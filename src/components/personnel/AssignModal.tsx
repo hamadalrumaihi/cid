@@ -18,7 +18,7 @@ import { useAuth } from '@/lib/auth'
 import { PermanentDelete } from '@/components/owner/PermanentDelete'
 import type { RosterProfile } from '@/lib/profiles'
 import {
-  BUREAUS, PERMANENT_BUREAUS, ROLE_LABEL, bureauLabel, canRemoveMember, canTransfer,
+  BUREAUS, PERMANENT_BUREAUS, ROLE_LABEL, bureauLabel, bureauShort, canRemoveMember, canTransfer,
   getAssignableRoles, isCommandRole, roleLabel, type RoleParty,
 } from '@/lib/roles'
 import { justiceRoleLabel } from '@/lib/justice'
@@ -50,8 +50,9 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
   const [toBureau, setToBureau] = useState<Bureau | ''>('')
   const [justiceRole, setJusticeRole] = useState('')
   const [dojRole, setDojRole] = useState('')
-  // Prosecutors belong to ONE home bureau queue (LSB/BCB/SAB) — required by
-  // justice_appoint for role=prosecutor, forbidden for judge/AG.
+  // Prosecutors belong to ONE home bureau queue (Major Crimes / Street
+  // Crimes) — required by justice_appoint for role=prosecutor, forbidden for
+  // judge/AG.
   const [dojBureau, setDojBureau] = useState('')
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
@@ -108,7 +109,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
   // surface verbatim.
   const assignDoj = async () => {
     if (!dojRole) { toast('Pick the DOJ role.', 'warn'); return }
-    if (dojRole === 'prosecutor' && !dojBureau) { toast('Pick the prosecutor’s home bureau (LSB, BCB, or SAB).', 'warn'); return }
+    if (dojRole === 'prosecutor' && !dojBureau) { toast('Pick the prosecutor’s home bureau (Major Crimes or Street Crimes).', 'warn'); return }
     const ok = await uiConfirm(
       p.active
         ? `This ends ${p.display_name}'s CID membership immediately and activates their DOJ access. Cases they lead keep them as lead until handed over. Continue?`
@@ -147,7 +148,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
   const changeRole = async () => {
     if (!newRole || !reason.trim()) { toast('Pick the new role and give a reason.', 'warn'); return }
     const ok = await uiConfirm(
-      `${p.display_name}: ${roleLabel(p.role)} · ${p.division} → ${roleLabel(newRole)} · ${p.division}\n\nReason: ${reason.trim()}\n\nThe change is recorded in the role history and the officer is notified.`,
+      `${p.display_name}: ${roleLabel(p.role)} · ${bureauShort(p.division)} → ${roleLabel(newRole)} · ${bureauShort(p.division)}\n\nReason: ${reason.trim()}\n\nThe change is recorded in the role history and the officer is notified.`,
       { title: 'Confirm role change', confirmText: 'Change role' },
     )
     if (!ok) return
@@ -162,7 +163,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
   const requestTransfer = async () => {
     if (!toBureau || !reason.trim()) { toast('Pick the destination and give a reason.', 'warn'); return }
     const ok = await uiConfirm(
-      `${p.display_name}: ${roleLabel(p.role)} · ${p.division} → ${roleLabel(p.role)} · ${toBureau}\n\nReason: ${reason.trim()}\n\nThe transfer applies immediately. The officer and both departments are notified, and the move is recorded in the role history.`,
+      `${p.display_name}: ${roleLabel(p.role)} · ${bureauShort(p.division)} → ${roleLabel(p.role)} · ${bureauShort(toBureau)}\n\nReason: ${reason.trim()}\n\nThe transfer applies immediately. The officer and both departments are notified, and the move is recorded in the role history.`,
       { title: 'Confirm transfer', confirmText: 'Transfer' },
     )
     if (!ok) return
@@ -170,14 +171,14 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
     const res = await rpc('request_transfer', { p_target: p.id, p_to_bureau: toBureau as never, p_reason: reason.trim() })
     setBusy(false)
     if (res.error) { toast(`Transfer failed: ${res.error.message}`, 'danger'); return }
-    toast(`${p.display_name} transferred to ${toBureau}`, 'success')
+    toast(`${p.display_name} transferred to ${bureauLabel(toBureau)}`, 'success')
     onChanged(); onClose()
   }
 
   const setActive = async (next: boolean) => {
     const ok = await uiConfirm(
       next
-        ? `Activate ${p.display_name}? They keep their saved role (${roleLabel(p.role)}) and department (${p.division}).`
+        ? `Activate ${p.display_name}? They keep their saved role (${roleLabel(p.role)}) and department (${bureauLabel(p.division)}).`
         : `Deactivate ${p.display_name}? They lose portal access until reactivated; role and department are kept.`,
       { confirmText: next ? 'Activate' : 'Deactivate', danger: !next },
     )
@@ -252,7 +253,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
             audited actions below, never a silent dropdown save. */}
         <div className="mb-4 grid grid-cols-2 gap-x-6 gap-y-1 rounded-xl border border-white/10 bg-ink-950/50 p-3 text-xs">
           <p className="text-slate-400">Current Role <span className="block text-sm text-slate-100">{roleLabel(p.role)}</span></p>
-          <p className="text-slate-400">Current Department <span className="block text-sm text-slate-100">{p.division ? `${p.division} — ${bureauLabel(p.division)}` : 'Unassigned (pending approval)'}</span></p>
+          <p className="text-slate-400">Current Department <span className="block text-sm text-slate-100">{p.division ? `${bureauShort(p.division)} — ${bureauLabel(p.division)}` : 'Unassigned (pending approval)'}</span></p>
           <p className="text-slate-400">Active <span className="block text-sm text-slate-100">{p.active ? 'Yes' : 'No'}</span></p>
           <p className="text-slate-400">On LOA <span className="block text-sm text-slate-100">{p.loa ? 'Yes' : 'No'}</span></p>
         </div>
@@ -306,7 +307,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
               </Field>
               {newRole && (
                 <p className="text-xs text-slate-300">
-                  {roleLabel(p.role)} · {p.division} → <b>{roleLabel(newRole)} · {p.division}</b>
+                  {roleLabel(p.role)} · {bureauShort(p.division)} → <b>{roleLabel(newRole)} · {bureauShort(p.division)}</b>
                 </p>
               )}
               <Field label="Reason" required>
@@ -369,7 +370,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
                   {(id) => (
                     <Select id={id} value={dojBureau} onChange={(e) => setDojBureau(e.target.value)}>
                       <option value="">Select…</option>
-                      {PERMANENT_BUREAUS.map((b) => <option key={b} value={b}>{b} — {bureauLabel(b)}</option>)}
+                      {PERMANENT_BUREAUS.map((b) => <option key={b} value={b}>{bureauShort(b)} — {bureauLabel(b)}</option>)}
                     </Select>
                   )}
                 </Field>
@@ -385,17 +386,17 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
 
           {panel === 'transfer' && (
             <div className="mt-3 space-y-3 rounded-xl border border-badge-400/20 bg-ink-950/50 p-3">
-              <Field label="Destination department" required hint="Cross-bureau moves need source + destination Bureau Lead approval (Deputy Director+ completes directly). JTF is never a destination.">
+              <Field label="Destination department" required hint="Transfers apply immediately. SIB is never a destination — its membership moves only through the SIB appointment workflow.">
                 {(id) => (
                   <Select id={id} value={toBureau} onChange={(e) => setToBureau(e.target.value as Bureau)}>
                     <option value="">Select…</option>
-                    {transferDestinations.map((b) => <option key={b} value={b}>{b} — {bureauLabel(b)}</option>)}
+                    {transferDestinations.map((b) => <option key={b} value={b}>{bureauShort(b)} — {bureauLabel(b)}</option>)}
                   </Select>
                 )}
               </Field>
               {toBureau && (
                 <p className="text-xs text-slate-300">
-                  {roleLabel(p.role)} · {p.division} → <b>{roleLabel(p.role)} · {toBureau}</b>
+                  {roleLabel(p.role)} · {bureauShort(p.division)} → <b>{roleLabel(p.role)} · {bureauShort(toBureau)}</b>
                 </p>
               )}
               <Field label="Reason" required>

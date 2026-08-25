@@ -1,10 +1,10 @@
 'use client'
 
-/** SIU actions, on the person's own record.
+/** SIB actions, on the person's own record.
  *
- *  ── Why this belongs here and not only in the SIU workspace ───────────────
+ *  ── Why this belongs here and not only in the SIB workspace ───────────────
  *  An agent reads a person's profile, decides they matter, and then — before
- *  this — had to leave, find the SIU tab, open a form and search the registry
+ *  this — had to leave, find the SIB tab, open a form and search the registry
  *  for the record they were already looking at. Every one of those steps was a
  *  chance to type a name instead of attaching the record, which is exactly how
  *  the unit ended up with a duplicate address book. Acting from the record
@@ -63,7 +63,7 @@ export function SiuPersonActions({ personId, personName }: {
 
   const load = useCallback(async () => {
     try { setD(await withRetry(() => fetchSiuPersonDossier(personId))) }
-    catch { /* an absent SIU block is the honest fallback */ }
+    catch { /* an absent SIB block is the honest fallback */ }
     finally { setLoaded(true) }
   }, [personId])
 
@@ -90,7 +90,7 @@ export function SiuPersonActions({ personId, personName }: {
       <div className="flex flex-wrap items-center gap-2">
         {/* The one violet mark on the panel: the unit's identity chip. The
             surface itself stays a standard flat card. */}
-        <Badge tint="bg-violet-500/15 text-violet-300">SIU</Badge>
+        <Badge tint="bg-violet-500/15 text-violet-300">SIB</Badge>
         <span className="text-sm font-semibold text-slate-200">Unit actions</span>
 
         {watch && (

@@ -9,6 +9,7 @@
  *  PGRST202) so a spec that calls an unhandled RPC fails loudly. */
 import { http, HttpResponse } from 'msw'
 import type { Database, Tables } from '@/lib/database.types'
+import { CASE_PREFIX, PERMANENT_BUREAUS } from '@/lib/roles'
 import { supabaseBaseUrl } from '../env'
 import { getRows, getRpcOverride, mockId, seedRows } from '../store'
 import { postgrestError, shapeNetwork } from './postgrest'
@@ -35,23 +36,32 @@ function searchAll(q: string): Fns['search_all']['Returns'] {
 }
 
 function dojBureauCoverage(): Fns['doj_bureau_coverage']['Returns'] {
-  return (['LSB', 'BCB', 'SAB'] as const).map((bureau) => ({
+  return PERMANENT_BUREAUS.map((bureau) => ({
     acting_id: null,
     acting_name: null,
     acting_role: null,
     acting_since: null,
     bureau,
-    covered: bureau !== 'SAB', // one uncovered bureau so coverage UIs show both states
-    primary_ada_id: bureau === 'SAB' ? null : mockId(),
-    primary_ada_name: bureau === 'SAB' ? null : `ADA ${bureau}`,
-    primary_since: bureau === 'SAB' ? null : '2026-06-01T00:00:00.000Z',
+    covered: bureau !== 'street_crimes', // one uncovered bureau so coverage UIs show both states
+    primary_ada_id: bureau === 'street_crimes' ? null : mockId(),
+    primary_ada_name: bureau === 'street_crimes' ? null : `ADA ${CASE_PREFIX[bureau]}`,
+    primary_since: bureau === 'street_crimes' ? null : '2026-06-01T00:00:00.000Z',
     supporting: [],
   }))
 }
 
+/** Mirror of private.case_number_base — MCB-4######, SCB-5######, SIB-8######,
+ *  JTF-3######; the mock just counts seeded cases past the base. */
+const CASE_NUMBER_BASE: Record<string, number> = {
+  major_crimes: 4_000_000,
+  street_crimes: 5_000_000,
+  special_investigations: 8_000_000,
+  JTF: 3_000_000,
+}
+
 function nextCaseNumber(bureau: string): Fns['next_case_number']['Returns'] {
   const count = getRows('cases').length + 1
-  return `CID-26-${String(count).padStart(4, '0')}-${bureau}`
+  return `${CASE_PREFIX[bureau] ?? bureau}-${(CASE_NUMBER_BASE[bureau] ?? 0) + count}`
 }
 
 export const rpcHandlers = [
@@ -69,7 +79,7 @@ export const rpcHandlers = [
       case 'doj_bureau_coverage':
         return HttpResponse.json(dojBureauCoverage())
       case 'next_case_number':
-        return HttpResponse.json(nextCaseNumber(String(args.p_bureau ?? 'LSB')))
+        return HttpResponse.json(nextCaseNumber(String(args.p_bureau ?? 'major_crimes')))
       case 'create_notification': {
         const typedArgs = args as Fns['create_notification']['Args']
         seedRows('notifications', [{

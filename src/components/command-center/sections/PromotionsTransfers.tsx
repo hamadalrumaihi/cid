@@ -13,7 +13,7 @@ import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { type RosterProfile, useProfilesStore, officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
-import { ROLE_LABEL, canDecideTransferSide, roleLabel, type RoleParty } from '@/lib/roles'
+import { ROLE_LABEL, bureauLabel, bureauShort, canDecideTransferSide, roleLabel, type RoleParty } from '@/lib/roles'
 import { timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { useAction } from '@/lib/useAction'
@@ -71,7 +71,7 @@ export function PromotionsTransfers() {
   // is in flight, so a double-click can't record it twice.
   const { run: act, busy: actBusy } = useAction(async (t: TransferRow, action: 'approve_source' | 'approve_target' | 'complete' | 'reject' | 'cancel') => {
     if (action === 'reject') {
-      const note = await uiPrompt(`Reject the transfer of ${officerName(t.target_id) || 'this officer'} to ${t.to_bureau}?`, {
+      const note = await uiPrompt(`Reject the transfer of ${officerName(t.target_id) || 'this officer'} to ${bureauLabel(t.to_bureau)}?`, {
         title: 'Reject transfer', placeholder: 'Reason (recorded)', confirmText: 'Reject',
       })
       if (note === null) return
@@ -89,7 +89,7 @@ export function PromotionsTransfers() {
     const rpcName = action === 'approve_source' ? 'approve_transfer_source'
       : action === 'approve_target' ? 'approve_transfer_target' : 'complete_transfer'
     const confirmMsg = action === 'complete'
-      ? `Complete this transfer now (higher-command authority)? ${officerName(t.target_id) || 'The officer'} moves to ${t.to_bureau} immediately.`
+      ? `Complete this transfer now (higher-command authority)? ${officerName(t.target_id) || 'The officer'} moves to ${bureauLabel(t.to_bureau)} immediately.`
       : action === 'approve_target'
         ? `Approve as the destination bureau? Both bureaus have then consented and the move is applied immediately.`
         : `Approve as the source bureau? The destination bureau decides next.`
@@ -126,7 +126,7 @@ export function PromotionsTransfers() {
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.slice(0, 24).map((p) => (
             <button key={p.id} onClick={() => setTarget(p)} className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-ink-950/50 px-3 py-2 text-left transition hover:border-badge-400/50">
-              <span><span className="block text-sm font-semibold text-white">{p.display_name}</span><span className="text-[11px] text-slate-400">{roleLabel(p.role)} · {p.division}</span></span>
+              <span><span className="block text-sm font-semibold text-white">{p.display_name}</span><span className="text-[11px] text-slate-400">{roleLabel(p.role)} · {bureauShort(p.division)}</span></span>
               <span className="text-xs font-semibold text-badge-200">Manage</span>
             </button>
           ))}
@@ -153,7 +153,7 @@ export function PromotionsTransfers() {
                     <div>
                       <p className="text-sm font-semibold text-white">
                         {officerName(t.target_id) || 'Officer'}
-                        <span className="ml-2 text-slate-300">{roleLabel(t.from_role)} · {t.from_bureau} → {roleLabel(t.to_role)} · {t.to_bureau}</span>
+                        <span className="ml-2 text-slate-300">{roleLabel(t.from_role)} · {bureauShort(t.from_bureau)} → {roleLabel(t.to_role)} · {bureauShort(t.to_bureau)}</span>
                       </p>
                       <p className="text-[11px] text-slate-400">
                         Requested by {officerName(t.requested_by) || '—'} · {timeAgo(t.created_at)}

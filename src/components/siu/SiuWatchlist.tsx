@@ -32,7 +32,7 @@
  *  rather than edits.
  *
  *  Field agents only — `siu_watchlist_sel` is gated on `private.siu_is_agent()`,
- *  not on SIU standing generally, because the list can name the Director of
+ *  not on SIB standing generally, because the list can name the Director of
  *  CID. Oversight sees counts through the oversight report. */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -354,7 +354,7 @@ function DeconflictPanel({ onWatch }: { onWatch: () => void }) {
                 {result.other_interest} other investigation{result.other_interest === 1 ? '' : 's'}
               </strong>{' '}
               you cannot see {result.other_interest === 1 ? 'has' : 'have'} an interest in this entity.
-              Coordinate through {result.coordinate_with ?? 'SIU command'} — the investigation and the
+              Coordinate through {result.coordinate_with ?? 'SIB command'} — the investigation and the
               agent working it are deliberately not named.
             </p>
           )}

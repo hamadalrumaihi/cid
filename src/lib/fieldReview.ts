@@ -101,8 +101,8 @@ export const SIU_FILTERS = [
 export type SiuFilter = (typeof SIU_FILTERS)[number]
 
 export const SIU_FILTER_LABEL: Record<SiuFilter, string> = {
-  siu_referred: 'SIU referred',
-  siu_assigned: 'SIU assigned',
+  siu_referred: 'SIB referred',
+  siu_assigned: 'SIB assigned',
   siu_organized_crime: 'Organized crime',
   siu_narcotics: 'Narcotics',
   siu_firearms: 'Firearms',

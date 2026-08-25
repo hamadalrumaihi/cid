@@ -70,7 +70,7 @@ export function fieldStatusLabel(s: string): string {
 
 const STATUS_MEANING: Record<FieldStatus, string> = {
   draft: 'Not sent yet. Only you can see it, and you can keep editing it.',
-  new: 'Sent to CID/SIU. Nobody has picked it up yet.',
+  new: 'Sent to CID/SIB. Nobody has picked it up yet.',
   reviewing: 'An investigator is going through it.',
   needs_info: 'An investigator has asked you something. Open it to answer.',
   reviewed: 'An investigator has read it and understood it. Nothing further is needed right now.',

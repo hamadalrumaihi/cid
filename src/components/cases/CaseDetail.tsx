@@ -422,10 +422,10 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       {caseDept === 'siu' ? (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-violet-500/25 bg-violet-500/5 px-4 py-2.5">
           <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-300">
-            Special Investigation Unit
+            Special Investigations Bureau
           </span>
           <span className="text-violet-500/40" aria-hidden>·</span>
-          <span className="text-xs font-semibold text-violet-100">SIU Investigation</span>
+          <span className="text-xs font-semibold text-violet-100">SIB Investigation</span>
           {c.siu_classification && (
             <Badge tint={siuClassificationTint(c.siu_classification)}>
               {siuClassificationLabel(c.siu_classification)}
@@ -447,7 +447,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
           </span>
           <span className="text-white/20" aria-hidden>·</span>
           <span className="text-xs text-slate-300">
-            Viewing under SIU authority — read-only oversight. You are not a member of this case.
+            Viewing under SIB authority — read-only oversight. You are not a member of this case.
           </span>
         </div>
       ) : null}

@@ -2,10 +2,10 @@
 
 /** The Director of CID asking X-1 to see one investigation — both sides of it.
  *
- *  ── Why this lives outside the SIU workspace ───────────────────────────────
- *  The Director holds NO SIU standing, so `useSiu().canAccess` is false and the
- *  SIU workspace renders the ordinary nothing-here surface for him. The request
- *  card therefore sits on his own desk, on the CID side. Naming SIU here is
+ *  ── Why this lives outside the SIB workspace ───────────────────────────────
+ *  The Director holds NO SIB standing, so `useSiu().canAccess` is false and the
+ *  SIB workspace renders the ordinary nothing-here surface for him. The request
+ *  card therefore sits on his own desk, on the CID side. Naming SIB here is
  *  deliberate and safe: it renders only for the Director, who is the unit's
  *  nominal boss and already knows it exists.
  *
@@ -86,7 +86,7 @@ export function SiuAccessRequestCard() {
     void load()
   }
 
-  // Renders for the Director alone. An account that already holds SIU standing
+  // Renders for the Director alone. An account that already holds SIB standing
   // has no use for it — they reach investigations directly.
   if (!siuMayRequestAccess({ profile, release: siu.releaseOpen })) return null
   if (loading) return null
@@ -97,7 +97,7 @@ export function SiuAccessRequestCard() {
   return (
     <Card>
       <SectionHeader
-        title="Special Investigation Unit — request access"
+        title="Special Investigations Bureau — request access"
         subtitle="You do not hold standing in the unit and its caseload is not visible to you. To read a specific investigation, ask X-1 for it by case number."
         actions={
           <div className="flex items-center gap-2">
@@ -118,7 +118,7 @@ export function SiuAccessRequestCard() {
               id={id}
               value={caseNumber}
               onChange={(e) => setCaseNumber(e.target.value)}
-              placeholder="SIU-26-0004"
+              placeholder="SIB-8000012"
             />
           )}
         </Field>
@@ -184,7 +184,7 @@ export function SiuAccessRequestCard() {
 
 /* ------------------------------------------------------------------ X-1 side */
 
-/** The decision queue, inside the SIU workspace. Command only — the RLS policy
+/** The decision queue, inside the SIB workspace. Command only — the RLS policy
  *  is `requested_by = me OR siu_is_command()`, so an ordinary agent sees
  *  nothing here either. */
 export function SiuAccessQueue({ rows, onDone }: {

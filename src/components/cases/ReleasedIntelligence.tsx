@@ -1,8 +1,8 @@
 'use client'
 
-/** §15, the CID side — intelligence SIU has released to this case.
+/** §15, the CID side — intelligence SIB has released to this case.
  *
- *  This panel is rendered for ORDINARY CID members with no SIU standing at
+ *  This panel is rendered for ORDINARY CID members with no SIB standing at
  *  all. What they see is the released text and nothing else: no case number,
  *  no link, no identifier, no count of anything withheld. The originating
  *  investigation is not merely hidden from the UI — `siu_released_intelligence()`
@@ -10,7 +10,7 @@
  *  every rank, so there is no query that would reveal it.
  *
  *  An empty result renders nothing at all. A CID case with no releases must
- *  look exactly like a CID case that has never been near SIU. */
+ *  look exactly like a CID case that has never been near SIB. */
 
 import { useCallback, useEffect, useState } from 'react'
 import { rpc } from '@/lib/db'
@@ -61,8 +61,8 @@ export function ReleasedIntelligence({ caseId }: { caseId: string }) {
   return (
     <Card className="border-violet-500/20">
       <SectionHeader
-        title="Released by the Special Investigation Unit"
-        subtitle="Provided for this case. This is the released material in full — SIU retains the investigation it came from."
+        title="Released by the Special Investigations Bureau"
+        subtitle="Provided for this case. This is the released material in full — SIB retains the investigation it came from."
       />
       <ul className="mt-3 space-y-2">
         {rows.map((r) => (

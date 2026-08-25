@@ -22,7 +22,7 @@ import { ACCENTS, DENSITIES, applyAppearance } from '@/lib/appearance'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { safeUrl } from '@/lib/safeUrl'
 import { initials } from '@/lib/format'
-import { deptLabel, roleLabel } from '@/lib/roles'
+import { bureauLabel, roleLabel } from '@/lib/roles'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Notice } from '@/components/ui/Notice'
@@ -108,7 +108,7 @@ export function ProfileView() {
           </div>
           <div className="mt-2 flex flex-wrap gap-2 text-xs">
             <span className="rounded-md bg-blue-500/10 px-2 py-1 font-semibold text-blue-200">{roleLabel(profile!.role)}</span>
-            <span className="rounded-md bg-white/5 px-2 py-1 font-semibold text-slate-300">{deptLabel(profile!.division)}</span>
+            <span className="rounded-md bg-white/5 px-2 py-1 font-semibold text-slate-300">{bureauLabel(profile!.division)}</span>
             {profile!.badge_number && <span className="rounded-md bg-white/5 px-2 py-1 font-mono text-slate-300">Badge {profile!.badge_number}</span>}
           </div>
           <p className="mt-2 text-[11px] text-slate-500">Member since {fmtDate(profile!.created_at)}</p>

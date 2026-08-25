@@ -70,22 +70,22 @@ export const SIU_STATES = ['flagged', 'referred', 'accepted', 'declined'] as con
 export type SiuState = (typeof SIU_STATES)[number]
 
 export const SIU_STATE_LABEL: Record<SiuState, string> = {
-  flagged: 'Possible SIU relevance',
-  referred: 'Referred to SIU',
-  accepted: 'SIU handling',
-  declined: 'SIU declined',
+  flagged: 'Possible SIB relevance',
+  referred: 'Referred to SIB',
+  accepted: 'SIB handling',
+  declined: 'SIB declined',
 }
 
 /** Deliberately spelled out, because the difference between a flag and a case
  *  is the thing most likely to be misread. */
 export const SIU_STATE_MEANING: Record<SiuState, string> = {
-  flagged: 'An investigator thinks this may be SIU work. It is not a referral '
+  flagged: 'An investigator thinks this may be SIB work. It is not a referral '
     + 'and nothing about who handles it has changed.',
-  referred: 'Somebody has formally asked SIU to take this on. SIU has not '
+  referred: 'Somebody has formally asked SIB to take this on. SIB has not '
     + 'answered yet.',
-  accepted: 'SIU is working this alongside CID. The CID assignment is '
+  accepted: 'SIB is working this alongside CID. The CID assignment is '
     + 'unchanged.',
-  declined: 'SIU looked and is not taking it. It stays with CID.',
+  declined: 'SIB looked and is not taking it. It stays with CID.',
 }
 
 export function siuStateLabel(s: string | null): string {
@@ -430,15 +430,15 @@ export function siuActionLine(
   const who = nameOf(a.actor_id)
   switch (a.action) {
     case 'flagged': return `${who} flagged possible ${siuCategoryLabel(a.category).toLowerCase()}`
-    case 'unflagged': return `${who} removed the SIU flag`
-    case 'referred': return `${who} referred it to SIU — ${siuCategoryLabel(a.category)}`
-    case 'accepted': return `${who} accepted it for SIU`
-    case 'declined': return `${who} declined it for SIU`
+    case 'unflagged': return `${who} removed the SIB flag`
+    case 'referred': return `${who} referred it to SIB — ${siuCategoryLabel(a.category)}`
+    case 'accepted': return `${who} accepted it for SIB`
+    case 'declined': return `${who} declined it for SIB`
     case 'assigned': return `${who} assigned it to ${nameOf(a.to_user)}`
     case 'reassigned': return `${who} moved it from ${nameOf(a.from_user)} to ${nameOf(a.to_user)}`
-    case 'sensitive_on': return `${who} restricted this report to SIU`
+    case 'sensitive_on': return `${who} restricted this report to SIB`
     case 'sensitive_off': return `${who} lifted the restriction`
-    case 'case_linked': return `${who} linked it to an SIU investigation`
+    case 'case_linked': return `${who} linked it to an SIB investigation`
     case 'case_unlinked': return `${who} unlinked it from the investigation`
     case 'target_designated': return `${who} designated a target from it`
     default: return a.action
@@ -448,9 +448,9 @@ export function siuActionLine(
 /** Why a referral cannot be sent yet, or null. The RPC refuses these too. */
 export function referralProblem(category: string, reason: string): string | null {
   if (!(SIU_CATEGORIES as readonly string[]).includes(category)) {
-    return 'Choose one of the SIU categories.'
+    return 'Choose one of the SIB categories.'
   }
-  if (!reason.trim()) return 'Say why this needs SIU — they read this to decide.'
+  if (!reason.trim()) return 'Say why this needs SIB — they read this to decide.'
   return null
 }
 
@@ -458,7 +458,7 @@ export function referralProblem(category: string, reason: string): string | null
  *  before the referral, not after. */
 export function referralWarning(category: string): string | null {
   return category === SENSITIVE_CATEGORY
-    ? 'A corruption referral is restricted to SIU. Colleagues in your bureau — '
+    ? 'A corruption referral is restricted to SIB. Colleagues in your bureau — '
       + 'including command — will no longer see this report. You will, because '
       + 'you referred it.'
     : null

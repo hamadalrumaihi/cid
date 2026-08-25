@@ -120,7 +120,7 @@ export function caseChargeActor(to: CaseChargeStatus): CaseChargeActor {
   return ACTOR[to]
 }
 
-/** The same answer in words, and SIU-aware, because the SIU lane never uses a
+/** The same answer in words, and SIB-aware, because the SIB lane never uses a
  *  CID Bureau Lead or a prosecutor queue. Mirrors the branch in
  *  private.case_charge_may(). */
 export function caseChargeActorLabel(to: CaseChargeStatus, siu: boolean): string {

@@ -12,10 +12,16 @@ import { useTableVersion } from '@/lib/realtime'
 import { CASE_STATUSES } from '@/lib/signoff'
 import { toast } from '@/lib/toast'
 import { parseStringArray } from '@/lib/jsonShapes'
+import { CASE_PREFIX, PERMANENT_BUREAUS, bureauLabel } from '@/lib/roles'
 
 type CaseRow = Tables<'cases'>
 type CaseTemplateRow = Tables<'case_templates'>
-const BUREAUS = ['LSB', 'BCB', 'SAB', 'JTF'] as const
+/** Creation targets: the permanent bureaus plus the temporary JTF designation.
+ *  special_investigations is never creatable here — SIB cases are minted
+ *  through the compartmented SIB workflow. */
+const BUREAUS = [...PERMANENT_BUREAUS, 'JTF'] as const
+/** Case-number prefix for a bureau id (MCB-/SCB-/JTF-). */
+const prefixOf = (b: string) => CASE_PREFIX[b] ?? b
 
 /** Task checklist stored on a template (jsonb array of title strings). */
 const tplTasks = (t: CaseTemplateRow | null): string[] =>
@@ -36,7 +42,10 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
   const [templates, setTemplates] = useState<CaseTemplateRow[]>([])
   const [managerOpen, setManagerOpen] = useState(false)
   const initial = useMemo(() => ({
-    bureau: record?.bureau ?? (profile?.division === 'LSB' || profile?.division === 'BCB' || profile?.division === 'SAB' || profile?.division === 'JTF' ? profile.division : 'LSB'),
+    bureau: record?.bureau
+      ?? ((PERMANENT_BUREAUS as readonly string[]).includes(profile?.division ?? '')
+        ? profile!.division!
+        : PERMANENT_BUREAUS[0]),
     digits: record?.case_number?.replace(/^[A-Z]+-/, '') ?? '',
     title: record?.title ?? '',
     status: record?.status ?? 'open',
@@ -59,7 +68,7 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
     } catch { setTemplates([]) }
   }
   useEffect(() => { if (open) queueMicrotask(() => { setForm(initial); setChecklist([]); setFollowupDays(null); void fetchOps(); void fetchTemplates() }) }, [open, initial, fetchOps, templatesVersion])
-  // Auto-continue the bureau's established case-number series (e.g. SAB-9000034)
+  // Auto-continue the bureau's established case-number series (e.g. MCB-4000034)
   // instead of leaving the field blank. New cases only; server-side generator so
   // it always reflects live data. We fill only when the field is empty or still
   // holds our previous suggestion, so a manually-typed number is never clobbered.
@@ -78,6 +87,10 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
     })
     return () => { alive = false }
   }, [open, record, form.bureau])
+  // Editing keeps the number's own prefix — legacy identifiers (LSB-/BCB-/
+  // SAB-/SIU-) are preserved verbatim even though the bureau enum moved on;
+  // new cases mint the bureau's current prefix.
+  const numberPrefix = record?.case_number?.match(/^[A-Z]+(?=-)/)?.[0] ?? prefixOf(form.bureau)
   const dirty = () => JSON.stringify(form) !== JSON.stringify(initial)
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
   const applyTemplate = (tpl: CaseTemplateRow | null) => {
@@ -101,12 +114,12 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
     // for the next in this bureau's block. Timestamp is only a last-ditch guard
     // if that call fails — never the normal path (that was the SAB-69179 bug).
     const typed = form.digits.replace(/\D/g, '')
-    let caseNumber = `${form.bureau}-${typed}`
+    let caseNumber = `${numberPrefix}-${typed}`
     if (!typed) {
       const gen = await rpc('next_case_number', { p_bureau: form.bureau })
       caseNumber = typeof gen.data === 'string' && gen.data
         ? gen.data
-        : `${form.bureau}-${Date.now().toString().slice(-5)}`
+        : `${numberPrefix}-${Date.now().toString().slice(-5)}`
     }
     // A template's default review cadence lands on new cases only, and never
     // overwrites a follow-up an editor already set.
@@ -163,13 +176,13 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
             {/* Bureau is frozen after creation (block_direct_case_bureau) — the
                 authorized path is the Reassign-bureau action on the case (DD+). */}
             <select value={form.bureau} onChange={(e) => set('bureau', e.target.value)} disabled={!!record} title={record ? 'Bureau changes go through Reassign bureau on the case (Deputy Director+)' : undefined} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white disabled:cursor-not-allowed disabled:opacity-60">
-              {BUREAUS.map((b) => <option key={b} value={b}>{b}</option>)}
+              {BUREAUS.map((b) => <option key={b} value={b}>{bureauLabel(b)}</option>)}
             </select>
             {record && <span className="mt-1 block text-[11px] text-slate-500">Changed via “Reassign bureau” on the case (Deputy Director+).</span>}
           </label>
           <label className="text-sm text-slate-300">Case number
             <div className="mt-1 flex">
-              <span className="rounded-l-lg border border-r-0 border-white/10 bg-white/5 px-3 py-2 font-mono text-slate-300">{form.bureau}-</span>
+              <span className="rounded-l-lg border border-r-0 border-white/10 bg-white/5 px-3 py-2 font-mono text-slate-300">{numberPrefix}-</span>
               <input value={form.digits} onChange={(e) => set('digits', e.target.value.replace(/\D/g, ''))} className="w-full rounded-r-lg border border-white/10 bg-ink-950 px-3 py-2 font-mono text-white" placeholder="1001" />
             </div>
           </label>
@@ -212,7 +225,7 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
 
 function TemplateManager({ open, templates, onClose, onChanged }: { open: boolean; templates: CaseTemplateRow[]; onClose: () => void; onChanged: () => void }) {
   const [drafts, setDrafts] = useState<CaseTemplateRow[]>(templates)
-  const [newRow, setNewRow] = useState({ name: '', icon: '', bureau: 'LSB', status: 'open', title: '', summary: '', tasks: '', followup: '' })
+  const [newRow, setNewRow] = useState({ name: '', icon: '', bureau: BUREAUS[0] as string, status: 'open', title: '', summary: '', tasks: '', followup: '' })
   // Raw textarea text per row — parsed only on save so Enter/blank lines type naturally.
   const [taskDrafts, setTaskDrafts] = useState<Record<string, string>>({})
   const parseTasks = (v: string): string[] => v.split('\n').map((x) => x.trim()).filter(Boolean)
@@ -247,7 +260,7 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
       sort_order: templates.length + 1,
     })
     if (res.error) toast(res.error.message, 'danger')
-    else { setNewRow({ name: '', icon: '', bureau: 'LSB', status: 'open', title: '', summary: '', tasks: '', followup: '' }); toast('Template added.', 'success'); onChanged() }
+    else { setNewRow({ name: '', icon: '', bureau: BUREAUS[0] as string, status: 'open', title: '', summary: '', tasks: '', followup: '' }); toast('Template added.', 'success'); onChanged() }
   }
   const patchDraft = (id: string, patch: Partial<CaseTemplateRow>) => setDrafts((rows) => rows.map((row) => row.id === id ? { ...row, ...patch } : row))
   return (
@@ -258,7 +271,7 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
           {drafts.map((row) => <div key={row.id} className="grid gap-2 rounded-xl border border-white/10 bg-ink-950/50 p-3 md:grid-cols-[4rem_1fr_6rem_7rem]">
             <input value={row.icon || ''} onChange={(e) => patchDraft(row.id, { icon: e.target.value })} placeholder="Icon" className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
             <input value={row.name} onChange={(e) => patchDraft(row.id, { name: e.target.value })} placeholder="Name" className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
-            <select value={row.bureau || 'LSB'} onChange={(e) => patchDraft(row.id, { bureau: e.target.value as CaseTemplateRow['bureau'] })} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white">{BUREAUS.map((b) => <option key={b} value={b}>{b}</option>)}</select>
+            <select value={row.bureau || BUREAUS[0]} onChange={(e) => patchDraft(row.id, { bureau: e.target.value as CaseTemplateRow['bureau'] })} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white">{BUREAUS.map((b) => <option key={b} value={b}>{bureauLabel(b)}</option>)}</select>
             <select value={row.status} onChange={(e) => patchDraft(row.id, { status: e.target.value as CaseTemplateRow['status'] })} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white">{CASE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
             <input value={row.title || ''} onChange={(e) => patchDraft(row.id, { title: e.target.value })} placeholder="Prefill title" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
             <input value={row.summary || ''} onChange={(e) => patchDraft(row.id, { summary: e.target.value })} placeholder="Prefill summary" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
@@ -270,7 +283,7 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
         <div className="mt-4 grid gap-2 rounded-xl border border-white/10 bg-white/5 p-3 md:grid-cols-[4rem_1fr_6rem_7rem]">
           <input value={newRow.icon} onChange={(e) => setNewRow({ ...newRow, icon: e.target.value })} placeholder="Icon" className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
           <input value={newRow.name} onChange={(e) => setNewRow({ ...newRow, name: e.target.value })} placeholder="New template name" className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
-          <select value={newRow.bureau} onChange={(e) => setNewRow({ ...newRow, bureau: e.target.value })} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white">{BUREAUS.map((b) => <option key={b} value={b}>{b}</option>)}</select>
+          <select value={newRow.bureau} onChange={(e) => setNewRow({ ...newRow, bureau: e.target.value })} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white">{BUREAUS.map((b) => <option key={b} value={b}>{bureauLabel(b)}</option>)}</select>
           <select value={newRow.status} onChange={(e) => setNewRow({ ...newRow, status: e.target.value })} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white">{CASE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
           <input value={newRow.title} onChange={(e) => setNewRow({ ...newRow, title: e.target.value })} placeholder="Prefill title" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
           <input value={newRow.summary} onChange={(e) => setNewRow({ ...newRow, summary: e.target.value })} placeholder="Prefill summary" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />

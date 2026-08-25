@@ -37,7 +37,7 @@ export type Department = (typeof DEPARTMENTS)[number]
 
 export const DEPARTMENT_LABEL: Record<Department, string> = {
   cid: 'Criminal Investigation Division',
-  siu: 'Special Investigation Unit',
+  siu: 'Special Investigations Bureau',
 }
 
 /** SIU's own rank ladder. It is NOT the CID hierarchy renamed: no SIU role
@@ -70,8 +70,8 @@ export const DEPARTMENT_TERMS: Record<Department, {
     lead: 'Lead Detective', member: 'Detective', command: 'CID Command',
   },
   siu: {
-    caseWord: 'Investigation', caseWordPlural: 'Investigations', caseHeading: 'SIU INVESTIGATION',
-    lead: 'Lead Agent', member: 'Special Agent', command: 'SIU Command',
+    caseWord: 'Investigation', caseWordPlural: 'Investigations', caseHeading: 'SIB INVESTIGATION',
+    lead: 'Lead Agent', member: 'Special Agent', command: 'SIB Command',
   },
 }
 
@@ -97,16 +97,16 @@ export const SIU_CLASSIFICATIONS = ['siu', 'siu_restricted', 'siu_command', 'siu
 export type SiuClassification = (typeof SIU_CLASSIFICATIONS)[number]
 
 export const SIU_CLASSIFICATION_LABEL: Record<string, string> = {
-  siu: 'SIU',
-  siu_restricted: 'SIU Restricted',
-  siu_command: 'SIU Command',
-  siu_compartmented: 'SIU Compartmented',
+  siu: 'SIB',
+  siu_restricted: 'SIB Restricted',
+  siu_command: 'SIB Command',
+  siu_compartmented: 'SIB Compartmented',
 }
 
 export const SIU_CLASSIFICATION_HINT: Record<string, string> = {
-  siu: 'Any active SIU agent.',
-  siu_restricted: 'Assigned agents and SIU command.',
-  siu_command: 'SIU command, plus anyone explicitly allow-listed.',
+  siu: 'Any active SIB agent.',
+  siu_restricted: 'Assigned agents and SIB command.',
+  siu_command: 'SIB command, plus anyone explicitly allow-listed.',
   siu_compartmented: 'Allow-list only — X-1 and the owner flag are not exempt.',
 }
 
@@ -191,7 +191,7 @@ export const SIU_NOTE_TYPE_LABEL: Record<string, string> = {
   leak_concern: 'Information Leak',
   conflict_of_interest: 'Conflict of Interest',
   surveillance_note: 'Surveillance Note',
-  related_investigation: 'Related SIU Investigation',
+  related_investigation: 'Related SIB Investigation',
 }
 
 /** The note types that count as an integrity concern against a CID case. */
@@ -1740,7 +1740,7 @@ export const SIU_AUDIT_LABEL: Record<string, string> = {
   SIU_AGENT_UNASSIGNED: 'Agent unassigned',
   SIU_COMPARTMENT_GRANTED: 'Compartment access granted',
   SIU_COMPARTMENT_REVOKED: 'Compartment access revoked',
-  SIU_CASE_ASSUMED: 'SIU control assumed of a CID case',
+  SIU_CASE_ASSUMED: 'SIB control assumed of a CID case',
   SIU_CASE_RETURNED: 'Control returned to CID',
   SIU_INTEL_RELEASED: 'Intelligence released to CID',
   SIU_INTEL_REVOKED: 'Release revoked',

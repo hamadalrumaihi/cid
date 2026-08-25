@@ -3,6 +3,7 @@
  *  reports.js pure helpers. Rendering lives in components/cases/FormBody.tsx;
  *  everything here is data + pure functions. */
 import { parseFormValues } from '@/lib/jsonShapes'
+import { BUREAUS } from '@/lib/roles'
 
 export type FormFieldType = 'text' | 'date' | 'money' | 'select' | 'textarea' | 'checks'
 
@@ -45,8 +46,11 @@ export interface FormSchema {
  *  _warrant_status, _warrant_log) are workflow metadata riding along. */
 export type FormValues = Record<string, unknown>
 
+/** External field agencies on printable forms — police departments, NOT CID
+ *  bureaus. */
 const FORM_DEPT_OPTS = ['', 'LSPD', 'BCSO', 'SAHP']
-const FORM_BUREAU_OPTS = ['', 'Los Santos Bureau', 'Blaine County Bureau', 'State Bureau', 'Joint Task Force']
+/** CID bureau display names (lib/roles BUREAUS). */
+const FORM_BUREAU_OPTS = ['', ...Object.values(BUREAUS)]
 
 export const FORM_SCHEMAS: Record<string, FormSchema> = {
   cid_investigative_report: {
@@ -179,7 +183,7 @@ export const FORM_SCHEMAS: Record<string, FormSchema> = {
         { key: 'warrant_title', label: 'Warrant Title', type: 'text' },
         { key: 'case_number', label: 'Case Number', type: 'text' },
         { key: 'detective', label: 'Requesting Detective', type: 'text' },
-        { key: 'department', label: 'Department', type: 'select', opts: ['', 'LSPD', 'BCSO', 'SAHP'] },
+        { key: 'department', label: 'Department', type: 'select', opts: FORM_DEPT_OPTS },
         { key: 'priority', label: 'Priority', type: 'select', opts: ['', 'Medium', 'High', 'Critical'] },
         { key: 'date', label: 'Date', type: 'text' },
       ] },
@@ -216,7 +220,7 @@ export const FORM_SCHEMAS: Record<string, FormSchema> = {
       { id: 'hdr', label: 'Affidavit', type: 'kv', fields: [
         { key: 'case_number', label: 'Case Number', type: 'text' },
         { key: 'affiant', label: 'Affiant (Detective)', type: 'text' },
-        { key: 'department', label: 'Department', type: 'select', opts: ['', 'LSPD', 'BCSO', 'SAHP'] },
+        { key: 'department', label: 'Department', type: 'select', opts: FORM_DEPT_OPTS },
         { key: 'date', label: 'Date', type: 'text' },
       ] },
       { id: 'location', label: 'Location to be Searched', type: 'textarea', key: 'location' },
@@ -248,7 +252,7 @@ export const FORM_SCHEMAS: Record<string, FormSchema> = {
       { id: 'hdr', label: 'Request', type: 'kv', fields: [
         { key: 'case_number', label: 'Case Number', type: 'text' },
         { key: 'detective', label: 'Requesting Detective', type: 'text' },
-        { key: 'department', label: 'Department', type: 'select', opts: ['', 'LSPD', 'BCSO', 'SAHP'] },
+        { key: 'department', label: 'Department', type: 'select', opts: FORM_DEPT_OPTS },
         { key: 'date', label: 'Date', type: 'text' },
       ] },
       { id: 'targets', label: 'Target Information', type: 'grid', cols: [
@@ -279,7 +283,7 @@ export const FORM_SCHEMAS: Record<string, FormSchema> = {
       { id: 'hdr', label: 'Issuance', type: 'kv', fields: [
         { key: 'case_number', label: 'Case Number', type: 'text' },
         { key: 'detective', label: 'Requesting Detective', type: 'text' },
-        { key: 'department', label: 'Department', type: 'select', opts: ['', 'LSPD', 'BCSO', 'SAHP'] },
+        { key: 'department', label: 'Department', type: 'select', opts: FORM_DEPT_OPTS },
         { key: 'date', label: 'Date', type: 'text' },
       ] },
       { id: 'type', label: 'Subpoena Type', type: 'kv', fields: [
@@ -310,7 +314,7 @@ export const FORM_SCHEMAS: Record<string, FormSchema> = {
       { id: 'hdr', label: 'Report', type: 'kv', fields: [
         { key: 'case_number', label: 'Case Number', type: 'text' },
         { key: 'detective', label: 'Reporting Detective', type: 'text' },
-        { key: 'department', label: 'Department', type: 'select', opts: ['', 'LSPD', 'BCSO', 'SAHP'] },
+        { key: 'department', label: 'Department', type: 'select', opts: FORM_DEPT_OPTS },
         { key: 'date', label: 'Date', type: 'text' },
       ] },
       { id: 'authorization', label: 'Authorization', type: 'kv', fields: [

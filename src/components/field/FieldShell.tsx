@@ -128,7 +128,7 @@ export function FieldShell() {
 
             <Card>
               <h2 className="text-base font-semibold text-white">
-                Send information to CID&nbsp;/&nbsp;SIU
+                Send information to CID&nbsp;/&nbsp;SIB
               </h2>
               <p className="mt-2 text-sm text-slate-300">
                 Report what you have seen on patrol — people, vehicles, gangs and

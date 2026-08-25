@@ -24,9 +24,9 @@ export function SiuStatusStrip() {
       : siuRoleLabel(siu.membership?.siu_role)
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-violet-500/15 bg-violet-500/[0.04] px-4 py-1.5 sm:px-6 lg:px-8" role="status" aria-label="SIU workspace status">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-violet-500/15 bg-violet-500/[0.04] px-4 py-1.5 sm:px-6 lg:px-8" role="status" aria-label="SIB workspace status">
       <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-violet-300">
-        <LockIcon size={12} /> SIU Workspace
+        <LockIcon size={12} /> SIB Workspace
       </span>
       <span className="text-[11px] text-slate-400">
         {siu.callsign ? `${siuCallsign(siu.callsign)} · ` : ''}{who}

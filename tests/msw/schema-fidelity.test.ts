@@ -19,7 +19,7 @@ describe('PostgREST read path (db.list / db.countRows)', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]).toEqual(caseRecord) // full-row echo: every generated column survives the wire
     expect(rows[0].status).toBe('active')
-    expect(rows[0].bureau).toBe('LSB')
+    expect(rows[0].bureau).toBe('major_crimes')
   })
 
   it('supports the db.ts filter surface: eq + is + order + limit', async () => {
@@ -95,7 +95,7 @@ describe('bureau queues + stages fixture surface (20260818120000)', () => {
     const [pros] = seedRows('profiles', [profileRow({ display_name: 'ADA Reyes' })])
     const [granter] = seedRows('profiles', [profileRow({ display_name: 'AG Marlowe', role: 'director' })])
     const [cov] = seedRows('prosecutor_coverage', [prosecutorCoverageRow({
-      prosecutor_id: pros.id, authorized_by: granter.id, bureau: 'BCB',
+      prosecutor_id: pros.id, authorized_by: granter.id, bureau: 'street_crimes',
     })])
     // the app's live-coverage query shape: unended rows for one prosecutor
     const live = await list('prosecutor_coverage', {
@@ -124,7 +124,7 @@ describe('RPC path (db.rpc, typed Returns)', () => {
   it('doj_bureau_coverage returns one typed row per permanent bureau', async () => {
     const res = await rpc('doj_bureau_coverage', undefined as never)
     expect(res.error).toBeNull()
-    expect(res.data!.map((r) => r.bureau).sort()).toEqual(['BCB', 'LSB', 'SAB'])
+    expect(res.data!.map((r) => r.bureau).sort()).toEqual(['major_crimes', 'street_crimes'])
     const uncovered = res.data!.find((r) => !r.covered)
     expect(uncovered?.primary_ada_id).toBeNull()
   })

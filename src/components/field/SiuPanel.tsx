@@ -1,14 +1,14 @@
 'use client'
 
-/** The SIU section of a Field Intelligence report.
+/** The SIB section of a Field Intelligence report.
  *
  *  Three audiences read this panel and each sees a different amount of it:
  *
- *  - Any investigator sees the SIU state, the category, the reason somebody
+ *  - Any investigator sees the SIB state, the category, the reason somebody
  *    gave and the handling history. That is what "a referral is not a
  *    disappearance" means in practice — CID keeps its report and can see what
  *    became of it.
- *  - SIU agents additionally get accept / decline, the restriction control and
+ *  - SIB agents additionally get accept / decline, the restriction control and
  *    the follow-up candidates.
  *  - X-1 additionally gets assignment.
  *
@@ -76,19 +76,19 @@ export function SiuPanel({ submission, parts, onChanged }: {
     if (problem) { toast(problem, 'warn'); return }
     await after(
       await referToSiu(id, form.category as SiuCategory, form.reason),
-      'Referred to SIU.',
+      'Referred to SIB.',
     )
     setRefer(false); setForm({ category: '', reason: '' })
   }
 
   const flag = async (category: SiuCategory) => {
-    await after(await flagForSiu(id, category), 'Flagged as possible SIU work.')
+    await after(await flagForSiu(id, category), 'Flagged as possible SIB work.')
   }
 
   const unflag = async () => {
     const why = await uiPrompt(
-      'The flag comes off and the report carries no SIU marking.',
-      { title: 'Remove the SIU flag', placeholder: 'Why is it not SIU work?', confirmText: 'Remove' },
+      'The flag comes off and the report carries no SIB marking.',
+      { title: 'Remove the SIB flag', placeholder: 'Why is it not SIB work?', confirmText: 'Remove' },
     )
     if (!why?.trim()) return
     await after(await unflagForSiu(id, why), 'Flag removed.')
@@ -100,28 +100,28 @@ export function SiuPanel({ submission, parts, onChanged }: {
       const said = await uiPrompt(
         'The CID investigator who referred it is still holding the report and '
         + 'needs to know what to do next.',
-        { title: 'Decline the referral', placeholder: 'Why is SIU not taking it?', confirmText: 'Decline' },
+        { title: 'Decline the referral', placeholder: 'Why is SIB not taking it?', confirmText: 'Decline' },
       )
       if (!said?.trim()) return
       note = said
     }
     await after(
       await decideSiuReferral(id, accept, note),
-      accept ? 'SIU has taken it. CID keeps the report.' : 'Declined. It stays with CID.',
+      accept ? 'SIB has taken it. CID keeps the report.' : 'Declined. It stays with CID.',
     )
   }
 
   const restrict = async (on: boolean) => {
     const why = await uiPrompt(
       on
-        ? 'Restricting hides this report from everybody outside SIU except the '
+        ? 'Restricting hides this report from everybody outside SIB except the '
           + 'officer who wrote it, the investigator who referred it and the '
           + 'investigator holding it.'
         : 'Lifting the restriction returns this report to the ordinary bureau queue.',
-      { title: on ? 'Restrict to SIU' : 'Lift the restriction', placeholder: 'Reason', confirmText: 'Confirm' },
+      { title: on ? 'Restrict to SIB' : 'Lift the restriction', placeholder: 'Reason', confirmText: 'Confirm' },
     )
     if (!why?.trim()) return
-    await after(await setSiuSensitive(id, on, why), on ? 'Restricted to SIU.' : 'Restriction lifted.')
+    await after(await setSiuSensitive(id, on, why), on ? 'Restricted to SIB.' : 'Restriction lifted.')
   }
 
   const assign = async (userId: string) => {
@@ -135,7 +135,7 @@ export function SiuPanel({ submission, parts, onChanged }: {
 
   const addFlag = async (kind: FollowupKind) => {
     const note = await uiPrompt(
-      'SIU only. The submitting officer and the CID investigator holding this '
+      'SIB only. The submitting officer and the CID investigator holding this '
       + 'report never see follow-up candidates.',
       { title: followupLabel(kind), placeholder: 'Note (optional)', confirmText: 'Add' },
     )
@@ -159,10 +159,10 @@ export function SiuPanel({ submission, parts, onChanged }: {
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-          Special Investigation Unit
+          Special Investigations Bureau
         </h4>
         <span className="flex items-center gap-2">
-          {submission.siu_sensitive && <Badge tone="danger">Restricted to SIU</Badge>}
+          {submission.siu_sensitive && <Badge tone="danger">Restricted to SIB</Badge>}
           {submission.siu_state && (
             <Badge tone={siuStateTone(submission.siu_state)}>
               {siuStateLabel(submission.siu_state)}
@@ -184,15 +184,15 @@ export function SiuPanel({ submission, parts, onChanged }: {
           )}
           {submission.siu_assigned_to && (
             <p className="mt-1 text-xs text-slate-400">
-              SIU: {officerName(submission.siu_assigned_to) ?? 'a Special Agent'}
+              SIB: {officerName(submission.siu_assigned_to) ?? 'a Special Agent'}
               {submission.siu_assigned_at && ` since ${fmtDateTime(submission.siu_assigned_at)}`}
             </p>
           )}
         </>
       ) : (
         <p className="mt-2 text-sm text-slate-400">
-          Nothing here suggests SIU work yet. Flagging is a note to colleagues; referring
-          is a formal ask that SIU take it on.
+          Nothing here suggests SIB work yet. Flagging is a note to colleagues; referring
+          is a formal ask that SIB take it on.
         </p>
       )}
 
@@ -201,11 +201,11 @@ export function SiuPanel({ submission, parts, onChanged }: {
         {canFlag(submission.siu_state) && (
           <Select
             value=""
-            aria-label="Flag possible SIU relevance"
+            aria-label="Flag possible SIB relevance"
             onChange={(e) => { if (e.target.value) void flag(e.target.value as SiuCategory) }}
             className="text-xs"
           >
-            <option value="">{submission.siu_state === 'flagged' ? 'Change the flag…' : 'Flag possible SIU relevance…'}</option>
+            <option value="">{submission.siu_state === 'flagged' ? 'Change the flag…' : 'Flag possible SIB relevance…'}</option>
             {SIU_CATEGORIES.map((c) => (
               <option key={c} value={c}>{SIU_CATEGORY_LABEL[c]}</option>
             ))}
@@ -215,11 +215,11 @@ export function SiuPanel({ submission, parts, onChanged }: {
           <Button size="sm" variant="ghost" onClick={() => void unflag()}>Remove flag</Button>
         )}
         {canRefer(submission.siu_state) && !refer && (
-          <Button size="sm" variant="ghost" onClick={() => setRefer(true)}>Refer to SIU</Button>
+          <Button size="sm" variant="ghost" onClick={() => setRefer(true)}>Refer to SIB</Button>
         )}
         {siu.isAgent && submission.siu_state === 'referred' && (
           <>
-            <Button size="sm" variant="primary" onClick={() => void decide(true)}>Accept for SIU</Button>
+            <Button size="sm" variant="primary" onClick={() => void decide(true)}>Accept for SIB</Button>
             <Button size="sm" variant="ghost" onClick={() => void decide(false)}>Decline</Button>
           </>
         )}
@@ -229,7 +229,7 @@ export function SiuPanel({ submission, parts, onChanged }: {
         {siu.isAgent && (
           <Button size="sm" variant="ghost"
             onClick={() => void restrict(!submission.siu_sensitive)}>
-            {submission.siu_sensitive ? 'Lift restriction' : 'Restrict to SIU'}
+            {submission.siu_sensitive ? 'Lift restriction' : 'Restrict to SIB'}
           </Button>
         )}
       </div>
@@ -247,7 +247,7 @@ export function SiuPanel({ submission, parts, onChanged }: {
               </Select>
             )}
           </Field>
-          <Field label="Why SIU" hint="They read this to decide. Say what makes it a network rather than an incident.">
+          <Field label="Why SIB" hint="They read this to decide. Say what makes it a network rather than an incident.">
             {(fid) => (
               <Textarea id={fid} rows={2} value={form.reason}
                 onChange={(e) => setForm({ ...form, reason: e.target.value })} />
@@ -267,7 +267,7 @@ export function SiuPanel({ submission, parts, onChanged }: {
       {siu.isCommand && submission.siu_state === 'accepted' && (
         <div className="mt-3">
           <Field label="Assign a Special Agent"
-            hint="SIU work follows the SIU chain. A Bureau Lead cannot make this assignment.">
+            hint="SIB work follows the SIB chain. A Bureau Lead cannot make this assignment.">
             {(fid) => (
               <Select id={fid} value=""
                 onChange={(e) => { if (e.target.value) void assign(e.target.value) }}>
@@ -283,7 +283,7 @@ export function SiuPanel({ submission, parts, onChanged }: {
         </div>
       )}
 
-      {/* SIU only, enforced by the table's policy. */}
+      {/* SIB only, enforced by the table's policy. */}
       {siu.isAgent && (
         <div className="mt-4 border-t border-white/5 pt-3">
           <h5 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -307,7 +307,7 @@ export function SiuPanel({ submission, parts, onChanged }: {
                   <Badge tone="accent">{followupLabel(f.kind)}</Badge>
                   {f.note && <span className="text-slate-400">{f.note}</span>}
                   <span className="text-slate-600">
-                    {officerName(f.created_by) ?? 'SIU'} · {fmtDateTime(f.created_at)}
+                    {officerName(f.created_by) ?? 'SIB'} · {fmtDateTime(f.created_at)}
                   </span>
                   <Button size="sm" variant="ghost" onClick={() => void clear(f)}>Clear</Button>
                 </li>

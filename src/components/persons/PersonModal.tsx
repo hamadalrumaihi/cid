@@ -176,7 +176,7 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
       if (siuChoice === 'siu_only') {
         try {
           await reserveVisibility('person', newId, 'siu_only',
-            'Created in the SIU workspace as SIU Only.')
+            'Created in the SIB workspace as SIB Only.')
         } catch (e) {
           toast(e instanceof Error ? e.message : String(e), 'danger')
           return
@@ -187,7 +187,7 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
     const res = record ? await update('persons', record.id, payload) : await insert('persons', payload)
     if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
     toast(record ? 'Person updated'
-      : siuChoice === 'siu_only' ? 'Person created, SIU Only. CID cannot see it.'
+      : siuChoice === 'siu_only' ? 'Person created, SIB Only. CID cannot see it.'
       : 'Person created', 'success')
     onSaved()
   }
@@ -297,7 +297,7 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
               </legend>
               <div className="mt-1 space-y-1.5">
                 {([
-                  ['siu_only', 'SIU Only',
+                  ['siu_only', 'SIB Only',
                    'Recommended. CID cannot see it at all — not in search, the graph, counts or exports.'],
                   ['cid', 'Shared with CID',
                    'An ordinary registry record, visible to every active investigator.'],

@@ -66,7 +66,7 @@ export function ChargesTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boo
   const [substanceFor, setSubstanceFor] = useState<string | null>(null)
   const [sub, setSub] = useState({ quantity: '', unit: '', note: '' })
   const { ready: penalReady } = usePenalCode()
-  // An SIU case never routes through a Bureau Lead or a prosecutor queue, so
+  // An SIB case never routes through a Bureau Lead or a prosecutor queue, so
   // the wording of who does what has to branch on it.
   const siu = c.case_authority === 'siu'
 

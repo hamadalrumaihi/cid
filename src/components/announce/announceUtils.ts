@@ -3,7 +3,7 @@
  *  it wrote {target,label} objects), so everything normalizes here. */
 import type { Json, Tables } from '@/lib/database.types'
 import { officerName } from '@/lib/profiles'
-import { ROLE_LABEL } from '@/lib/roles'
+import { BUREAUS, ROLE_LABEL } from '@/lib/roles'
 
 export type AnnouncementRow = Tables<'announcements'>
 
@@ -79,9 +79,11 @@ export function visibleAnnouncements(
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 }
 
-/** Audience vocabulary — every CHECK-allowed announcements.audience value. */
+/** Audience vocabulary — every CHECK-allowed announcements.audience value.
+ *  Bureau audiences carry the bureau display names (lib/roles BUREAUS); SIB
+ *  is never an announcement audience. */
 export const AUDIENCE_LABEL: Record<string, string> = {
   all: 'Everyone', command: 'Command', specific_members: 'Specific members',
-  LSB: 'LSPD', BCB: 'BCSO', SAB: 'SAHP', JTF: 'JTF',
+  major_crimes: BUREAUS.major_crimes, street_crimes: BUREAUS.street_crimes, JTF: BUREAUS.JTF,
 }
 export const audienceLabel = (a?: string | null) => (a && AUDIENCE_LABEL[a]) || a || '—'

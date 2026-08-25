@@ -25,11 +25,16 @@
 
 import { list, rpc } from './db'
 import type { Tables } from './database.types'
+import { PERMANENT_BUREAUS } from './roles'
 
 export type FieldCaseLinkRow = Tables<'field_submission_cases'>
 export type ObservationRow = Tables<'surveillance_observations'>
 
-export const CASE_BUREAUS = ['LSB', 'BCB', 'SAB', 'JTF'] as const
+/** Bureaus a case may be opened under from a field record — the permanent
+ *  bureaus plus the temporary JTF designation (the server rejects anything
+ *  else, SIB included). Labels come from roles.bureauLabel — never render
+ *  these ids raw. */
+export const CASE_BUREAUS = [...PERMANENT_BUREAUS, 'JTF'] as const
 export type CaseBureau = (typeof CASE_BUREAUS)[number]
 
 // ---------------------------------------------------------------------------

@@ -33,7 +33,7 @@ export function profileRow(overrides: Partial<Tables<'profiles'>> = {}): Tables<
     created_at: mockTimestamp(),
     discord_id: null,
     display_name: 'Det. Mara Voss',
-    division: 'LSB',
+    division: 'major_crimes',
     email: `mock-${id.slice(-4)}@cid.test`,
     id,
     is_owner: false,
@@ -62,7 +62,7 @@ export interface RoleSessionResult {
  *  - applicant → active:false, division 'JTF' (the pre-approval default);
  *  - owner     → is_owner:true on a plain detective rank (live owner fixture
  *                carries only the flag — RLS/UI gates key on is_owner);
- *  - all ranks → active:true in the given division (default LSB). */
+ *  - all ranks → active:true in the given division (default major_crimes). */
 export function roleSession(
   role: MockRole,
   opts: { division?: Bureau; active?: boolean; overrides?: Partial<Tables<'profiles'>> } = {},
@@ -70,7 +70,7 @@ export function roleSession(
   const enumRole: AppRole = role === 'applicant' || role === 'owner' ? 'detective' : role
   const profile = profileRow({
     role: enumRole,
-    division: opts.division ?? (role === 'applicant' ? 'JTF' : 'LSB'),
+    division: opts.division ?? (role === 'applicant' ? 'JTF' : 'major_crimes'),
     active: opts.active ?? role !== 'applicant',
     is_owner: role === 'owner',
     display_name: `Mock ${role.replace(/_/g, ' ')}`,

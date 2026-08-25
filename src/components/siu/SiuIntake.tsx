@@ -3,7 +3,7 @@
 /** §14 / §17 — the intake queue and the conflict register.
  *
  *  ── Why oversight cannot see this screen ───────────────────────────────────
- *  `siu_referrals` is gated on `private.siu_is_agent()`, NOT on SIU standing
+ *  `siu_referrals` is gated on `private.siu_is_agent()`, NOT on SIB standing
  *  generally, so oversight standing — the Director of CID, the Attorney General
  *  — reads nothing here. That is the whole point of an intake queue: a referral
  *  can name the Director, and handing the queue to oversight would hand the
@@ -18,7 +18,7 @@
  *  ── Accepting is not the same as investigating ─────────────────────────────
  *  A review that accepts opens a PRELIMINARY INQUIRY by default, not a full
  *  investigation (§15). The distinction is real: an inquiry is invisible to
- *  oversight at every classification, which is what lets SIU look at a senior
+ *  oversight at every classification, which is what lets SIB look at a senior
  *  allegation before it is sure. Promotion is the deliberate act that makes it
  *  visible, and it is audited with a reason.
  *
@@ -311,7 +311,7 @@ function ReviewModal({ referral, onClose, onDone }: {
                 </Select>
               )}
             </Field>
-            <Field label="Classification" required hint="Sensitivity — who inside SIU may reach it.">
+            <Field label="Classification" required hint="Sensitivity — who inside SIB may reach it.">
               {(id) => (
                 <Select id={id} value={classification} onChange={(e) => setClassification(e.target.value)}>
                   {SIU_CLASSIFICATIONS.map((c) => (

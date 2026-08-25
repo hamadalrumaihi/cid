@@ -7,6 +7,7 @@
  *  CHECK vocabularies, RLS visibility, and the workflow RPCs all enforce
  *  these rules server-side — everything here only decides what to SHOW. */
 import type { Tables } from '@/lib/database.types'
+import { BUREAUS } from '@/lib/roles'
 
 export type DocRow = Tables<'documents'>
 
@@ -112,8 +113,11 @@ export const REVIEW_OUTCOME_LABEL: Record<string, string> = {
   archive: 'Archive',
 }
 
+/** Reading-campaign audiences — bureau keys carry the display names from
+ *  lib/roles BUREAUS; SIB is never a campaign audience. */
 export const AUDIENCE_LABEL: Record<string, string> = {
-  all: 'All CID', LSB: 'LSB', BCB: 'BCB', SAB: 'SAB', JTF: 'JTF',
+  all: 'All CID',
+  major_crimes: BUREAUS.major_crimes, street_crimes: BUREAUS.street_crimes, JTF: BUREAUS.JTF,
   command: 'Command', detectives: 'Detectives',
   senior_detectives: 'Senior detectives', specific: 'Specific members',
 }

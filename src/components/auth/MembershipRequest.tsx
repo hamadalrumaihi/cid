@@ -11,7 +11,7 @@ import { useAuth } from '@/lib/auth'
 import { insert, list, rpc, update } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { useTableVersion } from '@/lib/realtime'
-import { BUREAUS, PERMANENT_BUREAUS, ROLE_LABEL, ROLE_ORDER, bureauLabel, getRequestableRoles, getValidDepartments, roleLabel } from '@/lib/roles'
+import { BUREAUS, PERMANENT_BUREAUS, ROLE_LABEL, ROLE_ORDER, bureauLabel, bureauShort, getRequestableRoles, getValidDepartments, roleLabel } from '@/lib/roles'
 import { fmtDateTime } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
@@ -26,8 +26,9 @@ type RequestRow = Tables<'membership_requests'>
 const MR_COLS = 'id,applicant_id,display_name,badge_number,requested_bureau,requested_role,reason,additional_notes,status,decided_bureau,decided_role,applicant_visible_decision_note,decided_by,decided_at,submitted_at,created_at,updated_at'
 /** Shared policy lists (roles.ts) — every normal CID role is requestable
  *  (requesting grants nothing; an authorized reviewer decides). Owner is a
- *  flag, not a role, so it can never appear. JTF is never offered
- *  (CHECK-enforced server-side too). */
+ *  flag, not a role, so it can never appear. JTF (temporary joint-case
+ *  designation) and SIB (appointed via the SIB workflow only) are never
+ *  offered (CHECK-enforced server-side too). */
 const APPLICANT_BUREAUS = getValidDepartments() as typeof PERMANENT_BUREAUS
 const APPLICANT_ROLES = getRequestableRoles('cid') as typeof ROLE_ORDER
 type ApplicantBureau = (typeof APPLICANT_BUREAUS)[number]
@@ -64,7 +65,7 @@ export function MembershipRequest() {
   const [histOpen, setHistOpen] = useState(false)
   const [hist, setHist] = useState<TimelineEntry[] | null>(null)
   const [form, setForm] = useState<FormState>({
-    display_name: '', badge_number: '', requested_bureau: 'LSB', requested_role: 'detective', reason: '', additional_notes: '',
+    display_name: '', badge_number: '', requested_bureau: 'major_crimes', requested_role: 'detective', reason: '', additional_notes: '',
   })
   const [approverName, setApproverName] = useState<string | null>(null)
   const v = useTableVersion('membership_requests')
@@ -105,7 +106,7 @@ export function MembershipRequest() {
     setForm({
       display_name: req?.display_name ?? profile?.display_name ?? '',
       badge_number: req?.badge_number ?? profile?.badge_number ?? '',
-      requested_bureau: (APPLICANT_BUREAUS as readonly string[]).includes(req?.requested_bureau ?? '') ? (req!.requested_bureau as ApplicantBureau) : 'LSB',
+      requested_bureau: (APPLICANT_BUREAUS as readonly string[]).includes(req?.requested_bureau ?? '') ? (req!.requested_bureau as ApplicantBureau) : 'major_crimes',
       requested_role: (APPLICANT_ROLES as readonly string[]).includes(req?.requested_role ?? '') ? (req!.requested_role as ApplicantRole) : 'detective',
       reason: req?.reason ?? '',
       additional_notes: req?.additional_notes ?? '',
@@ -294,7 +295,7 @@ export function MembershipRequest() {
       <Field label="Requested Department" required hint="JTF is a temporary joint-case designation — assigned per case, not a permanent department.">
         {(id) => (
           <Select id={id} value={form.requested_bureau} onChange={(e) => set('requested_bureau', e.target.value as ApplicantBureau)}>
-            {APPLICANT_BUREAUS.map((b) => <option key={b} value={b}>{b} — {BUREAUS[b]}</option>)}
+            {APPLICANT_BUREAUS.map((b) => <option key={b} value={b}>{bureauShort(b)} — {BUREAUS[b]}</option>)}
           </Select>
         )}
       </Field>

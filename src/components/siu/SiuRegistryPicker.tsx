@@ -3,7 +3,7 @@
 /** Choosing a subject means choosing a RECORD, not typing a name.
  *
  *  Shared by the watchlist and by target designation, which is the point: both
- *  screens attach SIU material to a row in a CID registry, and both would grow
+ *  screens attach SIB material to a row in a CID registry, and both would grow
  *  their own second address book if either offered a free-text box instead.
  *  One implementation, so a fix to one is a fix to both.
  *

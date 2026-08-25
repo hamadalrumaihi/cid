@@ -39,7 +39,8 @@ interface AnnouncementModalProps {
 /** How the audience is picked in the UI; 'mine'/'dept' both resolve to a
  *  bureau value, the rest map 1:1 onto announcements.audience. */
 type AudMode = 'all' | 'command' | 'mine' | 'dept' | 'specific_members'
-const BUREAU_VALUES = ['LSB', 'BCB', 'SAB', 'JTF'] as const
+// SIB is never an announcement audience — its membership is compartmented.
+const BUREAU_VALUES = ['major_crimes', 'street_crimes', 'JTF'] as const
 
 const SELECT_CLS = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
 
@@ -62,7 +63,7 @@ export function AnnouncementModal({ record, caseOptions, onClose, onSaved }: Ann
   const [mode, setMode] = useState<AudMode>(() =>
     record ? modeFor(record.audience) : canAll ? 'all' : myDivision ? 'mine' : 'command')
   const [dept, setDept] = useState<string>(() =>
-    record && modeFor(record.audience) === 'dept' ? record.audience : 'LSB')
+    record && modeFor(record.audience) === 'dept' ? record.audience : 'major_crimes')
   const [pinned, setPinned] = useState(!!record?.pinned)
   const [mentions, setMentions] = useState<Mention[]>(() =>
     parseMentions(record?.mentions ?? null).map((m) => ({ target: m.target, label: m.label || mentionLabel(m.target) })))

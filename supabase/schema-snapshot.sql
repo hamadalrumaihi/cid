@@ -31,7 +31,7 @@ create type public.assign_role as enum ('primary', 'support');
 
 create type public.bench_type as enum ('street', 'organized');
 
-create type public.bureau as enum ('LSB', 'BCB', 'SAB', 'JTF');
+create type public.bureau as enum ('major_crimes', 'street_crimes', 'special_investigations', 'JTF');
 
 create type public.case_status as enum ('open', 'active', 'cold', 'closed');
 
@@ -463,7 +463,8 @@ alter table public.cases add constraint cases_operation_id_fkey FOREIGN KEY (ope
 alter table public.cases add constraint cases_signoff_assignee_id_fkey FOREIGN KEY (signoff_assignee_id) REFERENCES public.profiles(id);
 alter table public.cases add constraint cases_signoff_submitted_by_fkey FOREIGN KEY (signoff_submitted_by) REFERENCES public.profiles(id);
 alter table public.cases add constraint cases_priority_check CHECK (((priority IS NULL) OR (priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
-alter table public.cases add constraint cases_originating_bureau_permanent CHECK (((originating_bureau IS NULL) OR (originating_bureau = ANY (ARRAY['LSB'::public.bureau, 'BCB'::public.bureau, 'SAB'::public.bureau]))));
+alter table public.cases add constraint cases_originating_bureau_permanent CHECK (((originating_bureau IS NULL) OR (originating_bureau = ANY (ARRAY['major_crimes'::public.bureau, 'street_crimes'::public.bureau]))));
+alter table public.cases add constraint cases_sib_bureau_requires_siu_authority CHECK (((bureau <> 'special_investigations'::public.bureau) OR (case_authority = 'siu'::text)));
 alter table public.cases add constraint cases_investigative_stage_check CHECK (investigative_stage in ('intake', 'active_investigation', 'legal_process', 'enforcement_ready', 'pending_closure', 'closed'));
 alter table public.cases add constraint cases_case_authority_check CHECK (case_authority in ('cid', 'siu'));
 alter table public.cases add constraint cases_siu_classification_check CHECK ((siu_classification is null) or (siu_classification in ('siu', 'siu_restricted', 'siu_command', 'siu_compartmented')));
@@ -472,7 +473,7 @@ alter table public.cases enable row level security;
 -- direct writers are blocked by trg_block_direct_case_stage — case_set_stage()
 -- (reason required, audited) is the only path.
 -- case_authority ('cid' | 'siu') is the INVESTIGATIVE AUTHORITY that owns the
--- case, and siu_classification is its SIU compartment level. Both are frozen
+-- case, and siu_classification is its SIB compartment level. Both are frozen
 -- for direct writers by trg_block_direct_siu_case_cols — siu_create_case() and
 -- siu_set_case_classification() are the only paths. An 'siu' case is governed
 -- exclusively by private.siu_case_access(): bureau, CID rank, command, lead/
@@ -616,7 +617,7 @@ alter table public.document_reading_campaigns add constraint document_reading_ca
 alter table public.document_reading_campaigns add constraint document_reading_campaigns_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.documents(id) ON DELETE CASCADE;
 alter table public.document_reading_campaigns add constraint document_reading_campaigns_document_version_id_fkey FOREIGN KEY (document_version_id) REFERENCES public.documents_versions(id);
 alter table public.document_reading_campaigns add constraint document_reading_campaigns_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
-alter table public.document_reading_campaigns add constraint document_reading_campaigns_audience_check CHECK ((audience = ANY (ARRAY['all'::text, 'LSB'::text, 'BCB'::text, 'SAB'::text, 'JTF'::text, 'command'::text, 'detectives'::text, 'senior_detectives'::text, 'specific'::text])));
+alter table public.document_reading_campaigns add constraint document_reading_campaigns_audience_check CHECK ((audience = ANY (ARRAY['all'::text, 'major_crimes'::text, 'street_crimes'::text, 'JTF'::text, 'command'::text, 'detectives'::text, 'senior_detectives'::text, 'specific'::text])));
 alter table public.document_reading_campaigns add constraint document_reading_campaigns_status_check CHECK ((status = ANY (ARRAY['active'::text, 'closed'::text, 'cancelled'::text])));
 alter table public.document_reading_campaigns enable row level security;
 -- Writes are RPC-only (publish_reading_campaign / close_reading_campaign);
@@ -1588,7 +1589,7 @@ alter table public.justice_memberships add constraint justice_memberships_user_i
 alter table public.justice_memberships add constraint justice_memberships_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES public.profiles(id);
 alter table public.justice_memberships add constraint justice_memberships_justice_role_check CHECK (justice_role in ('assistant_district_attorney', 'district_attorney', 'attorney_general', 'judge', 'prosecutor'));
 alter table public.justice_memberships add constraint justice_memberships_check CHECK ((agency = 'doj' and justice_role in ('assistant_district_attorney', 'district_attorney', 'attorney_general', 'prosecutor')) or (agency = 'judiciary' and justice_role = 'judge'));
-alter table public.justice_memberships add constraint justice_memberships_prosecutor_bureau_check CHECK (prosecutor_bureau is null or prosecutor_bureau in ('LSB', 'BCB', 'SAB'));
+alter table public.justice_memberships add constraint justice_memberships_prosecutor_bureau_check CHECK (prosecutor_bureau is null or prosecutor_bureau in ('major_crimes', 'street_crimes'));
 alter table public.justice_memberships enable row level security;
 -- prosecutor_bureau is the prosecutor's HOME bureau (exactly one of LSB/BCB/
 -- SAB; null for judges/AG and for legacy prosecutors pending manual
@@ -1840,20 +1841,20 @@ alter table public.legal_requests add constraint legal_requests_amends_request_i
 alter table public.legal_requests add constraint legal_requests_superseded_by_id_fkey FOREIGN KEY (superseded_by_id) REFERENCES public.legal_requests(id);
 alter table public.legal_requests add constraint legal_requests_execution_result_check CHECK ((execution_result IS NULL OR (execution_result = ANY (ARRAY['full'::text, 'partial'::text, 'unable'::text]))));
 alter table public.legal_requests add constraint legal_requests_review_status_check CHECK (review_status in ('not_submitted', 'cid_supervisor_review', 'returned_by_cid', 'siu_command_review', 'returned_by_siu_command', 'submitted_to_doj', 'ada_review', 'returned_by_ada', 'submitted_to_da', 'da_review', 'returned_by_da', 'submitted_to_ag', 'ag_review', 'returned_by_ag', 'submitted_to_judge', 'judicial_review', 'returned_by_judge', 'approved', 'denied', 'withdrawn', 'prosecutor_queue', 'prosecutor_review', 'returned_by_prosecutor', 'declined', 'cancelled', 'superseded'));
--- THE SIU LANE (20260903170000). An SIU legal request goes Special Agent ->
+-- THE SIB LANE (20260903170000). An SIB legal request goes Special Agent ->
 -- X-1 -> Attorney General -> Judge, and never touches a CID Bureau Lead or a
 -- prosecutor queue. Before this, submit_legal_request_to_cid() fanned out to
--- every CID deputy_director and director with no SIU branch -- and
+-- every CID deputy_director and director with no SIB branch -- and
 -- private.legal_notify() puts request_number, request_type and TITLE in the
--- payload, so that was a disclosure of an SIU legal request's substance to
+-- payload, so that was a disclosure of an SIB legal request's substance to
 -- accounts with no standing in the unit, not merely noise. Measured live: 4
 -- CID command notified before, 1 (X-1) after; the CID control path still
 -- notifies 4, unchanged. Approval now routes to ag_review rather than
--- prosecutor_queue, and private.can_view_legal_request() excludes SIU requests
--- from the bureau-scoped CID prosecutor lanes (an SIU case still carries a
+-- prosecutor_queue, and private.can_view_legal_request() excludes SIB requests
+-- from the bureau-scoped CID prosecutor lanes (an SIB case still carries a
 -- responsible_bureau because the column is NOT NULL). private.legal_is_siu()
 -- is the branch predicate; private.can_edit_legal_draft() learned
--- 'returned_by_siu_command' so a returned SIU request is not a dead end.
+-- 'returned_by_siu_command' so a returned SIB request is not a dead end.
 alter table public.legal_requests enable row level security;
 
 create table public.mdt_wanted_projections (
@@ -1955,7 +1956,7 @@ alter table public.prosecutor_coverage add constraint prosecutor_coverage_pkey P
 alter table public.prosecutor_coverage add constraint prosecutor_coverage_prosecutor_id_fkey FOREIGN KEY (prosecutor_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 alter table public.prosecutor_coverage add constraint prosecutor_coverage_authorized_by_fkey FOREIGN KEY (authorized_by) REFERENCES public.profiles(id);
 alter table public.prosecutor_coverage add constraint prosecutor_coverage_ended_by_fkey FOREIGN KEY (ended_by) REFERENCES public.profiles(id);
-alter table public.prosecutor_coverage add constraint prosecutor_coverage_bureau_check CHECK (bureau in ('LSB', 'BCB', 'SAB'));
+alter table public.prosecutor_coverage add constraint prosecutor_coverage_bureau_check CHECK (bureau in ('major_crimes', 'street_crimes'));
 alter table public.prosecutor_coverage enable row level security;
 -- TEMPORARY cross-bureau prosecutor coverage granted by the AG/Owner
 -- (explicit, dated, expiring, endable, audited). SELECT is the only policy
@@ -2044,7 +2045,7 @@ alter table public.member_transfers add constraint member_transfers_doj_decided_
 alter table public.member_transfers add constraint member_transfers_effective_by_fkey FOREIGN KEY (effective_by) REFERENCES public.profiles(id);
 alter table public.member_transfers add constraint member_transfers_direction_check CHECK (direction in ('cid_to_doj', 'doj_to_cid'));
 alter table public.member_transfers add constraint member_transfers_status_check CHECK (status in ('requested', 'cid_approved', 'doj_accepted', 'effective', 'returned', 'rejected', 'cancelled'));
-alter table public.member_transfers add constraint member_transfers_target_bureau_check CHECK (target_bureau is null or target_bureau in ('LSB', 'BCB', 'SAB'));
+alter table public.member_transfers add constraint member_transfers_target_bureau_check CHECK (target_bureau is null or target_bureau in ('major_crimes', 'street_crimes'));
 alter table public.member_transfers add constraint member_transfers_check CHECK ((direction = 'cid_to_doj' and requested_role in ('prosecutor', 'judge', 'attorney_general')) or (direction = 'doj_to_cid' and requested_role in ('detective', 'senior_detective', 'bureau_lead', 'deputy_director', 'director') and target_bureau is not null));
 alter table public.member_transfers add constraint member_transfers_check1 CHECK (not retain_cid or direction = 'cid_to_doj');
 alter table public.member_transfers enable row level security;
@@ -2467,10 +2468,10 @@ alter table public.membership_requests add constraint membership_requests_pkey P
 alter table public.membership_requests add constraint membership_requests_applicant_id_key UNIQUE (applicant_id);
 alter table public.membership_requests add constraint membership_requests_applicant_id_fkey FOREIGN KEY (applicant_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 alter table public.membership_requests add constraint membership_requests_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id);
-alter table public.membership_requests add constraint membership_requests_requested_bureau_check CHECK (requested_bureau in ('LSB', 'BCB', 'SAB'));
+alter table public.membership_requests add constraint membership_requests_requested_bureau_check CHECK (requested_bureau in ('major_crimes', 'street_crimes'));
 alter table public.membership_requests add constraint membership_requests_requested_role_check CHECK (requested_role in ('detective', 'senior_detective', 'bureau_lead', 'deputy_director', 'director'));
 alter table public.membership_requests add constraint membership_requests_status_check CHECK (status in ('draft', 'pending', 'correction_requested', 'approved', 'approved_with_changes', 'rejected', 'withdrawn'));
-alter table public.membership_requests add constraint membership_requests_decided_bureau_check CHECK (decided_bureau in ('LSB', 'BCB', 'SAB'));
+alter table public.membership_requests add constraint membership_requests_decided_bureau_check CHECK (decided_bureau in ('major_crimes', 'street_crimes'));
 alter table public.membership_requests enable row level security;
 -- Column privacy: internal_decision_note is grant-revoked from clients
 -- (profiles.email precedent); Command reads it via admin_membership_requests().
@@ -2555,7 +2556,7 @@ alter table public.operation_bureaus add constraint operation_bureaus_pkey PRIMA
 alter table public.operation_bureaus add constraint operation_bureaus_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES public.operations(id) ON DELETE CASCADE;
 alter table public.operation_bureaus add constraint operation_bureaus_joined_by_fkey FOREIGN KEY (joined_by) REFERENCES public.profiles(id);
 alter table public.operation_bureaus add constraint operation_bureaus_left_by_fkey FOREIGN KEY (left_by) REFERENCES public.profiles(id);
-alter table public.operation_bureaus add constraint operation_bureaus_bureau_check CHECK ((bureau <> 'JTF'::public.bureau));
+alter table public.operation_bureaus add constraint operation_bureaus_bureau_check CHECK ((bureau = ANY (ARRAY['major_crimes'::public.bureau, 'street_crimes'::public.bureau])));
 alter table public.operation_bureaus enable row level security;
 
 create table public.operation_case_links (
@@ -2612,8 +2613,8 @@ create index operations_commander_id_fkey_idx ON public.operations USING btree (
 alter table public.operations add constraint operations_jtf_converted_by_fkey FOREIGN KEY (jtf_converted_by) REFERENCES public.profiles(id);
 alter table public.operations add constraint operations_resolved_by_fkey FOREIGN KEY (resolved_by) REFERENCES public.profiles(id);
 alter table public.operations add constraint operations_op_type_check CHECK ((op_type = ANY (ARRAY['normal'::text, 'jtf'::text])));
-alter table public.operations add constraint operations_bureau_check CHECK (((bureau IS NULL) OR (bureau <> 'JTF'::public.bureau)));
-alter table public.operations add constraint operations_lead_bureau_check CHECK (((lead_bureau IS NULL) OR (lead_bureau <> 'JTF'::public.bureau)));
+alter table public.operations add constraint operations_bureau_check CHECK (((bureau IS NULL) OR (bureau = ANY (ARRAY['major_crimes'::public.bureau, 'street_crimes'::public.bureau]))));
+alter table public.operations add constraint operations_lead_bureau_check CHECK (((lead_bureau IS NULL) OR (lead_bureau = ANY (ARRAY['major_crimes'::public.bureau, 'street_crimes'::public.bureau]))));
 alter table public.operations enable row level security;
 
 create table public.person_places (
@@ -2977,8 +2978,8 @@ create table public.role_events (
   actor_id uuid,
   old_role public.app_role,
   new_role public.app_role,
-  old_division public.bureau,
-  new_division public.bureau,
+  old_division text,
+  new_division text,
   old_active boolean,
   new_active boolean,
   created_at timestamp with time zone not null default now(),
@@ -3055,10 +3056,10 @@ create index siu_case_notes_created_by_fkey_idx ON public.siu_case_notes USING b
 create index siu_case_notes_resolved_by_fkey_idx ON public.siu_case_notes USING btree (resolved_by);
 create index siu_case_notes_review_due_idx ON public.siu_case_notes USING btree (review_due_at) WHERE ((review_due_at IS NOT NULL) AND (resolved_at IS NULL));
 create index siu_case_notes_reviewed_by_idx ON public.siu_case_notes USING btree (last_reviewed_by);
--- THE SIU-ONLY LAYER. Attaches restricted SIU intelligence to ANY case,
+-- THE SIB-ONLY LAYER. Attaches restricted SIB intelligence to ANY case,
 -- including a CID one, with NO branch anywhere admitting a CID role — not the
 -- case's own lead detective, not CID command, not the Director. That is what
--- lets SIU investigate a compromised investigator without alerting them.
+-- lets SIB investigate a compromised investigator without alerting them.
 -- Â§20/Â§21/Â§23 GRADING (20260831120000): source_type is HOW it was obtained;
 -- source_reliability grades the SOURCE (the Admiralty A-F half, same vocabulary
 -- as siu_sources.reliability); info_credibility grades the INFORMATION (the 1-5
@@ -3149,9 +3150,9 @@ create unique index siu_targets_one_live_person ON public.siu_targets USING btre
 create unique index siu_targets_one_live_vehicle ON public.siu_targets USING btree (case_id, vehicle_id) WHERE (vehicle_id is not null and cleared_at is null);
 create unique index siu_targets_one_live_gang ON public.siu_targets USING btree (case_id, gang_id) WHERE (gang_id is not null and cleared_at is null);
 create unique index siu_targets_one_live_place ON public.siu_targets USING btree (case_id, place_id) WHERE (place_id is not null and cleared_at is null);
--- Investigative DESIGNATIONS, not findings, pinned to an SIU investigation and
+-- Investigative DESIGNATIONS, not findings, pinned to an SIB investigation and
 -- REFERENCING the shared registries through typed foreign keys (20260903150000)
--- -- one master record per person/vehicle/gang, with an SIU-only designation
+-- -- one master record per person/vehicle/gang, with an SIB-only designation
 -- layered on top. It previously carried an untyped entity_id with no FK and a
 -- copied `label`, the same duplicate address book corrected on the watchlist;
 -- `label` is now a fallback for entity_type = 'unknown' only. The table was
@@ -3202,9 +3203,9 @@ create index siu_disclosures_released_by_fkey_idx ON public.siu_disclosures USIN
 create index siu_disclosures_revoked_by_fkey_idx ON public.siu_disclosures USING btree (revoked_by);
 create index siu_disclosures_acknowledged_by_fkey_idx ON public.siu_disclosures USING btree (acknowledged_by);
 create index siu_disclosures_live_idx ON public.siu_disclosures USING btree (audience) WHERE (revoked_at is null);
--- §15. A SNAPSHOT of one released item — never a pointer into an SIU record —
+-- §15. A SNAPSHOT of one released item — never a pointer into an SIB record —
 -- so releasing an item cannot widen into the investigation. CID never reads
--- this table: siu_disclosures_sel is SIU-side only, and CID goes through
+-- this table: siu_disclosures_sel is SIB-side only, and CID goes through
 -- public.siu_released_intelligence(), which projects no origin at all.
 
 create table public.siu_sources (
@@ -3435,7 +3436,7 @@ create unique index siu_case_agents_active_idx ON public.siu_case_agents USING b
 create index siu_case_agents_user_idx ON public.siu_case_agents USING btree (user_id) WHERE (removed_at IS NULL);
 create index siu_case_agents_assigned_by_fkey_idx ON public.siu_case_agents USING btree (assigned_by);
 create index siu_case_agents_removed_by_fkey_idx ON public.siu_case_agents USING btree (removed_by);
--- Per-investigation SIU staffing. Assignment is NOT a compartment key: a
+-- Per-investigation SIB staffing. Assignment is NOT a compartment key: a
 -- compartmented case additionally needs a siu_compartment_members row.
 
 create table public.siu_compartment_members (
@@ -3460,7 +3461,7 @@ create index siu_compartment_members_user_idx ON public.siu_compartment_members 
 create index siu_compartment_members_granted_by_fkey_idx ON public.siu_compartment_members USING btree (granted_by);
 create index siu_compartment_members_revoked_by_fkey_idx ON public.siu_compartment_members USING btree (revoked_by);
 -- The ONLY key to an siu_compartmented investigation. No rank, no flag and no
--- SIU command role substitutes for a row here — X-1, the Attorney General and
+-- SIB command role substitutes for a row here — X-1, the Attorney General and
 -- the owner flag are all excluded unless explicitly listed. Managed from
 -- INSIDE the compartment (siu_compartment_add / _remove), so someone taken off
 -- the list cannot put themselves back on it.
@@ -3491,7 +3492,7 @@ alter table public.siu_memberships enable row level security;
 create unique index siu_memberships_active_callsign_idx ON public.siu_memberships USING btree (upper(callsign)) WHERE (active AND (callsign IS NOT NULL));
 create index siu_memberships_appointed_by_fkey_idx ON public.siu_memberships USING btree (appointed_by);
 create index siu_memberships_ended_by_fkey_idx ON public.siu_memberships USING btree (ended_by);
--- The SIU identity domain — separate from profiles.role (CID) and from
+-- The SIB identity domain — separate from profiles.role (CID) and from
 -- justice_memberships (DOJ/judiciary). APPOINTMENT-ONLY: there is no request
 -- table, no queue and no self-service path anywhere in the product.
 -- internal_note is column-revoked from authenticated/anon (the
@@ -3530,14 +3531,14 @@ create index siu_referrals_submitted_by_idx ON public.siu_referrals USING btree 
 create index siu_referrals_related_case_idx ON public.siu_referrals USING btree (related_case_id);
 create index siu_referrals_opened_case_idx ON public.siu_referrals USING btree (opened_case_id);
 create index siu_referrals_reviewed_by_fkey_idx ON public.siu_referrals USING btree (reviewed_by);
--- SIU intake queue (Â§14). Readable by FIELD AGENTS ONLY -- private.siu_is_agent(),
+-- SIB intake queue (Â§14). Readable by FIELD AGENTS ONLY -- private.siu_is_agent(),
 -- deliberately not oversight standing, because a referral may name the Director
 -- of CID or the Attorney General and the queue would hand its own subject the
 -- allegations against them. Oversight sees referral VOLUME via
 -- siu_oversight_report(). There is NO client write policy: public.siu_submit_referral()
 -- (any active member) and public.siu_review_referral() (field standing) are the
 -- only writers. The submitter's own view is public.siu_my_referrals(), which
--- strips every review column so a referral cannot become an oracle about SIU
+-- strips every review column so a referral cannot become an oracle about SIB
 -- activity.
 
 create table public.siu_conflicts (
@@ -3606,10 +3607,10 @@ create index siu_visibility_case_idx ON public.siu_visibility USING btree (siu_c
 alter table public.siu_visibility enable row level security;
 -- The compartment ledger. ABSENCE OF A ROW MEANS CID-VISIBLE: there is no
 -- visibility column on any registry table and nothing was backfilled as hidden,
--- so a bug here leaves SIU material visible to SIU rather than deleting CID's
+-- so a bug here leaves SIB material visible to SIB rather than deleting CID's
 -- registry. 'unclassified' is the flag for a record whose origin could not be
--- established and deliberately does NOT hide -- both active SIU members are
--- also senior CID staff, so "created by an SIU member" would have hidden all
+-- established and deliberately does NOT hide -- both active SIB members are
+-- also senior CID staff, so "created by an SIB member" would have hidden all
 -- ten vehicles and 49 of 54 gangs. Written only by the definer RPCs; no write
 -- policy exists.
 
@@ -3775,7 +3776,7 @@ create index siu_access_requests_decided_by_idx ON public.siu_access_requests US
 create index siu_access_requests_grant_idx ON public.siu_access_requests USING btree (granted_access_id);
 -- The Director of CID asks X-1 to see ONE investigation (20260902130000).
 -- case_number_requested is FREE TEXT and is deliberately NEVER resolved at
--- request time: the Director sees none of SIU's caseload, so answering "no such
+-- request time: the Director sees none of SIB's caseload, so answering "no such
 -- investigation" for a bad number and "submitted" for a good one would let him
 -- walk the case-number space and learn how many investigations exist and when.
 -- Resolution happens at DECISION time, in front of X-1, who can already see the
@@ -3814,12 +3815,12 @@ create index siu_temp_access_user_idx ON public.siu_temporary_access USING btree
 create index siu_temp_access_case_idx ON public.siu_temporary_access USING btree (case_id);
 create index siu_temp_access_granted_by_idx ON public.siu_temporary_access USING btree (granted_by);
 create index siu_temp_access_revoked_by_idx ON public.siu_temporary_access USING btree (revoked_by);
--- Â§30 supporting-officer access -- the ONE deliberate hole in the CID->SIU wall,
+-- Â§30 supporting-officer access -- the ONE deliberate hole in the CID->SIB wall,
 -- cut as small as it goes. private.siu_temp_access() is spliced into
 -- private.can_access_case() AND can_access_case_row(), NEVER into
 -- siu_case_access(), so the holder gets the case file (reports, evidence,
 -- media, tasks) and NO siu_* table -- no sources, legends, intercepts, targets
--- or SIU-only notes. Standard classification only; the test lives in the
+-- or SIB-only notes. Standard classification only; the test lives in the
 -- predicate, so reclassifying a case upward closes every outstanding grant at
 -- once. Expiry is evaluated against the clock (no sweeper job). The Â§17
 -- recusal veto still wins. Granting is a COMMAND act, never oversight.
@@ -3838,7 +3839,7 @@ alter table public.siu_settings enable row level security;
 -- Single-row build-phase release gate (a constant-true boolean primary key
 -- makes a second row structurally impossible). While enabled_for_non_owner is
 -- false, private.siu_standing() resolves to 'owner' and NULL for everyone
--- else, so SIU effectively does not exist for any non-owner account.
+-- else, so SIB effectively does not exist for any non-owner account.
 -- siu_set_release(boolean, text) — Owner-only, reason required, audited — is
 -- the one writer.
 
@@ -4165,8 +4166,8 @@ alter table public.transfer_requests add constraint transfer_requests_requested_
 alter table public.transfer_requests add constraint transfer_requests_source_approved_by_fkey FOREIGN KEY (source_approved_by) REFERENCES public.profiles(id);
 alter table public.transfer_requests add constraint transfer_requests_target_approved_by_fkey FOREIGN KEY (target_approved_by) REFERENCES public.profiles(id);
 alter table public.transfer_requests add constraint transfer_requests_completed_by_fkey FOREIGN KEY (completed_by) REFERENCES public.profiles(id);
-alter table public.transfer_requests add constraint transfer_requests_from_bureau_check CHECK (from_bureau in ('LSB', 'BCB', 'SAB', 'JTF'));
-alter table public.transfer_requests add constraint transfer_requests_to_bureau_check CHECK (to_bureau in ('LSB', 'BCB', 'SAB', 'JTF'));
+alter table public.transfer_requests add constraint transfer_requests_from_bureau_check CHECK (from_bureau in ('major_crimes', 'street_crimes', 'JTF'));
+alter table public.transfer_requests add constraint transfer_requests_to_bureau_check CHECK (to_bureau in ('major_crimes', 'street_crimes', 'JTF'));
 alter table public.transfer_requests add constraint transfer_requests_status_check CHECK (status in ('pending_source', 'pending_target', 'approved', 'rejected', 'cancelled', 'completed'));
 alter table public.transfer_requests add constraint transfer_requests_check CHECK (from_bureau <> to_bureau);
 alter table public.transfer_requests enable row level security;
@@ -4752,22 +4753,21 @@ begin
 end $function$
 ;
 
-CREATE OR REPLACE FUNCTION private.default_case_originating_bureau()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO ''
-AS $function$
+create or replace function private.default_case_originating_bureau()
+returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
 begin
   if new.originating_bureau = 'JTF' then new.originating_bureau := null; end if;
   if new.bureau = 'JTF' and new.originating_bureau is null then
     select p.division into new.originating_bureau
       from public.profiles p
      where p.id = coalesce(new.created_by, (select auth.uid()))
-       and p.division in ('LSB', 'BCB', 'SAB');
+       and p.division in ('major_crimes', 'street_crimes');
   end if;
   return new;
-end $function$
+end $$;
 ;
 
 CREATE OR REPLACE FUNCTION private.block_direct_report_finalize()
@@ -4911,18 +4911,17 @@ AS $function$
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION private.can_create_case(p_bureau public.bureau)
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO ''
-AS $function$
-  select private.is_active() and (
+create or replace function private.can_create_case(p_bureau public.bureau)
+returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select private.is_active() and p_bureau <> 'special_investigations' and (
     p_bureau = 'JTF'
     or p_bureau = (select division from public.profiles where id = (select auth.uid()))
     or private.is_command()
   )
-$function$
+$$;
 ;
 
 CREATE OR REPLACE FUNCTION private.can_delete()
@@ -5251,12 +5250,11 @@ begin
 end $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.assign_member(target uuid, set_active boolean)
- RETURNS void
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO ''
-AS $function$
+create or replace function public.assign_member(target uuid, set_active boolean)
+returns void
+language plpgsql security definer
+set search_path = ''
+as $$
 declare
   v_uid uuid := (select auth.uid());
   me public.profiles;
@@ -5325,7 +5323,7 @@ begin
              decided_by = v_uid,
              decided_at = now(),
              decided_role = t.role,
-             decided_bureau = case when t.division in ('LSB', 'BCB', 'SAB')
+             decided_bureau = case when t.division in ('major_crimes', 'street_crimes')
                                    then t.division else null end,
              internal_decision_note = case
                when internal_decision_note is null or btrim(internal_decision_note) = ''
@@ -5338,15 +5336,14 @@ begin
         'Auto-reconciled: member activated directly via assign_member.', true);
     end if;
   end if;
-end $function$
+end $$;
 ;
 
-CREATE OR REPLACE FUNCTION public.case_reassign_bureau(p_case uuid, p_to_bureau public.bureau, p_reason text, p_update_originating boolean DEFAULT false)
- RETURNS public.cases
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO ''
-AS $function$
+create or replace function public.case_reassign_bureau(p_case uuid, p_to_bureau public.bureau, p_reason text, p_update_originating boolean default false)
+returns public.cases
+language plpgsql security definer
+set search_path = ''
+as $$
 declare
   v_uid uuid := (select auth.uid());
   me public.profiles;
@@ -5363,16 +5360,14 @@ begin
     raise exception 'only a Deputy Director or higher may reassign a case between bureaus';
   end if;
   if v_reason = '' then raise exception 'a reason is required'; end if;
-  if p_to_bureau not in ('LSB', 'BCB', 'SAB') then
-    raise exception 'JTF is a shared-visibility designation, not a bureau — cases cannot be reassigned into it';
+  if p_to_bureau not in ('major_crimes', 'street_crimes') then
+    raise exception 'cases may only be reassigned to Major Crimes or Street Crimes — JTF is a shared-visibility designation, and SIB takes control through its own assumption workflow';
   end if;
 
   select * into c from public.cases where id = p_case for update;
   if c.id is null then raise exception 'case not found'; end if;
-  -- Post-lock revalidation: a concurrent reassignment that already applied
-  -- makes this a stale request, not a silent success.
   if c.bureau = p_to_bureau then
-    raise exception 'case is already in % — reload and retry', p_to_bureau;
+    raise exception 'case is already in % — reload and retry', private.bureau_label(p_to_bureau::text);
   end if;
 
   v_from := c.bureau;
@@ -5391,8 +5386,6 @@ begin
     'reason', left(v_reason, 500),
     'status', c.status, 'is_joint_case', c.is_joint_case));
 
-  -- Recipient-scoped notification: header text only. A fixture actor never
-  -- reaches a real member's bell (transfer_notify precedent).
   select u.email like 'rls-test-%@cidportal.test' into v_is_test
     from auth.users u where u.id = v_uid;
   insert into public.notifications (user_id, type, payload)
@@ -5400,7 +5393,8 @@ begin
     'case_id', p_case, 'case_number', c.case_number,
     'from', v_from, 'to', p_to_bureau,
     'reason', 'Case ' || coalesce(c.case_number, '') || ' was reassigned from '
-      || v_from || ' to ' || p_to_bureau || '. Reason: ' || v_reason,
+      || private.bureau_label(v_from::text) || ' to ' || private.bureau_label(p_to_bureau::text)
+      || '. Reason: ' || v_reason,
     'actor_id', v_uid, 'actor_name', me.display_name)
     from public.profiles p
    where p.active and p.removed_at is null and p.id <> v_uid
@@ -5414,15 +5408,14 @@ begin
                       where u.id = p.id and u.email like 'rls-test-%@cidportal.test'));
 
   return c;
-end $function$
+end $$;
 ;
 
-CREATE OR REPLACE FUNCTION public.convert_case_to_joint(p_case uuid, p_members jsonb, p_note text DEFAULT NULL::text)
- RETURNS jsonb
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO ''
-AS $function$
+create or replace function public.convert_case_to_joint(p_case uuid, p_members jsonb, p_note text default null::text)
+returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
 declare v_uid uuid := (select auth.uid()); c public.cases; v_n int;
 begin
   if not private.can_manage_joint(p_case) then raise exception 'not permitted to manage this case'; end if;
@@ -5432,7 +5425,7 @@ begin
   update public.cases
      set is_joint_case = true,
          originating_bureau = coalesce(originating_bureau,
-           case when bureau in ('LSB', 'BCB', 'SAB') then bureau end),
+           case when bureau in ('major_crimes', 'street_crimes') then bureau end),
          joint_case_created_by = v_uid, joint_case_created_at = now(),
          joint_case_ended_by = null, joint_case_ended_at = null
    where id = p_case;
@@ -5440,15 +5433,14 @@ begin
   insert into public.audit_log (actor_id, action, entity, entity_id)
   values (v_uid, 'JOINT_CASE_CREATED', 'cases', p_case);
   return jsonb_build_object('case_id', p_case, 'members_added', v_n);
-end $function$
+end $$;
 ;
 
-CREATE OR REPLACE FUNCTION public.resolve_case_originating_bureau(p_case uuid, p_bureau public.bureau, p_reason text DEFAULT NULL::text)
- RETURNS public.cases
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO ''
-AS $function$
+create or replace function public.resolve_case_originating_bureau(p_case uuid, p_bureau public.bureau, p_reason text default null::text)
+returns public.cases
+language plpgsql security definer
+set search_path = ''
+as $$
 declare v_uid uuid := (select auth.uid()); c public.cases; me public.profiles;
         v_old public.bureau; v_reason text := btrim(coalesce(p_reason, ''));
 begin
@@ -5462,19 +5454,19 @@ begin
   if not found or not private.can_access_case(p_case) then
     raise exception 'case not found or not accessible';
   end if;
-  if p_bureau not in ('LSB', 'BCB', 'SAB') then
-    raise exception 'the responsible bureau must be LSB, BCB, or SAB';
+  if p_bureau not in ('major_crimes', 'street_crimes') then
+    raise exception 'the responsible bureau must be Major Crimes or Street Crimes';
   end if;
-  if c.bureau in ('LSB', 'BCB', 'SAB') then
-    raise exception 'this case''s responsible bureau is its own bureau (%) — use the reassign-bureau workflow to move it', c.bureau;
+  if c.bureau in ('major_crimes', 'street_crimes') then
+    raise exception 'this case''s responsible bureau is its own bureau (%) — use the reassign-bureau workflow to move it', private.bureau_label(c.bureau::text);
   end if;
   v_old := c.originating_bureau;
-  if v_old in ('LSB', 'BCB', 'SAB') then
+  if v_old in ('major_crimes', 'street_crimes') then
     if v_old = p_bureau then
-      raise exception 'the responsible bureau is already %', p_bureau;
+      raise exception 'the responsible bureau is already %', private.bureau_label(p_bureau::text);
     end if;
     if not (me.role in ('deputy_director', 'director') or coalesce(me.is_owner, false)) then
-      raise exception 'the responsible bureau is already set to % — only a Deputy Director or higher may change it', v_old;
+      raise exception 'the responsible bureau is already set to % — only a Deputy Director or higher may change it', private.bureau_label(v_old::text);
     end if;
     if v_reason = '' then
       raise exception 'a reason is required to change the responsible bureau';
@@ -5483,13 +5475,13 @@ begin
   update public.cases set originating_bureau = p_bureau where id = p_case returning * into c;
   insert into public.audit_log (actor_id, action, entity, entity_id, detail)
   values (v_uid,
-          case when v_old in ('LSB', 'BCB', 'SAB')
+          case when v_old in ('major_crimes', 'street_crimes')
                then 'ORIGINATING_BUREAU_CHANGED' else 'ORIGINATING_BUREAU_SET' end,
           'cases', p_case,
           jsonb_build_object('bureau', p_bureau, 'previous', v_old, 'source', 'manual',
                              'reason', nullif(left(v_reason, 500), '')));
   return c;
-end $function$
+end $$;
 ;
 
 CREATE OR REPLACE FUNCTION public.cid_touch_updated_at()
@@ -6703,12 +6695,11 @@ end $function$
 ;
 
 -- Backfilled from 20260719030000_org_correction.sql (snapshot drift closed)
-CREATE OR REPLACE FUNCTION public.correct_membership_organization(p_target uuid, p_direction text, p_reason text, p_requested_justice_role text DEFAULT NULL::text, p_requested_bureau bureau DEFAULT NULL::bureau, p_requested_role app_role DEFAULT NULL::app_role)
- RETURNS jsonb
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO ''
-AS $function$
+create or replace function public.correct_membership_organization(p_target uuid, p_direction text, p_reason text, p_requested_justice_role text default null::text, p_requested_bureau public.bureau default null::public.bureau, p_requested_role public.app_role default null::public.app_role)
+returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
 declare
   v_uid uuid := (select auth.uid());
   me public.profiles;
@@ -6795,8 +6786,8 @@ begin
     end if;
 
   else  -- justice_to_cid
-    if p_requested_bureau is null or p_requested_bureau not in ('LSB', 'BCB', 'SAB') then
-      raise exception 'a permanent CID department (LSB/BCB/SAB) is required';
+    if p_requested_bureau is null or p_requested_bureau not in ('major_crimes', 'street_crimes') then
+      raise exception 'a permanent CID department (Major Crimes or Street Crimes) is required';
     end if;
     if p_requested_role is null
        or p_requested_role not in ('detective','senior_detective','bureau_lead','deputy_director','director') then
@@ -6863,7 +6854,7 @@ begin
     'actor_id', v_uid, 'actor_name', me.display_name));
 
   return jsonb_build_object('request_id', v_req, 'direction', p_direction);
-end $function$
+end $$;
 ;
 
 -- Backfilled from 20260719040000_owner_justice_grant.sql (snapshot drift closed)
@@ -6923,10 +6914,11 @@ end $function$
 -- can_approve_legal, transfer_doj_set_membership) are comment-tracked in the
 -- trailing 20260818120000 note. ──
 
-create or replace function public.justice_set_coverage(
-  p_user uuid, p_bureau public.bureau, p_reason text, p_expires_at timestamptz default null)
+create or replace function public.justice_set_coverage(p_user uuid, p_bureau public.bureau, p_reason text, p_expires_at timestamptz default null::timestamptz)
 returns public.prosecutor_coverage
-language plpgsql security definer set search_path to '' as $$
+language plpgsql security definer
+set search_path = ''
+as $$
 declare v_uid uuid := (select auth.uid()); c public.prosecutor_coverage;
 begin
   if not (coalesce(private.justice_role_effective(v_uid) = 'attorney_general', false)
@@ -6934,7 +6926,9 @@ begin
     raise exception 'only the Attorney General or Owner may manage coverage';
   end if;
   if btrim(coalesce(p_reason, '')) = '' then raise exception 'a reason is required'; end if;
-  if p_bureau not in ('LSB', 'BCB', 'SAB') then raise exception 'coverage bureau must be LSB, BCB, or SAB'; end if;
+  if p_bureau not in ('major_crimes', 'street_crimes') then
+    raise exception 'coverage bureau must be Major Crimes or Street Crimes';
+  end if;
   if coalesce(private.justice_role_effective(p_user) = 'prosecutor', false) is not true then
     raise exception 'coverage can only be granted to an active Prosecutor';
   end if;
@@ -6950,7 +6944,7 @@ begin
                              'expires_at', p_expires_at, 'reason', left(p_reason, 300)));
   insert into public.notifications (user_id, type, payload)
   values (p_user, 'justice_membership_update', jsonb_build_object(
-    'reason', 'You were granted temporary prosecutor coverage for ' || p_bureau
+    'reason', 'You were granted temporary prosecutor coverage for ' || private.bureau_label(p_bureau::text)
       || coalesce(' until ' || to_char(p_expires_at, 'YYYY-MM-DD HH24:MI'), '') || '.'));
   return c;
 end $$;
@@ -7068,41 +7062,53 @@ begin
   return r;
 end $$;
 
-create or replace function public.review_legal_request_as_cid(
-  p_request uuid, p_decision text, p_note text default null,
-  p_override_reason text default null, p_signature text default null)
+create or replace function public.review_legal_request_as_cid(p_request uuid, p_decision text, p_note text default null::text, p_override_reason text default null::text, p_signature text default null::text)
 returns public.legal_requests
-language plpgsql security definer set search_path to ''
-as $function$
+language plpgsql security definer
+set search_path = ''
+as $$
 declare v_uid uuid := (select auth.uid()); r public.legal_requests; v_ver uuid;
         v_exhibits integer; v_prosecutors integer := 0; rec record;
         me public.profiles; c public.cases; v_fallback boolean; v_jtf_any boolean;
+        v_siu boolean; v_stage text; v_returned text; v_ags integer := 0;
+        v_rank text;
 begin
   select * into r from public.legal_requests where id = p_request for update;
   if not found then raise exception 'request not found'; end if;
-  if r.review_status <> 'cid_supervisor_review' then
-    raise exception 'request is not awaiting CID review';
+  v_siu := private.legal_is_siu(p_request);
+  v_stage := case when v_siu then 'siu_command_review' else 'cid_supervisor_review' end;
+  v_returned := case when v_siu then 'returned_by_siu_command' else 'returned_by_cid' end;
+  if r.review_status <> v_stage then
+    raise exception 'request is not awaiting % review', case when v_siu then 'SIB command' else 'CID' end;
   end if;
   if not private.can_approve_legal(p_request, v_uid) then
-    raise exception 'only Bureau Lead or above may decide this request';
+    raise exception 'only % may decide this request',
+      case when v_siu then 'SIB command' else 'Bureau Lead or above' end;
   end if;
   if p_decision not in ('approve', 'deny', 'return') then raise exception 'invalid decision'; end if;
   select * into me from public.profiles where id = v_uid;
   select * into c from public.cases where id = r.case_id;
-  v_jtf_any := (me.role = 'bureau_lead' and c.bureau = 'JTF' and me.division <> r.responsible_bureau);
-  v_fallback := not (me.role = 'bureau_lead' and me.division = r.responsible_bureau) and not v_jtf_any;
+  -- The rank held right now, frozen into the record. Owner is not a CID rank,
+  -- so it is named separately rather than mislabelled as one.
+  v_rank := case when coalesce(me.is_owner, false) and me.role is null then 'owner'
+                 else me.role end;
+  v_jtf_any := (not v_siu) and (me.role = 'bureau_lead' and c.bureau = 'JTF' and me.division <> r.responsible_bureau);
+  v_fallback := (not v_siu) and not (me.role = 'bureau_lead' and me.division = r.responsible_bureau) and not v_jtf_any;
 
   if p_decision = 'return' then
     if btrim(coalesce(p_note, '')) = '' then raise exception 'a return requires a note'; end if;
     update public.legal_requests
-       set review_status = 'returned_by_cid', document_status = 'reopened'
+       set review_status = v_returned, document_status = 'reopened'
      where id = p_request returning * into r;
-    perform private.legal_log(p_request, r.current_version_id, 'returned_by_cid',
-      'cid_supervisor_review', 'returned_by_cid', p_note, null);
-    perform private.legal_audit(p_request, 'LEGAL_RETURNED_BY_CID',
-      jsonb_build_object('note', left(p_note, 200), 'fallback', v_fallback, 'jtf_any_lead', v_jtf_any));
+    perform private.legal_log(p_request, r.current_version_id, v_returned,
+      v_stage, v_returned, p_note, null);
+    perform private.legal_audit(p_request,
+      case when v_siu then 'LEGAL_RETURNED_BY_SIU_COMMAND' else 'LEGAL_RETURNED_BY_CID' end,
+      jsonb_build_object('note', left(p_note, 200), 'fallback', v_fallback,
+                         'jtf_any_lead', v_jtf_any, 'actor_rank', v_rank));
     perform private.legal_notify(r.created_by, p_request, 'legal_update',
-      'Your ' || r.request_type || ' request was returned by CID review.');
+      'Your ' || r.request_type || ' request was returned by '
+      || case when v_siu then 'SIB command' else 'CID review' end || '.');
     return r;
   end if;
 
@@ -7111,21 +7117,21 @@ begin
     update public.legal_requests
        set decision = 'denied', decision_note = p_note,
            decided_by = v_uid, decided_at = now(),
-           review_status = 'denied'
+           review_status = 'denied',
+           cid_reviewed_role = v_rank
      where id = p_request returning * into r;
     v_ver := private.legal_freeze_version(p_request, 'denied');
     select * into r from public.legal_requests where id = p_request;
-    perform private.legal_log(p_request, v_ver, 'denied',
-      'cid_supervisor_review', 'denied', p_note, null);
+    perform private.legal_log(p_request, v_ver, 'denied', v_stage, 'denied', p_note, null);
     perform private.legal_audit(p_request, 'LEGAL_DENIED_BY_COMMAND',
       jsonb_build_object('version', v_ver, 'note', left(p_note, 200),
-                         'fallback', v_fallback, 'jtf_any_lead', v_jtf_any));
+                         'siu', v_siu, 'fallback', v_fallback,
+                         'jtf_any_lead', v_jtf_any, 'actor_rank', v_rank));
     perform private.legal_notify(r.created_by, p_request, 'legal_decision',
       'Your ' || r.request_type || ' request was denied by command.');
     return r;
   end if;
 
-  -- approve → the responsible bureau's shared prosecutor queue
   if r.source_report_id is not null
      and not exists (select 1 from public.reports rp where rp.id = r.source_report_id and rp.finalized) then
     raise exception 'the source report must be finalized before approval';
@@ -7135,8 +7141,55 @@ begin
     raise exception 'at least one supporting item is required (or record an override reason)';
   end if;
 
+  if v_siu then
+    update public.legal_requests
+       set cid_reviewed_by = v_uid, cid_reviewed_at = now(),
+           cid_reviewed_role = v_rank,
+           review_status = 'ag_review',
+           submitted_to_doj_at = coalesce(submitted_to_doj_at, now()),
+           queue_entered_at = now(),
+           assigned_prosecutor_id = null, prosecutor_claimed_at = null
+     where id = p_request returning * into r;
+    v_ver := private.legal_freeze_version(p_request, 'siu_command_approved');
+    select * into r from public.legal_requests where id = p_request;
+    perform private.legal_sign(p_request, v_ver, 'siu_command_approval', p_signature);
+    perform private.legal_add_participant(p_request, v_uid, 'cid_supervisor');
+    perform private.legal_log(p_request, v_ver, 'siu_command_approved',
+      'siu_command_review', 'ag_review', p_note,
+      nullif(btrim(coalesce(p_override_reason, '')), ''));
+    if v_exhibits = 0 then
+      perform private.legal_log(p_request, v_ver, 'packet_override', null, null,
+        'Approved without supporting items: ' || p_override_reason, null);
+    end if;
+    perform private.legal_audit(p_request, 'LEGAL_APPROVED_BY_SIU_COMMAND',
+      jsonb_build_object('version', v_ver, 'packet_override', v_exhibits = 0,
+                         'to', 'ag_review', 'actor_rank', v_rank));
+    perform private.legal_notify(r.created_by, p_request, 'legal_update',
+      'Your ' || r.request_type || ' request passed SIB command review and is with the Attorney General.');
+    for rec in
+      select p.id from public.profiles p
+       where coalesce(private.justice_role_effective(p.id) = 'attorney_general', false)
+    loop
+      v_ags := v_ags + 1;
+      perform private.legal_notify(rec.id, p_request, 'legal_request',
+        'An SIB ' || r.request_type || ' request awaits Attorney General review.');
+    end loop;
+    if v_ags = 0 then
+      for rec in
+        select p.id from public.profiles p where p.is_owner and p.removed_at is null
+      loop
+        perform private.legal_notify(rec.id, p_request, 'legal_coverage',
+          'An SIB legal request is with the Attorney General, and no Attorney General is seated.');
+      end loop;
+      perform private.legal_audit(p_request, 'LEGAL_AG_UNCOVERED',
+        jsonb_build_object('version', v_ver));
+    end if;
+    return r;
+  end if;
+
   update public.legal_requests
      set cid_reviewed_by = v_uid, cid_reviewed_at = now(),
+         cid_reviewed_role = v_rank,
          review_status = 'prosecutor_queue',
          submitted_to_doj_at = coalesce(submitted_to_doj_at, now()),
          queue_entered_at = now(),
@@ -7149,6 +7202,13 @@ begin
   perform private.legal_log(p_request, v_ver, 'cid_approved',
     'cid_supervisor_review', 'prosecutor_queue', p_note,
     nullif(btrim(coalesce(p_override_reason, '')), ''));
+  if v_jtf_any then
+    perform private.legal_log(p_request, v_ver, 'command_fallback', null, null,
+      'Approved by a Bureau Lead from another bureau, permitted because the case is JTF.', null);
+  elsif v_fallback then
+    perform private.legal_log(p_request, v_ver, 'command_fallback', null, null,
+      'Approved by command standing in for the ' || private.bureau_label(r.responsible_bureau::text) || ' Bureau Lead.', null);
+  end if;
   if v_exhibits = 0 then
     perform private.legal_log(p_request, v_ver, 'packet_override', null, null,
       'Approved without supporting items: ' || p_override_reason, null);
@@ -7156,10 +7216,10 @@ begin
   perform private.legal_audit(p_request, 'LEGAL_APPROVED_BY_COMMAND',
     jsonb_build_object('version', v_ver, 'bureau', r.responsible_bureau,
                        'packet_override', v_exhibits = 0, 'to', 'prosecutor_queue',
-                       'fallback', v_fallback, 'jtf_any_lead', v_jtf_any));
+                       'fallback', v_fallback, 'jtf_any_lead', v_jtf_any,
+                       'actor_rank', v_rank));
   perform private.legal_notify(r.created_by, p_request, 'legal_update',
-    'Your ' || r.request_type || ' request passed CID review and entered the ' || r.responsible_bureau || ' prosecutor queue.');
-  -- Fan out to the BUREAU bench (home + live coverage; non-sealed only).
+    'Your ' || r.request_type || ' request passed CID review and entered the ' || private.bureau_label(r.responsible_bureau::text) || ' prosecutor queue.');
   if r.classification <> 'sealed' then
     for rec in
       select m.user_id from public.justice_memberships m
@@ -7169,7 +7229,7 @@ begin
     loop
       v_prosecutors := v_prosecutors + 1;
       perform private.legal_notify(rec.user_id, p_request, 'legal_request',
-        'A ' || r.request_type || ' request entered the ' || r.responsible_bureau || ' prosecutor queue.');
+        'A ' || r.request_type || ' request entered the ' || private.bureau_label(r.responsible_bureau::text) || ' prosecutor queue.');
     end loop;
   end if;
   if v_prosecutors = 0 then
@@ -7179,18 +7239,19 @@ begin
           or coalesce(private.justice_role_effective(p.id) = 'attorney_general', false)
     loop
       perform private.legal_notify(rec.id, p_request, 'legal_coverage',
-        'The ' || r.responsible_bureau || ' prosecutor queue has no covering prosecutor.');
+        'The ' || private.bureau_label(r.responsible_bureau::text) || ' prosecutor queue has no covering prosecutor.');
     end loop;
   end if;
   return r;
-end $function$;
+end $$;
 
-create or replace function public.submit_legal_request_to_cid(
-  p_request uuid, p_change_summary text default null, p_material_change boolean default false)
+create or replace function public.submit_legal_request_to_cid(p_request uuid, p_change_summary text default null::text, p_material_change boolean default false)
 returns public.legal_requests
-language plpgsql security definer set search_path to '' as $$
+language plpgsql security definer
+set search_path = ''
+as $$
 declare v_uid uuid := (select auth.uid()); r public.legal_requests; v_ver uuid; sup record;
-        v_fast boolean; v_from text; v_n int := 0;
+        v_fast boolean; v_from text; v_n int := 0; v_siu boolean; c public.cases;
 begin
   select * into r from public.legal_requests where id = p_request for update;
   if not found then raise exception 'request not found'; end if;
@@ -7217,11 +7278,13 @@ begin
     raise exception 'a recipient is required';
   end if;
 
+  v_siu := private.legal_is_siu(p_request);
+  select * into c from public.cases where id = r.case_id;
   v_from := r.review_status;
-  v_fast := v_from in ('returned_by_judge', 'returned_by_prosecutor')
+  v_fast := (not v_siu)
+            and v_from in ('returned_by_judge', 'returned_by_prosecutor')
             and not coalesce(p_material_change, false);
 
-  -- A resubmission after any return clears the prior judicial assignment.
   if r.review_status like 'returned_by_%' and r.assigned_judge_id is not null then
     update public.legal_request_participants
        set removed_at = now(), removed_by = v_uid
@@ -7235,7 +7298,6 @@ begin
    where id = p_request;
 
   if v_fast then
-    -- Corrected work re-enters PROSECUTOR review directly.
     v_ver := private.legal_freeze_version(p_request, 'prosecutor_queue', p_change_summary);
     update public.legal_requests
        set document_status = 'finalized', review_status = 'prosecutor_queue',
@@ -7256,14 +7318,54 @@ begin
     loop
       v_n := v_n + 1;
       perform private.legal_notify(sup.user_id, p_request, 'legal_request',
-        'A corrected ' || r.request_type || ' request re-entered the ' || r.responsible_bureau || ' prosecutor queue.');
+        'A corrected ' || r.request_type || ' request re-entered the ' || private.bureau_label(r.responsible_bureau::text) || ' prosecutor queue.');
     end loop;
     return r;
   end if;
 
   if coalesce(p_material_change, false) then
     perform private.legal_log(p_request, null, 'material_change_declared',
-      v_from, null, 'The investigator declared a material change — renewed CID review required.', null);
+      v_from, null, 'The investigator declared a material change - renewed command review required.', null);
+  end if;
+
+  if v_siu then
+    v_ver := private.legal_freeze_version(p_request, 'siu_command_review', p_change_summary);
+    update public.legal_requests
+       set document_status = 'finalized', review_status = 'siu_command_review',
+           submitted_to_cid_at = now()
+     where id = p_request returning * into r;
+    perform private.legal_log(p_request, v_ver, 'submitted_to_siu_command',
+      v_from, 'siu_command_review', null, null);
+    perform private.legal_audit(p_request, 'LEGAL_SUBMITTED_TO_SIU_COMMAND',
+      jsonb_build_object('version', v_ver, 'material_change', coalesce(p_material_change, false)));
+    for sup in
+      select m.user_id from public.siu_memberships m
+       where m.active and m.ended_at is null
+         and m.siu_role = 'special_agent_in_charge'
+         and not m.oversight_only
+         and m.user_id <> v_uid
+         and not private.siu_recused(r.case_id, m.user_id)
+         and (coalesce(c.siu_classification, 'siu') <> 'siu_compartmented'
+              or exists (select 1 from public.siu_compartment_members k
+                          where k.case_id = r.case_id and k.user_id = m.user_id
+                            and k.revoked_at is null))
+    loop
+      v_n := v_n + 1;
+      perform private.legal_notify(sup.user_id, p_request, 'legal_request',
+        'A ' || r.request_type || ' request awaits SIB command review.');
+    end loop;
+    if v_n = 0 then
+      for sup in
+        select p.id from public.profiles p
+         where coalesce(private.justice_role_effective(p.id) = 'attorney_general', false)
+      loop
+        perform private.legal_notify(sup.id, p_request, 'legal_coverage',
+          'An SIB legal request has no available SIB command reviewer.');
+      end loop;
+      perform private.legal_audit(p_request, 'LEGAL_SIU_COMMAND_UNCOVERED',
+        jsonb_build_object('version', v_ver));
+    end if;
+    return r;
   end if;
 
   v_ver := private.legal_freeze_version(p_request, 'cid_supervisor_review', p_change_summary);
@@ -7414,10 +7516,11 @@ begin
   return m;
 end $$;
 
-create or replace function public.justice_appoint(
-  p_user uuid, p_role text, p_reason text default null, p_bureau public.bureau default null)
+create or replace function public.justice_appoint(p_user uuid, p_role text, p_reason text default null::text, p_bureau public.bureau default null::public.bureau)
 returns public.justice_memberships
-language plpgsql security definer set search_path to '' as $$
+language plpgsql security definer
+set search_path = ''
+as $$
 declare v_uid uuid := (select auth.uid()); m public.justice_memberships;
         me public.profiles; t public.profiles; v_cid_authority boolean;
         v_ag boolean; v_tr uuid; v_led int := 0; v_is_test boolean; rec record;
@@ -7425,8 +7528,8 @@ begin
   if p_role not in ('prosecutor', 'judge', 'attorney_general') then
     raise exception 'role must be prosecutor, judge, or attorney_general';
   end if;
-  if p_role = 'prosecutor' and (p_bureau is null or p_bureau not in ('LSB', 'BCB', 'SAB')) then
-    raise exception 'a prosecutor needs a home bureau: LSB, BCB, or SAB';
+  if p_role = 'prosecutor' and (p_bureau is null or p_bureau not in ('major_crimes', 'street_crimes')) then
+    raise exception 'a prosecutor needs a home bureau: Major Crimes or Street Crimes';
   end if;
   if p_role <> 'prosecutor' and p_bureau is not null then
     raise exception 'only prosecutors carry a home bureau';
@@ -7526,18 +7629,18 @@ begin
   insert into public.notifications (user_id, type, payload)
   values (p_user, 'justice_membership_update', jsonb_build_object(
     'reason', 'You were appointed ' || replace(p_role, '_', ' ')
-      || coalesce(' (' || p_bureau || ' queue)', '')
+      || coalesce(' (' || private.bureau_label(p_bureau::text) || ' queue)', '')
       || case when coalesce(t.active, false)
               then ' — your CID membership has ended and your DOJ access is active now.'
               else ' in the DOJ legal-review workspace.' end));
   return m;
 end $$;
 
-create or replace function public.transfer_doj_request(
-  p_user uuid, p_direction text, p_role text, p_reason text,
-  p_bureau public.bureau default null)
+create or replace function public.transfer_doj_request(p_user uuid, p_direction text, p_role text, p_reason text, p_bureau public.bureau default null::public.bureau)
 returns public.member_transfers
-language plpgsql security definer set search_path to '' as $$
+language plpgsql security definer
+set search_path = ''
+as $$
 declare v_uid uuid := (select auth.uid()); t public.profiles; tr public.member_transfers;
         v_jrole text;
 begin
@@ -7556,8 +7659,8 @@ begin
     if not coalesce(t.active, false) then
       raise exception 'target is not an active CID member';
     end if;
-    if p_role = 'prosecutor' and (p_bureau is null or p_bureau not in ('LSB', 'BCB', 'SAB')) then
-      raise exception 'a prosecutor transfer needs a home bureau: LSB, BCB, or SAB';
+    if p_role = 'prosecutor' and (p_bureau is null or p_bureau not in ('major_crimes', 'street_crimes')) then
+      raise exception 'a prosecutor transfer needs a home bureau: Major Crimes or Street Crimes';
     end if;
   elsif p_direction = 'doj_to_cid' then
     if not (coalesce(private.justice_role_effective(v_uid) = 'attorney_general', false)
@@ -7585,10 +7688,11 @@ begin
   return tr;
 end $$;
 
-create or replace function public.transfer_doj_activate(
-  p_transfer uuid, p_reassignments jsonb default '{}'::jsonb)
+create or replace function public.transfer_doj_activate(p_transfer uuid, p_reassignments jsonb default '{}'::jsonb)
 returns public.member_transfers
-language plpgsql security definer set search_path to '' as $$
+language plpgsql security definer
+set search_path = ''
+as $$
 declare v_uid uuid := (select auth.uid()); tr public.member_transfers; me public.profiles;
         t public.profiles; rec record; v_new uuid; v_n int := 0; v_handover jsonb;
 begin
@@ -7610,8 +7714,8 @@ begin
     -- A prosecutor must land in exactly one home bureau; older pending rows
     -- created before bureau queues carry none — refuse rather than guess.
     if tr.requested_role = 'prosecutor'
-       and (tr.target_bureau is null or tr.target_bureau not in ('LSB', 'BCB', 'SAB')) then
-      raise exception 'this prosecutor transfer has no home bureau — file a new transfer naming LSB, BCB, or SAB';
+       and (tr.target_bureau is null or tr.target_bureau not in ('major_crimes', 'street_crimes')) then
+      raise exception 'this prosecutor transfer has no home bureau — file a new transfer naming Major Crimes or Street Crimes';
     end if;
     -- Every open led case must have a resolution: a named new lead, or an
     -- approved dual-membership retention.
@@ -7796,139 +7900,58 @@ returns void language plpgsql security definer set search_path to '';
 -- case somebody already opened is an association that can be taken back, and
 -- unlinking stamps the history row rather than deleting it. Both refuse a case
 -- the caller cannot open, so neither end leaks the other's access.
-create or replace function public.field_submission_create_case(
-  p_submission uuid, p_bureau text, p_title text,
-  p_summary text default null, p_lead uuid default null)
-returns uuid language plpgsql security definer set search_path to '';
+create or replace function public.field_submission_create_case(p_submission uuid, p_bureau text, p_title text, p_summary text default null::text, p_lead uuid default null::uuid)
+returns uuid
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_actor uuid := (select auth.uid());
+  v public.field_submissions;
+  v_case uuid;
+  v_no text;
+begin
+  if not private.is_active() then raise exception 'not authorized'; end if;
 
-create or replace function public.field_submission_link_case(
-  p_submission uuid, p_case uuid, p_note text default null)
-returns uuid language plpgsql security definer set search_path to '';
+  select * into v from public.field_submissions where id = p_submission;
+  if not found then raise exception 'no such record'; end if;
+  if not private.field_submission_readable(p_submission) then
+    raise exception 'that record is not in your jurisdiction';
+  end if;
+  if v.status = 'draft' then raise exception 'that record has not been sent yet'; end if;
 
-create or replace function public.field_submission_unlink_case(
-  p_link uuid, p_reason text)
-returns void language plpgsql security definer set search_path to '';
+  if coalesce(btrim(coalesce(p_title, '')), '') = '' then
+    raise exception 'the case needs a title';
+  end if;
+  if p_bureau not in ('major_crimes', 'street_crimes', 'JTF') then
+    raise exception 'unknown bureau';
+  end if;
 
--- An observation belongs to a case, so both of these require the record to be
--- linked to that case already -- otherwise they would be a third, invisible way
--- for intelligence to reach a case. The observation keeps a back-link to the
--- record that put it on the board.
-create or replace function public.field_submission_create_observation(
-  p_submission uuid, p_case uuid, p_activity text,
-  p_observed_at timestamptz default null, p_location text default null,
-  p_confidence text default null)
-returns uuid language plpgsql security definer set search_path to '';
+  v_no := public.next_case_number(p_bureau);
+  if coalesce(v_no, '') = '' then raise exception 'could not allocate a case number'; end if;
 
-create or replace function public.field_submission_link_observation(
-  p_submission uuid, p_observation uuid)
-returns void language plpgsql security definer set search_path to '';
+  insert into public.cases (case_number, bureau, title, summary, lead_detective_id, created_by)
+  values (v_no, p_bureau::public.bureau, btrim(p_title),
+          nullif(btrim(coalesce(p_summary, '')), ''),
+          coalesce(p_lead, v_actor), v_actor)
+  returning id into v_case;
 
--- Registering a confidential source stores the identity in the unreadable
--- field_submission_sources table and, only then, lets the record call itself
--- confidential -- the before-update trigger checks for the source row, so the
--- option and the protection cannot be separated. Revealing the identity admits
--- the handler and the Owner, and writes an audit row saying who looked.
-create or replace function public.field_submission_set_source(
-  p_submission uuid, p_codename text, p_name text default null,
-  p_contact text default null, p_notes text default null,
-  p_handler uuid default null)
-returns void language plpgsql security definer set search_path to '';
+  insert into public.field_submission_cases
+    (submission_id, case_id, relation, submission_no, linked_by)
+  values (p_submission, v_case, 'originated', v.submission_no, v_actor);
 
-create or replace function public.field_submission_source_reveal(p_submission uuid)
-returns jsonb language plpgsql security definer set search_path to '';
+  if private.field_submission_transition_ok(v.status, 'actionable') then
+    update public.field_submissions
+       set status = 'actionable', updated_at = now()
+     where id = p_submission;
+  end if;
 
--- One search over the record, its six claim tables and the officer thread --
--- most of the searchable text is NOT on the record, so a client-side filter
--- over the queue would miss almost every name somebody looks for. Definer so it
--- can reach the children; every hit is passed back through
--- field_submission_readable(), so a search can never reach further than the
--- queue. ARCHIVED RECORDS ARE INCLUDED: archiving means "not being worked", and
--- a search that skipped them would break the promise that archiving keeps
--- everything findable.
-create or replace function public.field_submission_search(
-  p_query text, p_limit int default 100)
-returns table (submission_id uuid, matched text[])
-language sql stable security definer set search_path to '';
-
--- Have we heard this before: one row per person, plate or organisation this
--- record names that also appears on another readable record. 'named' is the
--- same text written twice; 'linked' means a reviewer matched both records to
--- the SAME registry entry, which is much stronger. Returns the other record
--- numbers, so the answer is not a count somebody then has to go hunting for.
-create or replace function public.field_submission_repeats(p_submission uuid)
-returns table (kind text, label text, basis text, others int, records text[])
-language plpgsql stable security definer set search_path to '';
-
-create or replace function public.field_access_roster()
-returns table (
-  user_id uuid, display_name text, email text, agency text, callsign text,
-  officer_rank text, unit text, standing_active boolean, self_served boolean,
-  appointed_by uuid, appointed_at timestamptz, ended_at timestamptz,
-  end_reason text, removed_at timestamptz, login_denied boolean,
-  first_seen timestamptz, last_seen timestamptz, submissions integer,
-  last_submission_at timestamptz)
-language plpgsql stable security definer set search_path to '';
-
-create or replace function public.justice_migration_review()
-returns jsonb language sql stable security definer set search_path to '' as $$
-  select case
-    when not (private.owner_flag((select auth.uid()))
-              or coalesce(private.justice_role_effective((select auth.uid())) = 'attorney_general', false))
-    then jsonb_build_object('error', 'owner or attorney general only')
-    else jsonb_build_object(
-      'legacy_roles', (
-        select coalesce(jsonb_agg(jsonb_build_object(
-          'user_id', m.user_id, 'name', p.display_name, 'role', m.justice_role,
-          'active', m.active, 'effective', case m.justice_role
-            when 'assistant_district_attorney' then 'prosecutor'
-            when 'district_attorney' then 'prosecutor' else m.justice_role end)), '[]')
-        from public.justice_memberships m
-        left join public.profiles p on p.id = m.user_id
-        where m.justice_role in ('assistant_district_attorney', 'district_attorney')),
-      'prosecutors_without_bureau', (
-        select coalesce(jsonb_agg(jsonb_build_object(
-          'user_id', m.user_id, 'name', p.display_name, 'role', m.justice_role)), '[]')
-        from public.justice_memberships m
-        left join public.profiles p on p.id = m.user_id
-        where m.active and m.prosecutor_bureau is null
-          and m.justice_role in ('prosecutor', 'assistant_district_attorney', 'district_attorney')),
-      'dual_identity', (
-        select coalesce(jsonb_agg(jsonb_build_object(
-          'user_id', m.user_id, 'name', p.display_name,
-          'justice_role', m.justice_role, 'cid_role', p.role, 'cid_active', p.active)), '[]')
-        from public.justice_memberships m
-        join public.profiles p on p.id = m.user_id
-        where m.active and coalesce(p.active, false)),
-      'requests_in_retired_states', (
-        select coalesce(jsonb_agg(jsonb_build_object(
-          'id', r.id, 'number', r.request_number, 'status', r.review_status)), '[]')
-        from public.legal_requests r
-        where r.review_status in ('submitted_to_doj', 'ada_review', 'da_review', 'ag_review')),
-      'requests_assigned_to_inactive', (
-        select coalesce(jsonb_agg(jsonb_build_object(
-          'id', r.id, 'number', r.request_number, 'status', r.review_status)), '[]')
-        from public.legal_requests r
-        where (r.assigned_prosecutor_id is not null
-               and not private.is_justice_active(r.assigned_prosecutor_id)
-               and r.review_status = 'prosecutor_review')
-           or (r.assigned_judge_id is not null
-               and not private.is_justice_active(r.assigned_judge_id)
-               and r.review_status = 'judicial_review')),
-      'cases_missing_responsible_bureau', (
-        select coalesce(jsonb_agg(jsonb_build_object('id', c.id, 'number', c.case_number)), '[]')
-        from public.cases c
-        where c.bureau = 'JTF' and c.originating_bureau is null),
-      'self_review_conflicts', (
-        select coalesce(jsonb_agg(jsonb_build_object(
-          'id', r.id, 'number', r.request_number,
-          'holder', coalesce(r.assigned_prosecutor_id, r.assigned_judge_id))), '[]')
-        from public.legal_requests r
-        where (r.assigned_prosecutor_id is not null
-               and private.legal_is_conflicted(r.id, r.assigned_prosecutor_id))
-           or (r.assigned_judge_id is not null
-               and private.legal_is_conflicted(r.id, r.assigned_judge_id))))
-  end
-$$;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_actor, 'FIELD_SUBMISSION_CASE_OPENED', 'field_submissions', p_submission,
+          jsonb_build_object('submission_no', v.submission_no,
+                             'case_id', v_case, 'case_number', v_no));
+  return v_case;
+end $$;
 
 -- ============================================================
 -- Triggers (non-internal)
@@ -9890,7 +9913,7 @@ create policy wl_sel on public.watchlist
 -- blanket revoke but never touched pg_default_acl, which still read
 -- `arwdDxtm` for anon on new tables. The invariant this comment used to assert
 -- had therefore been FALSE since shortly after it was written: 53 tables --
--- every SIU table, every surveillance table, the whole penal code,
+-- every SIB table, every surveillance table, the whole penal code,
 -- case_charges -- were created afterwards and came back with full anon DML.
 -- Nothing was exposed (verified: reading each of them as `anon` returns 0 rows
 -- or a permission error, and no policy targets anon), but the claim was wrong
@@ -10220,13 +10243,13 @@ create policy wl_sel on public.watchlist
 -- 20260930120000_siu_context_may_control_visibility:
 -- public.siu_department_context() gains 'may_control_visibility'
 -- (private.siu_may_control_visibility()). S2 gave the Director restrict/reveal
--- authority but the only UI exposing it sat inside the SIU workspace, gated on
+-- authority but the only UI exposing it sat inside the SIB workspace, gated on
 -- siu_available -> siu_operates() -> siu_standing() is not null, which is NULL
 -- for a Director -- so the authority was real and unreachable. siu_available is
--- deliberately NOT widened: that would hand the head of CID the whole SIU
+-- deliberately NOT widened: that would hand the head of CID the whole SIB
 -- workspace, the arrangement 20260902120000 exists to prevent. The narrow
--- capability travels on its own so a "Restrict to SIU" action can appear on a
--- record without opening any SIU screen. Definitive SQL in
+-- capability travels on its own so a "Restrict to SIB" action can appear on a
+-- record without opening any SIB screen. Definitive SQL in
 -- supabase/migrations/20260930120000_siu_context_may_control_visibility.sql.
 -- 20260929120000_siu_two_mode_restriction + _registry_reach + _restriction_controls:
 -- TWO restrictions, not one. siu_visibility.scope is 'record' (the record and
@@ -10235,7 +10258,7 @@ create policy wl_sel on public.watchlist
 -- predicate for both -- a whole-record restriction blocks every section, so one
 -- call serves both modes; private.siu_hidden is now a thin wrapper over it and
 -- keeps its S1 signature so the twelve S1 policies needed no re-emission.
--- private.siu_may_control_visibility() now covers all three SIU ranks, the
+-- private.siu_may_control_visibility() now covers all three SIB ranks, the
 -- Owner AND the Director. The Director cannot be reached through
 -- private.siu_standing(), which returns NULL for them by deliberate design
 -- (20260902120000 removed the director branch so the head of CID could not
@@ -10261,7 +10284,7 @@ create policy wl_sel on public.watchlist
 -- confirmation as a PARAMETER -- a dialog enforces nothing] and
 -- public.siu_reserve_visibility(text, uuid, text, text) [writes the ledger row
 -- BEFORE the record exists, which entity_id's deliberate lack of a foreign key
--- makes possible, so an SIU-created record is never briefly visible].
+-- makes possible, so an SIB-created record is never briefly visible].
 -- public.siu_mark_origin now delegates to siu_restrict in 'record' mode and no
 -- longer refuses outright when CID holds the record -- warn and confirm
 -- replaced refuse.
@@ -10295,19 +10318,19 @@ create policy wl_sel on public.watchlist
 -- profiles.role at render time answers a different question and goes wrong on
 -- the first promotion. Historical rows stay NULL rather than being backfilled
 -- from today's roles. public.review_legal_request_as_cid() sets it on the deny,
--- SIU-approve and CID-approve paths and adds 'actor_rank' to its audit
+-- SIB-approve and CID-approve paths and adds 'actor_rank' to its audit
 -- payloads. NOTE the hierarchy itself was already present: can_approve_legal()
 -- already admitted deputy_director/director/Owner for any bureau, there is no
 -- claim gate on CID review, and command_fallback was already logged.
--- 20261001120200_siu_members_work_cid: private.siu_member_active() (active SIU
+-- 20261001120200_siu_members_work_cid: private.siu_member_active() (active SIB
 -- MEMBERSHIP -- excludes 'oversight', and inherits siu_membership_role()'s
 -- active/not-removed/not-oversight_only checks). private.can_access_case() and
 -- can_access_case_row() drop `not private.is_siu_department()` and gain an
--- explicit `or private.siu_member_active()` branch, so an active SIU member
+-- explicit `or private.siu_member_active()` branch, so an active SIB member
 -- works CID cases and everything scoped to one. Those two functions were the
 -- ENTIRE read-only wall -- zero RLS policies referenced is_siu_department
 -- directly, and the shared registries never did (they gate on is_active(),
--- which SIU members always passed). The SIU -> CID direction is untouched, and
+-- which SIB members always passed). The SIB -> CID direction is untouched, and
 -- Owner-only administration still gates on profiles.is_owner.
 -- 20260928120300_siu_visibility_forget: private.siu_visibility_forget()
 -- [trigger fn] with AFTER DELETE triggers persons_visibility_forget,
@@ -10316,7 +10339,7 @@ create policy wl_sel on public.watchlist
 -- (it points at one of four registries by entity_type), so without these a
 -- deleted person stranded its ledger row: dead weight, and a row that would
 -- hide a DIFFERENT record if that uuid were ever reused. The audit is
--- deliberately NOT swept: that SIU compartmented something stays true after the
+-- deliberately NOT swept: that SIB compartmented something stays true after the
 -- record is gone. Also public.rls_test_cleanup_visibility() [SECURITY DEFINER,
 -- same caller check as rls_test_cleanup() -- a separate function rather than a
 -- re-emit of that 200-line body, which is how a regression gets introduced into
@@ -10325,16 +10348,16 @@ create policy wl_sel on public.watchlist
 -- 20260928120000_siu_compartmentation + _registry + _action_precision:
 -- public.siu_visibility and public.siu_visibility_events (both mirrored above
 -- with their SELECT policies; neither has any write policy). New predicates:
--- private.siu_may_control_visibility() [any active SIU standing plus the Owner
--- -- NOT the Director, who heads CID and must not authorise release of SIU
--- material into their own division, and NOT 'oversight', which watches SIU
+-- private.siu_may_control_visibility() [any active SIB standing plus the Owner
+-- -- NOT the Director, who heads CID and must not authorise release of SIB
+-- material into their own division, and NOT 'oversight', which watches SIB
 -- rather than feeding it to CID], private.siu_hidden(text, uuid) [the conjunct
 -- now carried by the SELECT, UPDATE and DELETE policies of persons, vehicles,
 -- gangs and places -- UPDATE and DELETE too, because a hidden row that still
 -- reports "1 row affected" confirms what the SELECT denied],
 -- private.siu_entity_exists(text, uuid), private.siu_cid_attached(text, uuid)
 -- [enforces the shared-record rule: a person CID already holds does not become
--- SIU property because SIU opens a file on them], private.siu_side_attached
+-- SIB property because SIB opens a file on them], private.siu_side_attached
 -- (text, uuid) [annotates the review queue only; decides nothing] and
 -- private.siu_audience_rank(uuid, uuid). New RPCs, all SECURITY DEFINER with
 -- the standing check in the body: public.siu_mark_origin(text, uuid, text,
@@ -10342,7 +10365,7 @@ create policy wl_sel on public.watchlist
 -- public.siu_restrict_to_siu(text, uuid, text) and
 -- public.siu_resolve_review(text, uuid, boolean, text). The migration
 -- classifies NOTHING retroactively: it flags the 95 registry records created by
--- an SIU member as 'unclassified' + needs_review, which does not hide them.
+-- an SIB member as 'unclassified' + needs_review, which does not hide them.
 -- Definitive SQL in supabase/migrations/20260928120000_siu_compartmentation.sql,
 -- 20260928120100_siu_compartmentation_registry.sql and
 -- 20260928120200_siu_visibility_action_precision.sql.
@@ -11698,7 +11721,7 @@ create policy wl_sel on public.watchlist
 -- service_role. No tables, columns, or policies changed. Definitive SQL in
 -- supabase/migrations/20260819120000_case_stage_history.sql.
 
--- Special Investigation Unit — Phase 1 (20260820120000_siu_phase1). ADDITIVE
+-- Special Investigations Bureau — Phase 1 (20260820120000_siu_phase1). ADDITIVE
 -- ONLY; no drops, no data rewrites, no renamed roles. NEW TABLES (blocks
 -- above): siu_settings, siu_memberships, siu_case_agents,
 -- siu_compartment_members — SELECT-only for clients (policies above), every
@@ -11722,13 +11745,13 @@ create policy wl_sel on public.watchlist
 -- explicitly NOT the Director/Deputy Director/Bureau Lead/Prosecutor/Judge);
 -- is_siu_case(uuid), siu_case_classification(uuid), siu_case_assigned(uuid,
 -- uuid), siu_in_compartment(uuid, uuid) — case facts; siu_case_access(uuid) —
--- THE SIU case wall, where 'siu' admits any field agent, 'siu_restricted'
--- assigned agents + SIU command, 'siu_command' SIU command, and
+-- THE SIB case wall, where 'siu' admits any field agent, 'siu_restricted'
+-- assigned agents + SIB command, 'siu_command' SIB command, and
 -- 'siu_compartmented' the ALLOW-LIST ONLY (X-1, the AG and the owner flag are
 -- NOT exempt — this is what makes investigating anyone, X-1 included,
--- structurally possible); siu_case_command(uuid) — administer one SIU case
+-- structurally possible); siu_case_command(uuid) — administer one SIB case
 -- (command standing WITH access to that case, or its lead agent);
--- siu_oversight_read() — SIU's broad READ of CID, field standing only;
+-- siu_oversight_read() — SIB's broad READ of CID, field standing only;
 -- siu_audit(text, uuid, jsonb) — the audit writer (entity 'siu' in the
 -- existing Owner-only audit_log; ordinary agents cannot edit it because
 -- audit_log carries no client write policy at all).
@@ -11738,10 +11761,10 @@ create policy wl_sel on public.watchlist
 --
 -- RE-EMITTED CHOKEPOINTS: private.can_access_case(uuid) and
 -- can_access_case_row(bureau, uuid, uuid, uuid) each gain ONE branch — an
--- SIU-authority case is governed by siu_case_access() and the CID branch is
+-- SIB-authority case is governed by siu_case_access() and the CID branch is
 -- byte-identical to 20260810120000_jtf_operations.sql. Because every case
 -- child table, search_all (SECURITY INVOKER), relationship/graph queries and
--- realtime already route through these two, CID denial of SIU is automatic and
+-- realtime already route through these two, CID denial of SIB is automatic and
 -- returns NOTHING (no "restricted" placeholder, no count, no autocomplete
 -- entry). NEW READ-ONLY SUPERSET: private.can_read_case(uuid),
 -- can_read_case_row(bureau, uuid, uuid, uuid), can_read_case_number(text) =
@@ -11751,17 +11774,17 @@ create policy wl_sel on public.watchlist
 -- case_assignments_sel, csh_sel, cag_sel, operation_case_links_sel,
 -- report_versions_sel, custody_sel, media_sel, cf_read (each the live
 -- expression verbatim with can_access_case → can_read_case) — and NEVER in an
--- INSERT/UPDATE/DELETE policy, so SIU's broad read of CID can not become a
+-- INSERT/UPDATE/DELETE policy, so SIB's broad read of CID can not become a
 -- write path into a detective's report or CID evidence. case_messages (case
 -- chat) is deliberately NOT widened.
 --
 -- LEGAL: private.can_review_as_cid(uuid, uuid) and can_approve_legal(uuid,
--- uuid) re-emitted with ONE added SIU branch each — SIU command is the CID
+-- uuid) re-emitted with ONE added SIB branch each — SIB command is the CID
 -- gate on its OWN investigation (an X-1 whose historical CID role is
 -- 'detective' would otherwise fail the rank test); every existing CID branch
 -- is verbatim. Unrelated CID command still sees nothing, because both already
--- require private.can_access_case(r.case_id). No second court, no separate SIU
--- legal pipeline: SIU uses the existing DOJ prosecutor/judge lanes unchanged.
+-- require private.can_access_case(r.case_id). No second court, no separate SIB
+-- legal pipeline: SIB uses the existing DOJ prosecutor/judge lanes unchanged.
 --
 -- NEW PUBLIC RPCs (all revoked from public/anon, granted authenticated +
 -- service_role): siu_set_release(boolean, text) — Owner-only release gate,
@@ -11772,7 +11795,7 @@ create policy wl_sel on public.watchlist
 -- (reports, authorship, evidence, assignment rows and audit are untouched;
 -- nobody removes their own membership and only Owner/AG may end an X-Ray 1);
 -- siu_set_callsign(uuid, text); siu_create_case(text, text, text) — mints the
--- SIU-8000000 series via NEW next_siu_case_number(), stamps authority +
+-- SIB-8000000 series via NEW next_siu_case_number(), stamps authority +
 -- classification, enrols the creating agent (and seeds the compartment for a
 -- compartmented case); siu_set_case_classification(uuid, text, text) — reason
 -- required, seeds the allow-list on compartmentation so a case never locks its
@@ -11781,20 +11804,20 @@ create policy wl_sel on public.watchlist
 -- uuid, uuid, text) — gated on membership of the compartment ITSELF, never on
 -- rank or the owner flag, refusing self-removal and refusing to empty a
 -- compartment; siu_roster() — the restricted personnel page (zero rows without
--- SIU standing; former CID role/bureau exposed as provenance, never as
+-- SIB standing; former CID role/bureau exposed as provenance, never as
 -- authority); siu_member_search(text) — invite-flow candidates, appointment
 -- authority only; siu_audit_feed(integer) — compartment-respecting audit reads
 -- (case-keyed rows require siu_case_access on that case, so a subject under
 -- investigation never learns of the trail); siu_overview() returns jsonb — the
 -- workspace dashboard, answering {"access": false} rather than throwing.
--- public.rls_test_cleanup() re-emitted with the three SIU tables added to the
+-- public.rls_test_cleanup() re-emitted with the three SIB tables added to the
 -- fixture sweep.
 --
--- REALTIME: the four SIU tables are DELIBERATELY absent from
--- supabase_realtime — an unauthorized browser is never sent an SIU event to
+-- REALTIME: the four SIB tables are DELIBERATELY absent from
+-- supabase_realtime — an unauthorized browser is never sent an SIB event to
 -- filter client-side. `cases` stays published and its per-subscriber RLS check
--- now runs the SIU wall.
--- NULL-SAFETY: siu_standing() returns NULL for an account with no SIU
+-- now runs the SIB wall.
+-- NULL-SAFETY: siu_standing() returns NULL for an account with no SIB
 -- authority, so every standing predicate (siu_is_agent, siu_is_command,
 -- siu_can_appoint, siu_oversight_read, siu_case_access, siu_case_command) is
 -- coalesce()-pinned to a strict boolean — `NULL in (...)` is NULL, which would
@@ -11803,18 +11826,18 @@ create policy wl_sel on public.watchlist
 -- 20260714070000). Read paths were never affected.
 -- Definitive SQL in supabase/migrations/20260820120000_siu_phase1.sql.
 
--- SIU as a SEPARATE DEPARTMENT (20260821120000_siu_department) — the
+-- SIB as a SEPARATE DEPARTMENT (20260821120000_siu_department) — the
 -- architecture amendment to Phase 1. ADDITIVE ONLY; a NO-OP for every existing
 -- account while the release gate is closed. WIDENED CHECKS (both strict
 -- supersets, so no existing row can violate them):
--- siu_memberships_siu_role_check now admits senior_special_agent (SIU's own
+-- siu_memberships_siu_role_check now admits senior_special_agent (SIB's own
 -- three-tier ladder: special_agent → senior_special_agent →
 -- special_agent_in_charge / X-1 — NOT the CID hierarchy renamed, and the CID
 -- Director role is never granted to X-1), and documents_classification_check
 -- now admits 'siu'.
 --
 -- NEW PRIVATE HELPERS: user_department(uuid default null) returns text — the
--- member's ACTIVE department ('cid' | 'siu'), derived from SIU membership so
+-- member's ACTIVE department ('cid' | 'siu'), derived from SIB membership so
 -- there is exactly one source of truth and no column that can drift from the
 -- roster; deliberately GATE-AWARE, returning 'cid' for everybody (an
 -- already-appointed agent included) while siu_settings.enabled_for_non_owner
@@ -11826,7 +11849,7 @@ create policy wl_sel on public.watchlist
 --
 -- RE-EMITTED: private.can_access_case / can_access_case_row — byte-identical
 -- to 20260820120000 apart from ONE new conjunct on the CID branch,
--- `not private.is_siu_department()`. SIU IS NOT CID: a member whose department
+-- `not private.is_siu_department()`. SIB IS NOT CID: a member whose department
 -- is 'siu' loses the NATIVE CID case branch (bureau match, lead/creator,
 -- command, joint access) and therefore all CID case WRITE access; they keep
 -- the broad read-only oversight of CID through private.can_read_case, which is
@@ -11834,8 +11857,8 @@ create policy wl_sel on public.watchlist
 -- and siu_case_access re-emitted for the senior tier (a field tier: senior
 -- agents reach siu_restricted only when assigned, and never siu_command).
 -- private.doc_class_visible and can_edit_document_for_bureau each gain ONE
--- 'siu' branch — visible to SIU standing only (CID at every rank, Director
--- included, does not see it) and editable by SIU command (X-1), never CID
+-- 'siu' branch — visible to SIB standing only (CID at every rank, Director
+-- included, does not see it) and editable by SIB command (X-1), never CID
 -- command. public.siu_appoint re-emitted with the widened role list; the
 -- Owner-only X-1 rule and every target wall are verbatim.
 --
@@ -11850,11 +11873,11 @@ create policy wl_sel on public.watchlist
 -- NEW DATA: the unit's own Standard Operating Procedure seeded as a
 -- documents row (folder 'SOPs', category 'sops', document_type 'sop',
 -- classification 'siu', status 'published'), idempotent on the document name.
--- The CID SOP is never presented as the SIU SOP.
+-- The CID SOP is never presented as the SIB SOP.
 -- Definitive SQL in supabase/migrations/20260821120000_siu_department.sql.
 
--- SIU Phase 2 (20260822120000_siu_phase2) — targets, operations and the
--- SIU-only layer on CID cases. ADDITIVE ONLY; a no-op for every existing
+-- SIB Phase 2 (20260822120000_siu_phase2) — targets, operations and the
+-- SIB-only layer on CID cases. ADDITIVE ONLY; a no-op for every existing
 -- account while the release gate is closed. NEW TABLES (blocks above):
 -- siu_targets, siu_case_notes. NEW COLUMNS on public.operations: authority
 -- ('cid' | 'siu', not null default 'cid'), op_category, objective,
@@ -11866,53 +11889,53 @@ create policy wl_sel on public.watchlist
 --
 -- RE-EMITTED POLICIES operations_sel / _upd / _del: the CID branch is exactly
 -- today's rule (is_active / can_manage_operation / can_delete+can_manage), so
--- nothing changes for a CID operation; an SIU operation is gated on
+-- nothing changes for a CID operation; an SIB operation is gated on
 -- private.siu_is_agent() to read and private.siu_is_command() to change, and
 -- is invisible to CID at every rank.
 --
--- NEW PRIVATE HELPER private.siu_can_read_case_note(uuid): on an SIU
+-- NEW PRIVATE HELPER private.siu_can_read_case_note(uuid): on an SIB
 -- investigation it is siu_case_access (so a compartmented case's notes stay
 -- allow-list-only); on a CID case it is siu_oversight_read. There is
 -- deliberately NO branch admitting a CID role — not the case's own lead
--- detective, not CID command, not the Director — which is what lets SIU
+-- detective, not CID command, not the Director — which is what lets SIB
 -- investigate a compromised investigator without alerting them.
 --
 -- GRANTS: private.siu_is_agent() and siu_is_command() are now granted EXECUTE
 -- to authenticated because both appear inside RLS quals, which are evaluated
 -- as the QUERYING role rather than in a definer context (the siu_in_compartment
 -- requirement from Phase 1). Neither leaks anything beyond "does the caller
--- hold SIU standing".
+-- hold SIB standing".
 --
 -- RE-EMITTED public.siu_overview(): adds priority_targets, active_targets,
--- active_operations, open_intel, cid_integrity_flags (unresolved SIU integrity
+-- active_operations, open_intel, cid_integrity_flags (unresolved SIB integrity
 -- concerns raised against CID investigations) and surveillance_active. Every
 -- count re-derives access; an unauthorized caller still gets {"access": false}.
 --
 -- SURVEILLANCE needed no work: surveillance_targets / _observations are already
--- case-scoped through private.can_access_case, so an SIU investigation inherits
+-- case-scoped through private.can_access_case, so an SIB investigation inherits
 -- the whole surveillance domain and its records are automatically invisible to
 -- CID. Definitive SQL in supabase/migrations/20260822120000_siu_phase2.sql.
 
--- SIU CHAIN OF COMMAND (20260902120000, REVERSING 20260823120000):
+-- SIB CHAIN OF COMMAND (20260902120000, REVERSING 20260823120000):
 --   Attorney General -> Special Agent in Charge (X-1) -> Senior Special Agent
 --   -> Special Agent.  The Portal Owner sits above during the build phase.
 --
--- 20260823120000 read the unit's SOP as seating the DIRECTOR OF CID in the SIU
+-- 20260823120000 read the unit's SOP as seating the DIRECTOR OF CID in the SIB
 -- chain and gave every active role = 'director' profile oversight standing ex
 -- officio. That branch is DELETED. Oversight standing is not passive --
 -- siu_can_appoint() includes it and siu_remove() lets it end an X-1's
 -- membership -- so the Director of CID could have dissolved the unit
 -- investigating CID. CID command is powerful inside CID and does not command
--- SIU.
+-- SIB.
 --
 -- private.siu_standing(uuid) now resolves, in order: profiles.is_owner ->
 -- 'owner' (gate-independent); then, only while the gate is open, an appointed
 -- siu_memberships role; an oversight-only appointment; and the ATTORNEY
 -- GENERAL ex officio (never a fixture, 20260829120000). Nothing else. A
--- Director appointed to SIU keeps standing through the membership branch --
+-- Director appointed to SIB keeps standing through the membership branch --
 -- appointment is the only route in for any CID rank.
 --
--- NEW PRIVATE HELPER private.siu_case_read(uuid): the READ superset for an SIU
+-- NEW PRIVATE HELPER private.siu_case_read(uuid): the READ superset for an SIB
 -- investigation — siu_case_access() OR "base 'siu' classification and the
 -- caller holds oversight standing". private.siu_case_access() is deliberately
 -- UNCHANGED: it is the write/command wall feeding private.can_access_case()
@@ -11924,34 +11947,34 @@ create policy wl_sel on public.watchlist
 -- RE-EMITTED onto the superset: private.can_read_case(uuid),
 -- private.can_read_case_row(bureau, uuid, uuid, uuid), policies
 -- siu_case_agents_sel and siu_targets_sel, private.siu_can_read_case_note()
--- (SIU-case branch only — on a CID case the SIU-only layer stays field-agent
+-- (SIB-case branch only — on a CID case the SIB-only layer stays field-agent
 -- only, because the Director is a plausible SUBJECT of an integrity flag),
 -- public.siu_audit_feed() and public.siu_overview() (case counts; `assigned`
 -- and `surveillance_active` stay on the wall so no count reports rows the
 -- caller cannot open). Policy operations_sel now reads private.siu_operates()
--- for an SIU operation; _upd/_del still require siu_is_command().
+-- for an SIB operation; _upd/_del still require siu_is_command().
 --
 -- PRESERVED: oversight reads ONLY the base 'siu' level. siu_restricted,
--- siu_command and siu_compartmented still require assignment, SIU command or
+-- siu_command and siu_compartmented still require assignment, SIB command or
 -- an explicit allow-list row, so an investigation INTO the Director, the
 -- Attorney General or X-1 remains possible by classifying it above 'siu'.
 -- CONSEQUENCE: a standard 'siu' investigation is now readable by the Director
 -- and the Attorney General.
 -- Definitive SQL in supabase/migrations/20260823120000_siu_sop_chain_of_command.sql.
 
--- SIU case delete wall (20260823130000_siu_case_delete_wall) — closes a
+-- SIB case delete wall (20260823130000_siu_case_delete_wall) — closes a
 -- blind-delete path found while verifying the migration above. Seven
 -- case-child DELETE policies gated on private.can_delete() alone, a pure CID
 -- ROLE check with no case predicate, and DELETE never needs a read: an active
 -- Bureau Lead, Deputy Director or Director could destroy reports, media,
--- tasks, blockers, assignments and case_files rows belonging to any SIU
+-- tasks, blockers, assignments and case_files rows belonging to any SIB
 -- investigation — compartmented included — given a row id.
 --
 -- NEW PRIVATE HELPERS private.can_delete_case_child(uuid) and
 -- private.can_delete_case_file(text): for a CID-authority case they are
 -- private.can_delete() verbatim, so no CID user gains or loses a single
--- delete; for an SIU-authority case they are private.siu_case_command(), i.e.
--- access to that investigation AND (SIU command OR its lead agent). SIU
+-- delete; for an SIB-authority case they are private.siu_case_command(), i.e.
+-- access to that investigation AND (SIB command OR its lead agent). SIB
 -- therefore gains the delete it should always have had, oversight standing
 -- gains none, and compartmentation holds because siu_case_command() is built
 -- on siu_case_access(). is_siu_case(null) is false, so a media row with a null
@@ -11965,12 +11988,12 @@ create policy wl_sel on public.watchlist
 --
 -- 20260901130000 CLOSED THE OTHER HALF OF THE SAME HOLE. can_delete_case_child's
 -- CID branch was can_delete() VERBATIM -- a raw profiles.role check that knows
--- nothing about cases OR departments. An SIU member holding a CID rank of
+-- nothing about cases OR departments. An SIB member holding a CID rank of
 -- bureau_lead or above therefore satisfied it, and DELETE is the one write the
 -- `not is_siu_department()` term in can_access_case() never covered. Probed
 -- live as a real Special Agent in Charge with CID rank bureau_lead:
 -- can_access_case(cid case) FALSE, can_delete() TRUE, and a CID report, task
--- and RICO case all deleted. Both currently appointed SIU members hold a
+-- and RICO case all deleted. Both currently appointed SIB members hold a
 -- qualifying CID rank. The CID branch is now
 -- `can_delete() AND can_access_case(p_case)`, which changes NOTHING for CID --
 -- every rank can_delete() accepts is command, and can_access_case() admits
@@ -11980,12 +12003,12 @@ create policy wl_sel on public.watchlist
 --
 -- 20260901120000 moved rico_cases_sel / predicate_acts_sel from
 -- can_access_case() to can_read_case(). Every other case child was put on the
--- read superset in 20260820120000 and RICO was simply missed, so SIU and
+-- read superset in 20260820120000 and RICO was simply missed, so SIB and
 -- oversight could read a case's reports, evidence, media and tasks but not the
 -- record saying it is an enterprise prosecution. SELECT only; every write stays
 -- on can_access_case(). case_messages remains the one deliberate exclusion.
 
--- §14 Assume SIU Control (20260824120000_siu_assume_control) — SIU takes over a
+-- §14 Assume SIB Control (20260824120000_siu_assume_control) — SIB takes over a
 -- live CID case. NEW COLUMNS on public.cases: siu_assumed_at, siu_assumed_by
 -- (FK profiles), siu_assumption_reason, siu_returned_at — a permanent
 -- provenance record that survives a later return to CID, and RPC-only:
@@ -12002,12 +12025,12 @@ create policy wl_sel on public.watchlist
 -- lead_detective_id are deliberately NOT changed.
 --
 -- NEW RPCs: siu_assume_control(uuid, text, text default 'siu_restricted') —
--- SIU command only, mandatory reason, refuses an already-SIU or archived case,
+-- SIB command only, mandatory reason, refuses an already-SIB or archived case,
 -- enrols the actor as lead agent, seeds the compartment when compartmented,
 -- and audits SIU_CASE_ASSUMED with the whole before-picture (prior authority,
 -- bureau, status, CID lead and creator). siu_release_control(uuid, text) —
 -- command over that investigation, refuses unless siu_assumed_at is set, so a
--- natively-SIU investigation can never be handed to CID this way.
+-- natively-SIB investigation can never be handed to CID this way.
 -- No notification is emitted: a takeover is frequently a takeover FROM the
 -- subject. Definitive SQL in
 -- supabase/migrations/20260824120000_siu_assume_control.sql.
@@ -12016,7 +12039,7 @@ create policy wl_sel on public.watchlist
 -- without surrendering the investigation. NEW TABLE public.siu_disclosures
 -- (block above) carrying a SNAPSHOT of the released title + body rather than a
 -- pointer, which is the mechanism: there is no edge from a disclosure back to
--- any SIU record for a CID user to traverse, the released text is immutable,
+-- any SIB record for a CID user to traverse, the released text is immutable,
 -- and revocation removes the row from every CID surface rather than clawing
 -- back a permission that was never granted.
 --
@@ -12024,19 +12047,19 @@ create policy wl_sel on public.watchlist
 -- CID case), 'investigator' (one named officer); item_type 'intelligence' at
 -- audience 'cid' is the "Release Intelligence" action.
 --
--- ORIGIN IS NEVER DISCLOSED: siu_disclosures_sel is SIU-side only
+-- ORIGIN IS NEVER DISCLOSED: siu_disclosures_sel is SIB-side only
 -- (private.siu_case_read), so CID reads ZERO rows from the table at every
 -- rank. CID goes through NEW RPC siu_released_intelligence(uuid default null),
 -- which projects only the non-identifying columns — no siu_case_id, no
 -- source_item_id, no case number. NEW RPCs siu_share(...10 args) — release,
 -- gated on siu_case_access + siu_is_agent so oversight standing cannot release
 -- and a compartmented investigation releases only from inside the compartment;
--- siu_revoke_disclosure(uuid, text) — the releasing agent or SIU command;
+-- siu_revoke_disclosure(uuid, text) — the releasing agent or SIB command;
 -- siu_acknowledge_disclosure(uuid) — the CID recipient, re-checking the
 -- audience rule so it cannot be used as an existence oracle. Definitive SQL in
 -- supabase/migrations/20260824130000_siu_disclosure.sql.
 
--- SIU Phase 3 (20260825120000_siu_phase3 + 20260825130000_siu_phase3_rpcs) —
+-- SIB Phase 3 (20260825120000_siu_phase3 + 20260825130000_siu_phase3_rpcs) —
 -- tradecraft. NEW TABLES (blocks above): siu_sources, siu_undercover_operations,
 -- siu_financial_intel, siu_comms_intel, siu_integrity_reviews, siu_exports.
 --
@@ -12049,7 +12072,7 @@ create policy wl_sel on public.watchlist
 -- export log is an accountability record rather than tradecraft.
 --
 -- NEW PRIVATE PREDICATE private.siu_handler_access(uuid, uuid) = siu_case_access
--- AND (handler = me OR SIU command). siu_sources and siu_undercover_operations
+-- AND (handler = me OR SIB command). siu_sources and siu_undercover_operations
 -- use it, so an agent with full access to an investigation still cannot read
 -- another agent's source or another officer's cover identity; the deployed
 -- officer can always read their OWN deployment. Granted EXECUTE to
@@ -12073,15 +12096,15 @@ create policy wl_sel on public.watchlist
 -- Aggregate counts only: caseload by classification, §14 control taken and
 -- returned, §15 releases and acknowledgements, integrity workload and
 -- disposition, tradecraft VOLUME, export volume. No case id, title, name,
--- codename, legend or identifier ever appears. Any SIU standing may read it;
+-- codename, legend or identifier ever appears. Any SIB standing may read it;
 -- an unauthorized caller gets {"access": false}. Definitive SQL in
 -- supabase/migrations/20260825120000_siu_phase3.sql and
 -- supabase/migrations/20260825130000_siu_phase3_rpcs.sql.
 
--- rls_test_cleanup SIU coverage (20260826120000_rls_cleanup_siu_coverage) —
+-- rls_test_cleanup SIB coverage (20260826120000_rls_cleanup_siu_coverage) —
 -- RE-EMITTED public.rls_test_cleanup(). Found during the pre-enablement safety
 -- review of the RLS suites (docs/TEST-ENVIRONMENT.md): the sweep covered only
--- the three SIU Phase 1 tables, while ten more have shipped since. All of them
+-- the three SIB Phase 1 tables, while ten more have shipped since. All of them
 -- cascade from public.cases, so a row on a FIXTURE-CREATED case was already
 -- removed — the gap was a row attached to a case the fixture did NOT create,
 -- which §12/§15 make possible by design (siu_case_notes keys to any case, and
@@ -12120,7 +12143,7 @@ create policy wl_sel on public.watchlist
 -- cases/gangs.lead_detective_id is nulled on TEST rows only, and a disposable
 -- leading a real case is simply not deleted.
 --
--- SIU rows go the other way deliberately: a fixture-authored siu_case_note or
+-- SIB rows go the other way deliberately: a fixture-authored siu_case_note or
 -- siu_disclosure on a real case is invisible to CID, so leaving it would mean
 -- live division-visible test intelligence — they are deleted AND reported.
 --
@@ -12132,14 +12155,14 @@ create policy wl_sel on public.watchlist
 
 -- siu_settings FK index (20260828120000_siu_settings_fk_index) — the Supabase
 -- performance advisor flagged siu_settings_updated_by_fkey as the one covering
--- index missing across the whole SIU surface. NEW INDEX
+-- index missing across the whole SIB surface. NEW INDEX
 -- siu_settings_updated_by_fkey_idx ON public.siu_settings (updated_by).
 -- A re-run of the security advisor on the same date returned ZERO ERROR-level
 -- findings; the only INFO rls_enabled_no_policy rows are the three intentional
 -- deny-all tables (app_secrets, deletion_tokens, security_test_runs).
 -- Definitive SQL in supabase/migrations/20260828120000_siu_settings_fk_index.sql.
 
--- SIU ex-officio excludes fixtures (20260829120000) — RE-EMITTED
+-- SIB ex-officio excludes fixtures (20260829120000) — RE-EMITTED
 -- private.siu_standing(uuid). Found during the pre-flight for opening the
 -- release gate: the SOP change gave every active role='director' profile
 -- oversight standing EX OFFICIO, and oversight carries appointment authority
@@ -12154,7 +12177,7 @@ create policy wl_sel on public.watchlist
 -- rls-test-siu-agent to hold it), and profiles.is_owner still confers 'owner'
 -- (the whole owner lane is built on rls-test-owner having it). The distinction
 -- is deliberateness — somebody chose those; nobody chose to give the director
--- fixture SIU authority.
+-- fixture SIB authority.
 --
 -- KNOWN, NOT CHANGED: rls-test-owner carries profiles.is_owner, so it
 -- satisfies private.is_owner() and can call public.siu_set_release() — a test
@@ -12272,7 +12295,7 @@ create index penal_charges_rico_idx ON public.penal_charges USING btree (version
 create index penal_charges_predicate_idx ON public.penal_charges USING btree (version_id) WHERE is_rico_predicate;
 create index penal_charges_archived_by_idx ON public.penal_charges USING btree (archived_by);
 create index penal_charges_created_by_idx ON public.penal_charges USING btree (created_by);
--- THE SHARED PENAL CODE. One central dataset for every unit -- CID, SIU, JTF,
+-- THE SHARED PENAL CODE. One central dataset for every unit -- CID, SIB, JTF,
 -- DOJ, the AG, prosecutors and judges all read the same rows, because a penal
 -- code that differs by unit is not a penal code.
 --
@@ -12438,11 +12461,696 @@ create index case_charges_rico_idx ON public.case_charges USING btree (case_id) 
 -- see both, so authority for a MOVE lives in the trigger while the policies
 -- below decide who may touch the row at all. Both must pass.
 --
--- SELECT/UPDATE: private.can_access_case() -- which already dispatches SIU
+-- SELECT/UPDATE: private.can_access_case() -- which already dispatches SIB
 -- cases to siu_case_access() -- OR private.case_charge_court_read(), which
--- opens 'approved' onward to the courts and, on an SIU case, to the Attorney
+-- opens 'approved' onward to the courts and, on an SIB case, to the Attorney
 -- General and judges ONLY. INSERT additionally reserves RICO modifiers to a
 -- prosecuting attorney or judge, reading the trigger-written snap_is_rico so
 -- the flag cannot be spoofed. There is deliberately NO delete policy: a charge
 -- that should not have been brought is 'withdrawn', which keeps the record
 -- that it was brought. Readers: case_charges_for(), case_charge_totals().
+
+
+-- ---------------------------------------------------------------------------
+-- Bureau restructure (20260825): functions added or not previously captured
+-- in this snapshot.
+-- ---------------------------------------------------------------------------
+
+create or replace function private.bureau_label(p_bureau text)
+returns text
+language sql immutable
+set search_path = ''
+as $$
+  select case lower(coalesce(p_bureau, ''))
+           when 'major_crimes' then 'Major Crimes'
+           when 'street_crimes' then 'Street Crimes'
+           when 'special_investigations' then 'SIB'
+           when 'jtf' then 'JTF'
+           else coalesce(p_bureau, '')
+         end
+$$;
+
+create or replace function private.bureau_prefix(p_bureau text)
+returns text
+language sql immutable
+set search_path = ''
+as $$
+  select case lower(coalesce(p_bureau, ''))
+           when 'major_crimes' then 'MCB'
+           when 'street_crimes' then 'SCB'
+           when 'special_investigations' then 'SIB'
+           when 'jtf' then 'JTF'
+           else upper(coalesce(p_bureau, ''))
+         end
+$$;
+
+create or replace function private.case_number_base(p_bureau text)
+returns bigint
+language sql immutable
+set search_path = ''
+as $$
+  select case lower(coalesce(p_bureau, ''))
+           when 'major_crimes' then 4000000
+           when 'street_crimes' then 5000000
+           when 'jtf' then 3000000
+           when 'special_investigations' then 8000000
+           else 4000000
+         end::bigint
+$$;
+
+create or replace function public.next_case_number(p_bureau text)
+returns text
+language sql stable security definer
+set search_path = ''
+as $$
+  with base as (
+    select private.case_number_base(p_bureau) as lo
+  ),
+  candidates as (
+    select (regexp_replace(c.case_number, '^[A-Z]+-', ''))::bigint as n
+    from public.cases c
+    where c.bureau::text = p_bureau
+      and c.case_number ~ '^[A-Z]+-[0-9]+$'
+  )
+  select private.bureau_prefix(p_bureau) || '-' || (
+    coalesce(
+      (select max(n) from candidates, base where n between base.lo and base.lo + 999999),
+      (select lo from base)
+    ) + 1
+  )::text
+$$;
+
+create or replace function public.next_siu_case_number()
+returns text
+language sql stable security definer
+set search_path = ''
+as $$
+  select 'SIB-' || (
+    coalesce(
+      (select max((regexp_replace(c.case_number, '^SI[UB]-', ''))::bigint)
+         from public.cases c
+        where c.case_authority = 'siu' and c.case_number ~ '^SI[UB]-[0-9]+$'),
+      8000000::bigint)
+    + 1)::text
+$$;
+
+create or replace function private.announcement_recipients(p_audience text, p_mentions jsonb, p_author uuid)
+returns table(user_id uuid, mentioned boolean)
+language sql stable security definer
+set search_path = ''
+as $$
+  with targets as (
+    select m->>'target' as t from jsonb_array_elements(coalesce(p_mentions, '[]'::jsonb)) m
+  ),
+  aud as (
+    select p.id from public.profiles p
+    where p.active and p.removed_at is null
+      and (not p.is_test or private.is_test_user(p_author))
+      and (
+      p_audience = 'all'
+      or (p_audience = 'command' and (p.role in ('bureau_lead', 'deputy_director', 'director') or p.is_owner))
+      or (p_audience in ('major_crimes', 'street_crimes', 'JTF') and p.division::text = p_audience)
+    )
+  ),
+  ment as (
+    select p.id from public.profiles p
+    where p.active and p.removed_at is null
+      and (not p.is_test or private.is_test_user(p_author))
+      and exists (
+      select 1 from targets t where
+        (t.t = 'all' and private.can_post_audience('all'))
+        or (t.t like 'role:%' and p.role::text = substring(t.t from 6))
+        or t.t = p.id::text
+    )
+  )
+  select ids.id as user_id, bool_or(ids.m) as mentioned
+  from (
+    select id, false as m from aud
+    union all
+    select id, true as m from ment
+  ) ids
+  where ids.id <> p_author
+  group by ids.id
+$$;
+
+create or replace function private.can_post_audience(a text)
+returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select private.is_active() and (
+    case
+      when a = 'all' then
+        coalesce((select role in ('deputy_director', 'director') or is_owner
+                    from public.profiles where id = (select auth.uid())), false)
+      when a in ('command', 'specific_members') then private.can_announce()
+      when a in ('major_crimes', 'street_crimes', 'JTF') then
+        coalesce((select (role in ('deputy_director', 'director') or is_owner)
+                      or (role = 'bureau_lead' and division::text = a)
+                    from public.profiles where id = (select auth.uid())), false)
+      else false
+    end)
+$$;
+
+create or replace function private.document_campaign_recipients(p_document uuid, p_audience text, p_targets jsonb, p_creator uuid)
+returns table(user_id uuid)
+language sql stable security definer
+set search_path = ''
+as $$
+  select p.id from public.profiles p, public.documents d
+  where d.id = p_document
+    and p.active and p.removed_at is null and not p.is_system
+    and p.is_test = private.is_test_user(p_creator)
+    and p.id <> p_creator
+    and (
+      p_audience = 'all'
+      or (p_audience in ('major_crimes', 'street_crimes', 'JTF') and p.division::text = p_audience)
+      or (p_audience = 'command'
+          and (p.role in ('bureau_lead', 'deputy_director', 'director') or p.is_owner))
+      or (p_audience = 'detectives' and p.role = 'detective')
+      or (p_audience = 'senior_detectives' and p.role = 'senior_detective')
+      or (p_audience = 'specific'
+          and coalesce(p_targets, '[]'::jsonb) @> to_jsonb(p.id::text))
+    )
+    and case coalesce(d.classification, 'internal')
+      when 'internal' then true
+      when 'restricted' then p.role in ('senior_detective', 'bureau_lead',
+                                        'deputy_director', 'director') or p.is_owner
+      when 'command' then p.role in ('bureau_lead', 'deputy_director', 'director') or p.is_owner
+      when 'justice' then p.is_owner or exists (
+        select 1 from public.justice_memberships m where m.user_id = p.id and m.active)
+      when 'owner' then p.is_owner
+      else false end
+$$;
+
+create or replace function private.field_jurisdiction_visible_for(p_user uuid, p_jurisdiction text)
+returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select case
+    when coalesce(private.siu_standing(p_user) in
+           ('owner', 'special_agent_in_charge', 'senior_special_agent', 'special_agent'),
+         false) then true
+    else coalesce((select p.active from public.profiles p where p.id = p_user), false)
+  end
+$$;
+
+create or replace function private.get_routing_ada_for_bureau(p_bureau public.bureau)
+returns uuid
+language sql stable security definer
+set search_path = ''
+as $$
+  select a.prosecutor_id
+    from public.prosecutor_bureau_assignments a
+    join public.justice_memberships m on m.user_id = a.prosecutor_id
+   where a.bureau = p_bureau and a.ends_at is null and a.starts_at <= now()
+     and p_bureau in ('major_crimes', 'street_crimes')
+     and m.active
+     and m.justice_role in ('assistant_district_attorney', 'district_attorney')
+     and a.assignment_type in ('acting', 'primary')
+   order by case a.assignment_type when 'acting' then 0 else 1 end
+   limit 1
+$$;
+
+create or replace function private.legal_resolve_bureau(p_case uuid)
+returns public.bureau
+language plpgsql security definer
+set search_path = ''
+as $$
+declare c public.cases; v public.bureau; v_src text; v_pfx text;
+begin
+  select * into c from public.cases where id = p_case;
+  if not found then raise exception 'case not found'; end if;
+  if c.bureau in ('major_crimes', 'street_crimes') then return c.bureau; end if;
+  if c.originating_bureau in ('major_crimes', 'street_crimes') then return c.originating_bureau; end if;
+
+  -- Derivation for JTF-assigned cases. Priority mirrors the recorded history:
+  -- the case-number prefix is the bureau the number was minted under (numbers
+  -- never change on reassignment), then the lead's bureau, then the creator's.
+  -- Legacy prefixes map through the restructure (LSB→Major Crimes,
+  -- BCB→Street Crimes); an ex-SAB prefix is ambiguous under the split and
+  -- falls through to the lead/creator derivation.
+  v_pfx := split_part(coalesce(c.case_number, ''), '-', 1);
+  if v_pfx in ('MCB', 'LSB') then
+    v := 'major_crimes'; v_src := 'case_number';
+  elsif v_pfx in ('SCB', 'BCB') then
+    v := 'street_crimes'; v_src := 'case_number';
+  end if;
+  if v is null then
+    select p.division into v from public.profiles p
+     where p.id = c.lead_detective_id and p.division in ('major_crimes', 'street_crimes');
+    if v is not null then v_src := 'lead_detective'; end if;
+  end if;
+  if v is null then
+    select p.division into v from public.profiles p
+     where p.id = c.created_by and p.division in ('major_crimes', 'street_crimes');
+    if v is not null then v_src := 'creator'; end if;
+  end if;
+  if v is null then
+    raise exception 'this case needs a responsible bureau for legal routing — a CID supervisor must select Major Crimes or Street Crimes on the case';
+  end if;
+
+  -- Persist so the answer is stable and the user is never re-asked; audited
+  -- like the manual set. Guarded on "still unset" so a concurrent manual set
+  -- is never overwritten.
+  update public.cases set originating_bureau = v
+   where id = c.id and originating_bureau is null;
+  if found then
+    insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+    values ((select auth.uid()), 'ORIGINATING_BUREAU_SET', 'cases', c.id,
+            jsonb_build_object('bureau', v, 'source', 'derived:' || v_src,
+                               'via', 'legal_resolve_bureau'));
+  end if;
+  return v;
+end $$;
+
+create or replace function private.pba_validate(p_prosecutor uuid, p_bureau public.bureau, p_type text)
+returns void
+language plpgsql stable security definer
+set search_path = ''
+as $$
+declare v_role text;
+begin
+  if p_bureau not in ('major_crimes', 'street_crimes') then
+    raise exception 'a prosecutor bureau must be Major Crimes or Street Crimes';
+  end if;
+  select justice_role into v_role from public.justice_memberships
+   where user_id = p_prosecutor and active;
+  if v_role is null then raise exception 'target has no active justice membership'; end if;
+  if v_role = 'judge' then raise exception 'a Judge may never receive a bureau assignment'; end if;
+  if v_role = 'attorney_general' then raise exception 'the Attorney General oversees DOJ-wide and does not take bureau assignments'; end if;
+  if v_role = 'district_attorney' and p_type <> 'acting' then
+    raise exception 'a District Attorney may only serve as acting bureau prosecutor';
+  end if;
+  if v_role = 'assistant_district_attorney' and p_type not in ('primary', 'supporting', 'acting') then
+    raise exception 'invalid assignment type';
+  end if;
+end $$;
+
+create or replace function public.change_member_role(p_target uuid, p_new_role public.app_role, p_reason text)
+returns public.profiles
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_uid uuid := (select auth.uid());
+  me public.profiles;
+  t public.profiles;
+  v_old_role public.app_role;
+begin
+  select * into me from public.profiles where id = v_uid;
+  if me.id is null or not (me.active and (me.role in ('bureau_lead','deputy_director','director') or me.is_owner)) then
+    raise exception 'not authorized to change roles';
+  end if;
+  if p_target = v_uid then raise exception 'you cannot change your own role'; end if;
+  if btrim(coalesce(p_reason, '')) = '' then raise exception 'a reason is required'; end if;
+  if p_new_role is null
+     or p_new_role not in ('detective','senior_detective','bureau_lead','deputy_director','director') then
+    raise exception 'invalid role';
+  end if;
+
+  select * into t from public.profiles where id = p_target for update;
+  if t.id is null then raise exception 'member not found'; end if;
+  if t.removed_at is not null then raise exception 'member has been removed'; end if;
+  if not t.active then raise exception 'member is not active — reactivate or re-approve first'; end if;
+  if t.login_denied then raise exception 'member login is denied'; end if;
+  if t.role = p_new_role then raise exception 'member already holds this role'; end if;
+  if t.division not in ('major_crimes','street_crimes') then
+    raise exception 'member has no permanent department yet';
+  end if;
+  -- The owner super-grant outranks every CID rank; only another owner may
+  -- touch an owner account's CID role.
+  if t.is_owner and not me.is_owner then
+    raise exception 'only the owner may change an owner account';
+  end if;
+  if not (private.can_assign_cid_role(t.role, t.division)
+          and private.can_assign_cid_role(p_new_role, t.division)) then
+    raise exception 'you are not authorized to change % to % in %', t.role, p_new_role, private.bureau_label(t.division::text);
+  end if;
+
+  v_old_role := t.role;
+  update public.profiles set role = p_new_role where id = p_target returning * into t;
+  insert into public.role_events (target_id, actor_id, old_role, new_role,
+    old_division, new_division, old_active, new_active, reason, source)
+  values (p_target, v_uid, v_old_role, p_new_role,
+    t.division, t.division, t.active, t.active, p_reason, 'role_change');
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'ROLE_CHANGED', 'profiles', p_target,
+    jsonb_build_object('new_role', p_new_role, 'reason', p_reason));
+  insert into public.notifications (user_id, type, payload)
+  values (p_target, 'membership_update', jsonb_build_object(
+    'status', 'role_changed',
+    'reason', 'Your role is now ' || initcap(replace(p_new_role::text, '_', ' ')) || '. Reason: ' || p_reason,
+    'actor_id', v_uid, 'actor_name', me.display_name));
+  return t;
+end $$;
+
+create or replace function public.doj_bureau_coverage()
+returns table(bureau public.bureau, primary_ada_id uuid, primary_ada_name text, acting_id uuid, acting_name text, acting_role text, supporting jsonb, covered boolean, primary_since timestamptz, acting_since timestamptz)
+language sql stable security definer
+set search_path = ''
+as $$
+  with b as (select unnest(array['major_crimes','street_crimes']::public.bureau[]) as bureau),
+  live as (
+    select a.*, p.display_name, private.justice_role_of(a.prosecutor_id) as jrole
+      from public.prosecutor_bureau_assignments a
+      join public.profiles p on p.id = a.prosecutor_id
+     where a.ends_at is null and a.starts_at <= now()
+       and private.is_justice_active(a.prosecutor_id))
+  select b.bureau,
+         pr.prosecutor_id, pr.display_name,
+         ac.prosecutor_id, ac.display_name, ac.jrole,
+         coalesce((select jsonb_agg(jsonb_build_object('id', s.prosecutor_id, 'name', s.display_name)
+                                    order by s.display_name)
+                     from live s where s.bureau = b.bureau and s.assignment_type = 'supporting'),
+                  '[]'::jsonb),
+         (private.get_routing_ada_for_bureau(b.bureau) is not null),
+         pr.starts_at, ac.starts_at
+    from b
+    left join live pr on pr.bureau = b.bureau and pr.assignment_type = 'primary'
+    left join live ac on ac.bureau = b.bureau and ac.assignment_type = 'acting'
+   where private.justice_role() is not null or private.is_active()
+      or coalesce((select is_owner from public.profiles where id = (select auth.uid())), false)
+$$;
+
+create or replace function public.review_membership_request(p_request uuid, p_decision text, p_final_bureau public.bureau default null::public.bureau, p_final_role public.app_role default null::public.app_role, p_applicant_note text default null::text, p_internal_note text default null::text)
+returns public.membership_requests
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  r public.membership_requests;
+  v_uid uuid := (select auth.uid());
+  me public.profiles;
+  target public.profiles;
+  v_status text;
+begin
+  select * into me from public.profiles where id = v_uid;
+  if me.id is null or not me.active or not (me.role in ('bureau_lead', 'deputy_director', 'director') or me.is_owner) then
+    raise exception 'not authorized to review membership requests';
+  end if;
+  select * into r from public.membership_requests where id = p_request for update;
+  if not found then raise exception 'request not found'; end if;
+  -- Terminal rows are re-reviewable: a recorded rejection/withdrawal can be
+  -- superseded by a new decision (the history rows carry the real prior
+  -- status, so the supersession is visible in membership_request_history).
+  if r.status not in ('pending', 'rejected', 'withdrawn') then
+    raise exception 'request is not awaiting review';
+  end if;
+  if r.applicant_id = v_uid then raise exception 'you cannot review your own request'; end if;
+  if p_decision not in ('approve', 'approve_with_changes', 'request_correction', 'reject') then
+    raise exception 'invalid decision';
+  end if;
+
+  if p_decision = 'request_correction' then
+    update public.membership_requests
+       set status = 'correction_requested',
+           applicant_visible_decision_note = p_applicant_note,
+           internal_decision_note = coalesce(p_internal_note, internal_decision_note)
+     where id = p_request returning * into r;
+    perform private.mr_history(p_request, 'correction_requested', r.status, 'correction_requested', p_applicant_note, false);
+    if p_internal_note is not null then
+      perform private.mr_history(p_request, 'internal_note', null, null, p_internal_note, true);
+    end if;
+    insert into public.audit_log (actor_id, action, entity, entity_id)
+    values (v_uid, 'CORRECTION_REQUESTED', 'membership_requests', p_request);
+    insert into public.notifications (user_id, type, payload)
+    values (r.applicant_id, 'membership_update', jsonb_build_object(
+      'request_id', p_request, 'status', 'correction_requested',
+      'reason', 'Your membership request needs a correction.',
+      'actor_id', v_uid, 'actor_name', me.display_name));
+    return r;
+  end if;
+
+  if p_decision = 'reject' then
+    update public.membership_requests
+       set status = 'rejected', decided_by = v_uid, decided_at = now(),
+           applicant_visible_decision_note = p_applicant_note,
+           internal_decision_note = coalesce(p_internal_note, internal_decision_note)
+     where id = p_request returning * into r;
+    perform private.mr_history(p_request, 'rejected', r.status, 'rejected', p_applicant_note, false);
+    if p_internal_note is not null then
+      perform private.mr_history(p_request, 'internal_note', null, null, p_internal_note, true);
+    end if;
+    insert into public.audit_log (actor_id, action, entity, entity_id)
+    values (v_uid, 'REJECTED', 'membership_requests', p_request);
+    insert into public.notifications (user_id, type, payload)
+    values (r.applicant_id, 'membership_update', jsonb_build_object(
+      'request_id', p_request, 'status', 'rejected',
+      'reason', 'Your membership request was rejected.',
+      'actor_id', v_uid, 'actor_name', me.display_name));
+    return r;  -- profile stays inactive
+  end if;
+
+  -- approve / approve_with_changes
+  if p_final_bureau is null or p_final_role is null then
+    raise exception 'a final department and role are required to approve';
+  end if;
+  if p_final_bureau not in ('major_crimes', 'street_crimes') then
+    raise exception 'members join Major Crimes or Street Crimes — JTF is a temporary joint-case designation and SIB membership is appointed through its own process';
+  end if;
+  if p_final_role not in ('detective', 'senior_detective', 'bureau_lead', 'deputy_director', 'director') then
+    raise exception 'invalid role';
+  end if;
+  -- The unified authority matrix decides who may grant the FINAL role in the
+  -- FINAL bureau.
+  if not private.can_assign_cid_role(p_final_role, p_final_bureau) then
+    raise exception 'you are not authorized to assign % in %', p_final_role, private.bureau_label(p_final_bureau::text);
+  end if;
+  select * into target from public.profiles where id = r.applicant_id for update;
+  if target.id is null or target.removed_at is not null then raise exception 'applicant profile unavailable'; end if;
+  if target.login_denied then raise exception 'applicant login is denied — restore login before approving'; end if;
+
+  v_status := case when p_decision = 'approve'
+                    and p_final_bureau = r.requested_bureau
+                    and p_final_role = r.requested_role
+              then 'approved' else 'approved_with_changes' end;
+  -- Every adjustment away from what was requested needs a recorded reason the
+  -- applicant can see.
+  if v_status = 'approved_with_changes' and btrim(coalesce(p_applicant_note, '')) = '' then
+    raise exception 'approving with changes requires a reason for the applicant';
+  end if;
+  update public.membership_requests
+     set status = v_status, decided_by = v_uid, decided_at = now(),
+         decided_bureau = p_final_bureau, decided_role = p_final_role,
+         applicant_visible_decision_note = p_applicant_note,
+         internal_decision_note = coalesce(p_internal_note, internal_decision_note)
+   where id = p_request returning * into r;
+
+  update public.profiles
+     set role = p_final_role, division = p_final_bureau, active = true
+   where id = r.applicant_id;
+  insert into public.role_events (target_id, actor_id, old_role, new_role,
+    old_division, new_division, old_active, new_active, reason, source, source_id)
+  values (r.applicant_id, v_uid, target.role, p_final_role,
+    target.division, p_final_bureau, target.active, true,
+    p_applicant_note, 'membership_approval', p_request);
+
+  perform private.mr_history(p_request, v_status, r.status, v_status, p_applicant_note, false);
+  if p_internal_note is not null then
+    perform private.mr_history(p_request, 'internal_note', null, null, p_internal_note, true);
+  end if;
+  insert into public.audit_log (actor_id, action, entity, entity_id)
+  values (v_uid, upper(v_status), 'membership_requests', p_request);
+  insert into public.notifications (user_id, type, payload)
+  values (r.applicant_id, 'member_approved', jsonb_build_object(
+    'request_id', p_request, 'status', v_status,
+    'reason', case when v_status = 'approved' then 'Your membership request was approved.'
+                   else 'Your membership request was approved with changes.' end,
+    'actor_id', v_uid, 'actor_name', me.display_name));
+  return r;
+end $$;
+
+create or replace function public.owner_security_overview()
+returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_runs jsonb;
+  v_fixtures jsonb;
+  v_leftovers jsonb;
+  test_ids uuid[];
+begin
+  if not private.is_owner() then raise exception 'not authorized'; end if;
+
+  select coalesce(jsonb_agg(to_jsonb(r) order by r.created_at desc), '[]'::jsonb) into v_runs
+    from (select id, suite, passed, failed, skipped, total, failures, commit_sha,
+                 branch, release, source, duration_ms, created_at
+            from public.security_test_runs
+           order by created_at desc limit 20) r;
+
+  -- Expected fixture roster (kept in sync with tests/rls/README.md).
+  with expected(email, kind, exp_role, exp_division, exp_cid_active, exp_justice_role, exp_justice_active) as (values
+    ('rls-test-lsb@cidportal.test', 'cid', 'detective', 'major_crimes', true, null, null),
+    ('rls-test-bcb@cidportal.test', 'cid', 'detective', 'street_crimes', true, null, null),
+    ('rls-test-inactive@cidportal.test', 'cid', null, null, false, null, null),
+    ('rls-test-owner@cidportal.test', 'cid', 'detective', 'major_crimes', true, null, null),
+    ('rls-test-lead@cidportal.test', 'cid', 'bureau_lead', 'major_crimes', true, null, null),
+    ('rls-test-director@cidportal.test', 'cid', 'director', 'major_crimes', true, null, null),
+    ('rls-test-target@cidportal.test', 'cid', 'detective', 'major_crimes', true, null, null),
+    ('rls-test-applicant@cidportal.test', 'cid', null, null, false, null, null),
+    ('rls-test-ada-lsb@cidportal.test', 'justice', null, null, false, 'assistant_district_attorney', true),
+    ('rls-test-ada-bcb@cidportal.test', 'justice', null, null, false, 'assistant_district_attorney', true),
+    ('rls-test-ada-sab@cidportal.test', 'justice', null, null, false, 'assistant_district_attorney', true),
+    ('rls-test-da@cidportal.test', 'justice', null, null, false, 'district_attorney', true),
+    ('rls-test-ag@cidportal.test', 'justice', null, null, false, 'attorney_general', true),
+    ('rls-test-judge@cidportal.test', 'justice', null, null, false, 'judge', true),
+    ('rls-test-judge2@cidportal.test', 'justice', null, null, false, 'judge', true),
+    ('rls-test-justice@cidportal.test', 'justice', null, null, false, null, null))
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'email', e.email,
+           'present', u.id is not null,
+           'issues', (
+             select coalesce(jsonb_agg(issue), '[]'::jsonb) from (
+               select 'missing account' as issue where u.id is null
+               union all select 'missing profile' where u.id is not null and p.id is null
+               union all select 'unexpected CID role: ' || p.role::text
+                 where p.id is not null and e.exp_role is not null and p.role::text is distinct from e.exp_role
+               union all select 'unexpected bureau: ' || p.division::text
+                 where p.id is not null and e.exp_division is not null and p.division::text is distinct from e.exp_division
+               union all select 'CID active flag is ' || p.active::text
+                 where p.id is not null and e.exp_cid_active is not null and p.active is distinct from e.exp_cid_active
+               union all select 'login denied' where coalesce(p.login_denied, false)
+               union all select 'removed' where p.removed_at is not null
+               union all select 'unexpected justice role: ' || coalesce(jm.justice_role, 'none')
+                 where u.id is not null and e.kind = 'justice'
+                   and coalesce(jm.justice_role, '') is distinct from coalesce(e.exp_justice_role, '')
+               union all select 'justice membership inactive'
+                 where e.exp_justice_active is true and coalesce(jm.active, false) = false
+             ) issues)) order by e.email), '[]'::jsonb)
+    into v_fixtures
+    from expected e
+    left join auth.users u on u.email = e.email
+    left join public.profiles p on p.id = u.id
+    left join public.justice_memberships jm on jm.user_id = u.id;
+
+  select coalesce(array_agg(id), '{}') into test_ids
+    from auth.users where email like 'rls-test-%@cidportal.test';
+  select jsonb_build_object(
+    'cases', (select count(*) from public.cases where created_by = any(test_ids)),
+    'legal_requests', (select count(*) from public.legal_requests where created_by = any(test_ids)),
+    'prosecutor_assignments', (select count(*) from public.prosecutor_bureau_assignments
+                                where (prosecutor_id = any(test_ids) or assigned_by = any(test_ids)) and ends_at is null),
+    'announcements', (select count(*) from public.announcements where author_id = any(test_ids)),
+    'membership_requests', (select count(*) from public.membership_requests where applicant_id = any(test_ids)),
+    'justice_requests', (select count(*) from public.justice_membership_requests where applicant_id = any(test_ids)),
+    'persons', (select count(*) from public.persons where created_by = any(test_ids)))
+    into v_leftovers;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id)
+  values ((select auth.uid()), 'SECURITY_OVERVIEW_VIEWED', 'security_test_runs', null);
+
+  return jsonb_build_object('runs', v_runs, 'fixtures', v_fixtures, 'leftovers', v_leftovers);
+end $$;
+
+create or replace function public.siu_create_case(p_title text, p_summary text default null::text, p_classification text default 'siu'::text)
+returns uuid
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_actor uuid := (select auth.uid());
+  v_id uuid;
+  v_number text;
+begin
+  if not private.siu_is_agent() then raise exception 'not authorized'; end if;
+  if coalesce(btrim(p_title), '') = '' then raise exception 'a title is required'; end if;
+  if p_classification not in ('siu', 'siu_restricted', 'siu_command', 'siu_compartmented') then
+    raise exception 'unknown SIB classification';
+  end if;
+
+  v_number := public.next_siu_case_number();
+  insert into public.cases (case_number, title, summary, bureau, status,
+                            lead_detective_id, created_by, case_authority, siu_classification)
+  values (v_number, btrim(p_title), nullif(btrim(coalesce(p_summary, '')), ''),
+          'special_investigations', 'open', v_actor, v_actor, 'siu', p_classification)
+  returning id into v_id;
+
+  insert into public.siu_case_agents (case_id, user_id, agent_role, assigned_by)
+  values (v_id, v_actor, 'lead', v_actor);
+
+  if p_classification = 'siu_compartmented' then
+    insert into public.siu_compartment_members (case_id, user_id, granted_by, reason)
+    values (v_id, v_actor, v_actor, 'Opened the compartmented investigation');
+  end if;
+
+  perform private.siu_audit('SIU_CASE_CREATED', v_id, jsonb_build_object(
+    'case_number', v_number, 'classification', p_classification));
+  return v_id;
+end $$;
+
+create or replace function public.siu_review_referral(p_referral uuid, p_disposition text, p_note text, p_open_as text default 'preliminary_inquiry'::text, p_classification text default 'siu_restricted'::text, p_category text default null::text)
+returns uuid
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_actor uuid := (select auth.uid());
+  v_ref record;
+  v_case uuid;
+  v_number text;
+begin
+  if not private.siu_is_agent() then raise exception 'not authorized'; end if;
+  if p_disposition not in ('under_review','accepted','declined','referred_to_cid',
+                           'info_requested','withdrawn') then
+    raise exception 'unknown disposition';
+  end if;
+  if coalesce(btrim(p_note), '') = '' then raise exception 'a review note is required'; end if;
+
+  select * into v_ref from public.siu_referrals where id = p_referral for update;
+  if not found then raise exception 'referral not found'; end if;
+  if v_ref.opened_case_id is not null then
+    raise exception 'this referral has already been actioned';
+  end if;
+
+  if p_disposition = 'accepted' then
+    if p_open_as not in ('preliminary_inquiry','investigation') then
+      raise exception 'unknown opening stage';
+    end if;
+    if p_classification not in ('siu','siu_restricted','siu_command','siu_compartmented') then
+      raise exception 'unknown SIB classification';
+    end if;
+
+    v_number := public.next_siu_case_number();
+    insert into public.cases (case_number, title, summary, bureau, status,
+                              lead_detective_id, created_by, case_authority,
+                              siu_classification, siu_stage, siu_category)
+    values (v_number,
+            left(v_ref.summary, 200),
+            v_ref.detail,
+            'special_investigations', 'open', v_actor, v_actor, 'siu',
+            p_classification, p_open_as, p_category)
+    returning id into v_case;
+
+    insert into public.siu_case_agents (case_id, user_id, agent_role, assigned_by)
+    values (v_case, v_actor, 'lead', v_actor);
+
+    if p_classification = 'siu_compartmented' then
+      insert into public.siu_compartment_members (case_id, user_id, granted_by, reason)
+      values (v_case, v_actor, v_actor, 'Opened from referral');
+    end if;
+  end if;
+
+  update public.siu_referrals
+     set status = p_disposition, review_note = btrim(p_note),
+         reviewed_by = v_actor, reviewed_at = now(),
+         opened_case_id = coalesce(v_case, opened_case_id)
+   where id = p_referral;
+
+  perform private.siu_audit('SIU_REFERRAL_REVIEWED', p_referral, jsonb_build_object(
+    'disposition', p_disposition, 'note', btrim(p_note),
+    'opened_case', v_case, 'opened_as', case when v_case is not null then p_open_as end,
+    'classification', case when v_case is not null then p_classification end,
+    'reviewed_by', v_actor));
+  return v_case;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Bureau restructure (20260825): constraints not previously captured in this
+-- snapshot, in their current live form.
+-- ---------------------------------------------------------------------------
+alter table public.announcements add constraint announcements_audience_check CHECK ((audience = ANY (ARRAY['all'::text, 'command'::text, 'specific_members'::text, 'major_crimes'::text, 'street_crimes'::text, 'JTF'::text])));
+alter table public.legal_requests add constraint legal_requests_responsible_bureau_check CHECK ((responsible_bureau = ANY (ARRAY['major_crimes'::public.bureau, 'street_crimes'::public.bureau])));
+alter table public.prosecutor_bureau_assignments add constraint prosecutor_bureau_assignments_bureau_check CHECK ((bureau = ANY (ARRAY['major_crimes'::public.bureau, 'street_crimes'::public.bureau])));

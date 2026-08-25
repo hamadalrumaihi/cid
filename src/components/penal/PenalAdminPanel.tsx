@@ -173,7 +173,7 @@ export function PenalAdminPanel() {
           </p>
           <ul className="mt-2 space-y-1 text-xs text-amber-200/90">
             <li>
-              Every unit — CID, SIU, JTF, DOJ, the Attorney General, prosecutors and
+              Every unit — CID, SIB, JTF, DOJ, the Attorney General, prosecutors and
               judges — reads this code from the moment it is published.
             </li>
             {warnings.map((w) => <li key={w}>{w}</li>)}

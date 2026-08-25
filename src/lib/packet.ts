@@ -3,6 +3,7 @@
  *  and .pdf (shared paras via lib/pdf's lazy @react-pdf renderer). */
 import { list, rpc } from './db'
 import type { Tables } from './database.types'
+import { bureauLabel } from './roles'
 import { downloadDocx, type DocxPara } from './docx'
 import { downloadTextFile, fmtUSD, slug } from './format'
 import { reportTitle } from './forms'
@@ -87,7 +88,7 @@ export function packetParas(c: CaseRow, d: PacketData): DocxPara[] {
   const P: DocxPara[] = [
     { text: 'Criminal Investigation Division — State of San Andreas', style: 'subtitle' },
     { text: `CASE PACKET — ${c.case_number}`, style: 'title' },
-    { text: `${c.title || ''} · ${c.bureau} · ${String(c.status).toUpperCase()} · prepared ${new Date().toLocaleString('en-US')}`, style: 'subtitle' },
+    { text: `${c.title || ''} · ${bureauLabel(c.bureau)} · ${String(c.status).toUpperCase()} · prepared ${new Date().toLocaleString('en-US')}`, style: 'subtitle' },
     { text: '', style: 'normal' },
     { text: 'Summary', style: 'heading' },
     { text: c.summary || '—', style: 'normal' },
@@ -176,7 +177,7 @@ export function packetPdfSpec(c: CaseRow, d: PacketData): import('./pdf').PdfDoc
     subtitle: `${c.title || 'Untitled'} · prepared ${new Date().toLocaleString('en-US')}`,
     meta: [
       ['Status', String(c.status).toUpperCase()],
-      ['Bureau', c.bureau],
+      ['Bureau', bureauLabel(c.bureau)],
       ['Area', c.area || '—'],
       ['Evidence items', String(d.ev.length)],
       ['Charges', String(d.charges.length)],
@@ -195,7 +196,7 @@ export function packetDocx(c: CaseRow, d: PacketData): void {
 export function caseToMarkdown(c: CaseRow, d: PacketData): string {
   const L: string[] = []
   L.push(`# Case Packet — ${c.case_number}`, '')
-  L.push('`' + [c.title, c.bureau, String(c.status).toUpperCase()].filter(Boolean).join(' · ') + '` · prepared ' + new Date().toLocaleString('en-US'), '')
+  L.push('`' + [c.title, bureauLabel(c.bureau), String(c.status).toUpperCase()].filter(Boolean).join(' · ') + '` · prepared ' + new Date().toLocaleString('en-US'), '')
   L.push('## Summary', c.summary || '—', '')
   if (c.notes?.trim()) L.push('## Notes', c.notes.replace(/\r\n?/g, '\n'), '')
   L.push(`## Evidence (${d.ev.length})`)

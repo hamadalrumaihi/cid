@@ -24,7 +24,7 @@ import { caseLink } from '@/lib/caseLinks'
 import { priorityTint } from '@/lib/tint'
 import { useAuth } from '@/lib/auth'
 import { useAction } from '@/lib/useAction'
-import { bureauLabel } from '@/lib/roles'
+import { bureauLabel, bureauShort } from '@/lib/roles'
 import { officerName } from '@/lib/profiles'
 import { useWatchlistStore } from '@/lib/watchlist'
 import { caseCourtHint, caseStatusTint, CASE_STATUSES, signoffLabel, signoffTint } from '@/lib/signoff'
@@ -310,14 +310,14 @@ export function CaseCommandHeader({
         {assessment && (
           <DlField label="Workflow"><Badge tint={STAGE_TINTS[assessment.stage]}>{assessment.stageLabel}</Badge></DlField>
         )}
-        <DlField label="Unit">{isJtfAssigned(c) ? 'JTF (operational)' : c.bureau}</DlField>
+        <DlField label="Unit">{isJtfAssigned(c) ? 'JTF (operational)' : bureauShort(c.bureau)}</DlField>
         <DlField label="Responsible bureau">
           {responsibleBureau ? (
-            <Badge title="Responsible bureau for legal routing">{responsibleBureau}</Badge>
+            <Badge title="Responsible bureau for legal routing">{bureauShort(responsibleBureau)}</Badge>
           ) : (
             <Badge
               tint="bg-amber-500/15 text-amber-300"
-              title="No responsible bureau is set — a CID supervisor (Senior Detective or above) must select LSB, BCB, or SAB before legal requests can route."
+              title="No responsible bureau is set — a CID supervisor (Senior Detective or above) must select Major Crimes or Street Crimes before legal requests can route."
             >
               Needs routing bureau
             </Badge>

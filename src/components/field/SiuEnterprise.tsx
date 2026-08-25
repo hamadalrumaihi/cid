@@ -1,6 +1,6 @@
 'use client'
 
-/** SIU's reading of the network behind one Field Intelligence report.
+/** SIB's reading of the network behind one Field Intelligence report.
  *
  *  ── This is an assessment, not a fact table ────────────────────────────────
  *  `gang_members`, `person_relationships` and the rest remain where structural
@@ -12,14 +12,14 @@
  *
  *  ── Nothing is promoted on its own ─────────────────────────────────────────
  *  A node with a registry record behind it is a target CANDIDATE. Designating
- *  it calls the same `siu_designate_target()` the SIU workspace uses, and the
- *  report must already have been accepted by SIU — so patrol cannot start an
- *  SIU case and neither can an unanswered referral.
+ *  it calls the same `siu_designate_target()` the SIB workspace uses, and the
+ *  report must already have been accepted by SIB — so patrol cannot start an
+ *  SIB case and neither can an unanswered referral.
  *
- *  ── SIU eyes only ──────────────────────────────────────────────────────────
+ *  ── SIB eyes only ──────────────────────────────────────────────────────────
  *  The table's SELECT policy is `private.siu_is_agent()` with no second branch.
- *  CID keeps the report, its claims, its evidence and the SIU handling history;
- *  what CID does not get is SIU's working picture of an enterprise.
+ *  CID keeps the report, its claims, its evidence and the SIB handling history;
+ *  what CID does not get is SIB's working picture of an enterprise.
  */
 import { useCallback, useEffect, useState } from 'react'
 import { fmtDateTime } from '@/lib/format'
@@ -132,7 +132,7 @@ export function SiuEnterprise({ submission, parts, onChanged }: {
     <div className="mt-4 border-t border-white/5 pt-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h5 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-          SIU intelligence assessment
+          SIB intelligence assessment
         </h5>
         {!adding && (
           <Button size="sm" variant="ghost" onClick={() => setAdding(true)}>+ Map something</Button>
@@ -141,7 +141,7 @@ export function SiuEnterprise({ submission, parts, onChanged }: {
       <p className="mt-1 text-xs text-slate-500">
         What this report says about a structure, in the SOP&rsquo;s layers. Not visible to
         the submitting officer or to CID, and it does not change any person, gang or
-        location record &mdash; it records how SIU reads them.
+        location record &mdash; it records how SIB reads them.
       </p>
 
       {/* Which investigation this report fed. */}
@@ -149,13 +149,13 @@ export function SiuEnterprise({ submission, parts, onChanged }: {
         {submission.siu_case_id ? (
           <>
             <Badge tone="accent">
-              {linked ? (linked.case_number || linked.title || 'SIU investigation')
-                : 'An SIU investigation you cannot open'}
+              {linked ? (linked.case_number || linked.title || 'SIB investigation')
+                : 'An SIB investigation you cannot open'}
             </Badge>
             <Button size="sm" variant="ghost" onClick={() => void unlink()}>Unlink</Button>
           </>
         ) : submission.siu_state === 'accepted' ? (
-          <Select value="" aria-label="Link to an SIU investigation" className="text-xs"
+          <Select value="" aria-label="Link to an SIB investigation" className="text-xs"
             onChange={(e) => { if (e.target.value) void link(e.target.value) }}>
             <option value="">Link to an investigation…</option>
             {cases.map((c) => (
@@ -166,7 +166,7 @@ export function SiuEnterprise({ submission, parts, onChanged }: {
           </Select>
         ) : (
           <p className="text-xs text-slate-500">
-            SIU has to take the report before it can feed an investigation.
+            SIB has to take the report before it can feed an investigation.
           </p>
         )}
       </div>
@@ -197,7 +197,7 @@ export function SiuEnterprise({ submission, parts, onChanged }: {
                     {nodeEntity(n) && <Badge tone="accent">Registry record</Badge>}
                     {n.note && <span className="text-slate-500">{n.note}</span>}
                     <span className="text-slate-600">
-                      {officerName(n.created_by) ?? 'SIU'} · {fmtDateTime(n.created_at)}
+                      {officerName(n.created_by) ?? 'SIB'} · {fmtDateTime(n.created_at)}
                     </span>
                     {nodeEntity(n) && submission.siu_case_id && (
                       <Designate submission={submission} node={n}
@@ -307,7 +307,7 @@ function AddNode({ submission, parts, onDone, onCancel }: {
 }
 
 /** Resolving a node to a record in the registry, through the same search the
- *  SIU workspace uses. Only a resolved node can ever become a target. */
+ *  SIB workspace uses. Only a resolved node can ever become a target. */
 function RegistryPick({ value, onPick }: {
   value: { type: NodeEntityType; id: string; name: string } | null
   onPick: (v: { type: NodeEntityType; id: string; name: string } | null) => void
