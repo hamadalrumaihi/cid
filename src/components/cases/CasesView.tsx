@@ -126,6 +126,20 @@ function CasesViewInner() {
     }, 0)
     return () => window.clearTimeout(t)
   }, [sp, canEdit, router])
+
+  // `?archived=1` (Owner Console "Archived cases" link) lands on the archive
+  // once, then strips the param so refresh/back returns to the live board.
+  useEffect(() => {
+    if (sp.get('archived') !== '1') return
+    const t = window.setTimeout(() => {
+      setShowArchived(true)
+      const p = new URLSearchParams(sp.toString())
+      p.delete('archived')
+      const qs = p.toString()
+      router.replace(qs ? `/cases?${qs}` : '/cases', { scroll: false })
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [sp, router])
   const casesV = useTableVersion('cases')
   const templatesV = useTableVersion('case_templates')
   const tasksV = useTableVersion('case_tasks')

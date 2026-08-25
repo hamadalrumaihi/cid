@@ -58,6 +58,6 @@ export const useWatchlistStore = create<WatchlistState>((set, get) => ({
     if (res.data?.[0]) set((s) => ({ rows: [res.data![0], ...s.rows] }))
     else await get().fetch()
     markWatchSeen(type, id) // following it now = you've seen its current state
-    toast(`Following${label ? ' ' + label : ''} — updates show on My Desk`, 'success')
+    toast(`Following${label ? ' ' + label : ''} — updates show on My Dashboard`, 'success')
   },
 }))

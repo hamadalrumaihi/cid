@@ -12,7 +12,7 @@ export function WatchButton({ type, id, label, compact }: { type: WatchType; id:
   return (
     <button
       className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition hover:bg-white/10 ${on ? 'border-amber-500/30 bg-amber-500/10 text-amber-300' : 'border-white/10 bg-white/5 text-slate-200'}`}
-      title={on ? 'Following — click to unfollow' : 'Follow for updates on My Desk'}
+      title={on ? 'Following — click to unfollow' : 'Follow for updates on My Dashboard'}
       aria-pressed={on}
       disabled={busy}
       onClick={async (e) => {

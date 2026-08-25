@@ -243,7 +243,7 @@ const FEATURES: { icon: React.ReactNode; title: string; where: React.ReactNode; 
     art: <MiniCalendar />,
   },
   {
-    icon: <BellIcon />, title: 'My Desk', where: 'Command → My Desk',
+    icon: <BellIcon />, title: 'My Dashboard', where: 'Command → My Dashboard',
     caption: <>Everything waiting on <b>you</b>: sign-offs, returned cases, mentions, due follow-ups. Start every shift here.</>,
     art: <MiniDesk />,
   },
@@ -309,7 +309,7 @@ export function GuideView() {
           <Arrow />
           <span className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-200">2 · <b>Set LOA</b> before leave — routing skips you</span>
           <Arrow />
-          <span className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-200">3 · Open <b>My Desk</b> — your to-do view</span>
+          <span className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-200">3 · Open <b>My Dashboard</b> — your to-do view</span>
         </div>
       </Section>
 
@@ -403,7 +403,7 @@ export function GuideView() {
           <Arrow />
           <Step tone="good">Signed off</Step>
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">You get a notification at every step; returned cases land in <b>My Desk</b>. Nobody signs off their own submission.</p>
+        <p className="mt-2 text-[11px] text-slate-500">You get a notification at every step; returned cases land in <b>My Dashboard</b>. Nobody signs off their own submission.</p>
       </Section>
 
       {/* legal lanes */}

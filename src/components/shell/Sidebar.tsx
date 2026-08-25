@@ -288,7 +288,7 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
             onClick={() => go(() => {
               const next = inSiu ? 'cid' : 'siu'
               siu.setViewing(next)
-              navigate(next === 'siu' ? 'siu' : 'command')
+              navigate(next === 'siu' ? 'siu' : 'inbox')
             })}
             title={`Switch to ${inSiu ? DEPARTMENT_LABEL.cid : DEPARTMENT_LABEL.siu}`}
             className="nav-link group mt-2 flex w-full items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"

@@ -405,7 +405,7 @@ function DashboardSection({ onGo }: { onGo: (s: string) => void }) {
         <span className="font-bold uppercase tracking-wider text-slate-400">Command queues</span>
         <button onClick={() => router.push('/command-center?s=approvals')} className="rounded px-1.5 py-2 font-semibold text-blue-300 transition hover:text-white">Approvals →</button>
         <button onClick={() => router.push('/command-center?s=promotions')} className="rounded px-1.5 py-2 font-semibold text-blue-300 transition hover:text-white">Promotions &amp; transfers →</button>
-        <button onClick={() => router.push('/cases')} className="rounded px-1.5 py-2 font-semibold text-blue-300 transition hover:text-white">Archived cases →</button>
+        <button onClick={() => router.push('/cases?archived=1')} className="rounded px-1.5 py-2 font-semibold text-blue-300 transition hover:text-white">Archived cases →</button>
       </div>
     </div>
   )

@@ -1,11 +1,7 @@
 /** The portal access matrix — who can do what, by standing. Static
  *  documentation data (informational only; RLS and the definer RPCs are the
  *  authority). Shared home so the Command Center's Permissions section no
- *  longer reaches into the Owner Portal's data module for it.
- *
- *  NOTE: components/owner/ownerData.ts still carries its own copy of this
- *  matrix for the Owner Portal — keep the two in lockstep until the owner
- *  module re-exports from here. */
+ *  longer reaches into the Owner Console's data module for it. */
 
 export interface PermissionsMatrixRow {
   area: string
@@ -26,7 +22,7 @@ export const PERMISSIONS_MATRIX: PermissionsMatrixRow[] = [
   { area: 'View ALL feedback + triage/catalog', owner: '✓', command: '✗', member: 'own only', inactive: '✗' },
   { area: 'Audit Log', owner: '✓', command: '✗', member: '✗', inactive: '✗' },
   { area: 'Developer Handbook (in-app)', owner: '✓', command: '✗', member: '✗', inactive: '✗' },
-  { area: 'Owner Portal', owner: '✓', command: '✗', member: '✗', inactive: '✗' },
+  { area: 'Owner Console', owner: '✓', command: '✗', member: '✗', inactive: '✗' },
   { area: 'Grant ownership (is_owner flag)', owner: 'SQL only', command: '✗', member: '✗', inactive: '✗' },
 ]
 
