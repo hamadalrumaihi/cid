@@ -33,7 +33,7 @@ One row per leaf tab in `PAGE_META` (`src/lib/nav.ts` — the routing truth).
 
 | Slug | Screen (component) | Data highlights | Extra permissions |
 |---|---|---|---|
-| `command` | Dashboard (`CommandView` + 8 widgets) | cases, evidence, tickets, trackers, raid comp | filter bar/scorecards command-only |
+| `command` | Dashboard (`CommandView` + 8 widgets, incl. the "Jump back in" pins/recents strip — `command/JumpBack.tsx`) | cases, evidence, tickets, trackers, raid comp, user_pins | filter bar/scorecards command-only |
 | `analytics` | Division Analytics | cases, evidence, persons (charts) | — |
 | `announce` | Announcements | announcements | posting = command |
 | `heatmap` | Crime Heatmap | cases, turf, places, raids | — |
@@ -63,7 +63,7 @@ One row per leaf tab in `PAGE_META` (`src/lib/nav.ts` — the routing truth).
 | `sops` | SOPs & Library | documents + versions | writes = command |
 | `guide` | User Guide | static visual guide (generated from docs/USER-GUIDE.md) | — |
 | `devdocs` | Developer Handbook (`DevDocsView`) | generated handbook content | **owner-only** |
-| `action` | Action Center (`ActionCenterView`) | prioritized pending decisions across cases, command, personnel | self-scoped |
+| `action` | Action Center (`ActionCenterView`) | prioritized pending decisions across cases, command, personnel + Unassigned intel / Expiring BOLOs / Drafts lanes (`lib/actionItems`), type + bureau filters | self-scoped |
 | `inbox` | My Desk (`InboxView`) | self-scoped rollup panels (sign-offs, returned cases, follow-ups, tasks, mentions, following, drafts…) | self-scoped |
 | `calendar` | Calendar | cases, tasks, shift weeks | — |
 | `shifts` | Shift Reports | shift_reports | edit own |
