@@ -662,7 +662,7 @@ describe('§9 why is this stuck — the CID lane names who can act', () => {
     // The old wording was true and useless: it never said who, so a stalled
     // request gave the reader nothing to act on.
     const why = routingExplanation(pending(), viewer({ myId: 'u-other' }))
-    expect(why).toMatch(/MCB Bureau Lead/)
+    expect(why).toMatch(/Major Crimes Bureau Lead/)
     expect(why).toMatch(/Deputy Director or\s+Director/)
   })
 

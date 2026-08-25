@@ -43,10 +43,13 @@ export const BUREAUS: Record<string, string> = {
   JTF: 'Joint Task Force',
 }
 
-/** Short code per bureau — chips, badges, table columns, compact UI. */
+/** Compact display name per bureau — chips, badges, table columns. The
+ *  normal bureaus read as words on every screen ("Major Crimes"); SIB and
+ *  JTF are established short names. Case-number PREFIXES (MCB-/SCB-) are
+ *  identifiers, not display — see CASE_PREFIX. */
 export const BUREAU_SHORT: Record<string, string> = {
-  major_crimes: 'MCB',
-  street_crimes: 'SCB',
+  major_crimes: 'Major Crimes',
+  street_crimes: 'Street Crimes',
   special_investigations: 'SIB',
   JTF: 'JTF',
 }

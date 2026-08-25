@@ -26,11 +26,11 @@ describe('bureau vocabulary — restructure model', () => {
     expect(BUREAUS['street_crimes']).toBe('Street Crimes Bureau')
     expect(BUREAUS['special_investigations']).toBe('Special Investigations Bureau')
     expect(BUREAUS['JTF']).toBe('Joint Task Force')
-    expect(BUREAU_SHORT).toEqual({ major_crimes: 'MCB', street_crimes: 'SCB', special_investigations: 'SIB', JTF: 'JTF' })
+    expect(BUREAU_SHORT).toEqual({ major_crimes: 'Major Crimes', street_crimes: 'Street Crimes', special_investigations: 'SIB', JTF: 'JTF' })
     expect(CASE_PREFIX).toEqual({ major_crimes: 'MCB', street_crimes: 'SCB', special_investigations: 'SIB', JTF: 'JTF' })
   })
   it('bureauShort/bureauLabel resolve ids and fall back to raw historical codes', () => {
-    expect(bureauShort('major_crimes')).toBe('MCB')
+    expect(bureauShort('major_crimes')).toBe('Major Crimes')
     expect(bureauShort('SAB')).toBe('SAB') // frozen historical value renders verbatim
     expect(bureauShort(null)).toBe('—')
     expect(bureauLabel('street_crimes')).toBe('Street Crimes Bureau')

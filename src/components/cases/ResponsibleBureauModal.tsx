@@ -71,7 +71,7 @@ export function ResponsibleBureauModal({ open, c, onClose, onDone }: Responsible
         <label className="mt-4 block text-sm text-slate-300">Responsible bureau
           <select value={to} onChange={(e) => setTo(e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white">
             <option value="">Select a bureau…</option>
-            {options.map((b) => <option key={b} value={b}>{bureauShort(b)} — {bureauLabel(b)}</option>)}
+            {options.map((b) => <option key={b} value={b}>{bureauLabel(b)}</option>)}
           </select>
         </label>
         {changing && (

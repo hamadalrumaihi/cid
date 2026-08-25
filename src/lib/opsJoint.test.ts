@@ -155,7 +155,7 @@ describe('helpers', () => {
     expect(events[0].label).toMatch(/resolved|removed/i)
     expect(events.map((e) => e.label)).toEqual(expect.arrayContaining([
       'Operation created', 'Converted to Joint Task Force',
-      'Bureau joined — MCB', 'Case linked — LSB-9000042',
+      'Bureau joined — Major Crimes', 'Case linked — LSB-9000042',
       'Case removed — LSB-9000042', 'Operation resolved',
     ]))
     // Sorted newest first.

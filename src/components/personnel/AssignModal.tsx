@@ -253,7 +253,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
             audited actions below, never a silent dropdown save. */}
         <div className="mb-4 grid grid-cols-2 gap-x-6 gap-y-1 rounded-xl border border-white/10 bg-ink-950/50 p-3 text-xs">
           <p className="text-slate-400">Current Role <span className="block text-sm text-slate-100">{roleLabel(p.role)}</span></p>
-          <p className="text-slate-400">Current Department <span className="block text-sm text-slate-100">{p.division ? `${bureauShort(p.division)} — ${bureauLabel(p.division)}` : 'Unassigned (pending approval)'}</span></p>
+          <p className="text-slate-400">Current Department <span className="block text-sm text-slate-100">{p.division ? bureauLabel(p.division) : 'Unassigned (pending approval)'}</span></p>
           <p className="text-slate-400">Active <span className="block text-sm text-slate-100">{p.active ? 'Yes' : 'No'}</span></p>
           <p className="text-slate-400">On LOA <span className="block text-sm text-slate-100">{p.loa ? 'Yes' : 'No'}</span></p>
         </div>
@@ -370,7 +370,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
                   {(id) => (
                     <Select id={id} value={dojBureau} onChange={(e) => setDojBureau(e.target.value)}>
                       <option value="">Select…</option>
-                      {PERMANENT_BUREAUS.map((b) => <option key={b} value={b}>{bureauShort(b)} — {bureauLabel(b)}</option>)}
+                      {PERMANENT_BUREAUS.map((b) => <option key={b} value={b}>{bureauLabel(b)}</option>)}
                     </Select>
                   )}
                 </Field>
@@ -390,7 +390,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
                 {(id) => (
                   <Select id={id} value={toBureau} onChange={(e) => setToBureau(e.target.value as Bureau)}>
                     <option value="">Select…</option>
-                    {transferDestinations.map((b) => <option key={b} value={b}>{bureauShort(b)} — {bureauLabel(b)}</option>)}
+                    {transferDestinations.map((b) => <option key={b} value={b}>{bureauLabel(b)}</option>)}
                   </Select>
                 )}
               </Field>

@@ -295,7 +295,7 @@ export function MembershipRequest() {
       <Field label="Requested Department" required hint="JTF is a temporary joint-case designation — assigned per case, not a permanent department.">
         {(id) => (
           <Select id={id} value={form.requested_bureau} onChange={(e) => set('requested_bureau', e.target.value as ApplicantBureau)}>
-            {APPLICANT_BUREAUS.map((b) => <option key={b} value={b}>{bureauShort(b)} — {BUREAUS[b]}</option>)}
+            {APPLICANT_BUREAUS.map((b) => <option key={b} value={b}>{BUREAUS[b]}</option>)}
           </Select>
         )}
       </Field>
