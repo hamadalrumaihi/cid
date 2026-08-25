@@ -25,14 +25,14 @@ low-privilege test accounts and assert that the security wall holds:
 
 | Account | State | Used to prove |
 | --- | --- | --- |
-| `rls-test-lsb@cidportal.test` | detective, LSB, active | baseline member behavior |
-| `rls-test-bcb@cidportal.test` | detective, BCB, active | bureau isolation (read/write/create) |
+| `rls-test-lsb@cidportal.test` | detective, major_crimes, active | baseline member behavior |
+| `rls-test-bcb@cidportal.test` | detective, street_crimes, active | bureau isolation (read/write/create) |
 | `rls-test-inactive@cidportal.test` | inactive | deny-by-default |
-| `rls-test-owner@cidportal.test` | detective, SAB, active, **is_owner** | owner-POSITIVE paths (triage writes, audit reads) |
-| `rls-test-lead@cidportal.test` | **bureau_lead**, LSB, active | Command Center: bureau-lead scoping (own bureau only, no over-promotion) |
-| `rls-test-director@cidportal.test` | **director**, SAB, active | Command Center: director keeps broad promote/transfer power |
-| `rls-test-target@cidportal.test` | detective, LSB, active | throwaway target the scoping tests promote/transfer and restore |
-| `rls-test-applicant@cidportal.test` | detective, LSB, **inactive** | disposable applicant for the membership approval-success path (activated by the test, deactivated + purged in teardown) |
+| `rls-test-owner@cidportal.test` | detective, major_crimes, active, **is_owner** | owner-POSITIVE paths (triage writes, audit reads) |
+| `rls-test-lead@cidportal.test` | **bureau_lead**, major_crimes, active | Command Center: bureau-lead scoping (own bureau only, no over-promotion) |
+| `rls-test-director@cidportal.test` | **director**, major_crimes, active | Command Center: director keeps broad promote/transfer power |
+| `rls-test-target@cidportal.test` | detective, major_crimes, active | throwaway target the scoping tests promote/transfer and restore |
+| `rls-test-applicant@cidportal.test` | detective, major_crimes, **inactive** | disposable applicant for the membership approval-success path (activated by the test, deactivated + purged in teardown) |
 | `rls-test-ada-lsb / -ada-bcb / -ada-sab@cidportal.test` | active **ADA** (justice), no CID profile | bureau ADA coverage, routing precedence, packet isolation |
 | `rls-test-da@cidportal.test` | active **District Attorney** (justice) | ADA management, DA approval route, membership approvals |
 | `rls-test-ag@cidportal.test` | active **Attorney General** (justice) | AG approval route, DOJ-wide oversight |
@@ -48,7 +48,7 @@ column-grant, anonymous access, and the Command Center's `assign_member` bureau-
 Newer server surface (2026-07-13 migrations):
 
 - **Membership requests** — `rls-test-inactive` plays the applicant: single
-  draft per applicant (unique), LSB/BCB/SAB-only bureau CHECK, the
+  draft per applicant (unique), major_crimes/street_crimes-only bureau CHECK, the
   `internal_decision_note` column revoke, trigger-frozen workflow columns,
   self-review rejection, detective denial of `admin_membership_requests()`,
   bureau-lead approve scoping (wrong bureau / command role), and the
@@ -62,7 +62,7 @@ Newer server surface (2026-07-13 migrations):
   no SQL-console step needed.
 - **Membership approval (success path)** — the disposable
   `rls-test-applicant` account (never the shared inactive fixture) drafts,
-  submits, and gets `approve_with_changes`d into BCB/senior_detective by the
+  submits, and gets `approve_with_changes`d into street_crimes/senior_detective by the
   director (or owner): the block asserts the atomic result — decided columns
   + preserved requested values, profile `active/role/division` flipped in the
   same transaction, one `member_approved` notification, `internal_decision_note`
@@ -80,7 +80,7 @@ Newer server surface (2026-07-13 migrations):
   denied `announcement_recipient_count`; a bureau lead cannot publish to
   `all`. Broad audiences are proven **without notifying real members**:
   `announcement_recipient_count` (read-only) plus direct inserts — fan-out
-  lives only in `publish_announcement`, so a lead's direct `LSB` insert
+  lives only in `publish_announcement`, so a lead's direct `major_crimes` insert
   (visible in-division, invisible cross-bureau) and a director's direct `all`
   insert create zero notifications. The single `publish_announcement` success
   uses the `specific_members` audience (renamed from `members`, migration
