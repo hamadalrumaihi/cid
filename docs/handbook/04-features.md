@@ -20,7 +20,10 @@ Owner-only.
    Intel & Notes, Charges, RICO — conditional, shown when the case has
    tracker data or the viewer enables tracking, Reports, Tasks, Legal,
    Sign-off, Chat, Timeline) each fetch and write their own case-scoped
-   tables. Custody transfers append to the immutable `custody_chain`.
+   tables. Visited tabs stay mounted (`display:none` keep-alive) with
+   per-tab scroll restore, section pills carry counts + attention markers,
+   and the `caseSeen` recap stamp is written on case *exit*, not on tab
+   switches. Custody transfers append to the immutable `custody_chain`.
 3. **Move it** — drag on the board → `update('cases', {status})`; triggers
    stamp `closed_at`/`updated_at`.
 4. **Stale escalation (automatic)** — once per session, `CasesView` finds

@@ -18,10 +18,11 @@ import { useAuth } from '@/lib/auth'
 import { activeProfiles, officerName } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
 import { useSiu } from '@/lib/useSiu'
-import { reserveVisibility } from '@/lib/siuVisibility'
+import { reserveVisibility, restrictPreview } from '@/lib/siuVisibility'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { HelpTip } from '@/components/ui/HelpTip'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { SaveState } from '@/components/ui/SaveState'
 import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
@@ -431,8 +432,13 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
           </div>
           {offerVisibility && (
             <fieldset className="sm:col-span-2 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
-              <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-violet-300">
+              <legend className="flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-violet-300">
                 Who can see this record
+                {/* Canonical compartment sentence (lib/siuVisibility) — the
+                    same wording the restrict confirmation uses. */}
+                <HelpTip label="About who can see this record" guide="siu">
+                  <p>Decided once, at creation. If you pick <span className="font-semibold text-white">SIB Only</span>: {restrictPreview()}</p>
+                </HelpTip>
               </legend>
               <div className="mt-1 space-y-1.5">
                 {([

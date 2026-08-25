@@ -58,10 +58,20 @@ policy delegates to the same helper.
 active member's browser. **Deleted by** command via `deleteWithUndo`.
 
 ### Own-row (keyed to `auth.uid()`)
-`notifications` (insert ONLY via RPC — actor can't be forged), `watchlist`,
+`notifications` (insert ONLY via RPC — actor can't be forged; since
+`20260826010000` `create_notification` drops an identical unread duplicate
+created within the last hour), `watchlist`,
 `shift_reports` (command may read/update all), `feedback` (+2 triage
 owners), `profiles` (self-update allowed; `guard_profile` trigger blocks
-self-changing role/active/bureau; `email` column readable by command only).
+self-changing role/active/bureau; `email` column readable by command only),
+and the three **personalization tables** (`20260826010000_ux_personalization.sql`,
+the `document_user_state` contract): `user_pins` (pinned record refs, ids
+only), `user_drafts` (autosaved drafts, 64 KiB jsonb cap, touch-trigger
+`updated_at`), `user_prefs` (small keyed jsonb ≤32 KiB — saved views,
+notification mutes). All three are **owner-only in every direction** (RLS
+admits only `user_id = auth.uid()`, which also defaults server-side), carry
+no audit triggers and are not in the realtime publication — they hold
+convenience state, never shared records.
 
 ### System
 `audit_log` (written ONLY by the `private.audit()` trigger and the
@@ -137,6 +147,7 @@ logic.
 | Family | Tables | Effect |
 |---|---|---|
 | `private.audit()` AFTER I/U/D | every audited table (see the schema snapshot) | The app's audit logging — no client write path |
+| `private.audit_detail()` AFTER I/U/D | the relationship-link tables (`person_relationships`, `person_places`, `person_vehicles`, `gang_places`, `case_intel_links`, `account_links`) | Audit rows that also snapshot **old/new row jsonb** into `audit_log.detail` — a link edit (confidence/status/role/note, via `LinkEditPopover`) records what changed, not just that it changed (`20260826010000`) |
 | `touch` family BEFORE UPDATE | most tables (see the schema snapshot) | Honest `updated_at` (drives staleness + analytics) |
 | `stamp_author_identity` BEFORE INSERT | case_messages, announcements | Real author enforced server-side |
 | Guard triggers | profiles, cases, reports, trackers | Block self-promotion, direct sign-off/finalize writes, self-co-sign |
@@ -187,3 +198,10 @@ and the schema snapshot is the complete table list:
   `cases.archived_at/by` (trigger-guarded), `case_archive`/`case_restore`
   (command, restorable), `case_delete_preview`/`case_permanent_delete`
   (Owner only; refuses cases with legal requests).
+- **UX personalization pass** (`20260826010000`, mapped in
+  `supabase/MIGRATION-HISTORY.md`) — `user_pins`/`user_drafts`/`user_prefs`
+  (owner-only, see 8.2), `private.audit_detail()` old/new link snapshots
+  (see 8.5), the missing `case_intel_links` UPDATE policy (role/note
+  editable; the legal-hold trigger still vetoes), the `create_notification`
+  1-hour dedupe guard, and `search_all` `bolo` + `task` arms (+ a
+  `case_tasks` title trgm index).

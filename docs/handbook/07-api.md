@@ -22,7 +22,7 @@ SECURITY DEFINER (run privileged, then check the caller inside) except
 
 | RPC | Request | Response | Called from | Why it exists |
 |---|---|---|---|---|
-| `search_all(q)` | search string | ranked hits across 10 tables (v1.14 adds `legal` — header fields only, never narratives; INVOKER + RLS keep sealed requests undiscoverable) | SearchPalette | one round-trip fuzzy search, RLS-scoped |
+| `search_all(q)` | search string | ranked hits, capped per kind (v1.14 adds `legal` — header fields only, never narratives; INVOKER + RLS keep sealed requests undiscoverable; `20260826010000` appends `bolo` and `task` arms — a task hit rides its task id in `term`, its case id in the row id) | SearchPalette | one round-trip fuzzy search, RLS-scoped |
 | `signoff_submit(p_case)` | case id | updated case | CaseDetail | atomically route + stamp + history + notify; columns are trigger-locked |
 | `signoff_decide(p_case, p_decision, p_note)` | case id, approve/deny/changes, note | updated case | CaseDetail | reviewer decision, validated against the current assignee |
 | `signoff_owner_action(p_case, p_action)` | case id, complete/escalate/… | updated case | CaseDetail | owner-side chain actions |
@@ -39,7 +39,7 @@ SECURITY DEFINER (run privileged, then check the caller inside) except
 | `reject_transfer(p_id, p_note?)` / `cancel_transfer(p_id)` | transfer id | transfer row | PromotionsTransfers | **LEGACY** (same reason) — either side's Lead or DD+ rejects a pre-existing open row; the requester or DD+ cancels it |
 | `admin_member_emails()` | — | roster emails | PersonnelView | command-only bypass of the email column grant |
 | `admin_remove_member(p_target, p_reason?)` / `admin_restore_member(p_target)` | profile id (+ optional reason) | void | AdminPanel | soft remove/restore (`removed_at`) under the unified authority matrix: Bureau Leads remove own-bureau detectives/senior detectives; Deputy Directors anyone below deputy; Directors anyone except owner accounts; the Owner anyone; system accounts refused; self-removal and removing the last active director blocked. Restore is Director/Owner-only and returns the member INACTIVE (they re-enter through review) |
-| `create_notification(user, type, payload)` | recipient + payload | void | `lib/notify.ts` | insert for ANOTHER user with the actor stamped server-side (no forgery) |
+| `create_notification(user, type, payload)` | recipient + payload | void | `lib/notify.ts` | insert for ANOTHER user with the actor stamped server-side (no forgery); since `20260826010000` an identical still-unread notification created within the last hour is silently dropped (dedupe guard) |
 | `mo_crossref(terms[])` | term list | existence-only case matches | ModusView | controlled cross-bureau M.O. matching |
 | `report_reopen(p_report)` | report id | report row | CaseDetail Reports | bureau-scoped seal break; prior signature kept in `fields._reopen_log` |
 | `warrant_set_status(p_report, p_status)` | report id + status | report row | CaseDetail Reports | validated warrant lifecycle; only path on sealed warrants |
