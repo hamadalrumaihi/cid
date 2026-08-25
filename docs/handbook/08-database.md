@@ -13,7 +13,7 @@ live catalog (July 2026).
 | Enum | Values |
 |---|---|
 | `app_role` | detective, senior_detective, supervisor, bureau_lead, deputy_director, director, command *(supervisor/command are legacy labels; the app uses the 5-role ladder)* |
-| `bureau` | LSB, BCB, SAB, JTF |
+| `bureau` | major_crimes, street_crimes, special_investigations, JTF *(renamed in place 2026-08-25 — was LSB/BCB/SAB; `special_investigations` is SIB-authority cases only, `JTF` a temporary joint designation)* |
 | `case_status` | open, active, cold, closed |
 | `assign_role` / `report_kind` / `evidence_tamper` / `media_type` / `doc_kind` / `location_type` / `bench_type` / `tracker_status` / `threat_level` / `density` | see [Quick Reference](appendix-quick-reference.md) |
 

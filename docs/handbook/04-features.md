@@ -91,7 +91,7 @@ command, own/specific department, or just the mentioned members — the
 notification each, a recipient-count preview and confirm in the composer,
 and edits never re-notify unless explicitly requested), heatmap
 (weighted layers, pan/zoom SVG map), roster (membership requests: new
-sign-ins request ONE permanent department — LSB/BCB/SAB, never JTF — plus
+sign-ins request ONE permanent department — Major Crimes or Street Crimes (`major_crimes`/`street_crimes`), never JTF or SIB — plus
 any normal CID role (v1.16: detective … director; requesting grants
 nothing) from the inactive-account screen; the Approval Queue reviews them
 via `review_membership_request()` — approve / approve-with-changes (reason
