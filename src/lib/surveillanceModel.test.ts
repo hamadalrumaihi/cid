@@ -170,25 +170,25 @@ describe('observationPatterns — co-occurrence, histogram, span', () => {
 /* ── authority mirrors ───────────────────────────────────────────────────── */
 
 const viewer = (over: Partial<SurvViewer> = {}): SurvViewer =>
-  ({ userId: 'me', role: 'detective', division: 'LSB', isOwner: false, ...over })
+  ({ userId: 'me', role: 'detective', division: 'major_crimes', isOwner: false, ...over })
 
 describe('canAuthorizeSurveillance', () => {
   it('deputy director / director / owner authorize anywhere', () => {
-    expect(canAuthorizeSurveillance(viewer({ role: 'deputy_director', division: null }), 'BCB')).toBe(true)
+    expect(canAuthorizeSurveillance(viewer({ role: 'deputy_director', division: null }), 'street_crimes')).toBe(true)
     expect(canAuthorizeSurveillance(viewer({ role: 'director', division: null }), null)).toBe(true)
-    expect(canAuthorizeSurveillance(viewer({ isOwner: true }), 'BCB')).toBe(true)
+    expect(canAuthorizeSurveillance(viewer({ isOwner: true }), 'street_crimes')).toBe(true)
   })
 
   it('a bureau lead authorizes only their own division or JTF cases', () => {
-    const lead = viewer({ role: 'bureau_lead', division: 'LSB' })
-    expect(canAuthorizeSurveillance(lead, 'LSB')).toBe(true)
+    const lead = viewer({ role: 'bureau_lead', division: 'major_crimes' })
+    expect(canAuthorizeSurveillance(lead, 'major_crimes')).toBe(true)
     expect(canAuthorizeSurveillance(lead, 'JTF')).toBe(true)
-    expect(canAuthorizeSurveillance(lead, 'BCB')).toBe(false)
+    expect(canAuthorizeSurveillance(lead, 'street_crimes')).toBe(false)
     expect(canAuthorizeSurveillance(lead, null)).toBe(false)
   })
 
   it('detectives never authorize', () => {
-    expect(canAuthorizeSurveillance(viewer(), 'LSB')).toBe(false)
+    expect(canAuthorizeSurveillance(viewer(), 'major_crimes')).toBe(false)
   })
 })
 
