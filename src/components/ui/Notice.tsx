@@ -64,7 +64,7 @@ export function ErrorNotice({
   className?: string
 }) {
   return (
-    <div className={`rounded-2xl border border-rose-500/20 bg-rose-500/5 p-8 text-center ${className}`}>
+    <div className={`rounded-lg border border-rose-500/20 bg-rose-500/5 p-8 text-center ${className}`}>
       <p className="text-sm text-rose-200">{humanizeError(message)}</p>
       {onRetry && (
         <div className="mt-4">

@@ -19,6 +19,7 @@
 import { useCallback, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/lib/toast'
+import { Button } from '@/components/ui/Button'
 import { installDestructiveGuard } from './destructiveGuard'
 import { isPageAgentConfigured, pageAgentConfig } from './pageAgentConfig'
 
@@ -58,7 +59,7 @@ export function PortalAssistant() {
         onClick={() => setOpen((v) => !v)}
         title="Portal Assistant (owner pilot)"
         aria-label="Open Portal Assistant"
-        className="fixed bottom-24 right-4 z-40 grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-gradient-to-br from-badge-500 to-blue-700 text-white shadow-glow transition hover:brightness-110 lg:bottom-6"
+        className="fixed bottom-24 right-4 z-40 grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-badge-500 text-white transition hover:brightness-110 lg:bottom-6"
       >
         <span aria-hidden className="text-lg">✦</span>
       </button>
@@ -83,14 +84,15 @@ export function PortalAssistant() {
                 placeholder="e.g. Open case SAB-9000026 and go to the Evidence tab"
                 className="w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
               />
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                className="mt-2 w-full"
+                loading={busy}
+                disabled={!instruction.trim()}
                 onClick={() => void run()}
-                disabled={busy || !instruction.trim()}
-                className="mt-2 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60"
               >
                 {busy ? 'Working…' : 'Run'}
-              </button>
+              </Button>
             </>
           ) : (
             <p className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-[11px] text-slate-400">

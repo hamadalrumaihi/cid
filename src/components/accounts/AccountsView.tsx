@@ -28,7 +28,11 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { LinkEditPopover } from '@/components/shared/LinkEditPopover'
+import { ObservationHistory } from '@/components/shared/ObservationHistory'
+import { PinButton } from '@/components/shared/PinButton'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
+import { pushRecent } from '@/lib/recents'
 import { useToolNav } from '@/components/tools/useToolNav'
 
 type Account = Tables<'accounts'>
@@ -140,7 +144,7 @@ export function AccountsView() {
 
   return (
     <section className="view-in space-y-4">
-      <div className="rounded-2xl border border-white/10 bg-ink-900/60 p-6">
+      <div className="rounded-lg border border-white/10 bg-ink-900/60 p-6">
         <PageHeader
           title="Account Registry"
           subtitle="Social-media & online accounts, handle history and polymorphic ownership."
@@ -172,7 +176,12 @@ export function AccountsView() {
               canEdit={canEdit}
               isCommand={isCommand}
               expanded={open === a.id}
-              onToggle={() => setOpen(open === a.id ? null : a.id)}
+              onToggle={() => {
+                const next = open === a.id ? null : a.id
+                setOpen(next)
+                // Deliberate open of the card — record it in the recents trail.
+                if (next) pushRecent('account', a.id)
+              }}
               onEdit={() => setEditing(a)}
               onMerge={() => setMergeFor(a)}
             />
@@ -198,6 +207,7 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
   const [linkKind, setLinkKind] = useState<SubjectKind>('person')
   const [linkSubject, setLinkSubject] = useState<PickedRecord | null>(null)
   const [linkConf, setLinkConf] = useState<'suspected' | 'probable' | 'confirmed'>('suspected')
+  const [editLink, setEditLink] = useState<AccountLink | null>(null)
   const nameOf = useCallback((id: string) => names[id] || 'Unknown', [names])
 
   const load = useCallback(async () => {
@@ -279,7 +289,7 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
   ]
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-ink-900/50 p-4">
+    <div className="rounded-lg border border-white/10 bg-ink-900/50 p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -300,6 +310,7 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
           )}
         </div>
         <div className="flex flex-shrink-0 items-center gap-1.5">
+          {expanded && <PinButton type="account" id={a.id} label={`@${a.handle}`} size="sm" />}
           {canEdit && <Button size="sm" className="min-h-[44px] sm:min-h-0" aria-label={`Edit @${a.handle}`} onClick={onEdit}>Edit</Button>}
           {isCommand && <Button size="sm" className="min-h-[44px] sm:min-h-0" aria-label={`Merge @${a.handle}`} onClick={onMerge}>Merge</Button>}
           <Button size="sm" className="min-h-[44px] sm:min-h-0" aria-label={`${expanded ? 'Hide' : 'Show'} details for @${a.handle}`} aria-expanded={expanded} onClick={onToggle}>{expanded ? 'Hide' : 'Details'}</Button>
@@ -341,10 +352,27 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
                       </select>
                     ) : <Badge tint={CONF_TINT[l.ownership_confidence]}>{l.ownership_confidence}</Badge>}
                     {l.ownership_confidence === 'confirmed' && l.confirmed_by && <span className="text-[11px] text-slate-500">by {officerName(l.confirmed_by)}</span>}
-                    {canEdit && <Button size="sm" variant="danger" className="ml-auto min-h-[44px] sm:min-h-0" aria-label={`Unlink ${nameOf(l.subject_id)}`} onClick={() => void unlink(l)}>Unlink</Button>}
+                    {l.notes && <span className="w-full text-[11px] text-slate-400 sm:w-auto">{l.notes}</span>}
+                    {canEdit && (
+                      <span className="ml-auto flex items-center gap-1.5">
+                        <Button size="sm" className="min-h-[44px] sm:min-h-0" aria-label={`Edit note for ${nameOf(l.subject_id)}`} onClick={() => setEditLink(l)}>Note</Button>
+                        <Button size="sm" variant="danger" className="min-h-[44px] sm:min-h-0" aria-label={`Unlink ${nameOf(l.subject_id)}`} onClick={() => void unlink(l)}>Unlink</Button>
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
+            )}
+            {editLink && (
+              <LinkEditPopover
+                title={`Edit ownership note — ${nameOf(editLink.subject_id)}`}
+                table="account_links"
+                id={editLink.id}
+                note={editLink.notes}
+                noteColumn="notes"
+                onClose={() => setEditLink(null)}
+                onSaved={() => { setEditLink(null); void load() }}
+              />
             )}
             {canEdit && (
               <div className="mt-2 space-y-2">
@@ -367,13 +395,20 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
               </div>
             )}
           </div>
+
+          <div>
+            <h4 className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Surveillance history</h4>
+            {/* Verified-observation history via the polymorphic entity links
+                (kind='account') — RLS-trimmed like every other registry. */}
+            <ObservationHistory kind="account" refId={a.id} />
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-function AccountModal({ account, persons, onClose, onSaved }: { account?: Account; persons: PersonLite[]; onClose: () => void; onSaved: () => void }) {
+export function AccountModal({ account, persons, onClose, onSaved }: { account?: Account; persons: PersonLite[]; onClose: () => void; onSaved: () => void }) {
   const editing = !!account
   const [platform, setPlatform] = useState<string>(account?.platform ?? ACCOUNT_PLATFORMS[0])
   const [handle, setHandle] = useState(account?.handle ?? '')

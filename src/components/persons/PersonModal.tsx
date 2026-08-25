@@ -10,18 +10,22 @@
  *  and the repeatable Known Properties rows — are preserved verbatim, as is
  *  the gang-preservation guard (a stale gangs cache can't null gang_id).
  *  Mounted fresh per open. */
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Json, Tables, TablesInsert } from '@/lib/database.types'
-import { deleteWithUndo, insert, list, update } from '@/lib/db'
+import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
+import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
 import { useAuth } from '@/lib/auth'
 import { activeProfiles, officerName } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
 import { useSiu } from '@/lib/useSiu'
-import { reserveVisibility } from '@/lib/siuVisibility'
+import { reserveVisibility, restrictPreview } from '@/lib/siuVisibility'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { HelpTip } from '@/components/ui/HelpTip'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { SaveState } from '@/components/ui/SaveState'
+import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import {
   CONFIDENCE_LEVELS, PERSON_CLASSIFICATIONS, PERSON_LIFECYCLES, PERSON_PRIORITIES,
   classificationLabel, confidenceLabel, lifecycleLabel, parsePersonIdentity, priorityLabel,
@@ -56,6 +60,34 @@ export const PERSON_NULL_REFS = [
 ]
 
 const splitLines = (s: string): string[] => s.split('\n').map((x) => x.trim()).filter(Boolean)
+
+/** Everything the CREATE form types — stashed under `person:new` (userDrafts:
+ *  per-user local mirror + DB row) so a refresh mid-entry loses nothing.
+ *  Create mode only, by contract: an edit's source of truth is the row, and
+ *  restoring a stale stash over it would silently revert other detectives'
+ *  work. Key order must match the draftJson literal below (JSON equality). */
+interface PersonDraftShape {
+  name: string; alias: string; phone: string; dob: string; gangId: string
+  status: string; classification: string; confidence: string; priority: string
+  lifecycle: string; mugshot: string; idAliases: string; idStreet: string
+  idLicenses: string; ccw: boolean; vch: string; felonies: string; notes: string
+  nextReview: string; leadId: string; bolo: boolean; boloReason: string
+  boloRisk: string; boloInstructions: string; boloExpires: string
+  props: PersonProperty[]
+}
+
+const PERSON_DRAFT_KEY = 'person:new'
+
+const EMPTY_PERSON_DRAFT: PersonDraftShape = {
+  name: '', alias: '', phone: '', dob: '', gangId: '',
+  status: 'Person of Interest', classification: '', confidence: '', priority: '',
+  lifecycle: 'active', mugshot: '', idAliases: '', idStreet: '',
+  idLicenses: '', ccw: false, vch: '0', felonies: '0', notes: '',
+  nextReview: '', leadId: '', bolo: false, boloReason: '',
+  boloRisk: '', boloInstructions: '', boloExpires: '',
+  props: [],
+}
+const EMPTY_PERSON_DRAFT_JSON = JSON.stringify(EMPTY_PERSON_DRAFT)
 
 /** Uppercase section rule inside the form grid. Module-scope (static). */
 function GroupLabel({ children }: { children: React.ReactNode }) {
@@ -119,9 +151,92 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
   const [boloExpires, setBoloExpires] = useState(record?.bolo_expires_at?.slice(0, 10) || '')
   const [props, setProps] = useState<PersonProperty[]>(() => parseProperties(record?.properties ?? null))
 
+  // ── Draft protection (create mode only) ──────────────────────────────────
+  // Not for the quick-add prefill either: that flow is a deliberate one-shot
+  // and must neither restore an unrelated stash nor overwrite one.
+  const draftable = !record && !prefillName
+  const draftState = useDraftState(draftable ? PERSON_DRAFT_KEY : '')
+  const [draftBanner, setDraftBanner] = useState(false)
+  const applyDraft = useCallback((s: PersonDraftShape) => {
+    setName(s.name); setAlias(s.alias); setPhone(s.phone); setDob(s.dob); setGangId(s.gangId)
+    setStatus(s.status); setClassification(s.classification); setConfidence(s.confidence)
+    setPriority(s.priority); setLifecycle(s.lifecycle); setMugshot(s.mugshot)
+    setIdAliases(s.idAliases); setIdStreet(s.idStreet); setIdLicenses(s.idLicenses)
+    setCcw(s.ccw); setVch(s.vch); setFelonies(s.felonies); setNotes(s.notes)
+    setNextReview(s.nextReview); setLeadId(s.leadId); setBolo(s.bolo)
+    setBoloReason(s.boloReason); setBoloRisk(s.boloRisk); setBoloInstructions(s.boloInstructions)
+    setBoloExpires(s.boloExpires); setProps(Array.isArray(s.props) ? s.props : [])
+  }, [])
+  const draftJson = JSON.stringify({
+    name, alias, phone, dob, gangId,
+    status, classification, confidence, priority,
+    lifecycle, mugshot, idAliases, idStreet,
+    idLicenses, ccw, vch, felonies, notes,
+    nextReview, leadId, bolo, boloReason,
+    boloRisk, boloInstructions, boloExpires,
+    props,
+  } satisfies PersonDraftShape)
+  const draftJsonRef = useRef(draftJson)
+  useEffect(() => { draftJsonRef.current = draftJson })
+  // Restore once on mount — never over something already typed.
+  useEffect(() => {
+    if (!draftable) return
+    let live = true
+    void loadDraft<PersonDraftShape>(PERSON_DRAFT_KEY).then((d) => {
+      if (!live || !d?.data || draftJsonRef.current !== EMPTY_PERSON_DRAFT_JSON) return
+      applyDraft({ ...EMPTY_PERSON_DRAFT, ...d.data })
+      setDraftBanner(true)
+    })
+    return () => { live = false }
+  }, [draftable, applyDraft])
+  // Autosave while there is content; clear (once) when typed back to empty so
+  // an emptied form doesn't keep re-restoring. Drafts only — nothing here
+  // touches the persons table.
+  const wroteDraft = useRef(false)
+  useEffect(() => {
+    if (!draftable) return
+    if (draftJson === EMPTY_PERSON_DRAFT_JSON) {
+      if (wroteDraft.current) { wroteDraft.current = false; void clearDraft(PERSON_DRAFT_KEY) }
+      return
+    }
+    wroteDraft.current = true
+    void saveDraft(PERSON_DRAFT_KEY, JSON.parse(draftJson) as PersonDraftShape)
+  }, [draftable, draftJson])
+  const discardDraft = () => {
+    wroteDraft.current = false
+    void clearDraft(PERSON_DRAFT_KEY)
+    applyDraft(EMPTY_PERSON_DRAFT)
+    setDraftBanner(false)
+  }
+
   const gangKnown = !gangId || gangs.some((g) => g.id === gangId)
   const detectives = activeProfiles()
   const leadKnown = !leadId || detectives.some((p) => p.id === leadId)
+
+  // Duplicate hint at create time — debounced name search through the indexed,
+  // RLS-safe `search_persons` RPC (the LinkAssociateModal pattern). Purely
+  // advisory: it never blocks Save; the merge flow handles real duplicates.
+  const [dupes, setDupes] = useState<DuplicateMatch[]>([])
+  useEffect(() => {
+    if (record) return // edit mode — the record IS the existing one
+    const q = name.trim()
+    let live = true
+    const t = window.setTimeout(async () => {
+      if (q.length < 2) { if (live) setDupes([]); return }
+      const res = await rpc('search_persons', { p_q: q, p_limit: 5 })
+      const hits = (res.data ?? []).map((h) => h.id)
+      if (!hits.length) { if (live) setDupes([]); return }
+      const rows = await list('persons', { select: 'id,name,alias,lifecycle', in: { id: hits } })
+        .then((r) => r as unknown as Pick<PersonRow, 'id' | 'name' | 'alias' | 'lifecycle'>[])
+        .catch(() => [] as Pick<PersonRow, 'id' | 'name' | 'alias' | 'lifecycle'>[])
+      if (!live) return
+      setDupes(rows
+        .filter((r) => r.lifecycle !== 'merged')
+        .slice(0, 3)
+        .map((r) => ({ type: 'person', id: r.id, label: r.name || 'Person', sublabel: r.alias ? `“${r.alias}”` : undefined })))
+    }, 400)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [name, record])
 
   const setProp = (i: number, patch: Partial<PersonProperty>) =>
     setProps((rows) => rows.map((r, x) => (x === i ? { ...r, ...patch } : r)))
@@ -186,6 +301,7 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
     }
     const res = record ? await update('persons', record.id, payload) : await insert('persons', payload)
     if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
+    if (draftable) { wroteDraft.current = false; void clearDraft(PERSON_DRAFT_KEY) }
     toast(record ? 'Person updated'
       : siuChoice === 'siu_only' ? 'Person created, SIB Only. CID cannot see it.'
       : 'Person created', 'success')
@@ -214,9 +330,33 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
   return (
     <Modal open wide onClose={onClose} dirty={dirty}>
       <div className="p-6">
-        <ModalHeader title={`${record ? 'Edit' : 'New'} Person`} onClose={onClose} />
+        <ModalHeader
+          title={record ? 'Edit Person' : (
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              New Person
+              {draftable && <SaveState status={draftState.status} lastSavedAt={draftState.lastSavedAt} />}
+            </span>
+          )}
+          onClose={onClose}
+        />
+        {draftBanner && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2">
+            <p className="text-xs text-amber-200">Draft restored — your unsaved entry from last time.</p>
+            <span className="flex items-center gap-1">
+              <button type="button" onClick={discardDraft} className="rounded-md px-2 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/10 hover:text-white">Discard draft</button>
+              <button type="button" onClick={() => setDraftBanner(false)} aria-label="Dismiss restored-draft notice" className="grid h-8 w-8 place-items-center rounded-md text-amber-200/70 hover:bg-amber-500/10 hover:text-white">✕</button>
+            </span>
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Name" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} />}</Field>
+          <Field label="Name" required>
+            {(id) => (
+              <>
+                <Input id={id} value={name} onChange={(e) => setName(e.target.value)} />
+                {!record && <DuplicateMatchNotice matches={dupes} />}
+              </>
+            )}
+          </Field>
           <Field label="Alias">{(id) => <Input id={id} value={alias} onChange={(e) => setAlias(e.target.value)} />}</Field>
           <Field label="Phone">{(id) => <Input id={id} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="555-0100" />}</Field>
           <Field label="Date of birth">{(id) => <Input id={id} type="date" value={dob} onChange={(e) => setDob(e.target.value)} />}</Field>
@@ -292,8 +432,13 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
           </div>
           {offerVisibility && (
             <fieldset className="sm:col-span-2 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
-              <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-violet-300">
+              <legend className="flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-violet-300">
                 Who can see this record
+                {/* Canonical compartment sentence (lib/siuVisibility) — the
+                    same wording the restrict confirmation uses. */}
+                <HelpTip label="About who can see this record" guide="siu">
+                  <p>Decided once, at creation. If you pick <span className="font-semibold text-white">SIB Only</span>: {restrictPreview()}</p>
+                </HelpTip>
               </legend>
               <div className="mt-1 space-y-1.5">
                 {([

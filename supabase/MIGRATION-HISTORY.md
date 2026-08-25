@@ -267,3 +267,10 @@ timestamp.
 | — | bureau_restructure_history_lsb_bcb | `20260825121000_bureau_restructure_finalize.sql` |
 | — | bureau_restructure_command_notice | `20260825121000_bureau_restructure_finalize.sql` |
 | — | bureau_restructure_coverage_fieldcase | `20260825120000_bureau_restructure.sql` |
+| — | ux_personalization_c1_user_pins | `20260826010000_ux_personalization.sql` |
+| — | ux_personalization_c2_drafts_prefs | `20260826010000_ux_personalization.sql` |
+| — | ux_personalization_c3_audit_detail | `20260826010000_ux_personalization.sql` |
+| — | ux_personalization_c4_cil_update_policy | `20260826010000_ux_personalization.sql` |
+| — | ux_personalization_c5_notification_dedupe | `20260826010000_ux_personalization.sql` |
+| — | ux_personalization_c6a_task_trgm_index | `20260826010000_ux_personalization.sql` |
+| — | ux_personalization_c6b_search_all_bolo_task | `20260826010000_ux_personalization.sql` |

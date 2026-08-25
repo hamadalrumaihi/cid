@@ -7,10 +7,21 @@
  *
  *  CSV cells are formula-injection-guarded: values starting with = + - @
  *  are prefixed with a quote so exported logs can't execute when opened in
- *  a spreadsheet. */
-import { useMemo, useState, type ReactNode } from 'react'
+ *  a spreadsheet.
+ *
+ *  Opt-ins (all additive — the defaults render exactly the old table):
+ *   - `selection` — a leading checkbox column with select-all-on-page and
+ *     shift-click range select; selection state lives in the caller.
+ *   - `pageSizeOptions` — a rows-per-page select next to the filter.
+ *   - `mobileCard` — below `sm` the current page renders as a card list
+ *     (filter/sort/pagination still apply) instead of a table that would
+ *     only x-scroll. Uses lib/useNarrow (matchMedia, not CSS hiding).
+ *   - rows with `onRowClick` are keyboard-activatable (tabIndex 0 +
+ *     Enter/Space); the global [tabindex]:focus-visible ring applies. */
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { downloadTextFile } from '@/lib/format'
 import { toast } from '@/lib/toast'
+import { useNarrow } from '@/lib/useNarrow'
 
 export interface DataColumn<T> {
   key: string
@@ -24,6 +35,17 @@ export interface DataColumn<T> {
   className?: string
 }
 
+/** Caller-owned multi-select state for the leading checkbox column. */
+export interface DataTableSelection<T> {
+  selected: ReadonlySet<string>
+  onToggle: (id: string) => void
+  /** Header checkbox: toggle every (selectable) id on the current page. */
+  onToggleAll: (ids: string[]) => void
+  idOf: (row: T) => string
+  /** Rows the viewer may not select (checkbox renders disabled). */
+  disabled?: (row: T) => boolean
+}
+
 /** Exported for unit tests — the CSV formula-injection guard. */
 export const csvCell = (raw: string): string => {
   let v = raw
@@ -32,11 +54,14 @@ export const csvCell = (raw: string): string => {
   return v
 }
 
-export function DataTable<T>({ columns, rows, rowKey, pageSize = 50, initialSort, filterPlaceholder = 'Filter…', csvName, emptyText = 'No entries.', countLabel, searchText, dense = false, onRowClick }: {
+export function DataTable<T>({ columns, rows, rowKey, pageSize = 50, pageSizeOptions, initialSort, filterPlaceholder = 'Filter…', csvName, emptyText = 'No entries.', countLabel, searchText, dense = false, onRowClick, selection, mobileCard }: {
   columns: DataColumn<T>[]
   rows: T[]
   rowKey: (row: T) => string
   pageSize?: number
+  /** Offer a rows-per-page select (e.g. [25, 50, 100]). `pageSize` stays the
+   *  initial value; omitting this keeps the fixed page size. */
+  pageSizeOptions?: number[]
   initialSort?: { key: string; dir: 'asc' | 'desc' }
   filterPlaceholder?: string
   /** Filename (without extension) enabling the ⬇ CSV button. */
@@ -49,14 +74,23 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = 50, initialSort
   /** Tighter rows (py-1.5) for registry-density tables. Additive — default
    *  geometry is unchanged. */
   dense?: boolean
-  /** Whole-row activation (master-detail navigation). Keep a real link or
-   *  button in one column too — the row click is a pointer convenience, not
-   *  the keyboard path. */
+  /** Whole-row activation (master-detail navigation). Rows become keyboard-
+   *  focusable (Enter/Space activate) — keep a real link or button in one
+   *  column too, as the semantic path. */
   onRowClick?: (row: T) => void
+  /** Leading checkbox column — see DataTableSelection. */
+  selection?: DataTableSelection<T>
+  /** Below `sm`, render the current page as these cards instead of a table. */
+  mobileCard?: (row: T) => ReactNode
 }) {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState(initialSort ?? { key: columns[0]?.key ?? '', dir: 'asc' as 'asc' | 'desc' })
   const [page, setPage] = useState(0)
+  const [size, setSize] = useState(pageSize)
+  const narrow = useNarrow()
+  // Shift-click range anchor: the last checkbox the user clicked, remembered
+  // with its page so a stale anchor never ranges across a page flip.
+  const lastPicked = useRef<{ page: number; idx: number } | null>(null)
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -76,9 +110,34 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = 50, initialSort
     })
   }, [rows, columns, query, sort, searchText])
 
-  const pages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const pages = Math.max(1, Math.ceil(filtered.length / size))
   const p = Math.min(page, pages - 1)
-  const slice = filtered.slice(p * pageSize, (p + 1) * pageSize)
+  const slice = filtered.slice(p * size, (p + 1) * size)
+
+  // Current-page selectable ids (for select-all + the header checkbox state).
+  const pageIds = selection
+    ? slice.filter((r) => !selection.disabled?.(r)).map((r) => selection.idOf(r))
+    : []
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selection!.selected.has(id))
+  const somePageSelected = pageIds.some((id) => selection!.selected.has(id))
+
+  const pickRow = (row: T, idx: number, shift: boolean) => {
+    const sel = selection!
+    const id = sel.idOf(row)
+    const target = !sel.selected.has(id)
+    const anchor = lastPicked.current
+    if (shift && anchor && anchor.page === p && anchor.idx !== idx) {
+      const [a, b] = anchor.idx < idx ? [anchor.idx, idx] : [idx, anchor.idx]
+      for (const r of slice.slice(a, b + 1)) {
+        if (sel.disabled?.(r)) continue
+        const rid = sel.idOf(r)
+        if (sel.selected.has(rid) !== target) sel.onToggle(rid)
+      }
+    } else {
+      sel.onToggle(id)
+    }
+    lastPicked.current = { page: p, idx }
+  }
 
   const exportCsv = () => {
     if (!csvName) return
@@ -88,6 +147,9 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = 50, initialSort
     toast(`Exported ${filtered.length} row${filtered.length === 1 ? '' : 's'}`, 'success')
   }
 
+  const cellPad = dense ? 'py-1.5' : 'py-2'
+  const asCards = narrow && !!mobileCard
+
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -95,6 +157,16 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = 50, initialSort
           {rows.length} {countLabel ?? 'rows'}{query.trim() && ` · ${filtered.length} match${filtered.length === 1 ? '' : 'es'}`}
         </span>
         <div className="flex items-center gap-2">
+          {pageSizeOptions && pageSizeOptions.length > 0 && (
+            <select
+              value={size}
+              onChange={(e) => { setSize(Number(e.target.value)); setPage(0) }}
+              aria-label="Rows per page"
+              className="rounded-lg border border-white/10 bg-ink-900 px-2 py-1.5 text-xs text-white outline-none focus:border-badge-500"
+            >
+              {pageSizeOptions.map((n) => <option key={n} value={n}>{n} / page</option>)}
+            </select>
+          )}
           <input
             type="search"
             value={query}
@@ -115,49 +187,83 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = 50, initialSort
         <div className="rounded-xl border border-white/5 bg-ink-900 p-6 text-center text-sm text-slate-400">
           {rows.length ? 'No rows match your filter — try a broader search.' : emptyText}
         </div>
+      ) : asCards ? (
+        /* Narrow fallback: the SAME page slice as cards — an honest stack
+         * instead of a table that only x-scrolls (see lib/useNarrow). */
+        <ul className="space-y-2">
+          {slice.map((r) => <li key={rowKey(r)}>{mobileCard!(r)}</li>)}
+        </ul>
       ) : (
-        <>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/10">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            {/* Sticky header — opaque ink so rows never show through. */}
+            <thead className="sticky top-0 z-[1] bg-ink-900">
+              <tr className="border-b border-white/10">
+                {selection && (
+                  <th className={`w-8 px-3 ${cellPad}`}>
+                    <input
+                      type="checkbox"
+                      aria-label="Select all rows on this page"
+                      checked={allPageSelected}
+                      ref={(el) => { if (el) el.indeterminate = !allPageSelected && somePageSelected }}
+                      disabled={pageIds.length === 0}
+                      onChange={() => { selection.onToggleAll(pageIds); lastPicked.current = null }}
+                    />
+                  </th>
+                )}
+                {columns.map((c) => (
+                  <th
+                    key={c.key}
+                    className={`cursor-pointer select-none px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white ${cellPad}`}
+                    onClick={() => { setSort((s) => ({ key: c.key, dir: s.key === c.key && s.dir === 'desc' ? 'asc' : 'desc' })); setPage(0) }}
+                    aria-sort={sort.key === c.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                  >
+                    {c.label}{sort.key === c.key && (sort.dir === 'asc' ? ' ▲' : ' ▼')}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {slice.map((r, idx) => (
+                <tr
+                  key={rowKey(r)}
+                  onClick={onRowClick ? () => onRowClick(r) : undefined}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  onKeyDown={onRowClick ? (e) => {
+                    if (e.target !== e.currentTarget) return // let cell controls keep their keys
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(r) }
+                  } : undefined}
+                  className={onRowClick ? 'cursor-pointer transition hover:bg-white/5 focus-visible:bg-white/5' : undefined}
+                >
+                  {selection && (
+                    <td className={`w-8 px-3 ${cellPad}`}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Select row ${columns[0] ? columns[0].value(r) : selection.idOf(r)}`}
+                        checked={selection.selected.has(selection.idOf(r))}
+                        disabled={selection.disabled?.(r) ?? false}
+                        onClick={(e) => { e.stopPropagation(); pickRow(r, idx, e.shiftKey) }}
+                        onChange={() => { /* handled in onClick for shift-range support */ }}
+                      />
+                    </td>
+                  )}
                   {columns.map((c) => (
-                    <th
-                      key={c.key}
-                      className={`cursor-pointer select-none px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white ${dense ? 'py-1.5' : 'py-2'}`}
-                      onClick={() => { setSort((s) => ({ key: c.key, dir: s.key === c.key && s.dir === 'desc' ? 'asc' : 'desc' })); setPage(0) }}
-                      aria-sort={sort.key === c.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-                    >
-                      {c.label}{sort.key === c.key && (sort.dir === 'asc' ? ' ▲' : ' ▼')}
-                    </th>
+                    <td key={c.key} className={c.className ?? `px-3 text-sm text-slate-200 ${cellPad}`}>
+                      {c.render ? c.render(r) : c.value(r)}
+                    </td>
                   ))}
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {slice.map((r) => (
-                  <tr
-                    key={rowKey(r)}
-                    onClick={onRowClick ? () => onRowClick(r) : undefined}
-                    className={onRowClick ? 'cursor-pointer transition hover:bg-white/5' : undefined}
-                  >
-                    {columns.map((c) => (
-                      <td key={c.key} className={c.className ?? `px-3 text-sm text-slate-200 ${dense ? 'py-1.5' : 'py-2'}`}>
-                        {c.render ? c.render(r) : c.value(r)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {pages > 1 && (
-            <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
-              <button onClick={() => setPage(Math.max(0, p - 1))} disabled={p === 0} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 disabled:opacity-40">← Prev</button>
-              <span>Page {p + 1} / {pages}</span>
-              <button onClick={() => setPage(Math.min(pages - 1, p + 1))} disabled={p >= pages - 1} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 disabled:opacity-40">Next →</button>
-            </div>
-          )}
-        </>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {pages > 1 && slice.length > 0 && (
+        <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+          <button onClick={() => setPage(Math.max(0, p - 1))} disabled={p === 0} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 disabled:opacity-40">← Prev</button>
+          <span>Page {p + 1} / {pages}</span>
+          <button onClick={() => setPage(Math.min(pages - 1, p + 1))} disabled={p >= pages - 1} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 disabled:opacity-40">Next →</button>
+        </div>
       )}
     </div>
   )

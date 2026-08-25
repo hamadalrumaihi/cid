@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { list } from '@/lib/db'
 import { safeUrl } from '@/lib/safeUrl'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { EmptyState } from '@/components/ui/Notice'
 
 type LinkedAccount = {
@@ -16,12 +17,6 @@ type LinkedAccount = {
   ownership_confidence: string
   account_id: string
   accounts: { id: string; platform: string; handle: string; display_name: string | null; profile_url: string | null } | null
-}
-
-const CONF_TINT: Record<string, string> = {
-  suspected: 'bg-slate-500/15 text-slate-300',
-  probable: 'bg-amber-500/15 text-amber-300',
-  confirmed: 'bg-emerald-500/15 text-emerald-300',
 }
 
 export function PersonAccountsSection({ personId }: { personId: string }) {
@@ -55,7 +50,9 @@ export function PersonAccountsSection({ personId }: { personId: string }) {
             <Badge>{r.accounts!.platform}</Badge>
             <span className="font-semibold text-white">@{r.accounts!.handle}</span>
             {r.accounts!.display_name && <span className="text-sm text-slate-400">{r.accounts!.display_name}</span>}
-            <Badge tint={CONF_TINT[r.ownership_confidence]}>{r.ownership_confidence}</Badge>
+            {/* Ownership confidence — registry chip (probable reads as the
+                accent mid-confidence tier, matching confidenceTint, not amber). */}
+            <StatusBadge domain="accountOwnership" value={r.ownership_confidence} />
             {r.accounts!.profile_url && safeUrl(r.accounts!.profile_url) && (
               <a href={safeUrl(r.accounts!.profile_url)!} target="_blank" rel="noopener noreferrer" className="ml-auto text-xs text-badge-300 hover:underline">Open ↗</a>
             )}

@@ -57,8 +57,8 @@ SIB is **not** applied for here. SIB membership is appointed from inside the div
 ### Where the work is
 
 - **My Desk** (Command section — your landing page) gathers everything waiting on you: sign-offs, returned cases, due follow-ups, open tasks, mentions, followed records and draft reports. Start every session here.
-- The **Action Center** ranks work needing your attention across cases, command and personnel.
-- The **bell** is your notification feed — mentions, sign-off events, decisions. Click one to jump to its record.
+- The **Action Center** is one prioritized queue of everything awaiting a decision or action from you, in named lanes — Overdue, Returned to you, Needs your action, Command decisions, **Unassigned intel** (field intelligence no reviewer has claimed), **Expiring BOLOs** (windows closing within 7 days), Waiting on others, and **Drafts** (unfinished work you saved — resume or discard). Every item says why it's here and what to do next; filter the queue by type or bureau.
+- The **bell** is your notification feed. Notifications about the same case or request collapse into one group; the unread badge is exact. Click a row to mark it read and jump to its record, mark a whole group read, or **Mark all read** in one click. The bell's settings panel can **mute the optional streams** (announcements, tracker authorizations, document suggestions, stale-case reminders, sign-off heads-ups) — assignments, mentions, sign-off decisions, legal and security notices can never be muted. Duplicate notifications for the same event are suppressed automatically.
 
 ## C. Navigation
 
@@ -94,8 +94,15 @@ SIB is a **separate workspace and authority**, not a CID category. An SIB accoun
 
 ### The header, everywhere
 
-- **Search everything…** — press **/** to focus, or **Ctrl-K / ⌘K** for the palette. It finds cases, people, plates, places, penal codes and legal requests, and runs commands ("new case", "loa", "go to heatmap").
-- **Bell** — notifications. **Access chip** — hover to see what your role allows. **Set LOA / Clear LOA**. **Sign out**.
+- **Search everything…** — press **/** to focus, or **Ctrl-K / ⌘K** for the palette. One search reaches everything your access can see: cases, reports, case tasks, evidence, operations, legal requests, persons, **BOLOs**, gangs, places, vehicles, accounts, narcotics, ballistics, documents, penal charges, **intelligence submissions** and **division members**. Results come grouped by kind, each row tagged with what it is (typo-tolerant — a few letters or a plate fragment is enough). Opening a person, vehicle, gang or narcotics hit lands it as its own record tab in the Investigative Tools workspace; a task hit deep-links straight to its case's Tasks tab. The palette also runs commands: **Go to** any screen your role can actually open (Owner, Command and SIB surfaces are simply not listed otherwise), a permission-gated **New record** set, My active cases, Set/Clear LOA and Sign out. On a phone the palette opens full-screen.
+- **+ Create** — one button for every record type you're allowed to create: case, person, vehicle, gang, place, account, indicator, operation and (for SIB agents) SIB investigation. It opens the exact same forms the individual screens use, from anywhere — a bottom sheet on your phone. Types your role can't create aren't shown.
+- **Bell** — notifications (see section B). **Access chip** — hover to see what your role allows. **Set LOA / Clear LOA**. **Sign out**.
+
+### Pins and recents — "Jump back in"
+
+- **Pin** a case or record (the pin button on case headers and record profiles) to keep it one click away. Pins are saved to your account, so they **follow you across devices**. Pinning stores only the record's id — never its contents.
+- The portal also keeps a short **recently-opened** trail on each device.
+- Both appear in the **Jump back in** strip on the Command dashboard — pinned chips first, then recents, with a **Clear** for the history. A record you can no longer access simply doesn't appear; a pin comes back by itself if your access returns.
 
 ## D. Running a CID case
 
@@ -118,11 +125,15 @@ A case carries four separate dials — don't conflate them:
 - **Investigative stage** — a deliberate progress marker moved with a reason: Intake → Active Investigation → Legal Process → Enforcement Ready → Pending Closure → Closed.
 - **Workflow** — where the case sits in sign-off (investigation, awaiting sign-off, returned, closed).
 
-The case header shows all of them, plus blockers, overdue items and **one recommended next action**. Rarely-used and administrative actions live in the header's **Actions** menu.
+**Hover any status chip, anywhere in the portal** — the tooltip says what that status means and, where a workflow is waiting, who acts next. The same vocabulary is used everywhere, so "Returned for changes" on a case always means the same thing it does on a legal request.
+
+The case header is two compact lines — identity, state and **one recommended next action** on the first; stage, unit, lead, last update, sign-off and overdue markers on the second. Blockers show in the metric strip below, legal-hold and archived states as banners. Rarely-used and administrative actions live in the header's **Actions** menu.
+
+Under the header, a **Health** row lists advisory chips when the case looks neglected — no lead detective, no summary, quiet 14+ days, overdue tasks, draft reports, returned legal work, undescribed evidence. Each chip's tooltip says why it raised and how to clear it, and clicking one jumps to the relevant section. Health chips are **advisory only** — they never block sign-off or closure — and a healthy case shows no row at all.
 
 ### Work the tabs
 
-The case detail groups its tabs into three areas:
+The case detail groups its tabs into three areas. Each section pill carries a **live count** of what's inside (reports, media, tasks, charges, legal, intel…) and an amber **attention dot** when something in it needs someone — a report awaiting sign-off, an actionable legal request, an overdue task, a draft report. **Switching sections never loses your place**: every section you've visited keeps its filters, drafts, scroll position and half-finished forms until you leave the case, and the Brief's "since your last visit" recap is only reset when you actually leave the case — not by hopping between tabs. On a phone, a compact section switcher replaces the tab strip.
 
 **Investigation**
 - **Brief** — the case at a glance: assignments, stats, recap, blockers.
@@ -147,6 +158,12 @@ The case detail groups its tabs into three areas:
 ### Close it — and reopen it
 
 Closure runs through **Sign-off** (section I). Cases are never deleted from the working view: Command **archives** (archived cases can be restored), and only the portal owner can permanently delete. A closed case can be reopened by changing its status if your rank allows; sealed reports inside it stay sealed.
+
+### Manage the list — saved views and bulk actions
+
+- **Saved views.** On Case Files (and the Persons, Legal Requests and BOLO lists), set up your filters, scope and search, then **Save** them as a named view. Views are saved to your account — they follow you across devices — and one view per list can be marked **default**, applying automatically when you open the list clean. Rename or delete views from the same menu. Case views you had saved on this device before are migrated to your account automatically the first time you open Case Files.
+- **Needs attention** (command). The case-age filter includes a **Needs attention** option for command: open cases carrying at least one health flag the list can see (no lead, no summary, quiet 14+ days, follow-up date passed). List rows carry a small attention count whose tooltip names the flags.
+- **Bulk actions.** Select several cases (checkboxes; shift-click for a range) and **set status** (open / active / cold), **assign a lead** (command only), or **archive / restore**. Every bulk action shows a preview confirm first, skips rows you can't edit (the result says how many), and reports progress as it works through the selection. Closing a case still runs through Sign-off, one case at a time — and there is **no bulk delete**, ever.
 
 ## E. Running an SIB investigation
 
@@ -179,6 +196,8 @@ Every investigation carries a **classification** — who inside SIB may reach it
 - **SIB Compartmented** — allow-list only; rank does not exempt anyone, X-1 included.
 
 A **preliminary inquiry** stays invisible to oversight at every classification until it becomes a **full investigation**. Categories (corruption, integrity, organized crime, narcotics…) are subject matter, orthogonal to classification.
+
+Wherever a record carries an access level — an SIB classification here, a legal classification on a request, a classification on an SOP document — it renders as the same style of **access badge**; hover it to see who can reach the record.
 
 ### Staff and share it
 
@@ -293,7 +312,18 @@ The registries — every tool in the **Investigative Tools** workspace (section 
 - **Narcotics** — drug processing and market analytics. **Ballistics** — weapon benches and component tracing. **M.O. Detector** — tactical profiling and cross-reference.
 - **Media Vault** — universal media-to-case intake. **Records** — live shared division records.
 
-Link intel to a case from the case's **Intel & Notes** tab so everything cross-references. **Follow** any case, person or vehicle (the ☆ button) and My Desk flags it whenever it changes. Archiving hides a record from working views without destroying it; **permanent deletion is the portal owner's alone**.
+### Working with linked records
+
+The registries are relationship-first — a record's value is who and what it's connected to:
+
+- **Edit a link, don't recreate it.** Every relationship (person↔person, person↔vehicle, person↔place, gang turf and properties, gang↔account, gang↔narcotic, case intel links, account ownership) has an **Edit** control: change its confidence, its role or note, or mark it **Current / Historical / Disputed** as the picture develops. An association that ended is marked Historical — not deleted — so the record keeps its history and its audit trail.
+- **Search pickers.** Linking a record opens a search picker over the registry — type a few letters and pick — instead of scrolling an unbounded list.
+- **Peek before you open.** Linked records carry a **peek** button: a small preview card with the record's identity, status chips and linked-record counts, so you can confirm "is this the right one?" without leaving your screen. One click opens the full record.
+- **New link panels**: a vehicle's profile lists its **linked people**, a gang dossier its **accounts** and **narcotics** ties, and an account its **surveillance history** — connections that existed in the data but had no screen before.
+- **Duplicate warnings.** Creating a person, gang or vehicle shows an inline warning when a similar record already exists — with peek buttons to check — but never blocks you; you decide.
+- **Pin** buttons on person, vehicle, gang, account and narcotics records add them to your Jump-back strip (section C).
+
+Link intel to a case from the case's **Intel & Notes** tab so everything cross-references. **Follow** any case, person or vehicle (the ☆ button) and My Desk flags it whenever it changes — follow is "tell me about changes", pin is "keep it one click away". Archiving hides a record from working views without destroying it; **permanent deletion is the portal owner's alone**.
 
 ## I. Reports, evidence and sign-off
 
@@ -301,7 +331,9 @@ Link intel to a case from the case's **Intel & Notes** tab so everything cross-r
 
 Write investigative reports on the case's **Reports** tab, from the division's templates. The **Evidence / Property** section has **Add from case evidence** and **Add from case attachments** pickers — they list only what is already logged on this case, and entries appear as removable chips. Open a saved report in place: referenced evidence expands, attachments open, matching names jump to profiles.
 
-**Finalize** seals the report — contents lock, and your signature (name, badge, time) is recorded. Bureau Leads and above can **Reopen** a sealed report; nothing sealed is ever lost — Signatures shows every seal including superseded ones, and **Versions** lists each sealed version exactly as signed. Warrant reports carry a status ladder (draft → signed → executed → returned) that feeds the BOLO board and person profiles.
+**Your draft saves itself.** While you type, a small chip shows **Saving… / Saved** — the draft is stored to your account, so you can start a report at one desk and finish it at another. If you're offline (or the draft grows very large) the chip says so and the draft is kept on the device until it can sync. Reopening the editor shows a **Restore draft** banner — restore it or **Discard** it deliberately; saved drafts also appear in the Action Center's **Drafts** lane. The same autosave runs on case notes, the case chat composer, person and gang creation, and intelligence summaries.
+
+**Finalize** seals the report — contents lock, and your signature (name, badge, time) is recorded. Bureau Leads and above can **Reopen** a sealed report; nothing sealed is ever lost — Signatures shows every seal including superseded ones, and **Versions** lists each sealed version exactly as signed. Warrant reports carry a status ladder (draft → signed → executed → **Return filed**) that feeds the BOLO board and person profiles. "Return filed" means the warrant's return went to the court — the warrant is complete. It is deliberately not called "Returned", which in legal review means **Returned for revision** (sent back to you for changes).
 
 ### Charges
 

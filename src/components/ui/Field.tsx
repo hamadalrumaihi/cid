@@ -15,26 +15,46 @@ export const inputCls =
   'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none transition focus:border-badge-500'
 export const labelCls = 'mb-1 block text-xs font-semibold text-slate-400'
 
-export function Input({ className = '', ...rest }: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={`${inputCls} ${className}`} {...rest} />
+/** Rose border for a control whose Field carries an error. */
+const invalidCls = 'border-rose-500/60 focus:border-rose-400'
+
+interface InvalidProp {
+  /** Marks the control invalid: sets aria-invalid and a rose border. Pair it
+   *  with <Field error=…> and aria-describedby={fieldErrorId(id)}. */
+  invalid?: boolean
 }
 
-export function Select({ className = '', children, ...rest }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+export function Input({ className = '', invalid, ...rest }: React.InputHTMLAttributes<HTMLInputElement> & InvalidProp) {
+  return <input aria-invalid={invalid || undefined} className={`${inputCls} ${invalid ? invalidCls : ''} ${className}`} {...rest} />
+}
+
+export function Select({ className = '', invalid, children, ...rest }: React.SelectHTMLAttributes<HTMLSelectElement> & InvalidProp) {
   return (
-    <select className={`${inputCls} ${className}`} {...rest}>
+    <select aria-invalid={invalid || undefined} className={`${inputCls} ${invalid ? invalidCls : ''} ${className}`} {...rest}>
       {children}
     </select>
   )
 }
 
-export function Textarea({ className = '', ...rest }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={`${inputCls} ${className}`} {...rest} />
+export function Textarea({ className = '', invalid, ...rest }: React.TextareaHTMLAttributes<HTMLTextAreaElement> & InvalidProp) {
+  return <textarea aria-invalid={invalid || undefined} className={`${inputCls} ${invalid ? invalidCls : ''} ${className}`} {...rest} />
 }
+
+/** The id of the error line <Field error=…> renders — pass it to the control
+ *  as aria-describedby so screen readers announce the error with the field. */
+export const fieldErrorId = (id: string): string => `${id}-error`
 
 export interface FieldProps {
   label: string
   /** Optional helper text under the control. */
   hint?: string
+  /** Validation error — rendered in rose under the control with id
+   *  `fieldErrorId(id)`. NOTE: because `children` is a render prop, Field
+   *  cannot reach the control itself; callers pass `invalid` and
+   *  `aria-describedby={fieldErrorId(id)}` to the control themselves. */
+  error?: string
+  /** Decorative asterisk only — the render prop means Field cannot set
+   *  `required` on the child; pass it to the control yourself if needed. */
   required?: boolean
   className?: string
   /** Receives the generated id so the control is programmatically labelled. */
@@ -42,8 +62,10 @@ export interface FieldProps {
 }
 
 /** Wraps a label + control with a shared generated id. Usage:
- *  <Field label="Name">{(id) => <Input id={id} … />}</Field> */
-export function Field({ label, hint, required, className = '', children }: FieldProps) {
+ *  <Field label="Name" error={err}>
+ *    {(id) => <Input id={id} invalid={!!err} aria-describedby={err ? fieldErrorId(id) : undefined} … />}
+ *  </Field> */
+export function Field({ label, hint, error, required, className = '', children }: FieldProps) {
   const id = useId()
   return (
     <div className={className}>
@@ -52,7 +74,8 @@ export function Field({ label, hint, required, className = '', children }: Field
         {required && <span className="ml-0.5 text-rose-300" aria-hidden>*</span>}
       </label>
       {children(id)}
-      {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
+      {error && <p id={fieldErrorId(id)} className="mt-1 text-xs font-semibold text-rose-300">{error}</p>}
+      {hint && !error && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
     </div>
   )
 }

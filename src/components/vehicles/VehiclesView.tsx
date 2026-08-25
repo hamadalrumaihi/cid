@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
-import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
+import { deleteWithUndo, ilikeAny, insert, list, update, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
@@ -22,6 +22,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { inputCls, labelCls } from '@/components/ui/Field'
 import { WatchButton } from '@/components/cases/WatchButton'
+import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import { useToolNav } from '@/components/tools/useToolNav'
 import { VehicleProfile } from './VehicleProfile'
 
@@ -153,9 +154,9 @@ export function VehiclesView() {
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-2">
                     <WatchButton type="vehicle" id={v.id} label={v.plate} compact />
-                    <button onClick={() => { if (nav.inWorkspace) nav.openRecord('vehicles', v.id, v.plate); else router.push(`/vehicles?vehicle=${v.id}`) }} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Profile</button>
-                    {canEdit && <button onClick={() => setEditor({ record: v })} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
-                    {canDelete && <button onClick={() => void onDelete(v)} aria-label="Delete vehicle" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10"><XMarkIcon size={14} /></button>}
+                    <button onClick={() => { if (nav.inWorkspace) nav.openRecord('vehicles', v.id, v.plate); else router.push(`/vehicles?vehicle=${v.id}`) }} className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10 sm:min-h-0">Profile</button>
+                    {canEdit && <button onClick={() => setEditor({ record: v })} className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10 sm:min-h-0">Edit</button>}
+                    {canDelete && <button onClick={() => void onDelete(v)} aria-label={`Delete vehicle ${v.plate}`} className="-my-1 min-h-[44px] min-w-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10 sm:min-h-0 sm:min-w-0"><XMarkIcon size={14} className="mx-auto" /></button>}
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
@@ -200,6 +201,27 @@ export function VehicleModal({ record, persons, gangs, onClose, onSaved }: {
   const [notes, setNotes] = useState(record?.notes ?? '')
   const [busy, setBusy] = useState(false)
 
+  // Duplicate hint at create time — an exact normalized-plate match against a
+  // bounded ilike lookup. Advisory only (the UNIQUE plate key still guards).
+  const [dupes, setDupes] = useState<DuplicateMatch[]>([])
+  useEffect(() => {
+    if (record) return
+    const p = plate.trim().toUpperCase()
+    let live = true
+    const t = window.setTimeout(async () => {
+      if (p.length < 2) { if (live) setDupes([]); return }
+      const or = ilikeAny(['plate'], p)
+      if (!or) { if (live) setDupes([]); return }
+      const rows = await list('vehicles', { select: 'id,plate', or, limit: 3 })
+        .then((r) => r as unknown as { id: string; plate: string }[]).catch(() => [])
+      if (!live) return
+      setDupes(rows
+        .filter((v) => (v.plate || '').trim().toUpperCase() === p)
+        .map((v) => ({ type: 'vehicle', id: v.id, label: v.plate })))
+    }, 400)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [plate, record])
+
   // FK-preservation guard (vanilla vehicles.js): if the linked owner/gang
   // isn't in the loaded options (fetch failed / stale), keep a synthetic
   // option so an unrelated save can't silently null the link.
@@ -233,6 +255,7 @@ export function VehicleModal({ record, persons, gangs, onClose, onSaved }: {
           <div>
             <label htmlFor="vehicle-plate" className={labelCls}>Plate *</label>
             <input id="vehicle-plate" value={plate} onChange={(e) => setPlate(e.target.value)} className={`${inputCls} font-mono uppercase tracking-widest`} />
+            {!record && <DuplicateMatchNotice matches={dupes} />}
           </div>
           <div>
             <label htmlFor="vehicle-model" className={labelCls}>Model</label>
@@ -300,14 +323,17 @@ function CrossrefPanel({ vehicles, persons, ownerName }: {
     let cancelled = false
     const t = window.setTimeout(async () => {
       setScan('loading')
-      let reports: Tables<'reports'>[] = []
-      let links: Tables<'case_intel_links'>[] = []
+      // Deconfliction must see EVERY (RLS-visible) row or it under-reports —
+      // so no limit here; the selects are narrowed to just the columns the
+      // scan reads, which is the whole payload win on the big tables.
+      let reports: Pick<Tables<'reports'>, 'case_id' | 'fields'>[] = []
+      let links: Pick<Tables<'case_intel_links'>, 'kind' | 'ref_id' | 'case_id'>[] = []
       let cases: CaseOption[] = []
       let failed = false
       try {
         ;[reports, links, cases] = await Promise.all([
-          list('reports', {}),
-          list('case_intel_links', {}),
+          list('reports', { select: 'case_id,fields' }) as unknown as Promise<Pick<Tables<'reports'>, 'case_id' | 'fields'>[]>,
+          list('case_intel_links', { select: 'kind,ref_id,case_id' }) as unknown as Promise<Pick<Tables<'case_intel_links'>, 'kind' | 'ref_id' | 'case_id'>[]>,
           list('cases', { select: 'id,case_number' }) as unknown as Promise<CaseOption[]>,
         ])
       } catch { failed = true }
@@ -365,7 +391,7 @@ function CrossrefPanel({ vehicles, persons, ownerName }: {
   if (scan === 'loading') return <p className="mb-6 text-sm text-slate-400">Scanning for cross-case matches…</p>
   if (scan === 'failed') {
     return (
-      <div className="mb-6 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 text-sm text-amber-200">
+      <div className="mb-6 rounded-lg border border-amber-500/20 bg-amber-500/5 p-5 text-sm text-amber-200">
         ⚠ Could not scan for cross-case matches (connection issue).{' '}
         <button onClick={() => setRetry((n) => n + 1)} className="underline">Retry</button>
       </div>

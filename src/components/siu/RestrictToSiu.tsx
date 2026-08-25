@@ -27,11 +27,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSiu } from '@/lib/useSiu'
 import {
   COMPARTMENT_TYPES, compartmentTypeLabel, reasonIsUsable, restrict,
-  restrictionImpact, sectionsFor, visibilityTint,
+  restrictionImpact, restrictPreview, revealPreview, sectionsFor,
   type RestrictMode, type RestrictionImpact,
 } from '@/lib/siuVisibility'
 import { toast } from '@/lib/toast'
+import { AccessBadge } from '@/components/ui/AccessBadge'
 import { Badge } from '@/components/ui/Badge'
+import { HelpTip } from '@/components/ui/HelpTip'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Field, Textarea } from '@/components/ui/Field'
@@ -157,9 +159,7 @@ export function RestrictDialog({ target, onClose, onDone }: {
             <div className="flex flex-wrap items-center gap-2">
               <Badge>{compartmentTypeLabel(impact.entity_type)}</Badge>
               <span className="text-sm font-semibold text-white">{impact.name ?? 'Unnamed record'}</span>
-              <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${visibilityTint(impact.current_state)}`}>
-                {impact.current_state === 'cid' ? 'Shared with CID' : impact.current_state}
-              </span>
+              <AccessBadge kind="sib" value={impact.current_state} />
             </div>
             <p className="mt-1.5 text-xs text-slate-400">
               Created by {impact.created_by_name ?? 'an unknown account'} on {fmtWhen(impact.created_at)}.
@@ -194,8 +194,14 @@ export function RestrictDialog({ target, onClose, onDone }: {
 
           {/* The choice, with the consequence of each spelled out. */}
           <fieldset>
-            <legend className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <legend className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
               How much to restrict
+              {/* The canonical restrict/reveal sentences (lib/siuVisibility) —
+                  the same wording every confirmation in the compartment uses. */}
+              <HelpTip label="How restricting and revealing affect access" guide="siu">
+                <p>{restrictPreview()}</p>
+                <p className="mt-1.5">A later reveal reverses it: {revealPreview({})}</p>
+              </HelpTip>
             </legend>
             <div className="mt-2 space-y-2">
               {(['sections', 'record'] as RestrictMode[]).map((m) => (

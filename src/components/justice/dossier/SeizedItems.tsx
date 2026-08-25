@@ -20,18 +20,13 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { inputCls } from '@/components/ui/Field'
 import { uiPrompt } from '@/components/ui/dialog'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { StatusChip } from '../legalShared'
 
 type SeizedItem = Tables<'legal_seized_items'>
 
 export const SEIZED_CATEGORIES = ['weapon', 'narcotics', 'currency', 'electronics', 'document', 'vehicle', 'other'] as const
 export const SEIZED_DISPOSITIONS = ['held', 'returned', 'destroyed', 'forfeited', 'other'] as const
-
-// Disposition chip tone: held is neutral, returned informational, forfeited a
-// caution, destroyed destructive.
-const DISP_TONE: Record<string, 'slate' | 'amber' | 'emerald' | 'rose' | 'blue'> = {
-  held: 'slate', returned: 'blue', destroyed: 'rose', forfeited: 'amber', other: 'slate',
-}
 
 const INPUT = inputCls
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
@@ -124,7 +119,9 @@ export function SeizedItemsPanel({ requestId, canFulfil }: { requestId: string; 
                   {s.category && <StatusChip label={s.category} tone="slate" />}
                   {s.evidence_bag && <span className="text-xs text-slate-400">Bag {s.evidence_bag}</span>}
                   {s.storage_location && <span className="text-xs text-slate-400">@ {s.storage_location}</span>}
-                  <StatusChip label={disp} tone={DISP_TONE[disp] ?? 'slate'} />
+                  {/* Disposition — central registry chip ("Returned to owner",
+                      never a bare "returned" that could read as sent-back). */}
+                  <StatusBadge domain="seizedItem" value={disp} />
                   {s.notes && <span className="text-xs text-slate-400">— {s.notes}</span>}
                   <div className="ml-auto flex items-center gap-2">
                     <span className="text-[11px] text-slate-500">{fmtDateTime(s.created_at)}</span>

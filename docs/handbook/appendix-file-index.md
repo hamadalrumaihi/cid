@@ -30,23 +30,31 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | `db.ts` | ⚠ THE data layer: list/insert/update/remove/rpc/deleteWithUndo/withRetry |
 | `docx.ts` | Dependency-free OOXML writer (byte-fragile ZIP) |
 | `deadlines.ts` | Shared deadline engine (v1.14) — feeds `ui/DeadlineChip`; `justice.ts` delegates to it |
-| `drafts.ts` | Never-lose-work localStorage stash — reports, chat, and (v1.14) the legal create/edit forms |
+| `caseHealth.ts` | Pure, clock-injected advisory health flags (hygiene + due/returned signals) — never fetches, skips flags whose inputs weren't passed; renders via `cases/CaseHealthRow` + the CasesView attention marker/"Needs attention" filter |
+| `drafts.ts` | localStorage draft primitive (`cid-draft:` keys) — now mostly `userDrafts`' local mirror; the legal wizard's stash keeps the legacy shared keys |
+| `userDrafts.ts` | DB-backed never-lose-work drafts (`user_drafts`, owner-only RLS, cross-device): debounced upsert, per-user local mirror, 60KB guard, offline degradation; feeds `ui/SaveState` |
+| `entityPreview.ts` | Lite RLS-scoped record projections + linked-record counts for `ui/RecordPeek` |
 | `fivemanage.ts` | Media upload (multipart → hosted URL) |
 | `format.ts` | timeAgo/todayISO/fmtUSD/slug/downloadBlob/copyText |
 | `forms.ts` | 8 report schemas + warrant helpers + finalize-gap check |
 | `markdown.tsx` | Safe mini-Markdown → React (no innerHTML, ever) |
 | `nav.ts` | ⚠ PAGE_META / categories / labels — the nav contract |
 | `notify.ts` / `notifText.ts` | Notification write (RPC, unforgeable) / render vocabulary |
+| `notifications.ts` | Shared notification actions — mark-read, mark-all (one conditional update), accurate unread count, mute prefs (`user_prefs` key `notif_muted`; only `OPTIONAL_NOTIF_CATEGORIES` are mutable) |
 | `operations.ts` | Operations zustand cache + status colors |
 | `packet.ts` / `pdf.tsx` | Case-packet gathering / court-styled PDF renderer (dynamic import) |
 | `penal.ts` | Static penal code (162 charges) + calculators |
+| `pins.ts` | DB-backed pinned records (`user_pins`, owner-only RLS, cross-device, ids only, soft cap 24) — distinct from the Follow watchlist |
 | `profiles.ts` | Roster cache + `officerName()` |
+| `recents.ts` | Device-local recently-opened trail (Store blob, ids only, pushed on deliberate opens) |
+| `savedViews.ts` | Per-user saved views over `user_prefs` (`views:<section>` rows, opaque caller-shaped config, one default per section; one-time migration of the legacy `caseViews` Store key) |
 | `realtime.ts` | ⚠ One channel per table → version counters (`useTableVersion`) |
 | `roles.ts` | Role/bureau vocabulary + seniority + command predicates |
 | `safeUrl.ts` | ⚠ XSS scheme allow-list for DB-sourced URLs (tested) |
 | `schemas.ts` | Zod tolerant parsers for structured JSON payloads (v1.14) — legal form_data, packet manifests, notification payloads, report signatures/reopen logs, security overview |
-| `search.ts` | `search_all` RPC wrapper + penal hits + recents |
+| `search.ts` | `search_all` RPC wrapper (now incl. bolo/task arms) + client-side charge/member/intel-tip hits, kind metadata (`SEARCH_KINDS`) + recent searches |
 | `signoff.ts` | Read-only sign-off vocabulary/tints/"whose court" hint |
+| `status.ts` | ⚠ Central status registry — label/tint/meaning/who-acts-next for every status vocabulary (composes `tint.ts` + domain vocabularies; disambiguates warrant "Return filed" from legal "Returned for revision"); render via `ui/StatusBadge` |
 | `store.ts` | The shared localStorage blob (legacy-compatible keys) |
 | `supabase.ts` | ⚠ Lazy client singleton + `isConfigured` |
 | `toast.ts` | Toast store + `humanizeError` |
@@ -67,8 +75,9 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | `shell/Header.tsx` | Title bar, `/` & ⌘K shortcuts, LOA, sign-out |
 | `shell/Sidebar.tsx` | ⚠ Categories, badges, body-class collapse |
 | `shell/BottomNav.tsx` / `Subtabs.tsx` | Mobile bar / in-category tab strip |
-| `shell/SearchPalette.tsx` | ⚠ ⌘K search + quick actions |
-| `shell/NotificationsBell.tsx` | Live bell + mark-read |
+| `shell/SearchPalette.tsx` | ⚠ ⌘K search + permission-gated go-to/create commands (full-screen sheet below `lg`) |
+| `shell/CreateHost.tsx` | Universal "+ Create" context provider — lazy-loads the exported registry modals; `useCreate().open(kind)` |
+| `shell/NotificationsBell.tsx` | Live bell — grouped clusters, accurate unread count, mark-all, mute settings (via `lib/notifications`) |
 | `shell/useNav.ts` / `useNavBadges.ts` | Routing helpers / ⚠ badge logic mirroring server rules |
 | `shell/ConnBanner` / `AppearanceModal` / `MyProfileModal` / `icons` | Offline pill / accent+density / self-profile / SVG icons |
 | `ui/Modal.tsx` | ⚠ Focus trap, dirty guard, scroll-lock, ref-routed handlers |
@@ -77,7 +86,10 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | `ui/RichEditor.tsx` | Tiptap markdown editor |
 | `ui/Toaster.tsx` | Toast renderer |
 | `ui/WorkflowTimeline.tsx` / `ui/DeadlineChip.tsx` | v1.14 shared history render / deadline chip (see [Ch. 6](06-components.md)) |
+| `ui/StatusBadge.tsx` / `ui/AccessBadge.tsx` | Registry-backed status chip (tooltip: meaning + who acts next) / one chip for the three access vocabularies (SIB visibility, legal classification, SOP classification) |
+| `ui/RecordPeek.tsx` / `ui/SaveState.tsx` | Lazy record-preview card (data from `lib/entityPreview`) / autosave-state chip (fed by `lib/userDrafts`) |
 | `shared/RelatedRecordPicker.tsx` / `VersionViewer.tsx` / `SignatureViewer.tsx` | v1.14 cross-feature record picker / version list / signature trail |
+| `shared/LinkEditPopover.tsx` / `RecordSearchPicker.tsx` / `DuplicateMatches.tsx` / `PinButton.tsx` / `RecordPeekButton.tsx` | Relationship-link editor (confidence/status/note over the link tables' UPDATE policies) / bounded registry search picker / non-blocking duplicate hints on create modals / pin toggle over `lib/pins` / peek trigger |
 
 ## Feature views (main file per folder)
 

@@ -15,40 +15,31 @@ import { list, rpc } from '@/lib/db'
 import { useTableVersion } from '@/lib/realtime'
 import { useAuth } from '@/lib/auth'
 import type { LegalViewer } from '@/lib/legalWorkflow'
-import {
-  CLASSIFICATION_STYLE, deadlineInfo, type Classification, type LegalRequest,
-} from '@/lib/justice'
+import { deadlineInfo, type LegalRequest } from '@/lib/justice'
+import { LEGAL_TONE_CLS, legalReviewTone, type LegalTone } from '@/lib/status'
+import { AccessBadge } from '@/components/ui/AccessBadge'
 import { LegalRequestCard } from './LegalRequestCard'
 
+/** Kept as a thin wrapper for the existing call sites — the rendering (and
+ *  the who-can-access tooltip) now lives in ui/AccessBadge. */
 export function ClassificationBadge({ value }: { value: string }) {
-  const cls = CLASSIFICATION_STYLE[(value as Classification)] ?? CLASSIFICATION_STYLE.standard
-  return (
-    <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${cls}`}>
-      {value === 'sealed' ? '🔒 ' : ''}{value}
-    </span>
-  )
+  return <AccessBadge kind="legal" value={value} />
 }
 
-export function StatusChip({ label, tone = 'slate' }: { label: string; tone?: 'slate' | 'amber' | 'emerald' | 'rose' | 'blue' }) {
-  const tones: Record<string, string> = {
-    slate: 'border-white/10 bg-white/5 text-slate-300',
-    amber: 'border-amber-500/25 bg-amber-500/10 text-amber-300',
-    emerald: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300',
-    rose: 'border-rose-500/25 bg-rose-500/10 text-rose-300',
-    blue: 'border-badge-500/25 bg-badge-500/10 text-blue-300',
-  }
-  return <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${tones[tone]}`}>{label}</span>
+export function StatusChip({ label, tone = 'slate' }: { label: string; tone?: LegalTone }) {
+  // Tone → class map lives in the central status registry (lib/status), so
+  // this chip can never drift from the legalReview domain's colors.
+  return <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${LEGAL_TONE_CLS[tone]}`}>{label}</span>
 }
 
-export function reviewTone(status: string): 'slate' | 'amber' | 'emerald' | 'rose' | 'blue' {
-  if (status === 'approved') return 'emerald'
-  if (status === 'denied' || status.startsWith('returned')) return 'rose'
-  if (status.endsWith('_review') || status.startsWith('submitted')) return 'amber'
-  if (status === 'withdrawn') return 'slate'
-  return 'blue'
-}
+/** Review-status → tone, from the central registry (single source of truth). */
+export const reviewTone = legalReviewTone
 
-export function DeadlineChip({ request }: { request: Pick<LegalRequest, 'expires_at' | 'response_deadline' | 'fulfilment_status'> }) {
+/** Deadline/expiry warning chip for a LEGAL REQUEST row. Renamed from
+ *  DeadlineChip to end the name collision with ui/DeadlineChip (the generic
+ *  date-countdown chip) — they take different props and mean different
+ *  things. */
+export function LegalDeadlineChip({ request }: { request: Pick<LegalRequest, 'expires_at' | 'response_deadline' | 'fulfilment_status'> }) {
   // Only live requests warn — closed/returned records keep a quiet history.
   if (['closed', 'returned', 'return_recorded', 'revoked'].includes(request.fulfilment_status)) return null
   const exp = deadlineInfo(request.expires_at, 'expires')

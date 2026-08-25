@@ -67,7 +67,7 @@ export function PersonnelView() {
       {state === 'in' && isCommand && (
         <button
           onClick={() => navigate('command-center')}
-          className="flex w-full items-center justify-between gap-3 rounded-2xl border border-badge-500/30 bg-badge-500/5 p-4 text-left transition hover:bg-badge-500/10"
+          className="flex w-full items-center justify-between gap-3 rounded-lg border border-badge-500/30 bg-badge-500/5 p-4 text-left transition hover:bg-badge-500/10"
         >
           <span>
             <span className="block text-sm font-bold text-white">🛡️ Manage personnel in the Command Center</span>
@@ -81,9 +81,9 @@ export function PersonnelView() {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">Active Roster</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {state !== 'in' ? (
-            <p className="text-sm text-slate-500 sm:col-span-2 xl:col-span-3">Sign in to view the roster.</p>
+            <p className="text-sm text-slate-400 sm:col-span-2 xl:col-span-3">Sign in to view the roster.</p>
           ) : !roster.length ? (
-            <p className="text-sm text-slate-500 sm:col-span-2 xl:col-span-3">No officers on the roster yet.</p>
+            <p className="text-sm text-slate-400 sm:col-span-2 xl:col-span-3">No officers on the roster yet.</p>
           ) : (
             <>
               {visible.map((p) => (
@@ -124,7 +124,7 @@ function RosterCard({ p, isMe, onEditMe, onChanged }: { p: RosterProfile; isMe: 
 
   const status = p.loa ? 'On LOA' : p.active ? 'Active' : 'Pending'
   return (
-    <div className={`rounded-2xl border bg-ink-900/60 p-5 transition hover:border-white/10 ${p.loa ? 'border-amber-500/20' : 'border-white/5'}`}>
+    <div className={`rounded-lg border bg-ink-900/60 p-5 transition hover:border-white/10 ${p.loa ? 'border-amber-500/20' : 'border-white/5'}`}>
       <div className="flex items-center gap-3">
         <div className="grid h-12 w-12 flex-shrink-0 place-items-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-700 text-sm font-bold text-white">
           {initials(p.display_name)}

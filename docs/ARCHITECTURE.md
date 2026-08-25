@@ -98,9 +98,10 @@ database RPCs; see [Handbook Ch. 7](handbook/07-api.md).
 | `src/components/<feature>/` | One folder per domain (cases, legal, justice, operations, owner, devdocs, command-center, …). Feature views share a uniform shape: fetch on mount + realtime version bump → `refresh()`; permission-gated buttons; fresh-mounted modals; toasts + Undo for deletes. |
 | `src/components/tools/` | The Investigative Tools workspace (`/tools`): tool directory, keep-alive tab strip, the legacy-route redirect shim, and the lazy per-tool component registry. |
 | `src/components/ui/` | Shared primitives (Modal, Toaster, dialog host, headers, …) everything is assembled from. |
-| `src/components/shell/` | The constant chrome (`AppShell`, sidebar, nav badges). |
+| `src/components/shell/` | The constant chrome (`AppShell`, sidebar, nav badges, the ⌘K `SearchPalette`, the notifications bell, and `CreateHost` — the universal "+ Create" provider that lazy-loads the registry views' exported create modals via `useCreate()`). |
+| `src/components/shared/` | Cross-feature record widgets — `LinkEditPopover` (relationship-link editing), `RecordSearchPicker`, `DuplicateMatches`, `PinButton`, `RecordPeekButton`. |
 | `src/components/auth/` | The `Gate` screens (login, pending approval, retry, setup). |
-| `src/lib/` | Domain libraries and infrastructure — data access, auth, realtime, sign-off vocabulary, form schemas, exports. |
+| `src/lib/` | Domain libraries and infrastructure — data access, auth, realtime, sign-off vocabulary, the central status registry (`status.ts`, rendered by `ui/StatusBadge`), record previews (`entityPreview.ts` → `ui/RecordPeek`), the per-user personalization layer (`pins.ts`, `recents.ts`, `userDrafts.ts`, `savedViews.ts`), notification actions (`notifications.ts`), form schemas, exports. |
 
 The [Handbook Ch. 6](handbook/06-components.md) catalogs the reusable
 building blocks; [Ch. 5](handbook/05-pages.md) maps every URL to its
@@ -219,8 +220,19 @@ More depth: [Handbook Ch. 9](handbook/09-auth.md).
   realtime version counters (`lib/realtime.ts`), toasts (`lib/toast.ts`),
   the roster cache (`lib/profiles.ts`), watchlist, operations, the dialog
   host, and the Owner Portal vitals. There is no global app store.
-- **Device preferences** (accent, density, pins, drafts) persist in one
-  localStorage blob (`cid-portal-v3`, [`src/lib/store.ts`](../src/lib/store.ts)).
+- **Device preferences** (accent, density, list view modes, the ids-only
+  recents trail) persist in one localStorage blob (`cid-portal-v3`,
+  [`src/lib/store.ts`](../src/lib/store.ts)).
+- **Per-user cross-device state** lives in three owner-only tables (RLS
+  admits only the owner; no audit triggers, no realtime, size-capped
+  jsonb): `user_pins` (pinned records — [`src/lib/pins.ts`](../src/lib/pins.ts)),
+  `user_drafts` (autosaved drafts with a per-user local mirror and the
+  Saving/Saved/Offline `SaveState` chip —
+  [`src/lib/userDrafts.ts`](../src/lib/userDrafts.ts)), and `user_prefs`
+  (saved views — [`src/lib/savedViews.ts`](../src/lib/savedViews.ts) — and
+  notification mutes — [`src/lib/notifications.ts`](../src/lib/notifications.ts)).
+  Rows referencing records store **ids only**; titles are re-resolved
+  through the viewer's RLS at render, so lost access hides entries.
 - Feature views fetch on mount and refetch when their table version bumps —
   see [Handbook Ch. 10](handbook/10-state.md).
 

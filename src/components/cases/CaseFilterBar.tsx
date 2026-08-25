@@ -1,9 +1,12 @@
 'use client'
 
+import { useAuth } from '@/lib/auth'
 import { activeProfiles, officerName } from '@/lib/profiles'
-import { activeCaseFilterCount, caseViews, EMPTY_FILTERS, setCaseViews, type CaseFilters, type SavedCaseView } from './caseUtils'
-import { uiPrompt } from '@/components/ui/dialog'
+import { useSavedViews } from '@/lib/savedViews'
+import { activeCaseFilterCount, EMPTY_FILTERS, type CaseFilters, type SavedCaseViewConfig } from './caseUtils'
+import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Button } from '@/components/ui/Button'
+import { HelpTip } from '@/components/ui/HelpTip'
 import { toast } from '@/lib/toast'
 import { PERMANENT_BUREAUS, bureauLabel } from '@/lib/roles'
 
@@ -23,35 +26,58 @@ interface Props {
   onActiveViewName: (name: string) => void
 }
 
+/** The filter bar is shared by all three case layouts (table/grid/board) —
+ *  CasesView renders it above the layout switch, so saved views stay visible
+ *  and applicable in every mode. Views live in lib/savedViews ('cases',
+ *  cross-device via user_prefs); applying one only re-applies client filter
+ *  state — RLS still decides what the filters can match. */
 export function CaseFilterBar({ filters, scope, query, activeViewName, onFilters, onScope, onQuery, onActiveViewName }: Props) {
-  const views = caseViews()
+  const { isCommand } = useAuth()
+  const sv = useSavedViews<SavedCaseViewConfig>('cases')
   const count = activeCaseFilterCount(filters)
   const patch = (p: Partial<CaseFilters>) => onFilters({ ...filters, ...p })
 
   const saveView = async () => {
-    const name = await uiPrompt('Name this case view.', { title: 'Save view', placeholder: 'Active SCB follow-ups', confirmText: 'Save' })
-    if (!name) return
-    const next: SavedCaseView = { name, filters, scope, q: query }
-    setCaseViews([...views.filter((v) => v.name !== name), next])
-    onActiveViewName(name)
-    toast('Saved case view.', 'success')
+    const name = await sv.saveViaPrompt({ filters, scope, q: query }, 'Name this case view.')
+    if (name) onActiveViewName(name)
   }
 
   const applyView = (name: string) => {
     onActiveViewName(name)
-    const v = views.find((x) => x.name === name)
+    const v = sv.views.find((x) => x.name === name)
     if (!v) return
-    onFilters({ ...EMPTY_FILTERS, ...v.filters })
-    if (v.scope) onScope(v.scope)
-    onQuery(v.q ?? '')
+    onFilters({ ...EMPTY_FILTERS, ...v.config.filters })
+    if (v.config.scope) onScope(v.config.scope)
+    onQuery(v.config.q ?? '')
   }
 
-  const deleteView = () => {
-    if (!activeViewName) return
-    setCaseViews(views.filter((v) => v.name !== activeViewName))
-    onActiveViewName('')
-    toast('Case view deleted.', 'success')
-  }
+  const isDefault = sv.defaultView?.name === activeViewName
+  const viewMenu: ActionItem[] = [
+    {
+      label: 'Rename…',
+      onClick: () => {
+        void sv.renameViaPrompt(activeViewName).then((next) => { if (next) onActiveViewName(next) })
+      },
+    },
+    {
+      label: isDefault ? 'Clear default' : 'Set as default',
+      onClick: () => {
+        void sv.setDefault(isDefault ? null : activeViewName).then((ok) => {
+          if (ok) toast(isDefault ? 'Default view cleared.' : `"${activeViewName}" is now your default case view.`, 'success')
+        })
+      },
+    },
+    {
+      label: `Delete "${activeViewName}"`,
+      danger: true,
+      separatorBefore: true,
+      onClick: () => {
+        void sv.remove(activeViewName).then((ok) => {
+          if (ok) { onActiveViewName(''); toast('Case view deleted.', 'success') }
+        })
+      },
+    },
+  ]
 
   return (
     <div className="rounded-2xl border border-white/10 bg-ink-900/50 p-3">
@@ -70,24 +96,41 @@ export function CaseFilterBar({ filters, scope, query, activeViewName, onFilters
           <option value="unassigned">Unassigned</option>
           {activeProfiles().map((p) => <option key={p.id} value={p.id}>{officerName(p.id) || p.display_name}</option>)}
         </select>
-        <select aria-label="Filter by case age" value={filters.stale} onChange={(e) => patch({ stale: e.target.value })} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
-          <option value="">Any age</option>
-          <option value="stale">Stale (14d+)</option>
-          <option value="fresh">Fresh</option>
-        </select>
+        <div className="flex items-center gap-1.5">
+          <select aria-label="Filter by case age" value={filters.stale} onChange={(e) => patch({ stale: e.target.value })} className="w-full min-w-0 rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
+            <option value="">Any age</option>
+            <option value="stale">Stale (14d+)</option>
+            <option value="fresh">Fresh</option>
+            {/* Command triage lens (lib/caseHealth's list-safe flags). Also kept
+                when a saved view / persisted filter already carries it, so the
+                select never shows a blank for an active value. */}
+            {(isCommand || filters.stale === 'attention') && <option value="attention">Needs attention</option>}
+          </select>
+          {isCommand && (
+            <HelpTip label="What counts as needs attention" align="right" className="shrink-0">
+              <p><span className="font-semibold text-white">Needs attention</span> shows open cases with at least one health flag a list row can see: no lead detective, no summary, quiet 14 days or more, or a follow-up date that has passed.</p>
+            </HelpTip>
+          )}
+        </div>
         <div className="flex gap-2">
           <Button className="flex-1" onClick={() => onFilters(EMPTY_FILTERS)}>
             Clear{count ? ` (${count})` : ''}
           </Button>
-          <Button onClick={saveView} title="Save view">Save</Button>
+          <Button onClick={() => void saveView()} title="Save the current filters, scope and search as a named view">Save</Button>
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <select aria-label="Saved views" value={activeViewName} onChange={(e) => applyView(e.target.value)} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
           <option value="">Saved views</option>
-          {views.map((v) => <option key={v.name} value={v.name}>{v.name}</option>)}
+          {/* A ?view= deep link can name a view deleted on another device —
+              keep the select honest until the user picks something else. */}
+          {activeViewName && !sv.views.some((v) => v.name === activeViewName) && (
+            <option value={activeViewName}>{activeViewName}</option>
+          )}
+          {sv.views.map((v) => <option key={v.name} value={v.name}>{v.name}{v.isDefault ? ' · default' : ''}</option>)}
         </select>
-        {activeViewName && <button onClick={deleteView} className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-500/20">Delete &quot;{activeViewName}&quot;</button>}
+        {activeViewName && <ActionMenu label={`Actions for view "${activeViewName}"`} align="left" items={viewMenu} />}
+        {isDefault && activeViewName && <span className="text-xs text-slate-400">Default view — applies when you open Case Files with no filters.</span>}
       </div>
     </div>
   )

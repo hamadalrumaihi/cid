@@ -94,7 +94,7 @@ export function DocGovernanceWarnings() {
   }
 
   return (
-    <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
+    <section className="rounded-lg border border-white/5 bg-ink-900/45 p-5">
       <h3 className="mb-1 font-bold text-white">Document governance <span className="text-slate-500">({warnings.length})</span></h3>
       <p className="mb-3 text-xs text-slate-400">Library warnings needing a human decision — expiries, overdue reviews, missing owners/approvals, Drive conflicts, and lapsed required-reading deadlines.</p>
       {warnings.length ? (

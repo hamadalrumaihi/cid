@@ -21,6 +21,7 @@ import {
 } from '@/components/shell/icons'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { ErrorNotice, EmptyState } from '@/components/ui/Notice'
 import { ActionMenu } from '@/components/ui/ActionMenu'
@@ -28,21 +29,27 @@ import { RestrictToSiuButton } from '@/components/siu/RestrictToSiu'
 import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
 import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTimeline'
-import { ConfidenceBadge, ProvenanceBadge, StaleIntelBadge } from '@/components/ui/IntelBadges'
+import { ConfidenceBadge, StaleIntelBadge } from '@/components/ui/IntelBadges'
 import { EntityLink } from '@/components/ui/EntityLink'
 import { uiConfirm } from '@/components/ui/dialog'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
+import { LinkEditPopover } from '@/components/shared/LinkEditPopover'
+import { PinButton } from '@/components/shared/PinButton'
+import { RecordPeekButton } from '@/components/shared/RecordPeekButton'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { useToolNav } from '@/components/tools/useToolNav'
 import { useNow } from '@/lib/useNow'
+import { pushRecent } from '@/lib/recents'
 import { RosterSection } from './gangRoster'
+import { GangAccountsPanel, GangNarcoticsPanel } from './gangLinkPanels'
 import { MemberModal, TurfModal, LinkPlaceModal, AddGangPhotoModal, GangPhotoLightbox, AttachGangModal } from './gangModals'
 import {
-  DEFAULT_REVIEW_DAYS, SUMMARY_SECTIONS, humanize, isGangStale, parseColors, rankTier, turfLastKnown,
+  DEFAULT_REVIEW_DAYS, SUMMARY_SECTIONS, TURF_STATUSES, humanize, isGangStale, parseColors, rankTier, turfLastKnown,
 } from './gangIntel'
 import { densityTint, cap, type CaseOption, type CaseRow, type GangPlaceRow, type GangRow, type IntelLinkRow, type LinkedPlace, type MediaRow, type MemberRow, type PlaceRow, type TurfRow, type VehicleRow } from './gangShared'
 
-type SectionId = 'overview' | 'members' | 'territory' | 'places' | 'vehicles' | 'cases' | 'observations' | 'media' | 'activity'
-const SECTION_IDS: SectionId[] = ['overview', 'members', 'territory', 'places', 'vehicles', 'cases', 'observations', 'media', 'activity']
+type SectionId = 'overview' | 'members' | 'territory' | 'places' | 'vehicles' | 'accounts' | 'narcotics' | 'cases' | 'observations' | 'media' | 'activity'
+const SECTION_IDS: SectionId[] = ['overview', 'members', 'territory', 'places', 'vehicles', 'accounts', 'narcotics', 'cases', 'observations', 'media', 'activity']
 
 const fmtDate = (iso: string | null | undefined) => {
   if (!iso) return '—'
@@ -161,8 +168,8 @@ function InvestigationStatus({ gang, now }: { gang: GangRow; now: number }) {
 }
 
 // ── Territory ────────────────────────────────────────────────────────────────
-function TerritorySection({ gangId, turf, canEdit, canDelete, onAdd, onDelete, now }: {
-  gangId: string; turf: TurfRow[]; canEdit: boolean; canDelete: boolean; onAdd: () => void; onDelete: (t: TurfRow) => void; now: number
+function TerritorySection({ gangId, turf, canEdit, canDelete, onAdd, onEdit, onDelete, now }: {
+  gangId: string; turf: TurfRow[]; canEdit: boolean; canDelete: boolean; onAdd: () => void; onEdit: (t: TurfRow) => void; onDelete: (t: TurfRow) => void; now: number
 }) {
   const router = useRouter()
   const [density, setDensity] = useState('any')
@@ -203,14 +210,19 @@ function TerritorySection({ gangId, turf, canEdit, canDelete, onAdd, onDelete, n
                 {t.hotspot_area && <p className="text-xs text-slate-400">{t.hotspot_area}</p>}
                 <div className="flex flex-wrap items-center gap-1.5">
                   {t.status && <Badge tint={statusTint(t.status)}>{humanize(t.status)}</Badge>}
-                  {t.confidence && <ConfidenceBadge confidence={t.confidence} />}
+                  <StatusBadge domain="confidence" value={t.confidence ?? 'unverified'} />
                   {stale && <span className="t-readout rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300" title="No confirmation in over 180 days"><span className="t-dot t-dot-amber" /> STALE</span>}
                 </div>
                 {(t.first_observed || t.last_confirmed) && (
                   <p className="text-[11px] text-slate-500">{t.first_observed ? `First seen ${fmtDate(t.first_observed)}` : ''}{t.first_observed && t.last_confirmed ? ' · ' : ''}{t.last_confirmed ? `Confirmed ${fmtDate(t.last_confirmed)}` : ''}</p>
                 )}
                 {t.notes && <p className="line-clamp-2 text-xs text-slate-400">{t.notes}</p>}
-                {canDelete && <div className="mt-1"><button onClick={() => onDelete(t)} className="text-[11px] text-rose-300 hover:text-rose-200">Remove</button></div>}
+                {(canEdit || canDelete) && (
+                  <div className="mt-1 flex items-center gap-2">
+                    {canEdit && <button onClick={() => onEdit(t)} className="text-[11px] font-semibold text-blue-300 hover:text-blue-200" title="Edit control status or confidence">Edit</button>}
+                    {canDelete && <button onClick={() => onDelete(t)} className="text-[11px] text-rose-300 hover:text-rose-200">Remove</button>}
+                  </div>
+                )}
               </Card>
             )
           })}
@@ -225,8 +237,8 @@ const PLACE_ICON: Record<string, (p: { size?: number; className?: string }) => R
   drug_lab: NarcoticIcon, stash_house: ArchiveIcon, dead_drop: DocumentIcon, front_business: ReceiptIcon, chop_shop: VehicleIcon,
 }
 
-function PlacesSection({ linked, media, canEdit, canDelete, onLink, onUnlink }: {
-  linked: LinkedPlace[]; media: MediaRow[]; canEdit: boolean; canDelete: boolean; onLink: () => void; onUnlink: (l: GangPlaceRow) => void
+function PlacesSection({ linked, media, canEdit, canDelete, onLink, onEdit, onUnlink }: {
+  linked: LinkedPlace[]; media: MediaRow[]; canEdit: boolean; canDelete: boolean; onLink: () => void; onEdit: (l: GangPlaceRow) => void; onUnlink: (l: GangPlaceRow) => void
 }) {
   const nav = useToolNav()
   const photoFor = (placeId: string) => media.find((m) => m.place_id === placeId)
@@ -253,15 +265,23 @@ function PlacesSection({ linked, media, canEdit, canDelete, onLink, onUnlink }: 
                   <div className="grid h-16 w-20 flex-shrink-0 place-items-center rounded-md bg-ink-700 text-slate-400" aria-hidden><PlaceGlyph size={22} /></div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <button onClick={() => nav.openHref(`/places?q=${encodeURIComponent(place.name)}`)} className="truncate text-left text-sm font-semibold text-white hover:text-blue-200" title="Open place">{place.name}</button>
+                  <span className="flex items-center gap-1">
+                    <button onClick={() => nav.openHref(`/places?q=${encodeURIComponent(place.name)}`)} className="min-w-0 truncate text-left text-sm font-semibold text-white hover:text-blue-200" title="Open place">{place.name}</button>
+                    <RecordPeekButton type="place" id={place.id} label={place.name} />
+                  </span>
                   <p className="text-[11px] text-slate-400">{humanize(place.type)}{place.area ? ` · ${place.area}` : ''}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     {link?.role && <Badge tone="accent">{link.role}</Badge>}
-                    {link?.confidence && <ConfidenceBadge confidence={link.confidence} />}
-                    {link?.provenance && <ProvenanceBadge provenance={link.provenance} />}
+                    {link && <StatusBadge domain="confidence" value={link.confidence ?? 'unverified'} />}
+                    {link?.provenance && <StatusBadge domain="provenance" value={link.provenance} />}
                     {via === 'controlling' && <span className="text-[10px] uppercase tracking-wide text-slate-500" title="Linked via the place's controlling gang">controlling</span>}
                   </div>
-                  {canDelete && link && <button onClick={() => onUnlink(link)} className="mt-1 text-[11px] text-rose-300 hover:text-rose-200">Unlink</button>}
+                  {link && (canEdit || canDelete) && (
+                    <div className="mt-1 flex items-center gap-2">
+                      {canEdit && <button onClick={() => onEdit(link)} className="text-[11px] font-semibold text-blue-300 hover:text-blue-200" title="Edit role, confidence, or note">Edit</button>}
+                      {canDelete && <button onClick={() => onUnlink(link)} className="text-[11px] text-rose-300 hover:text-rose-200">Unlink</button>}
+                    </div>
+                  )}
                 </div>
               </Card>
             )
@@ -411,6 +431,8 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
 
   const [memberEditor, setMemberEditor] = useState<MemberRow | 'new' | null>(null)
   const [turfOpen, setTurfOpen] = useState(false)
+  const [turfEdit, setTurfEdit] = useState<TurfRow | null>(null)
+  const [placeLinkEdit, setPlaceLinkEdit] = useState<GangPlaceRow | null>(null)
   const [linkPlaceOpen, setLinkPlaceOpen] = useState(false)
   const [photoOpen, setPhotoOpen] = useState(false)
   const [attachOpen, setAttachOpen] = useState(false)
@@ -462,6 +484,9 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
   }, [gang.id])
 
   useEffect(() => { const h = window.setTimeout(() => { void load() }, 0); return () => window.clearTimeout(h) }, [load])
+
+  // Deliberate open of this dossier — record it in the recents trail.
+  useEffect(() => { pushRecent('gang', gang.id) }, [gang.id])
 
   // Merge controlling + linked places into one navigable list (dedupe by place).
   const linkedPlaces: LinkedPlace[] = useMemo(() => {
@@ -519,6 +544,8 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
     { id: 'territory', label: 'Territory', count: turf.length },
     { id: 'places', label: 'Places', count: linkedPlaces.length },
     { id: 'vehicles', label: 'Vehicles', count: vehicles.length },
+    { id: 'accounts', label: 'Accounts' },
+    { id: 'narcotics', label: 'Narcotics' },
     { id: 'cases', label: 'Cases', count: intelLinks.length },
     { id: 'observations', label: 'Observations' },
     { id: 'media', label: 'Media', count: media.length },
@@ -582,7 +609,8 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {canEdit && <button onClick={onEdit} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Edit gang</button>}
+            <PinButton type="gang" id={gang.id} label={gang.name} />
+            {canEdit && <Button variant="primary" onClick={onEdit}>Edit gang</Button>}
             {canEdit && <button onClick={() => setMemberEditor('new')} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Add member</button>}
             {canEdit && <button onClick={onEdit} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-blue-200 hover:bg-white/10">Add intelligence</button>}
             {canEdit && <button onClick={() => setAttachOpen(true)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-blue-200 hover:bg-white/10">Attach to case</button>}
@@ -622,9 +650,11 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
           </div>
         )}
         {section === 'members' && <RosterSection members={members} personNames={personNames} canEdit={canEdit} canDelete={canDelete} onAddMember={() => setMemberEditor('new')} onEditMember={(m) => setMemberEditor(m)} onRefresh={() => void load()} />}
-        {section === 'territory' && <TerritorySection gangId={gang.id} turf={turf} canEdit={canEdit} canDelete={canDelete} onAdd={() => setTurfOpen(true)} onDelete={(t) => void deleteTurf(t)} now={now} />}
-        {section === 'places' && <PlacesSection linked={linkedPlaces} media={media} canEdit={canEdit} canDelete={canDelete} onLink={() => setLinkPlaceOpen(true)} onUnlink={(l) => void unlinkPlace(l)} />}
+        {section === 'territory' && <TerritorySection gangId={gang.id} turf={turf} canEdit={canEdit} canDelete={canDelete} onAdd={() => setTurfOpen(true)} onEdit={setTurfEdit} onDelete={(t) => void deleteTurf(t)} now={now} />}
+        {section === 'places' && <PlacesSection linked={linkedPlaces} media={media} canEdit={canEdit} canDelete={canDelete} onLink={() => setLinkPlaceOpen(true)} onEdit={setPlaceLinkEdit} onUnlink={(l) => void unlinkPlace(l)} />}
         {section === 'vehicles' && <VehiclesSection vehicles={vehicles} />}
+        {section === 'accounts' && <GangAccountsPanel gangId={gang.id} canEdit={canEdit} />}
+        {section === 'narcotics' && <GangNarcoticsPanel gangId={gang.id} canEdit={canEdit} />}
         {section === 'cases' && <CasesSection links={intelLinks} cases={linkedCases} indirect={indirectCases} canEdit={canEdit} onAttach={() => setAttachOpen(true)} onUnlink={(l) => void unlinkCase(l)} />}
         {section === 'observations' && (
           <Card pad="lg">
@@ -655,9 +685,37 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
         />
       )}
       {turfOpen && <TurfModal gangId={gang.id} onClose={() => setTurfOpen(false)} onSaved={() => { setTurfOpen(false); void load() }} />}
-      {linkPlaceOpen && <LinkPlaceModal gang={gang} places={places} existing={gangPlaces} onClose={() => setLinkPlaceOpen(false)} onSaved={() => { setLinkPlaceOpen(false); void load() }} />}
+      {turfEdit && (
+        <LinkEditPopover
+          title={`Edit turf — ${turfEdit.block}`}
+          table="gang_turf"
+          id={turfEdit.id}
+          status={turfEdit.status ?? 'unknown'}
+          statusColumn="status"
+          statusOptions={TURF_STATUSES}
+          statusLabel={humanize}
+          confidence={turfEdit.confidence}
+          note={turfEdit.notes}
+          noteColumn="notes"
+          onClose={() => setTurfEdit(null)}
+          onSaved={() => { setTurfEdit(null); void load() }}
+        />
+      )}
+      {placeLinkEdit && (
+        <LinkEditPopover
+          title="Edit place link"
+          table="gang_places"
+          id={placeLinkEdit.id}
+          role={placeLinkEdit.role}
+          confidence={placeLinkEdit.confidence}
+          note={placeLinkEdit.note}
+          onClose={() => setPlaceLinkEdit(null)}
+          onSaved={() => { setPlaceLinkEdit(null); void load() }}
+        />
+      )}
+      {linkPlaceOpen && <LinkPlaceModal gang={gang} existing={gangPlaces} onClose={() => setLinkPlaceOpen(false)} onSaved={() => { setLinkPlaceOpen(false); void load() }} />}
       {photoOpen && <AddGangPhotoModal gang={gang} onClose={() => setPhotoOpen(false)} onSaved={() => { setPhotoOpen(false); void load() }} />}
-      {attachOpen && <AttachGangModal gang={gang} caseOptions={caseOptions} onClose={() => setAttachOpen(false)} onSaved={() => { setAttachOpen(false); void load() }} />}
+      {attachOpen && <AttachGangModal gang={gang} onClose={() => setAttachOpen(false)} onSaved={() => { setAttachOpen(false); void load() }} />}
       {lightbox && <GangPhotoLightbox media={lightbox} onClose={() => setLightbox(null)} />}
       {children}
     </section>

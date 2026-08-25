@@ -15,7 +15,13 @@ export function useNav() {
   // First path segment is the tab id ('/cases/…' → 'cases'); default 'command'.
   const seg = pathname.split('/')[1] || 'command'
   const activeTab = isValidTab(seg) ? seg : 'command'
-  const activeCategory = activeTab === 'feedback' ? null : (TAB_CATEGORY[activeTab] ?? 'command')
+  // TAB_CATEGORY now covers every PAGE_META tab; null means "belongs to no
+  // category" (profile/owner/command-center/concern/siu/feedback) — no strip
+  // highlight, Subtabs suppressed. The 'command' fallback only guards a tab
+  // somehow missing from the map entirely. (Feedback keeps its explicit
+  // special case — it predates the null entries and must never regress.)
+  const activeCategory: string | null =
+    activeTab === 'feedback' ? null : (TAB_CATEGORY[activeTab] !== undefined ? TAB_CATEGORY[activeTab] : 'command')
 
   const navigate = useCallback(
     (tab: string) => {

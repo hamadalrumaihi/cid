@@ -28,6 +28,8 @@ import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { EntityLink } from '@/components/ui/EntityLink'
 import { EntityLegalLine, fetchEntityLegalRefs, type EntityLegalRef } from '@/components/justice/EntityLegalSection'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
+import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
+import { searchCaseOptions } from '@/components/persons/ProfileRelations'
 
 type PlaceRow = Tables<'places'>
 type GangRow = Tables<'gangs'>
@@ -336,7 +338,7 @@ export function PlacesView() {
           onSaved={() => { setEditor(null); void refresh() }}
         />
       )}
-      {attach && <AttachPlaceModal place={attach} caseOptions={cases} onClose={() => setAttach(null)} />}
+      {attach && <AttachPlaceModal place={attach} onClose={() => setAttach(null)} />}
       {addPhoto && <AddPlacePhotoModal place={addPhoto} onClose={() => setAddPhoto(null)} onSaved={() => { setAddPhoto(null); void refresh() }} />}
       {lightbox && <PhotoLightbox photo={lightbox} onClose={() => setLightbox(null)} />}
     </section>
@@ -570,7 +572,7 @@ function PlaceObservations({ placeId, count }: { placeId: string; count: number 
   )
 }
 
-function PlaceModal({ record, gangs, cases, drugs, onClose, onSaved }: {
+export function PlaceModal({ record, gangs, cases, drugs, onClose, onSaved }: {
   record: PlaceRow | null
   gangs: GangRow[]
   cases: CaseOption[]
@@ -666,17 +668,14 @@ function PlaceModal({ record, gangs, cases, drugs, onClose, onSaved }: {
   )
 }
 
-function AttachPlaceModal({ place, caseOptions, onClose }: { place: PlaceRow; caseOptions: CaseOption[]; onClose: () => void }) {
+function AttachPlaceModal({ place, onClose }: { place: PlaceRow; onClose: () => void }) {
   const { profile } = useAuth()
-  const sorted = useMemo(
-    () => caseOptions.slice().sort((a, b) => (a.case_number || '').localeCompare(b.case_number || '')),
-    [caseOptions],
-  )
-  const [caseId, setCaseId] = useState(place.case_id || sorted[0]?.id || '')
+  const [picked, setPicked] = useState<PickedRecord | null>(null)
   const label = `Place - ${place.name} (${locLabel(place.type)})${place.area ? ` · ${place.area}` : ''}`
 
   const go = async () => {
-    if (!caseId) return
+    if (!picked) return
+    const caseId = picked.id
     // The durable record first (the RegistryAttachModal contract): a
     // case_intel_links row the case Intel tab and search read. The chat post
     // below is only a courtesy breadcrumb.
@@ -686,7 +685,7 @@ function AttachPlaceModal({ place, caseOptions, onClose }: { place: PlaceRow; ca
       else toast(`Attach failed: ${link.error.message}`, 'danger')
       return
     }
-    const num = sorted.find((c) => c.id === caseId)?.case_number || 'case'
+    const num = picked.label || 'case'
     const chat = await insert('case_messages', {
       case_id: caseId,
       author_name: profile?.display_name || 'CID',
@@ -700,22 +699,21 @@ function AttachPlaceModal({ place, caseOptions, onClose }: { place: PlaceRow; ca
   }
 
   return (
-    <Modal open onClose={onClose}>
+    <Modal open onClose={onClose} dirty={() => !!picked}>
       <div className="p-6">
         <ModalHeader title="Attach to case" onClose={onClose} />
         <p className="mb-3 text-sm text-slate-400">Links <span className="text-white">{label}</span> to the case record and posts a reference into the case channel.</p>
-        {sorted.length ? (
-          <>
-            <select value={caseId} onChange={(e) => setCaseId(e.target.value)} aria-label="Case to attach the reference to" className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">
-              {sorted.map((c) => <option key={c.id} value={c.id}>{c.case_number} · {c.title || ''}</option>)}
-            </select>
-            <Button variant="primary" className="mt-4 w-full" onAction={go}>
-              Attach to case
-            </Button>
-          </>
-        ) : (
-          <p className="text-sm text-slate-400">No cases available to attach to.</p>
-        )}
+        <RecordSearchPicker
+          label="Case"
+          required
+          placeholder="Search case number or title…"
+          value={picked}
+          onChange={setPicked}
+          search={searchCaseOptions}
+        />
+        <Button variant="primary" className="mt-4 w-full" onAction={go} disabled={!picked}>
+          Attach to case
+        </Button>
       </div>
     </Modal>
   )

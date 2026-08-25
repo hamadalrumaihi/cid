@@ -27,10 +27,11 @@ import {
   compartmentTypeLabel, fetchCompartments, fetchReviewQueue,
   fetchVisibilityHistory, reasonIsUsable, resolveReview, restrictPreview,
   restrictToSiu, revealPreview, revealToCid, reviewRank, sectionLabel,
-  visibilityActionLabel, visibilityLabel, visibilityTint,
+  visibilityActionLabel,
   type VisibilityEvent, type VisibilityRow,
 } from '@/lib/siuVisibility'
 import { toast } from '@/lib/toast'
+import { AccessBadge } from '@/components/ui/AccessBadge'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -164,9 +165,7 @@ function Row({ row, onAct }: { row: VisibilityRow; onAct: (a: Act) => void }) {
     <li className="rounded-xl border border-white/10 bg-ink-900 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <Badge>{compartmentTypeLabel(row.entity_type)}</Badge>
-        <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${visibilityTint(row.state)}`}>
-          {visibilityLabel(row)}
-        </span>
+        <AccessBadge kind="sib" row={row} />
         {/* The id is the only handle there is: a compartmented record has no
             name here, because reading its name would mean reading the record. */}
         <code className="truncate text-[11px] text-slate-500">{row.entity_id}</code>

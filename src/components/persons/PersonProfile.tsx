@@ -28,6 +28,7 @@ import { safeUrl } from '@/lib/safeUrl'
 import { priorityTint, statusTint } from '@/lib/tint'
 import { toast } from '@/lib/toast'
 import { useNow } from '@/lib/useNow'
+import { pushRecent } from '@/lib/recents'
 import { useWatchlistStore } from '@/lib/watchlist'
 import {
   AlertIcon, ArchiveIcon, DocumentIcon, NetworkIcon, PersonIcon, PlaceIcon, ScaleIcon, StarIcon, TraceIcon, TrashIcon, UndoIcon, VehicleIcon,
@@ -71,9 +72,10 @@ import { BoloStateBadge, LegalSection, ManageBoloModal } from './ProfileLegal'
 import { PersonAccountsSection } from './PersonAccountsSection'
 import { PersonDuplicatesModal } from './PersonMergeModal'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
+import { PinButton } from '@/components/shared/PinButton'
 
 type SectionId = 'overview' | 'identity' | 'relationships' | 'cases' | 'legal' | 'vehicles' | 'accounts' | 'locations' | 'observations' | 'media' | 'activity'
-const SECTION_IDS: SectionId[] = ['overview', 'identity', 'relationships', 'cases', 'legal', 'vehicles', 'locations', 'observations', 'media', 'activity']
+const SECTION_IDS: SectionId[] = ['overview', 'identity', 'relationships', 'cases', 'legal', 'vehicles', 'accounts', 'locations', 'observations', 'media', 'activity']
 
 /** Stable empty fallback so memo deps don't churn while the core loads. */
 const NO_LEGAL: PersonCore['legal'] = []
@@ -157,6 +159,8 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
     + useTableVersion('case_intel_links')
     + useTableVersion('media')
     + useTableVersion('legal_requests')
+    + useTableVersion('gang_members')
+    + useTableVersion('account_links')
 
   // Inside the workspace the section is LOCAL state (a URL write would route
   // back through the redirect shim and remount every open tab); the query
@@ -218,6 +222,8 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
   useEffect(() => {
     loadedKey.current = {}
     for (const s of SECTION_IDS) sectionSeq.current[s] = (sectionSeq.current[s] ?? 0) + 1
+    // Deliberate open of this dossier — record it in the recents trail.
+    pushRecent('person', id)
     const t = window.setTimeout(() => {
       setCore(null)
       setSlices({})
@@ -225,7 +231,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
       void fetchWatch(); void fetchProfiles(); void loadCore()
     }, 0)
     return () => window.clearTimeout(t)
-  }, [loadCore, fetchWatch, fetchProfiles])
+  }, [id, loadCore, fetchWatch, fetchProfiles])
 
   // Realtime bump (never the initial render): refresh the core row.
   const lastRt = useRef(rtKey)
@@ -455,6 +461,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
                 {mayEdit && <Button onClick={() => setAttachOpen(true)}>Attach to case</Button>}
                 {mayEdit && <Button onClick={() => setSummaryOpen(true)}>Add intelligence</Button>}
                 {mayEdit && <Button onClick={() => setAddMedia(true)}>Add media</Button>}
+                <PinButton type="person" id={p.id} label={p.name || undefined} />
                 {/* Hiding a person from CID is done FROM the person, not by
                     finding them again inside the SIU workspace. Renders
                     nothing without the capability. */}

@@ -12,13 +12,16 @@ import Link from 'next/link'
 import { useCallback, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import type { ActionItem } from '@/lib/actionItems'
-import { update } from '@/lib/db'
+import { removeWhere, update } from '@/lib/db'
+import { markRead } from '@/lib/notifications'
 import { useAuth } from '@/lib/auth'
 import { timeAgo, todayISO } from '@/lib/format'
+import { PERMANENT_BUREAUS, bureauShort } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { useNow } from '@/lib/useNow'
 import { Button } from '@/components/ui/Button'
-import { Field, Textarea } from '@/components/ui/Field'
+import { uiConfirm } from '@/components/ui/dialog'
+import { Field, Select, Textarea } from '@/components/ui/Field'
 import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
@@ -44,6 +47,9 @@ const TYPE_FILTERS: { key: string; label: string; types: readonly ActionItem['so
   { key: 'followup', label: 'Follow-ups', types: ['case_followup'] },
   { key: 'blocker', label: 'Blockers', types: ['blocker'] },
   { key: 'surveillance', label: 'Surveillance', types: ['unverified_observation', 'surveillance_expiring'] },
+  { key: 'intel', label: 'Intel', types: ['unassigned_intel'] },
+  { key: 'bolo', label: 'BOLOs', types: ['bolo_expiring'] },
+  { key: 'draft', label: 'Drafts', types: ['draft'] },
   // Library governance is navigation-only by design: acknowledging happens in
   // the reader AFTER reading — never as a one-click inline write here.
   { key: 'library', label: 'Library', types: ['document_ack', 'document_review', 'document_approval', 'document_sync'] },
@@ -63,17 +69,29 @@ const STATUS_FILTERS: Record<string, { label: string; test: (it: ActionItem, tod
 
 /* ── Section model — pre-sorted items partition into ordered queues ──────── */
 
-type SectionKey = 'overdue' | 'returned' | 'personal' | 'command' | 'waiting' | 'activity'
+type SectionKey = 'overdue' | 'returned' | 'personal' | 'command' | 'intel' | 'bolo' | 'waiting' | 'drafts' | 'activity'
 
-const SECTION_ORDER: { key: SectionKey; title: string }[] = [
-  { key: 'overdue', title: 'Overdue' },
-  { key: 'returned', title: 'Returned to you' },
-  { key: 'personal', title: 'Needs your action' },
-  { key: 'command', title: 'Command decisions' },
-  { key: 'waiting', title: 'Waiting on others' },
+/** Every section explains itself: a one-line subtitle saying what belongs
+ *  here, and a specific empty message rendered when the (unfiltered) queue
+ *  has nothing in that lane. `gate` names the viewer flag that must hold for
+ *  the section to render at all when it is empty. */
+const SECTION_ORDER: { key: Exclude<SectionKey, 'activity'>; title: string; subtitle: string; empty: string; gate?: 'isCommand' | 'canEdit' }[] = [
+  { key: 'overdue', title: 'Overdue', subtitle: 'Deadlines that have already passed.', empty: 'Nothing is overdue.' },
+  { key: 'returned', title: 'Returned to you', subtitle: 'Work sent back for changes — revise and resubmit.', empty: 'Nothing has been returned to you.' },
+  { key: 'personal', title: 'Needs your action', subtitle: 'Tasks, reviews and replies waiting on you personally.', empty: 'Nothing is waiting on you personally.' },
+  { key: 'command', title: 'Command decisions', subtitle: 'Approvals and authorizations your command role owns.', empty: 'Nothing is awaiting your command decision.', gate: 'isCommand' },
+  { key: 'intel', title: 'Unassigned intel', subtitle: 'Field intelligence no reviewer has claimed yet.', empty: 'Nothing is awaiting intel review.', gate: 'canEdit' },
+  { key: 'bolo', title: 'Expiring BOLOs', subtitle: 'BOLO windows closing within 7 days — renew or stand down.', empty: 'No BOLOs are close to expiry.', gate: 'canEdit' },
+  { key: 'waiting', title: 'Waiting on others', subtitle: 'Your requests sitting in someone else’s queue — nothing for you to do yet.', empty: 'Nothing of yours is waiting on others.' },
+  { key: 'drafts', title: 'Drafts', subtitle: 'Unfinished work you saved — resume it or discard it.', empty: 'No saved drafts.' },
 ]
 
 function sectionOf(it: ActionItem): SectionKey {
+  // The Wave-3 lanes are keyed by source, not status — a lapsed BOLO stays in
+  // its own section instead of drowning the general Overdue list.
+  if (it.sourceType === 'draft') return 'drafts'
+  if (it.sourceType === 'unassigned_intel') return 'intel'
+  if (it.sourceType === 'bolo_expiring') return 'bolo'
   if (it.status === 'overdue') return 'overdue'
   if (it.status === 'returned') return 'returned'
   if (it.status === 'waiting') return 'waiting'
@@ -100,26 +118,36 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
   )
 }
 
-function QueueSection({ id, title, items, muted, now, onOpen, onAction }: {
+function QueueSection({ id, title, subtitle, emptyText, showWhenEmpty, items, muted, now, onOpen, onAction }: {
   id: SectionKey
   title: string
+  subtitle: string
+  /** Specific empty message for this lane. */
+  emptyText: string
+  /** Filtered views hide empty sections; the full queue explains them. */
+  showWhenEmpty: boolean
   items: ActionItem[]
   muted?: boolean
   now: number
   onOpen: (item: ActionItem) => void
   onAction: (item: ActionItem, kind: InlineActionKind) => Promise<unknown> | void
 }) {
-  if (!items.length) return null
+  if (!items.length && !showWhenEmpty) return null
   return (
     <section aria-labelledby={`ac-sec-${id}`}>
-      <h2 id={`ac-sec-${id}`} className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-slate-400">
+      <h2 id={`ac-sec-${id}`} className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">
         {title} <span className="font-semibold">({items.length})</span>
       </h2>
-      <ul className="space-y-1.5">
-        {items.map((it) => (
-          <ActionItemRow key={it.id} item={it} now={now} muted={muted} onOpen={onOpen} onAction={onAction} />
-        ))}
-      </ul>
+      <p className="mb-2 mt-0.5 text-xs text-slate-400">{subtitle}</p>
+      {items.length ? (
+        <ul className="space-y-1.5">
+          {items.map((it) => (
+            <ActionItemRow key={it.id} item={it} now={now} muted={muted} onOpen={onOpen} onAction={onAction} />
+          ))}
+        </ul>
+      ) : (
+        <EmptyState title={emptyText} />
+      )}
     </section>
   )
 }
@@ -180,7 +208,7 @@ function ResolveBlockerModal({ item, onClose, onResolved }: {
 /* ── The view ─────────────────────────────────────────────────────────────── */
 
 export function ActionCenterView() {
-  const { state, isCommand } = useAuth()
+  const { state, isCommand, canEdit } = useAuth()
   const { items, suppressedCount, loading, refreshing, error, refresh, lastRefreshed } = useActionItems()
   const router = useRouter()
   const pathname = usePathname()
@@ -193,10 +221,12 @@ export function ActionCenterView() {
 
   const fParam = sp.get('f')
   const sParam = sp.get('s')
+  const bParam = sp.get('b')
   const typeFilter = TYPE_FILTERS.find((t) => t.key === fParam) ?? null
   const statusFilter = sParam && STATUS_FILTERS[sParam] ? sParam : null
+  const bureauFilter = bParam && (PERMANENT_BUREAUS as readonly string[]).includes(bParam) ? bParam : null
 
-  const setParam = useCallback((key: 'f' | 's', value: string | null) => {
+  const setParam = useCallback((key: 'f' | 's' | 'b', value: string | null) => {
     const params = new URLSearchParams(sp.toString())
     if (value) params.set(key, value)
     else params.delete(key)
@@ -208,14 +238,16 @@ export function ActionCenterView() {
     const params = new URLSearchParams(sp.toString())
     params.delete('f')
     params.delete('s')
+    params.delete('b')
     const q = params.toString()
     router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false })
   }, [sp, router, pathname])
 
   /** Absorbed unread notifications get read when an item is acted on or its
-   *  deep link is followed — fire-and-forget, the queue refreshes anyway. */
+   *  deep link is followed — fire-and-forget through the shared helper, the
+   *  queue refreshes anyway. */
   const absorb = useCallback((it: ActionItem) => {
-    for (const id of notificationIdsOf(it)) void update('notifications', id, { read: true })
+    void markRead(notificationIdsOf(it))
   }, [])
 
   const runInline = useCallback(async (it: ActionItem, kind: InlineActionKind) => {
@@ -230,12 +262,24 @@ export function ActionCenterView() {
       await refresh()
       return
     }
+    if (kind === 'discard_draft') {
+      // The viewer's own user_drafts row (RLS owner-only) — the finished
+      // record, if one exists, is untouched.
+      const ok = await uiConfirm('Discard this draft? The saved work-in-progress is deleted; anything already saved to the record itself is untouched.', {
+        title: 'Discard draft', confirmText: 'Discard draft',
+      })
+      if (!ok) return
+      const res = await removeWhere('user_drafts', { eq: { key: it.sourceId } })
+      if (res.error) { toast(res.error.message, 'danger'); return }
+      toast('Draft discarded.', 'success')
+      await refresh()
+      return
+    }
     // mark_read — the item's own notification row + any absorbed ones.
     const ids = new Set(notificationIdsOf(it))
     if (it.sourceType === 'mention' || it.sourceType === 'handover' || it.sourceType === 'other') ids.add(it.sourceId)
-    const results = await Promise.all([...ids].map((id) => update('notifications', id, { read: true })))
-    const failed = results.find((r) => r.error)
-    if (failed?.error) { toast(failed.error.message, 'danger'); return }
+    const err = await markRead([...ids])
+    if (err) { toast(err.message, 'danger'); return }
     toast('Marked read.', 'success')
     await refresh()
   }, [absorb, refresh])
@@ -244,11 +288,12 @@ export function ActionCenterView() {
     let out = items
     if (typeFilter) out = out.filter((it) => (typeFilter.types as readonly string[]).includes(it.sourceType))
     if (statusFilter) out = out.filter((it) => STATUS_FILTERS[statusFilter].test(it, today))
+    if (bureauFilter) out = out.filter((it) => it.bureau === bureauFilter)
     return out
-  }, [items, typeFilter, statusFilter, today])
+  }, [items, typeFilter, statusFilter, bureauFilter, today])
 
   const sections = useMemo(() => {
-    const buckets: Record<SectionKey, ActionItem[]> = { overdue: [], returned: [], personal: [], command: [], waiting: [], activity: [] }
+    const buckets: Record<SectionKey, ActionItem[]> = { overdue: [], returned: [], personal: [], command: [], intel: [], bolo: [], waiting: [], drafts: [], activity: [] }
     for (const it of filtered) buckets[sectionOf(it)].push(it)
     return buckets
   }, [filtered])
@@ -281,8 +326,12 @@ export function ActionCenterView() {
 
   if (state !== 'in') return <Notice text="Sign in to view your Action Center." />
 
-  const hasFilter = !!typeFilter || !!statusFilter
+  const hasFilter = !!typeFilter || !!statusFilter || !!bureauFilter
   const showEmpty = !loading && (error == null || items.length > 0) && filtered.length === 0
+  // With the full queue on screen, empty lanes explain themselves; filtered
+  // views (and the all-caught-up state) hide them instead.
+  const explainEmpties = !hasFilter && filtered.length > 0
+  const gates: Record<'isCommand' | 'canEdit', boolean> = { isCommand, canEdit }
 
   return (
     <section className="view-in space-y-5">
@@ -307,24 +356,37 @@ export function ActionCenterView() {
         <>
           <MetricStrip metrics={metrics} />
 
-          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by source type">
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Queue filters">
             <FilterChip active={!typeFilter} onClick={() => setParam('f', null)}>All</FilterChip>
             {TYPE_FILTERS.map((t) => (
               <FilterChip key={t.key} active={typeFilter?.key === t.key} onClick={() => setParam('f', typeFilter?.key === t.key ? null : t.key)}>
                 {t.label}
               </FilterChip>
             ))}
-            {statusFilter && (
-              <button
-                type="button"
-                onClick={() => setParam('s', null)}
-                className="ml-auto inline-flex min-h-[40px] items-center gap-1.5 rounded-full border border-amber-400/25 bg-amber-500/10 px-3 text-xs font-semibold text-amber-200 transition hover:bg-amber-500/15"
+            <span className="ml-auto flex items-center gap-1.5">
+              {statusFilter && (
+                <button
+                  type="button"
+                  onClick={() => setParam('s', null)}
+                  className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full border border-amber-400/25 bg-amber-500/10 px-3 text-xs font-semibold text-amber-200 transition hover:bg-amber-500/15"
+                >
+                  {STATUS_FILTERS[statusFilter].label}
+                  <span aria-hidden>×</span>
+                  <span className="sr-only">— clear status filter</span>
+                </button>
+              )}
+              <Select
+                aria-label="Filter by bureau"
+                value={bureauFilter ?? ''}
+                onChange={(e) => setParam('b', e.target.value || null)}
+                className="w-auto min-w-[9rem] py-2 text-xs"
               >
-                {STATUS_FILTERS[statusFilter].label}
-                <span aria-hidden>×</span>
-                <span className="sr-only">— clear status filter</span>
-              </button>
-            )}
+                <option value="">All bureaus</option>
+                {PERMANENT_BUREAUS.map((b) => (
+                  <option key={b} value={b}>{bureauShort(b)}</option>
+                ))}
+              </Select>
+            </span>
           </div>
 
           {showEmpty && (hasFilter ? (
@@ -342,13 +404,16 @@ export function ActionCenterView() {
             />
           ))}
 
-          {SECTION_ORDER.map(({ key, title }) => (
+          {SECTION_ORDER.map(({ key, title, subtitle, empty, gate }) => (
             <QueueSection
               key={key}
               id={key}
               title={title}
+              subtitle={subtitle}
+              emptyText={empty}
+              showWhenEmpty={explainEmpties && (!gate || gates[gate])}
               items={sections[key]}
-              muted={key === 'waiting'}
+              muted={key === 'waiting' || key === 'drafts'}
               now={now}
               onOpen={absorb}
               onAction={runInline}

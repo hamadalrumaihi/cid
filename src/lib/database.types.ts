@@ -10818,6 +10818,93 @@ export type Database = {
           },
         ]
       }
+      user_drafts: {
+        Row: {
+          data: Json
+          key: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          data?: Json
+          key: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          data?: Json
+          key?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_drafts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_pins: {
+        Row: {
+          created_at: string
+          target_id: string
+          target_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          target_id: string
+          target_type: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          target_id?: string
+          target_type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_pins_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_prefs: {
+        Row: {
+          key: string
+          updated_at: string
+          user_id: string
+          value: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          user_id?: string
+          value?: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          user_id?: string
+          value?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_prefs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       watchlist: {
         Row: {
           created_at: string

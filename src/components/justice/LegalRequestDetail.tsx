@@ -42,7 +42,7 @@ import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { EmptyState, Notice } from '@/components/ui/Notice'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
 import {
-  ClassificationBadge, DeadlineChip, StatusChip, buildLegalViewer, reviewTone,
+  ClassificationBadge, LegalDeadlineChip, StatusChip, buildLegalViewer, reviewTone,
   useLegalPeople, useMyJusticeRole, useMyProsecutorBureaus,
 } from './legalShared'
 import { LegalStageTracker } from './LegalStageTracker'
@@ -436,7 +436,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <StatusChip label={reviewStatusLabel(status)} tone={reviewTone(status)} />
               <StatusChip label={fulfilmentLabel(r.fulfilment_status)} tone="slate" />
-              <DeadlineChip request={r} />
+              <LegalDeadlineChip request={r} />
             </div>
             <p className="mt-2 text-sm text-slate-400">
               <span className="text-slate-300">{r.request_type === 'warrant' ? 'Suspect' : 'Recipient'}:</span> {formatTarget(r)}

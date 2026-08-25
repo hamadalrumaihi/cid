@@ -8,15 +8,14 @@ import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { insert, list, deleteWithUndo, rpc } from '@/lib/db'
 import { caseLink } from '@/lib/caseLinks'
-import { fmtDate, timeAgo } from '@/lib/format'
+import { fmtDate } from '@/lib/format'
 import { CaseProvenance } from '../CaseProvenance'
 import { useAuth } from '@/lib/auth'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useAction } from '@/lib/useAction'
-import { bureauLabel, bureauShort, roleLabel } from '@/lib/roles'
+import { bureauLabel, roleLabel } from '@/lib/roles'
 import { useTableVersion } from '@/lib/realtime'
 import type { CaseAssessment, ClosureChecklistItem, NextAction } from '@/lib/caseWorkflow'
-import { isJtfAssigned, isRoutingBureau } from '@/lib/legalWorkflow'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import type { WorkflowRows } from '../CaseDetail'
@@ -54,12 +53,9 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
     } catch { /* tab can render stale */ }
   }, [c.id])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vA])
-  // Re-stamp the marker when leaving the case, so the next visit's recap covers
-  // what changed while away. new Date() runs only in this browser effect.
-  useEffect(() => {
-    const id = c.id
-    return () => { Store.set(`caseSeen:${id}`, new Date().toISOString()) }
-  }, [c.id])
+  // The marker is RE-STAMPED by CaseDetail when the case itself unmounts (or
+  // the id changes) — it used to happen here on unmount, so switching to any
+  // other tab consumed the recap mid-visit.
 
   const recap = useMemo(() => {
     if (!seenAt || !wf) return null
@@ -103,33 +99,16 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
         </div>
         {/* Right — context: case facts, people, linked legal work. */}
         <div className="min-w-0 space-y-4">
-          {/* Case facts the shell's MetricStrip doesn't carry — evidence/report
-              counts live up there now, so these tiles stay non-duplicative. */}
+          {/* Case facts the compact command header doesn't carry — Lead and
+              Updated live up there now (with Unit/Responsible), so only the
+              non-duplicative tiles remain. */}
           <div className="grid grid-cols-2 gap-3">
-            <Stat label="Lead" value={officerName(c.lead_detective_id) || 'Unassigned'} />
             <Stat label="Officers" value={standardRows.filter((a) => isActiveAssignment(a)).length} />
             <Stat label="Opened" value={fmtDate(c.created_at)} />
-            <Stat label="Updated" value={timeAgo(c.updated_at).toUpperCase()} />
           </div>
           {/* Why this investigation exists. Renders nothing when the case was
               not built on intelligence, which is most of them. */}
           <CaseProvenance caseId={c.id} />
-          {/* JTF-assigned cases: the operational unit vs the responsible bureau
-              that routes legal requests (originating_bureau — RPC-managed). */}
-          {isJtfAssigned(c) && (
-            <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
-              <div className="flex items-start justify-between gap-3 py-0.5">
-                <span className="text-xs uppercase tracking-[0.16em] text-slate-500">Assigned unit</span>
-                <span className="text-right text-sm text-slate-200">JTF (operational)</span>
-              </div>
-              <div className="flex items-start justify-between gap-3 py-0.5">
-                <span className="text-xs uppercase tracking-[0.16em] text-slate-500">Responsible bureau</span>
-                {isRoutingBureau(c.originating_bureau)
-                  ? <span className="text-right text-sm text-slate-200">{bureauShort(c.originating_bureau)} — routes legal requests</span>
-                  : <span className="text-right text-sm text-amber-300">Not set — required for legal routing</span>}
-              </div>
-            </div>
-          )}
           <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-bold text-white">Assigned Officers</h3>

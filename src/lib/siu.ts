@@ -935,10 +935,13 @@ export const siuWatchEntityLabel = (t?: string | null) =>
   (t && SIU_WATCH_ENTITY_LABEL[t]) || t || '—'
 export const siuWatchStatusLabel = (s?: string | null) =>
   (s && SIU_WATCH_STATUS_LABEL[s]) || s || '—'
+/** House temperature (lib/tint priorityTint): critical → rose, high → amber,
+ *  elevated → blue (accent-remapped), routine/unknown → neutral. Orange was a
+ *  palette one-off, not a signal — the label always rides alongside. */
 export const siuWatchPriorityTint = (p?: string | null): string =>
   p === 'critical' ? 'bg-rose-500/15 text-rose-300'
-  : p === 'high_priority' ? 'bg-orange-500/15 text-orange-300'
-  : p === 'priority' ? 'bg-amber-500/15 text-amber-300'
+  : p === 'high_priority' ? 'bg-amber-500/15 text-amber-300'
+  : p === 'priority' ? 'bg-blue-500/15 text-blue-300'
   : 'bg-white/5 text-slate-300'
 
 /** One row of `siu_watchlist_live()`.
@@ -1029,10 +1032,12 @@ export const SIU_TARGET_PRIORITY_LABEL: Record<string, string> = {
   low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical',
 }
 
+/** Same temperature as lib/tint priorityTint: critical → rose, high → amber,
+ *  medium → blue (accent-remapped), low/unknown → neutral. */
 export const siuTargetPriorityTint = (p?: string | null): string =>
   p === 'critical' ? 'bg-rose-500/15 text-rose-300'
-  : p === 'high' ? 'bg-orange-500/15 text-orange-300'
-  : p === 'medium' ? 'bg-amber-500/15 text-amber-300'
+  : p === 'high' ? 'bg-amber-500/15 text-amber-300'
+  : p === 'medium' ? 'bg-blue-500/15 text-blue-300'
   : 'bg-white/5 text-slate-300'
 
 /** One row of `siu_targets_live()`. `display_name` is joined from the registry

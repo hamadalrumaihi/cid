@@ -31,8 +31,11 @@ any feedback. Never `alert()`.
 
 ## `ui/DataTable.tsx`
 Declarative columns (`value()` feeds sort/filter/CSV; optional `render()`,
-`sortValue`, hidden `searchText`); pagination; CSV export guarded against
-formula injection (`csvCell`, unit-tested). Currently used by AuditView.
+`sortValue`, hidden `searchText`); pagination + page-size options; sticky
+header; row selection (shift-range, select-all, disabled rows) for bulk
+actions; `mobileCard` narrow fallback; keyboard-activatable rows; CSV
+export guarded against formula injection (`csvCell`, unit-tested). Used by
+AuditView, CasesView and PersonsView.
 **Reuse when**: any tabular list — don't hand-roll another table.
 
 ## `ui/RichEditor.tsx`
@@ -68,6 +71,48 @@ don't re-inline the pattern.
   joint-case access expiry (OverviewTab), case follow-ups (CaseDetail).
   **Reuse when**: any surface shows a due/expiry timestamp — same
   vocabulary everywhere.
+
+## The UX-pass shared set (2026-08-25)
+Extracted or introduced by the portal-wide UX pass — same rule: reuse, don't
+re-inline.
+
+- **`ui/StatusBadge.tsx` + `lib/status.ts`** — THE status chip. Every
+  status vocabulary (case, stage, sign-off, legal review, warrant, field
+  submission, priority, threat, confidence, provenance, BOLO risk, seized
+  items, person review, account ownership, charges) renders through the
+  central registry: consistent label + tint, a tooltip carrying the
+  status's meaning and (for workflows) who acts next. **Reuse when**: any
+  status renders as a chip — never hand-pick chip classes for a status
+  again.
+- **`ui/AccessBadge.tsx`** — one chip for the three access vocabularies
+  (SIB visibility, legal classification, SOP classification) with
+  who-can-access titles. **Reuse when**: a record's access level renders.
+- **`ui/SaveState.tsx` + `lib/userDrafts.ts`** — the autosave layer:
+  debounced DB-backed drafts (`user_drafts`) with a per-user local mirror
+  and the Saving/Saved/Offline chip. Used by report forms, case
+  notes/chat, person/gang creation, intel summaries. **Reuse when**: any
+  long-form input should never lose work. (The legal wizard keeps its own
+  stash flow deliberately.)
+- **`ui/RecordPeek.tsx` + `shared/RecordPeekButton.tsx` +
+  `lib/entityPreview.ts`** — the "is this the record I think it is?"
+  preview card (lite RLS-scoped projection, status chips, linked counts,
+  access-restricted stub for invisible rows). **Reuse when**: a linked
+  record deserves a glance without navigation.
+- **`shared/LinkEditPopover.tsx`** — the ONE editor for an existing
+  relationship-link row (confidence / current-historical-disputed status /
+  role / note) over the link tables' UPDATE policies; the server-side
+  `audit_detail` triggers record old/new content. **Reuse when**: any link
+  table gains an editable attribute — never delete-and-recreate.
+- **`shared/RecordSearchPicker.tsx`** — bounded, RLS-scoped search picker
+  for attaching registry records. **Reuse when**: any "link a record" flow.
+- **`shared/DuplicateMatches.tsx`** — non-blocking duplicate hints under
+  the name/plate field of the Person/Gang/Vehicle create modals.
+- **`shared/PinButton.tsx` + `lib/pins.ts`** — pin toggle (person,
+  vehicle, gang, account, narcotics profiles + case headers).
+- **`shell/CreateHost.tsx`** — the universal "+ Create" provider:
+  `useCreate().open(kind)` opens the exact exported registry modal,
+  lazy-loaded, permission-gated. **Reuse when**: any surface wants a
+  create shortcut — never fork a second copy of a create form.
 
 ## `cases/WatchButton.tsx`
 Follow/unfollow for `case|person|vehicle`. Stops propagation (works inside

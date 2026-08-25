@@ -7,7 +7,7 @@
  *  flight, so the queue never flashes empty. */
 import { useCallback, useEffect, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { buildActionItems, type AcDoc, type AcGrant, type AcHold, type AcMemberTransfer, type AcObservation, type AcSuggestion, type AcSurvTarget, type ActionItem, type ActionSources } from '@/lib/actionItems'
+import { buildActionItems, type AcBoloPerson, type AcDoc, type AcDraft, type AcFieldSubmission, type AcGrant, type AcHold, type AcMemberTransfer, type AcObservation, type AcSuggestion, type AcSurvTarget, type ActionItem, type ActionSources } from '@/lib/actionItems'
 import {
   ackState, canApproveDoc, docTitle, reviewState,
   type MyAckVersions, type ShelfDoc,
@@ -56,6 +56,14 @@ const DOC_COLS =
 /** Document-suggestion projection — RLS already scopes visibility to the
  *  submitter and the managers, so no body/thread columns are ever fetched. */
 const SUGGESTION_COLS = 'id,title,status,document_id,created_by,assigned_editor,created_at,updated_at'
+/** My saved drafts — the KEY only; payload contents are never fetched. */
+const DRAFT_COLS = 'key,updated_at'
+/** Unclaimed field-intel projection — mirrors AcFieldSubmission exactly. */
+const FIELD_COLS = 'id,submission_no,summary,status,assigned_to,jurisdiction,submitted_at,created_at,updated_at'
+/** Review-active lane — fieldReview's OPEN_STATUSES values. */
+const FIELD_OPEN = ['new', 'reviewing', 'needs_info']
+/** BOLO-expiry projection — mirrors AcBoloPerson exactly. */
+const BOLO_COLS = 'id,name,bolo,bolo_expires_at,bolo_risk,updated_at'
 
 const TRANSFER_PENDING = ['pending_source', 'pending_target']
 
@@ -123,7 +131,7 @@ export interface ActionItemsResult {
 export function useActionItems(): ActionItemsResult {
   const auth = useAuth()
   const siu = useSiu()
-  const { profile, state, isCommand, isOwner, justiceRole } = auth
+  const { profile, state, isCommand, isOwner, justiceRole, canEdit } = auth
   // The legal branch's disposition viewer needs live prosecutor bureaus so
   // bureau-awareness rows are recognised (and never shown as assigned work).
   const prosecutorBureaus = useMyProsecutorBureaus()
@@ -151,6 +159,12 @@ export function useActionItems(): ActionItemsResult {
   const vGrants = useTableVersion('restricted_access_grants')
   const vSurvObs = useTableVersion('surveillance_observations')
   const vSurvTgt = useTableVersion('surveillance_targets')
+  const vDrafts = useTableVersion('user_drafts')
+  const vPersons = useTableVersion('persons')
+  // NOTE: field_submissions is NOT in the realtime publication — this counter
+  // never moves (silent no-op). The unclaimed-intel rows still refresh on
+  // every other trigger (visibility catch-up, manual Refresh, sibling bumps).
+  const vFieldSubs = useTableVersion('field_submissions')
 
   const refresh = useCallback(async () => {
     if (state !== 'in' || !profile) return
@@ -168,15 +182,20 @@ export function useActionItems(): ActionItemsResult {
     }
     try {
       const me = profile.id
-      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks, suggestionRows, holds, restrictedGrants, survObservations, survTargetRows, justiceMembershipRows, memberTransfers] =
+      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks, suggestionRows, holds, restrictedGrants, survObservations, survTargetRows, justiceMembershipRows, memberTransfers, myDrafts, fieldSubmissions, boloPersons] =
         await Promise.all([
-          list('cases', { select: CASE_COLS, is: { archived_at: null } }),
+          // Bounded: newest-first so the AWAITING/returned/follow-up branches
+          // and the caseById context map keep the live working set — an
+          // archived-out backlog beyond the bound only loses cosmetic case
+          // context on very old tasks/blockers, never queue items.
+          list('cases', { select: CASE_COLS, is: { archived_at: null }, order: 'updated_at', ascending: false, limit: 400 }),
           list('case_tasks', { select: TASK_COLS, eq: { assignee: me, done: false } }),
           list('transfer_requests', { select: TRANSFER_COLS, in: { status: TRANSFER_PENDING } }),
           list('case_access_requests', { select: ACCESS_COLS, eq: { status: 'pending' } }),
           // Fail-closed: legal is RLS-sealed for some viewers — a denied read
-          // contributes nothing and must never sink the whole page.
-          list('legal_requests', { select: LEGAL_COLS }).catch(() => []),
+          // contributes nothing and must never sink the whole page. Bounded
+          // newest-first like cases (terminal rows age out of the window).
+          list('legal_requests', { select: LEGAL_COLS, order: 'updated_at', ascending: false, limit: 200 }).catch(() => []),
           list('case_blockers', { select: BLOCKER_COLS, eq: { owner_id: me, status: 'open' } }),
           list('notifications', {
             select: NOTIF_COLS,
@@ -239,6 +258,25 @@ export function useActionItems(): ActionItemsResult {
           // Open member transfers — only viewers who could hold a stage
           // decision fetch (command/owner/justice); RLS trims the rest.
           canAdmin || justiceRole ? fetchMemberTransfers() : Promise.resolve([] as AcMemberTransfer[]),
+          // My saved drafts (user_drafts is RLS owner-only; the explicit eq
+          // is belt-and-braces). Keys + timestamps only — never payloads.
+          list('user_drafts', { select: DRAFT_COLS, eq: { user_id: me }, order: 'updated_at', ascending: false, limit: 50 })
+            .then((r) => r as unknown as AcDraft[]).catch(() => [] as AcDraft[]),
+          // Unclaimed review-active field intel — active reviewers only
+          // (canEdit mirrors profiles.active, the RLS is_active() gate the
+          // Intelligence queue itself relies on). Bounded + fail-open.
+          canEdit
+            ? list('field_submissions', {
+                select: FIELD_COLS, is: { assigned_to: null, deleted_at: null },
+                in: { status: FIELD_OPEN }, order: 'created_at', ascending: false, limit: 100,
+              }).then((r) => r as unknown as AcFieldSubmission[]).catch(() => [] as AcFieldSubmission[])
+            : Promise.resolve([] as AcFieldSubmission[]),
+          // Live BOLO subjects — editors only (the builder re-gates on
+          // canManageBolos); slim projection, expiry filtering in the model.
+          canEdit
+            ? list('persons', { select: BOLO_COLS, eq: { bolo: true }, limit: 200 })
+                .then((r) => r as unknown as AcBoloPerson[]).catch(() => [] as AcBoloPerson[])
+            : Promise.resolve([] as AcBoloPerson[]),
         ])
       const nowMs = Date.now()
       // Command/owner: the shared awaitingCount (submitted + actionable
@@ -314,6 +352,10 @@ export function useActionItems(): ActionItemsResult {
         restrictedGrants,
         observations: survObservations,
         survTargets: survTargetRows,
+        myDrafts,
+        fieldSubmissions,
+        boloPersons,
+        canManageBolos: canEdit,
         notifications,
         documents,
         suggestions,
@@ -326,10 +368,10 @@ export function useActionItems(): ActionItemsResult {
     } finally {
       setRefreshing(false)
     }
-  }, [state, profile, isCommand, isOwner, justiceRole, fetchProfiles, auth, prosecutorBureaus, siu.isCommand])
+  }, [state, profile, isCommand, isOwner, justiceRole, canEdit, fetchProfiles, auth, prosecutorBureaus, siu.isCommand])
 
   useEffect(() => {
-    // A version-driven refetch fans out ~13 queries — pointless while the tab
+    // A version-driven refetch fans out ~21 queries — pointless while the tab
     // is hidden. Skip it and run ONE catch-up refetch when the tab returns to
     // visible (the effect re-arms per bump, so `missed` covers this cycle).
     let missed = false
@@ -345,7 +387,7 @@ export function useActionItems(): ActionItemsResult {
       window.clearTimeout(id)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs, vDocuments, vSuggestions, vHolds, vGrants, vSurvObs, vSurvTgt, vJusticeMemberships, vMemberTransfers])
+  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs, vDocuments, vSuggestions, vHolds, vGrants, vSurvObs, vSurvTgt, vJusticeMemberships, vMemberTransfers, vDrafts, vPersons, vFieldSubs])
 
   return {
     items: built?.items ?? [],

@@ -12,7 +12,7 @@
  *  to SHOW — RLS and the RPCs re-decide server-side. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Tables, TablesUpdate } from '@/lib/database.types'
-import { insert, list, rpc, updateWhere, withRetry } from '@/lib/db'
+import { list, rpc, upsert, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { renderDocumentMarkdown } from '@/lib/markdown'
 import { indexSections, sectionsStale } from '@/lib/docSections'
@@ -55,14 +55,12 @@ const bodyOf = (d: DocRow): string => {
   return ''
 }
 
-/** Best-effort per-user reading state write (composite key, no upsert helper
- *  in lib/db): update-first, insert when the row doesn't exist yet. Never
- *  throws — personalization must not break reading. */
+/** Best-effort per-user reading state write — one round trip via the shared
+ *  upsert helper on the (user_id, document_id) composite key. Never throws —
+ *  personalization must not break reading. */
 async function upsertUserState(documentId: string, userId: string, patch: TablesUpdate<'document_user_state'>): Promise<void> {
   try {
-    const res = await updateWhere('document_user_state', { eq: { document_id: documentId, user_id: userId } }, patch)
-    if (res.error || (res.data?.length ?? 0) > 0) return
-    await insert('document_user_state', { document_id: documentId, user_id: userId, ...patch })
+    await upsert('document_user_state', { document_id: documentId, user_id: userId, ...patch }, 'user_id,document_id')
   } catch { /* best-effort */ }
 }
 

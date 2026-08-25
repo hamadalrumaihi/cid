@@ -10,9 +10,9 @@
  *  the end. Static content, no fetches. */
 import { NAV_CATEGORIES, TAB_LABEL } from '@/lib/nav'
 import { statusTint } from '@/lib/tint'
-import { visibilityTint } from '@/lib/siuVisibility'
 import { fieldStatusLabel } from '@/lib/fieldSubmissions'
 import { renderMarkdown } from '@/lib/markdown'
+import { AccessBadge } from '@/components/ui/AccessBadge'
 import { CASE_TAB_GROUPS, CASE_TAB_LABELS } from '@/components/cases/caseTabs'
 import {
   AlertIcon, ArchiveIcon, BellIcon, CalendarIcon, CategoryIcon, CheckIcon, ClockIcon,
@@ -465,10 +465,10 @@ export function GuideView() {
       {/* SIB visibility */}
       <Section id="siu" title="SIB visibility, in plain terms" blurb="Shared registries are one dataset — SIB can take a record out of CID's view, and give it back.">
         <div className="flex flex-wrap gap-1.5" aria-hidden>
-          <span className={`rounded px-2 py-1 text-[11px] font-semibold ${visibilityTint('siu_only')}`}>SIB only</span>
-          <span className={`rounded px-2 py-1 text-[11px] font-semibold ${visibilityTint('partial')}`}>Sections restricted</span>
-          <span className={`rounded px-2 py-1 text-[11px] font-semibold ${visibilityTint('revealed')}`}>Revealed to CID</span>
-          <span className={`rounded px-2 py-1 text-[11px] font-semibold ${visibilityTint('unclassified')}`}>Origin not established</span>
+          <AccessBadge kind="sib" value="siu_only" />
+          <AccessBadge kind="sib" value="partial" label="Sections restricted" />
+          <AccessBadge kind="sib" value="revealed" />
+          <AccessBadge kind="sib" value="unclassified" />
         </div>
         <ul className="mt-3 space-y-1.5 text-xs leading-relaxed text-slate-400">
           <li><b className="text-slate-200">Restrict to SIB</b> hides a whole record, or only its sensitive sections, from CID — with a written reason CID never sees.</li>

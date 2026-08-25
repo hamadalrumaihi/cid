@@ -8,6 +8,100 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Portal-wide UX pass — 2026-08-25
+
+One coordinated usability pass across the whole portal. No permissions or
+RLS semantics changed anywhere in it — every new surface renders what the
+viewer's own policies already allow.
+
+**Search & create**
+- Universal search (Cmd/Ctrl-K) now also reaches BOLOs, case tasks,
+  intelligence submissions and division members (never emails), alongside
+  cases, reports, evidence, operations, legal requests, persons, gangs,
+  places, vehicles, accounts, narcotics, ballistics, documents and charges.
+  Results are grouped with per-kind tags; record hits open as Investigative
+  Tools record tabs; task hits deep-link the case Tasks tab. `search_all`
+  gained `bolo`/`task` arms + a `case_tasks` trgm index (`20260826010000`).
+- Palette commands are permission-gated: Go-to entries for Owner, Command
+  and SIB surfaces are no longer listed for everyone; a New-record command
+  set runs through the new universal **+ Create** header button
+  (`shell/CreateHost.tsx` — lazy-loaded exported registry modals for
+  case/person/vehicle/gang/place/account/indicator/operation/SIB
+  investigation; bottom sheet on mobile). Palette is full-screen on phones.
+
+**Pins, recents & saved views**
+- Pins (`src/lib/pins.ts` over the new `user_pins` table) follow the member
+  across devices; recents (`src/lib/recents.ts`) are a device-local
+  ids-only trail. Both feed the Command dashboard "Jump back in" strip with
+  Clear-history; titles are RLS-resolved at render, so records the viewer
+  lost access to disappear silently.
+- Saved views (`src/lib/savedViews.ts` over `user_prefs`) on the Cases,
+  Persons, Legal and BOLO lists — rename, per-list default, cross-device;
+  legacy device-local case views are migrated automatically.
+
+**Case workspace**
+- Case sections keep their state when switching (keep-alive, per-tab scroll
+  restore); section pills carry live counts and attention markers; the
+  header is a compact two-line jacket; a phone-width section switcher
+  replaces the overflowing strip; the "since your last visit" recap is no
+  longer consumed by tab switches (seen-stamp written on case exit).
+- Advisory case-health chips (`src/lib/caseHealth.ts`, pure/clock-injected;
+  rendered by `cases/CaseHealthRow.tsx`): no lead / no summary / quiet 14d+
+  / overdue tasks / draft reports / returned legal / undescribed evidence —
+  each chip explains itself and deep-links its section; nothing blocks any
+  workflow. Command gets a "Needs attention" case filter and per-row
+  attention counts built on the same flags.
+- Bulk actions on the case list: set status (open/active/cold), assign lead
+  (command-only), archive/restore — preview confirms, read-only-row skips,
+  chunked progress. Closing stays per-case through sign-off; no bulk
+  delete, ever.
+
+**Relationship-first records**
+- Existing relationship links are editable (`shared/LinkEditPopover.tsx`):
+  confidence, current/historical/disputed status, role and note — instead
+  of delete-and-recreate. The relationship audit now snapshots old/new link
+  content (`private.audit_detail()`), and `case_intel_links` gained its
+  missing UPDATE policy (legal hold still vetoes).
+- Bounded search pickers for linking; RecordPeek preview panels
+  (`ui/RecordPeek` + `src/lib/entityPreview.ts`); new panels — vehicle
+  linked people, gang accounts & narcotics, account surveillance history;
+  non-blocking duplicate-match warnings when creating persons/gangs/
+  vehicles; pin buttons on record profiles.
+
+**Autosave**
+- Drafts sync to the server (`src/lib/userDrafts.ts` over `user_drafts`:
+  debounced upsert, per-user local mirror closing the shared-terminal leak,
+  offline degradation) with a Saving/Saved/Offline chip (`ui/SaveState`) on
+  reports, case notes, chat, person/gang creation and intel summaries;
+  restore banners with explicit Discard; saved drafts surface in the Action
+  Center. The legal wizard keeps its own stash flow.
+
+**Action Center & notifications**
+- New Action Center lanes — Unassigned intel, Expiring BOLOs, Drafts — with
+  why-it's-here and next-action copy, type/bureau filters and specific
+  empty states.
+- Notifications group by case/record with accurate unread counts, one-click
+  mark-all and per-category mutes for OPTIONAL streams only (assignments,
+  mentions, sign-off decisions, legal and security can never be muted);
+  identical unread duplicates are suppressed server-side within 1 hour.
+
+**Status & access consistency**
+- One status vocabulary through the central registry (`src/lib/status.ts` +
+  `ui/StatusBadge`) with meaning / who-acts-next tooltips; the warrant
+  return state is labeled **"Return filed"** to stop colliding with the
+  legal-review "Returned for revision". Access badges (`ui/AccessBadge`)
+  render the SIB visibility / legal classification / SOP classification
+  vocabularies consistently.
+
+**Database** (`20260826010000_ux_personalization.sql`, applied live and
+mapped in `supabase/MIGRATION-HISTORY.md`)
+- Three per-user tables — `user_pins`, `user_drafts`, `user_prefs` —
+  owner-only RLS, no audit triggers, no realtime, size-capped jsonb.
+- `private.audit_detail()` old/new snapshots on the relationship-link
+  tables; `case_intel_links` UPDATE policy (role/note editable);
+  `create_notification` 1-hour identical-unread dedupe; `search_all`
+  bolo/task arms.
+
 ### Investigative Tools workspace
 
 **Fourteen intelligence tabs, one nav item.** The Intelligence category's

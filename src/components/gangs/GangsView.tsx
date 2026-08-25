@@ -13,6 +13,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { useRegistry } from '@/lib/useRegistry'
 import { useNow } from '@/lib/useNow'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/Button'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
@@ -218,7 +219,7 @@ export function GangsView() {
                 </span>
               )}
               {canEdit && (
-                <button onClick={() => setEditor('new')} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">+ New Gang</button>
+                <Button variant="primary" onClick={() => setEditor('new')}>+ New Gang</Button>
               )}
             </>
           }

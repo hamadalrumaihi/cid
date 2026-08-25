@@ -457,7 +457,7 @@ function ConvertToJtfModal({ open, op, viewerDivision, onClose, onDone }: {
   )
 }
 
-function OperationModal({ open, record, viewer, onClose, onSaved }: { open: boolean; record: OperationRow | null; viewer: OpViewer; onClose: () => void; onSaved: () => void }) {
+export function OperationModal({ open, record, viewer, onClose, onSaved }: { open: boolean; record: OperationRow | null; viewer: OpViewer; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState('')
   const [status, setStatus] = useState('active')
   const [description, setDescription] = useState('')

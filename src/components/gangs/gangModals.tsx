@@ -1,17 +1,21 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { insert, list, rpc, update } from '@/lib/db'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ilikeAny, insert, list, rpc, update } from '@/lib/db'
 import type { TablesInsert } from '@/lib/database.types'
+import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/lib/toast'
 import { safeUrl } from '@/lib/safeUrl'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { parseIntelSummary } from '@/lib/jsonShapes'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { SaveState } from '@/components/ui/SaveState'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
+import { searchCaseOptions } from '@/components/persons/ProfileRelations'
 import { useToolNav } from '@/components/tools/useToolNav'
 import {
   CONFIDENCE_LEVELS, GANG_CLASSIFICATIONS, GANG_STATUSES, PROVENANCE_KINDS, SUMMARY_SECTIONS, TURF_STATUSES, humanize,
@@ -21,6 +25,26 @@ import { MEMBER_CONFIDENCE, MEMBER_STATUSES, RANK_SUGGEST, type CaseOption, type
 const input = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
 const label = 'mb-1 block text-xs font-semibold text-slate-400'
 interface Officer { id: string; display_name: string | null }
+
+/** Everything the CREATE gang form types — stashed under `gang:new`
+ *  (userDrafts) so a refresh mid-entry loses nothing. On EDIT only the
+ *  structured-intel textareas are drafted (`gang:intel:<id>`); the scalar
+ *  fields' source of truth is the row. Key order must match the draftJson
+ *  literal in GangModal (JSON equality). */
+interface GangDraftShape {
+  name: string; aliases: string; colors: string; threat: ThreatLevel
+  classification: string; status: string; confidence: string; lead: string
+  notes: string; summary: Record<string, string>
+}
+
+const GANG_DRAFT_KEY = 'gang:new'
+
+const EMPTY_GANG_DRAFT: GangDraftShape = {
+  name: '', aliases: '', colors: '', threat: 'medium',
+  classification: '', status: '', confidence: '', lead: '',
+  notes: '', summary: {},
+}
+const EMPTY_GANG_DRAFT_JSON = JSON.stringify(EMPTY_GANG_DRAFT)
 
 export function GangModal({ record, onClose, onSaved }: { record: GangRow | null; onClose: () => void; onSaved: () => void }) {
   const { profile } = useAuth()
@@ -43,7 +67,94 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
       .catch(() => setOfficers([]))
   }, [])
 
+  // Duplicate hint at create time — bounded ilike name search, never blocking.
+  const [dupes, setDupes] = useState<DuplicateMatch[]>([])
+  useEffect(() => {
+    if (record) return // edit mode — the record IS the existing one
+    const q = name.trim()
+    let live = true
+    const t = window.setTimeout(async () => {
+      if (q.length < 2) { if (live) setDupes([]); return }
+      const or = ilikeAny(['name', 'aliases'], q)
+      if (!or) { if (live) setDupes([]); return }
+      const rows = await list('gangs', { select: 'id,name,aliases', or, limit: 5 })
+        .then((r) => r as unknown as { id: string; name: string; aliases: string | null }[]).catch(() => [])
+      if (!live) return
+      setDupes(rows.slice(0, 3).map((g) => ({ type: 'gang', id: g.id, label: g.name, sublabel: g.aliases ? `aka ${g.aliases}` : undefined })))
+    }, 400)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [name, record])
+
   const setSection = (k: string, v: string) => setSummary((s) => ({ ...s, [k]: v }))
+
+  // ── Drafts (userDrafts) ───────────────────────────────────────────────────
+  // Create: the whole form under 'gang:new'. Edit: the structured-intel
+  // textareas only, under 'gang:intel:<id>'. Restored on reopen behind a
+  // dismissible banner; cleared on a successful save; kept on cancel.
+  const draftKey = record ? `gang:intel:${record.id}` : GANG_DRAFT_KEY
+  const draftState = useDraftState(draftKey)
+  const [draftBanner, setDraftBanner] = useState(false)
+  const initialSummaryJson = useMemo(() => JSON.stringify(parseIntelSummary(record?.intelligence_summary)), [record])
+  const applyCreateDraft = useCallback((s: GangDraftShape) => {
+    setName(s.name); setAliases(s.aliases); setColors(s.colors); setThreat(s.threat)
+    setClassification(s.classification); setStatus(s.status); setConfidence(s.confidence)
+    setLead(s.lead); setNotes(s.notes)
+    setSummary(s.summary && typeof s.summary === 'object' ? s.summary : {})
+  }, [])
+  const draftJson = record
+    ? JSON.stringify(summary)
+    : JSON.stringify({ name, aliases, colors, threat, classification, status, confidence, lead, notes, summary } satisfies GangDraftShape)
+  const pristineJson = record ? initialSummaryJson : EMPTY_GANG_DRAFT_JSON
+  const draftJsonRef = useRef(draftJson)
+  useEffect(() => { draftJsonRef.current = draftJson })
+  // Restore once on mount — never over something already typed.
+  useEffect(() => {
+    let live = true
+    void loadDraft<GangDraftShape | Record<string, string>>(draftKey).then((d) => {
+      if (!live || !d?.data || draftJsonRef.current !== pristineJson) return
+      if (record) {
+        const s = d.data as Record<string, string>
+        if (JSON.stringify(s) === initialSummaryJson) return
+        setSummary(s)
+      } else {
+        applyCreateDraft({ ...EMPTY_GANG_DRAFT, ...(d.data as GangDraftShape) })
+      }
+      setDraftBanner(true)
+    })
+    return () => { live = false }
+  }, [draftKey, pristineJson, record, initialSummaryJson, applyCreateDraft])
+  // Autosave while dirty; clear (once) when typed back to pristine. Drafts
+  // only — the gangs row is written by Save alone.
+  const wroteDraft = useRef(false)
+  useEffect(() => {
+    if (draftJson === pristineJson) {
+      if (wroteDraft.current) { wroteDraft.current = false; void clearDraft(draftKey) }
+      return
+    }
+    wroteDraft.current = true
+    void saveDraft(draftKey, JSON.parse(draftJson) as unknown)
+  }, [draftKey, draftJson, pristineJson])
+  const discardDraft = () => {
+    wroteDraft.current = false
+    void clearDraft(draftKey)
+    if (record) setSummary(parseIntelSummary(record.intelligence_summary))
+    else applyCreateDraft(EMPTY_GANG_DRAFT)
+    setDraftBanner(false)
+  }
+
+  // Dirty guard (Modal confirms before discarding) — form state vs the
+  // initial record, same idea as CaseModal's.
+  const dirty = () =>
+    name !== (record?.name || '')
+    || aliases !== (record?.aliases || '')
+    || colors !== (record?.colors || '')
+    || threat !== (record?.threat_level || 'medium')
+    || classification !== (record?.classification || '')
+    || status !== (record?.status || '')
+    || confidence !== (record?.confidence || '')
+    || lead !== (record?.lead_detective_id || '')
+    || notes !== (record?.notes || '')
+    || JSON.stringify(summary) !== JSON.stringify(parseIntelSummary(record?.intelligence_summary))
 
   const save = async (markReviewed = false) => {
     if (!name.trim()) { toast('Gang name is required.', 'warn'); return }
@@ -70,16 +181,41 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
     const res = record ? await update('gangs', record.id, payload) : await insert('gangs', payload)
     setBusy(false)
     if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
+    wroteDraft.current = false
+    void clearDraft(draftKey)
     toast(record ? 'Gang updated' : 'Gang created', 'success')
     onSaved()
   }
 
   return (
-    <Modal open wide onClose={onClose}>
+    <Modal open wide onClose={onClose} dirty={dirty}>
       <div className="max-h-[85vh] overflow-y-auto p-6">
-        <ModalHeader title={`${record ? 'Edit' : 'New'} Gang`} onClose={onClose} />
+        <ModalHeader
+          title={record ? 'Edit Gang' : (
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              New Gang
+              <SaveState status={draftState.status} lastSavedAt={draftState.lastSavedAt} />
+            </span>
+          )}
+          onClose={onClose}
+        />
+        {draftBanner && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2">
+            <p className="text-xs text-amber-200">
+              {record ? 'Draft restored — unsaved structured-intel edits from last time.' : 'Draft restored — your unsaved entry from last time.'}
+            </p>
+            <span className="flex items-center gap-1">
+              <button type="button" onClick={discardDraft} className="rounded-md px-2 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/10 hover:text-white">Discard draft</button>
+              <button type="button" onClick={() => setDraftBanner(false)} aria-label="Dismiss restored-draft notice" className="grid h-8 w-8 place-items-center rounded-md text-amber-200/70 hover:bg-amber-500/10 hover:text-white">✕</button>
+            </span>
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div><label htmlFor="gang-name" className={label}>Name *</label><input id="gang-name" value={name} onChange={(e) => setName(e.target.value)} className={input} /></div>
+          <div>
+            <label htmlFor="gang-name" className={label}>Name *</label>
+            <input id="gang-name" value={name} onChange={(e) => setName(e.target.value)} className={input} />
+            {!record && <DuplicateMatchNotice matches={dupes} />}
+          </div>
           <div><label htmlFor="gang-aliases" className={label}>Aliases</label><input id="gang-aliases" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="OneS, 1s" className={input} /></div>
           <div><label htmlFor="gang-colors" className={label}>Colors</label><input id="gang-colors" value={colors} onChange={(e) => setColors(e.target.value)} placeholder="Black and Gold" className={input} /></div>
           <div>
@@ -119,7 +255,10 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
           </div>
         </div>
 
-        <p className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Structured intelligence</p>
+        <div className="mb-2 mt-5 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Structured intelligence</p>
+          {record && <SaveState status={draftState.status} lastSavedAt={draftState.lastSavedAt} />}
+        </div>
         <div className="space-y-2">
           {SUMMARY_SECTIONS.map((s) => (
             <div key={s.key}>
@@ -135,9 +274,9 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
-          <button onClick={() => void save(false)} disabled={busy} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+          <Button variant="primary" className="flex-1" loading={busy} onClick={() => void save(false)}>
             {busy ? 'Saving…' : record ? 'Save changes' : 'Create gang'}
-          </button>
+          </Button>
           {record && <button onClick={() => void save(true)} disabled={busy} title="Save and stamp reviewed now (+90d next review)" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-60">Save &amp; mark reviewed</button>}
         </div>
       </div>
@@ -482,32 +621,34 @@ export function TurfModal({ gangId, onClose, onSaved }: { gangId: string; onClos
           <div><label htmlFor="turf-last" className={label}>Last confirmed</label><input id="turf-last" type="date" value={lastConf} onChange={(e) => setLastConf(e.target.value)} className={input} /></div>
           <div className="sm:col-span-2"><label htmlFor="turf-notes" className={label}>Notes</label><textarea id="turf-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className={input} /></div>
         </div>
-        <button onClick={() => void save()} disabled={busy} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">{busy ? 'Saving…' : 'Add Turf'}</button>
+        <Button variant="primary" className="mt-5 w-full" loading={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Add Turf'}</Button>
       </div>
     </Modal>
   )
 }
 
 /** Durable attach-to-case — creates a structured case_intel_links row (kind=gang)
- *  instead of an unstructured chat message. Prevents duplicate attachment and
- *  optionally also posts a channel note. */
-export function AttachGangModal({ gang, caseOptions, onClose, onSaved }: { gang: GangRow; caseOptions: CaseOption[]; onClose: () => void; onSaved?: () => void }) {
+ *  instead of an unstructured chat message. The case picker is a bounded
+ *  server-backed search (ilikeAny + limit 20 — never a whole-table load);
+ *  duplicate attachment is blocked by the unique (case_id, kind, ref_id) key. */
+export function AttachGangModal({ gang, onClose, onSaved }: { gang: GangRow; onClose: () => void; onSaved?: () => void }) {
   const { profile } = useAuth()
-  const sorted = useMemo(() => caseOptions.slice().sort((a, b) => (a.case_number || '').localeCompare(b.case_number || '')), [caseOptions])
-  const [caseId, setCaseId] = useState(sorted[0]?.id || '')
+  const [picked, setPicked] = useState<PickedRecord | null>(null)
   const [role, setRole] = useState('Subject')
   const [note, setNote] = useState('')
   const [alsoPost, setAlsoPost] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const go = async () => {
-    if (!caseId) return
+    if (!picked) return
     setBusy(true)
-    // Dedupe: unique (case_id, kind, ref_id) also enforces this server-side.
-    const existing = await list('case_intel_links', { eq: { case_id: caseId, kind: 'gang', ref_id: gang.id } }).catch(() => [])
-    if (existing.length) { toast('This gang is already linked to that case.', 'warn'); setBusy(false); return }
+    const caseId = picked.id
     const res = await insert('case_intel_links', { case_id: caseId, kind: 'gang', ref_id: gang.id, role: role.trim() || null, note: note.trim() || null })
-    if (res.error) { toast(`Attach failed: ${res.error.message}`, 'danger'); setBusy(false); return }
+    if (res.error) {
+      toast(res.error.code === '23505' ? 'This gang is already linked to that case.' : `Attach failed: ${res.error.message}`, 'danger')
+      setBusy(false)
+      return
+    }
     if (alsoPost) {
       await insert('case_messages', {
         case_id: caseId, author_name: profile?.display_name || 'CID',
@@ -516,55 +657,64 @@ export function AttachGangModal({ gang, caseOptions, onClose, onSaved }: { gang:
       }).catch(() => {})
     }
     setBusy(false)
-    const num = sorted.find((c) => c.id === caseId)?.case_number || 'case'
-    toast(`Gang linked to ${num}`, 'success')
+    toast(`Gang linked to ${picked.label || 'case'}`, 'success')
     onSaved?.()
     onClose()
   }
 
   return (
-    <Modal open onClose={onClose}>
+    <Modal open onClose={onClose} dirty={() => !!picked || !!note.trim()}>
       <div className="p-6">
         <ModalHeader title="Attach to case" onClose={onClose} />
         <p className="mb-3 text-sm text-slate-400">Creates a durable intel link (shows in the case&rsquo;s Intel &amp; Graph tabs) for <span className="text-white">{gang.name}</span>.</p>
-        {sorted.length ? (
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="attach-case" className={label}>Case</label>
-              <select id="attach-case" value={caseId} onChange={(e) => setCaseId(e.target.value)} className={input}>
-                {sorted.map((c) => <option key={c.id} value={c.id}>{c.case_number} · {c.title || ''}</option>)}
-              </select>
-            </div>
-            <div><label htmlFor="attach-role" className={label}>Gang role in the case</label><input id="attach-role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="Subject, suspect org, rival…" className={input} /></div>
-            <div><label htmlFor="attach-note" className={label}>Note (optional)</label><input id="attach-note" value={note} onChange={(e) => setNote(e.target.value)} className={input} /></div>
-            <label className="flex items-center gap-2 text-xs text-slate-400"><input type="checkbox" checked={alsoPost} onChange={(e) => setAlsoPost(e.target.checked)} className="h-4 w-4 accent-badge-500" />Also post a note in the case channel</label>
-            <button onClick={() => void go()} disabled={busy} className="w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">{busy ? 'Linking…' : 'Create case link'}</button>
-          </div>
-        ) : (
-          <p className="text-sm text-slate-400">No cases available to attach to.</p>
-        )}
+        <div className="space-y-3">
+          <RecordSearchPicker
+            label="Case"
+            required
+            placeholder="Search case number or title…"
+            value={picked}
+            onChange={setPicked}
+            search={searchCaseOptions}
+          />
+          <div><label htmlFor="attach-role" className={label}>Gang role in the case</label><input id="attach-role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="Subject, suspect org, rival…" className={input} /></div>
+          <div><label htmlFor="attach-note" className={label}>Note (optional)</label><input id="attach-note" value={note} onChange={(e) => setNote(e.target.value)} className={input} /></div>
+          <label className="flex items-center gap-2 text-xs text-slate-400"><input type="checkbox" checked={alsoPost} onChange={(e) => setAlsoPost(e.target.checked)} className="h-4 w-4 accent-badge-500" />Also post a note in the case channel</label>
+          <Button variant="primary" className="w-full" loading={busy} disabled={!picked} onClick={() => void go()}>{busy ? 'Linking…' : 'Create case link'}</Button>
+        </div>
       </div>
     </Modal>
   )
 }
 
-/** Link an existing place to the gang with a role/confidence/provenance. */
-export function LinkPlaceModal({ gang, places, existing, onClose, onSaved }: {
-  gang: GangRow; places: PlaceRow[]; existing: GangPlaceRow[]; onClose: () => void; onSaved: () => void
+/** Link an existing place to the gang with a role/confidence/provenance. The
+ *  place picker is a bounded server-backed search (ilikeAny + limit 20);
+ *  already-linked places are excluded and the unique key backs the friendly
+ *  duplicate message. */
+export function LinkPlaceModal({ gang, existing, onClose, onSaved }: {
+  gang: GangRow; existing: GangPlaceRow[]; onClose: () => void; onSaved: () => void
 }) {
   const linkedIds = useMemo(() => new Set(existing.map((g) => g.place_id)), [existing])
-  const options = useMemo(() => places.filter((p) => !linkedIds.has(p.id)).sort((a, b) => a.name.localeCompare(b.name)), [places, linkedIds])
-  const [placeId, setPlaceId] = useState(options[0]?.id || '')
+  const [picked, setPicked] = useState<PickedRecord | null>(null)
   const [role, setRole] = useState('')
   const [confidence, setConfidence] = useState('')
   const [provenance, setProvenance] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
 
+  const searchPlaces = useCallback(async (q: string): Promise<PickedRecord[]> => {
+    const or = ilikeAny(['name', 'area'], q)
+    const rows = await list('places', { select: 'id,name,type,area', order: 'name', limit: 20, ...(or ? { or } : {}) })
+      .then((r) => r as unknown as Pick<PlaceRow, 'id' | 'name' | 'type' | 'area'>[])
+      .catch(() => [] as Pick<PlaceRow, 'id' | 'name' | 'type' | 'area'>[])
+    return rows
+      .filter((p) => !linkedIds.has(p.id))
+      .map((p) => ({ id: p.id, label: p.name, sublabel: [humanize(p.type), p.area].filter(Boolean).join(' · ') || undefined }))
+  }, [linkedIds])
+
   const go = async () => {
-    if (!placeId) return
+    if (!picked) return
     setBusy(true)
-    const res = await insert('gang_places', { gang_id: gang.id, place_id: placeId, role: role.trim() || null, confidence: confidence || null, provenance: provenance || null, note: note.trim() || null })
+    const res = await insert('gang_places', { gang_id: gang.id, place_id: picked.id, role: role.trim() || null, confidence: confidence || null, provenance: provenance || null, note: note.trim() || null })
     setBusy(false)
     if (res.error) {
       toast(res.error.code === '23505' ? 'That place is already linked.' : `Link failed: ${res.error.message}`, 'danger')
@@ -574,34 +724,33 @@ export function LinkPlaceModal({ gang, places, existing, onClose, onSaved }: {
   }
 
   return (
-    <Modal open onClose={onClose}>
+    <Modal open onClose={onClose} dirty={() => !!picked || !!note.trim()}>
       <div className="p-6">
         <ModalHeader title="Link a place" onClose={onClose} />
-        {options.length ? (
-          <div className="space-y-3">
+        <div className="space-y-3">
+          <RecordSearchPicker
+            label="Place"
+            required
+            placeholder="Search name or area…"
+            value={picked}
+            onChange={setPicked}
+            search={searchPlaces}
+            emptyState="No matching unlinked places. Create the place in the Places area first, then link it here."
+          />
+          <div><label htmlFor="lp-role" className={label}>Role</label><input id="lp-role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="clubhouse, stash, laundering…" className={input} /></div>
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor="lp-place" className={label}>Place</label>
-              <select id="lp-place" value={placeId} onChange={(e) => setPlaceId(e.target.value)} className={input}>
-                {options.map((p) => <option key={p.id} value={p.id}>{p.name} · {humanize(p.type)}{p.area ? ` · ${p.area}` : ''}</option>)}
-              </select>
+              <label htmlFor="lp-conf" className={label}>Confidence</label>
+              <select id="lp-conf" value={confidence} onChange={(e) => setConfidence(e.target.value)} className={input}><option value="">—</option>{CONFIDENCE_LEVELS.map((c) => <option key={c} value={c}>{humanize(c)}</option>)}</select>
             </div>
-            <div><label htmlFor="lp-role" className={label}>Role</label><input id="lp-role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="clubhouse, stash, laundering…" className={input} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="lp-conf" className={label}>Confidence</label>
-                <select id="lp-conf" value={confidence} onChange={(e) => setConfidence(e.target.value)} className={input}><option value="">—</option>{CONFIDENCE_LEVELS.map((c) => <option key={c} value={c}>{humanize(c)}</option>)}</select>
-              </div>
-              <div>
-                <label htmlFor="lp-prov" className={label}>Source</label>
-                <select id="lp-prov" value={provenance} onChange={(e) => setProvenance(e.target.value)} className={input}><option value="">—</option>{PROVENANCE_KINDS.map((p) => <option key={p} value={p}>{humanize(p)}</option>)}</select>
-              </div>
+            <div>
+              <label htmlFor="lp-prov" className={label}>Source</label>
+              <select id="lp-prov" value={provenance} onChange={(e) => setProvenance(e.target.value)} className={input}><option value="">—</option>{PROVENANCE_KINDS.map((p) => <option key={p} value={p}>{humanize(p)}</option>)}</select>
             </div>
-            <div><label htmlFor="lp-note" className={label}>Note</label><input id="lp-note" value={note} onChange={(e) => setNote(e.target.value)} className={input} /></div>
-            <button onClick={() => void go()} disabled={busy} className="w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">{busy ? 'Linking…' : 'Link place'}</button>
           </div>
-        ) : (
-          <p className="text-sm text-slate-400">All existing places are already linked, or none exist yet. Create places in the Places area first.</p>
-        )}
+          <div><label htmlFor="lp-note" className={label}>Note</label><input id="lp-note" value={note} onChange={(e) => setNote(e.target.value)} className={input} /></div>
+          <Button variant="primary" className="w-full" loading={busy} disabled={!picked} onClick={() => void go()}>{busy ? 'Linking…' : 'Link place'}</Button>
+        </div>
       </div>
     </Modal>
   )
@@ -657,7 +806,7 @@ export function AddGangPhotoModal({ gang, onClose, onSaved }: { gang: GangRow; o
             <div>
               <label htmlFor="gp-url" className={label}>Image URL</label>
               <input id="gp-url" value={url} onChange={(e) => setUrl(e.target.value)} className={input} />
-              <button onClick={() => void saveUrl()} disabled={busy} className="mt-3 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-2.5 text-sm font-semibold text-white shadow-glow disabled:opacity-60">{busy ? 'Saving…' : 'Add photo'}</button>
+              <Button variant="primary" className="mt-3 w-full" loading={busy} onClick={() => void saveUrl()}>{busy ? 'Saving…' : 'Add photo'}</Button>
             </div>
           )}
         </div>

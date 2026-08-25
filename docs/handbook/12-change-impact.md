@@ -14,6 +14,10 @@
 | `FORM_SCHEMAS` field keys | Saved `reports.fields` JSON (old reports must still render), `formToText`, warrant matching | Field keys ARE the storage format |
 | A case-satellite FK / cascade | `CaseDetail` delete config; `GangsView`/`PlacesView`/`PersonsView` children/setNullRefs | Undo restores exactly what the config lists |
 | `Store` keys | The legacy vanilla app, `page.tsx` deep-link shim, the pre-hydration `PREF_APPLIER` | Shared localStorage blob = cross-app contract |
+| A status vocabulary (values or labels) | `lib/status.ts` domain + its source vocabulary (`signoff`/`forms`/`caseCharges`/…), `ui/StatusBadge` call sites, `lib/status.test.ts` | The registry is the single presentation source; a value missing from its domain renders a bare fallback chip |
+| `user_prefs`/`user_drafts`/`user_pins` shapes | `lib/savedViews.ts` parse/serialize, `lib/userDrafts.ts` size guard, `lib/pins.ts`, `lib/notifications.ts` mute prefs, the Action Center drafts lane | Owner-only jsonb with size caps — parsers are tolerant (garbage → empty), so a silently-changed shape loses data, not errors |
+| `OPTIONAL_NOTIF_CATEGORIES` / notification `type` strings | `lib/notifText.ts` vocabulary, the bell's mute panel, the `create_notification` dedupe (matches on type+payload) | Only allow-listed types are mutable; mandatory streams must never become mutable |
+| A saved-view `config` shape (per list) | That list's apply/save functions only (`caseUtils`, registry filter modules) | `lib/savedViews` treats config as opaque — each list owns its own migration/tolerance |
 | `globals.css` accent remap / `.nav-collapsed` | Sidebar collapse logic, `PREF_APPLIER`, AppearanceModal | The class/dataset contracts live in three places |
 | CSP (`next.config.ts`) | PDF export (WASM), Supabase REST+WSS, FiveManage, Discord | The allow-lists are exact |
 | `docs/USER-GUIDE.md` | Regenerate `guideContent.ts` | Dual-copy system |

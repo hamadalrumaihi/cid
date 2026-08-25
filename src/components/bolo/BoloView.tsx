@@ -6,7 +6,7 @@
  *  (full `reports` table scan + exact free-text name matching) is gone; the
  *  data spine is now the same structured legal join the person dossier uses.
  *  Board layout unchanged: rose-framed cards, live filter, profile/edit. */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { list, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { fmtDate, todayISO } from '@/lib/format'
@@ -14,8 +14,12 @@ import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { priorityTint } from '@/lib/tint'
+import { toast } from '@/lib/toast'
 import { useNow } from '@/lib/useNow'
+import { useSavedViews, type SavedViewsApi } from '@/lib/savedViews'
+import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -28,6 +32,10 @@ import { ManageBoloModal } from '@/components/persons/ProfileLegal'
 import { LEGAL_COLS, type LegalLite } from '@/components/persons/profileLoad'
 import { MdtExportsPanel } from './MdtExports'
 
+/** The board's whole filter state is one search string — already serializable,
+ *  so saved views (lib/savedViews 'bolo') just snapshot `{ q }`. */
+interface BoloViewConfig { q?: string }
+
 export function BoloView() {
   const { state, canEdit, isCommand } = useAuth()
   const now = useNow()
@@ -38,6 +46,22 @@ export function BoloView() {
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const savedViews = useSavedViews<BoloViewConfig>('bolo')
+  const [activeSaved, setActiveSaved] = useState('')
+  // Default saved filter — applied once, only when nothing is typed yet.
+  const defaultApplied = useRef(false)
+  useEffect(() => {
+    if (defaultApplied.current || !savedViews.loaded) return
+    defaultApplied.current = true
+    if (query.trim()) return
+    const d = savedViews.defaultView
+    if (!d || typeof d.config.q !== 'string' || !d.config.q) return
+    // Deferred — never setState synchronously in the effect body.
+    const t = window.setTimeout(() => { setActiveSaved(d.name); setQuery(d.config.q ?? '') }, 0)
+    return () => window.clearTimeout(t)
+    // Snapshot semantics: runs once when the saved views finish loading.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedViews.loaded])
   const [profile, setProfile] = useState<IntelTarget | null>(null)
   const [editor, setEditor] = useState<PersonRow | null>(null)
   const [manage, setManage] = useState<PersonRow | null>(null)
@@ -99,7 +123,7 @@ export function BoloView() {
 
   return (
     <section className="view-in space-y-4">
-      <div className="rounded-2xl border border-rose-500/20 bg-ink-900/60 p-6">
+      <div className="rounded-lg border border-rose-500/20 bg-ink-900/60 p-6">
         <PageHeader
           title="BOLO Board"
           subtitle="At-large subjects flagged be-on-the-lookout, with risk, instructions and live warrant status."
@@ -118,6 +142,15 @@ export function BoloView() {
                   placeholder="Filter name, alias, gang, reason..."
                   aria-label="Filter BOLOs"
                   className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
+                />
+              )}
+              {state === 'in' && persons.length > 0 && (
+                <BoloSavedViews
+                  sv={savedViews}
+                  active={activeSaved}
+                  currentQuery={query}
+                  onApply={(name, cfg) => { setActiveSaved(name); setQuery(cfg.q ?? '') }}
+                  onActive={setActiveSaved}
                 />
               )}
             </>
@@ -171,6 +204,59 @@ export function BoloView() {
   )
 }
 
+/** Compact saved-filter control for the board header — same lib/savedViews
+ *  pattern as the other registries, over the board's single filter string. */
+function BoloSavedViews({ sv, active, currentQuery, onApply, onActive }: {
+  sv: SavedViewsApi<BoloViewConfig>
+  active: string
+  currentQuery: string
+  onApply: (name: string, cfg: BoloViewConfig) => void
+  onActive: (name: string) => void
+}) {
+  const isDefault = sv.defaultView?.name === active
+  const menu: ActionItem[] = [
+    { label: 'Rename…', onClick: () => { void sv.renameViaPrompt(active).then((n) => { if (n) onActive(n) }) } },
+    {
+      label: isDefault ? 'Clear default' : 'Set as default',
+      onClick: () => {
+        void sv.setDefault(isDefault ? null : active).then((ok) => {
+          if (ok) toast(isDefault ? 'Default filter cleared.' : `"${active}" now applies when you open the board.`, 'success')
+        })
+      },
+    },
+    {
+      label: `Delete "${active}"`, danger: true, separatorBefore: true,
+      onClick: () => { void sv.remove(active).then((ok) => { if (ok) { onActive(''); toast('View deleted.', 'success') } }) },
+    },
+  ]
+  return (
+    <div className="flex items-center gap-1.5">
+      <select
+        aria-label="Saved BOLO filters"
+        value={sv.views.some((v) => v.name === active) ? active : ''}
+        onChange={(e) => {
+          const v = sv.views.find((x) => x.name === e.target.value)
+          if (v) onApply(v.name, v.config)
+          else onActive('')
+        }}
+        className="min-h-[40px] max-w-[10rem] rounded-lg border border-white/10 bg-ink-900 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-badge-500"
+      >
+        <option value="">Saved filters</option>
+        {sv.views.map((v) => <option key={v.name} value={v.name}>{v.name}{v.isDefault ? ' · default' : ''}</option>)}
+      </select>
+      <Button
+        size="sm"
+        className="min-h-[40px]"
+        title="Save the current board filter as a named view"
+        onClick={() => { void sv.saveViaPrompt({ q: currentQuery }, 'Name this board filter.').then((n) => { if (n) onActive(n) }) }}
+      >
+        Save
+      </Button>
+      {active && <ActionMenu label={`Actions for filter "${active}"`} buttonClassName="min-h-[40px]" items={menu} />}
+    </div>
+  )
+}
+
 function BoloCard({ person, gang, legal, today, now, canEdit, onProfile, onEdit, onManage }: {
   person: PersonRow
   gang: string | null
@@ -189,7 +275,7 @@ function BoloCard({ person, gang, legal, today, now, canEdit, onProfile, onEdit,
   const issuedBy = officerName(person.bolo_issued_by)
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-rose-500/20 bg-ink-900/60">
+    <div className="overflow-hidden rounded-lg border border-rose-500/20 bg-ink-900/60">
       <div className="flex items-center justify-between gap-2 bg-rose-500/10 px-4 py-2">
         <span className="text-[11px] font-bold uppercase tracking-widest text-rose-300">Be on the lookout</span>
         <span className="flex items-center gap-1.5">
@@ -231,9 +317,9 @@ function BoloCard({ person, gang, legal, today, now, canEdit, onProfile, onEdit,
         </div>
       </div>
       <div className="flex gap-2 border-t border-white/5 px-4 py-2.5">
-        <button onClick={onProfile} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10">Profile</button>
-        {canEdit && <button onClick={onManage} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10">Manage BOLO</button>}
-        {canEdit && <button onClick={onEdit} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10">Edit</button>}
+        <button onClick={onProfile} className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10 sm:min-h-0">Profile</button>
+        {canEdit && <button onClick={onManage} className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10 sm:min-h-0">Manage BOLO</button>}
+        {canEdit && <button onClick={onEdit} className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10 sm:min-h-0">Edit</button>}
       </div>
     </div>
   )

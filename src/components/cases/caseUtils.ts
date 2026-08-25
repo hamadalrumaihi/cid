@@ -1,12 +1,16 @@
 'use client'
 
 /** Client-side case helpers — staleness, pins/recents, filters and saved
- *  views. All persistence uses the SAME Store keys as vanilla casefiles.js
- *  (casesScope/casesView/caseFilters/caseViews/recentCases/pinnedCases) so
- *  personal presets carry over between the legacy site and this app. */
+ *  views. Filter/scope/layout persistence uses the SAME Store keys as vanilla
+ *  casefiles.js (casesScope/casesView/caseFilters/recentCases/pinnedCases) so
+ *  personal presets carry over between the legacy site and this app. Saved
+ *  views moved to the cross-device lib/savedViews store (user_prefs, section
+ *  'cases'); the old Store 'caseViews' blob is migrated on first load and
+ *  kept as an offline/legacy fallback. */
 import type { Tables } from '@/lib/database.types'
 import { countRows, list } from '@/lib/db'
 import { assessCase } from '@/lib/caseWorkflow'
+import { listCaseHealth } from '@/lib/caseHealth'
 import { todayISO } from '@/lib/format'
 import { Store } from '@/lib/store'
 import { uiConfirm } from '@/components/ui/dialog'
@@ -47,20 +51,11 @@ export async function confirmCaseClose(c: CaseRow, meId: string | null = null): 
   )
 }
 
-/* ---- Pins + recents (Jump-back data; the strip renders on Command) ------- */
-export const recentCaseIds = (): string[] => Store.get<string[]>('recentCases', [])
-export const pinnedCaseIds = (): string[] => Store.get<string[]>('pinnedCases', [])
-
-export function pushRecentCase(id: string): void {
-  if (!id) return
-  const r = recentCaseIds().filter((x) => x !== id)
-  Store.set('recentCases', [id, ...r].slice(0, 8))
-}
-export const isPinnedCase = (id: string): boolean => pinnedCaseIds().includes(id)
-export function togglePinCase(id: string): void {
-  const p = pinnedCaseIds()
-  Store.set('pinnedCases', (p.includes(id) ? p.filter((x) => x !== id) : [id, ...p]).slice(0, 12))
-}
+/* ---- Pins + recents --------------------------------------------------------
+ * Migrated off the legacy Store keys: pins live in the DB-backed lib/pins
+ * store (usePinsStore, type 'case' — the case header toggles it) and recents
+ * in the unified lib/recents trail (pushRecent('case', …) on deliberate
+ * opens). The Command Jump-back strip reads both stores directly. */
 
 /* ---- RICO tab session reveal ---------------------------------------------
  * The RICO tab is conditional (lib/caseWorkflow.ricoTabVisible): hidden until
@@ -92,7 +87,10 @@ export interface CaseFilters {
   status: string
   /** '' anyone · 'me' · 'unassigned' · a profile id */
   assignee: string
-  /** '' any · 'stale' ≥14d · 'fresh' <14d */
+  /** '' any · 'stale' ≥14d · 'fresh' <14d · 'attention' any list-safe health
+   *  flag (lib/caseHealth listCaseHealth — no lead / no summary / stale /
+   *  follow-up due). The option is offered to command in the filter bar;
+   *  saved views carry it like any other filter value. */
   stale: string
 }
 
@@ -120,16 +118,35 @@ export function applyCaseFilters(items: CaseRow[], f: CaseFilters, meId: string 
     else if (f.assignee && c.lead_detective_id !== f.assignee) return false
     if (f.stale === 'stale') { if (c.status === 'closed' || c.status === 'cold' || caseStaleDays(c) < 14) return false }
     else if (f.stale === 'fresh') { if (caseStaleDays(c) >= 14) return false }
+    else if (f.stale === 'attention') { if (listCaseHealth(c).length === 0) return false }
     return true
   })
 }
 
-export interface SavedCaseView {
-  name: string
+/** The opaque `config` a saved case view carries (lib/savedViews section
+ *  'cases'). Shape matches the legacy Store 'caseViews' entries minus `name`,
+ *  so the one-time server migration lifts them losslessly. */
+export interface SavedCaseViewConfig {
   filters: Partial<CaseFilters>
   scope?: string
   q?: string
 }
 
-export const caseViews = (): SavedCaseView[] => Store.get<SavedCaseView[]>('caseViews', [])
-export const setCaseViews = (v: SavedCaseView[]): void => Store.set('caseViews', v)
+/* ---- Bulk mutation pacing -------------------------------------------------
+ * Per-id write loops (bulk status / lead / archive) run in awaited chunks so
+ * a 100-row selection never fires 100 concurrent requests or freezes the UI.
+ * Progress is reported after every chunk for the "N of M…" readout. */
+export async function runChunked<T>(
+  items: T[],
+  fn: (item: T) => Promise<{ error: unknown }>,
+  onProgress?: (done: number, total: number) => void,
+  chunkSize = 10,
+): Promise<{ ok: number; failed: number }> {
+  let ok = 0, failed = 0
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const results = await Promise.all(items.slice(i, i + chunkSize).map((it) => fn(it)))
+    for (const r of results) { if (r.error) failed += 1; else ok += 1 }
+    onProgress?.(ok + failed, items.length)
+  }
+  return { ok, failed }
+}

@@ -11,7 +11,7 @@ shipped. Effort: S < 1d, M = days, L = week+.
 |---|---|---|
 | ~~Drop unused deps (`react-hook-form`, `@tanstack/react-query`)~~ **done** — dropped; zod kept and adopted (`src/lib/schemas.ts`) | Zero imports; smaller install/audit surface | none |
 | Drop/verify `bootstrap_*` RPCs | Close a setup-era privileged path | none (verify first) |
-| ~~Wire or delete `lib/drafts.ts`~~ **done** — wired into the report/chat/legal editors | Never-lose-work code | none |
+| ~~Wire or delete `lib/drafts.ts`~~ **done** — wired into the report/chat/legal editors; **superseded 2026-08-25** by the DB-backed `lib/userDrafts.ts` (`user_drafts`, cross-device, per-user local mirror) — `drafts.ts` survives as its mirror primitive + the legal stash | Never-lose-work code | none |
 | ~~Script + CI check for `guideContent.ts` generation~~ **done** — `npm run gen:guide` + drift check | Kills a proven drift class | none |
 | ~~Fix the guide's hardcoded case-tab illustration~~ **done** — the guide regenerates from `docs/USER-GUIDE.md` | Was drifting from the real tabs | none |
 | Fold `chargeByCode` into `penalByCode`; migrate off deprecated `roles.isCommand` | Naming hygiene | trivial |
@@ -45,7 +45,8 @@ shipped. Effort: S < 1d, M = days, L = week+.
   checklist completion (`HARDENING.md`).
 - **DX**: guide generation script, JSON typing, more unit tests around
   pure domain logic (penal totals, matchKey).
-- **UX/A11y**: heat-tint labels, keyboard board moves, notification
-  mute preferences, mark-all in the bell.
+- **UX/A11y**: heat-tint labels, keyboard board moves; ~~notification
+  mute preferences, mark-all in the bell~~ **done 2026-08-25**
+  (`lib/notifications.ts` — optional-stream mutes + one-update mark-all).
 - **Scalability**: pagination + selective realtime payloads (use the
   event's row data instead of refetching) — a natural pair.

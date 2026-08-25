@@ -9,6 +9,7 @@ import { PAGE_META } from '@/lib/nav'
 import { useAuth } from '@/lib/auth'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
+import { CreateMenuButton } from './CreateHost'
 import { MenuIcon, SearchIcon } from './icons'
 import { NotificationsBell } from './NotificationsBell'
 import { SearchPalette } from './SearchPalette'
@@ -91,13 +92,17 @@ export function Header({ onOpenDrawer }: { onOpenDrawer: () => void }) {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
-        setPalette({ open: true, query: '' })
+        // Already open → leave state (and the typed query) alone; the palette's
+        // own listener refocuses its input instead of blanking the search.
+        setPalette((p) => (p.open ? p : { open: true, query: '' }))
         return
       }
       if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const t = e.target as HTMLElement | null
         const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
-        if (!typing) {
+        // Never hijack `/` out from under an open modal/dialog (the palette
+        // included) — stealing focus there would break its focus trap.
+        if (!typing && !document.querySelector('[role="dialog"]')) {
           e.preventDefault()
           searchRef.current?.focus()
         }
@@ -151,11 +156,10 @@ export function Header({ onOpenDrawer }: { onOpenDrawer: () => void }) {
           <SearchIcon className="h-5 w-5" />
         </button>
         <SearchPalette open={palette.open} initialQuery={palette.query} onClose={() => setPalette({ open: false, query: '' })} />
+        {/* Universal + Create (permission-gated menu → CreateHost modals). It
+            took the decorative "Secure link active" chip's slot. */}
+        <CreateMenuButton />
         <NotificationsBell />
-        <div className="hidden flex-shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-ink-850 px-2.5 py-2 text-xs font-medium text-slate-300 sm:flex sm:px-3">
-          <span className="pulse-dot h-2 w-2 rounded-full bg-emerald-400" />
-          <span className="hidden sm:inline">Secure link active</span>
-        </div>
         <AuthBar />
       </div>
     </header>

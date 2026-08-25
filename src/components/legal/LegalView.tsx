@@ -16,17 +16,20 @@
  *     dual members get both sets.
  *  Creation and revision run through the guided LegalCreateWizard; every
  *  write stays on the existing definer RPCs. Deep link: /legal?request=<id>. */
-import { Suspense, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { useSiu } from '@/lib/useSiu'
 import { timeAgo } from '@/lib/format'
+import { useSavedViews, type SavedViewsApi } from '@/lib/savedViews'
+import { toast } from '@/lib/toast'
 import { SUBPOENA_TYPES, WARRANT_TYPES, isEditableDraft, type LegalRequest } from '@/lib/justice'
 import {
   OP_GROUP_LABEL, activeDeadline, dispositionFor,
   type LegalDisposition, type OpGroup,
 } from '@/lib/legalWorkflow'
 import { useNow } from '@/lib/useNow'
+import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Input, Select } from '@/components/ui/Field'
@@ -55,6 +58,26 @@ const WAITING_GROUPS: readonly OpGroup[] = ['waiting_cid', 'waiting_doj', 'waiti
 
 type ViewId = 'overview' | 'requests' | DojViewId
 
+/* ── Requests-view filter state, ONE serializable object (it used to be three
+ * scattered locals) so lib/savedViews ('legal') can snapshot and re-apply it.
+ * A saved view only re-applies client filter state — RLS still decides which
+ * requests the viewer sees. ── */
+interface LegalFilterState {
+  q: string
+  /** '' any · 'warrant'/'subpoena' · 'warrant:<subtype>' etc. */
+  type: string
+  group: OpGroup | ''
+}
+const EMPTY_LEGAL_FILTERS: LegalFilterState = { q: '', type: '', group: '' }
+/** Saved-view config — same shape, but every field re-coerced on apply so a
+ *  stale config can't inject an unknown group. */
+type LegalViewConfig = Partial<LegalFilterState>
+const coerceLegalFilters = (c: LegalViewConfig | null | undefined): LegalFilterState => ({
+  q: typeof c?.q === 'string' ? c.q : '',
+  type: typeof c?.type === 'string' ? c.type : '',
+  group: GROUP_ORDER.includes(c?.group as OpGroup) ? (c?.group as OpGroup) : '',
+})
+
 export function LegalView() {
   return (
     <Suspense fallback={<p className="text-sm text-slate-400">Loading legal requests…</p>}>
@@ -71,9 +94,30 @@ function LegalViewInner() {
   const openId = params.get('request')
   const [wizard, setWizard] = useState<LegalWizardEntry | null>(null)
   const { requests, loading, reload } = useLegalRequests()
-  const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState('')
-  const [groupFilter, setGroupFilter] = useState<OpGroup | ''>('')
+  const [filters, setFilters] = useState<LegalFilterState>(EMPTY_LEGAL_FILTERS)
+
+  // Saved request filters (lib/savedViews 'legal', cross-device).
+  const savedViews = useSavedViews<LegalViewConfig>('legal')
+  const [activeSaved, setActiveSaved] = useState('')
+  const filtersActive = !!(filters.q.trim() || filters.type || filters.group)
+  const applySavedView = (name: string, cfg: LegalViewConfig) => {
+    setActiveSaved(name)
+    setFilters(coerceLegalFilters(cfg))
+  }
+  // Default view: apply its FILTERS once on a clean arrival (no deep link,
+  // nothing filtered yet). Navigation (?view=) is never driven by a default.
+  const defaultApplied = useRef(false)
+  useEffect(() => {
+    if (defaultApplied.current || !savedViews.loaded) return
+    defaultApplied.current = true
+    if (params.get('request') || params.get('view') || filtersActive) return
+    const d = savedViews.defaultView
+    if (!d) return
+    const t = window.setTimeout(() => applySavedView(d.name, d.config), 0)
+    return () => window.clearTimeout(t)
+    // Snapshot semantics: runs once when the saved views finish loading.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedViews.loaded])
 
   // Role-aware mode: an active justice member (effective role — legacy ADA/DA
   // map to prosecutor) gets the DOJ workspace tabs; an active CID member gets
@@ -161,19 +205,19 @@ function LegalViewInner() {
 
   /* ── Requests view: filters over the loaded projection ────────────────────── */
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    const [ft, fs] = typeFilter.split(':')
+    const q = filters.q.trim().toLowerCase()
+    const [ft, fs] = filters.type.split(':')
     return entries.filter(({ r, d }) => {
       if (ft && r.request_type !== ft) return false
       if (fs && r.subtype !== fs) return false
-      if (groupFilter && d.group !== groupFilter) return false
+      if (filters.group && d.group !== filters.group) return false
       if (q) {
         const hay = `${r.request_number ?? ''} ${r.title ?? ''} ${r.person_name_snapshot ?? ''} ${r.recipient_name ?? ''} ${r.case_number_snapshot ?? ''}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
     })
-  }, [entries, search, typeFilter, groupFilter])
+  }, [entries, filters])
 
   const grouped = useMemo(() => {
     const map = new Map<OpGroup, LegalRequest[]>()
@@ -196,7 +240,7 @@ function LegalViewInner() {
     )
   }
 
-  const gotoGroup = (g: OpGroup | '') => { setGroupFilter(g); setView('requests') }
+  const gotoGroup = (g: OpGroup | '') => { setFilters((f) => ({ ...f, group: g })); setView('requests') }
   const metrics: Metric[] = [
     { label: 'My drafts', value: counts.drafts, onClick: () => gotoGroup('needs_action') },
     { label: 'Returned to me', value: counts.returned, onClick: () => gotoGroup('returned_to_you') },
@@ -222,8 +266,7 @@ function LegalViewInner() {
   ]
   const isDojView = dojViews.some((v) => v.id === view)
 
-  const filtersActive = !!(search.trim() || typeFilter || groupFilter)
-  const clearFilters = () => { setSearch(''); setTypeFilter(''); setGroupFilter('') }
+  const clearFilters = () => { setFilters(EMPTY_LEGAL_FILTERS); setActiveSaved('') }
   const activeGroups = GROUP_ORDER.filter((g) => (grouped.get(g)?.length ?? 0) > 0)
   const canRevise = (r: LegalRequest) => auth.profile?.id === r.created_by && isEditableDraft(r)
 
@@ -340,15 +383,15 @@ function LegalViewInner() {
             <div className="flex flex-wrap items-center gap-2">
               <Input
                 aria-label="Search requests"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={filters.q}
+                onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
                 placeholder="Search number, title, target or case…"
                 className="sm:max-w-xs"
               />
               <Select
                 aria-label="Filter by type"
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
+                value={filters.type}
+                onChange={(e) => { const v = e.target.value; setFilters((f) => ({ ...f, type: v })) }}
                 className="sm:w-auto"
               >
                 <option value="">All types</option>
@@ -363,8 +406,8 @@ function LegalViewInner() {
               </Select>
               <Select
                 aria-label="Filter by status group"
-                value={groupFilter}
-                onChange={(e) => setGroupFilter(e.target.value as OpGroup | '')}
+                value={filters.group}
+                onChange={(e) => { const v = e.target.value as OpGroup | ''; setFilters((f) => ({ ...f, group: v })) }}
                 className="sm:w-auto"
               >
                 <option value="">All statuses</option>
@@ -373,6 +416,13 @@ function LegalViewInner() {
               {filtersActive && (
                 <Button size="sm" variant="ghost" onClick={clearFilters}>Clear filters</Button>
               )}
+              <LegalSavedViews
+                sv={savedViews}
+                active={activeSaved}
+                currentConfig={filters}
+                onApply={applySavedView}
+                onActive={setActiveSaved}
+              />
             </div>
             {activeGroups.length === 0 ? (
               <EmptyState
@@ -395,6 +445,60 @@ function LegalViewInner() {
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+/** Compact saved-views control for the Requests filter row: apply select,
+ *  Save, and an overflow menu (rename / set-default / delete) for the applied
+ *  view. Same lib/savedViews pattern as the cases and persons registries. */
+function LegalSavedViews({ sv, active, currentConfig, onApply, onActive }: {
+  sv: SavedViewsApi<LegalViewConfig>
+  active: string
+  currentConfig: LegalFilterState
+  onApply: (name: string, cfg: LegalViewConfig) => void
+  onActive: (name: string) => void
+}) {
+  const isDefault = sv.defaultView?.name === active
+  const menu: ActionItem[] = [
+    { label: 'Rename…', onClick: () => { void sv.renameViaPrompt(active).then((n) => { if (n) onActive(n) }) } },
+    {
+      label: isDefault ? 'Clear default' : 'Set as default',
+      onClick: () => {
+        void sv.setDefault(isDefault ? null : active).then((ok) => {
+          if (ok) toast(isDefault ? 'Default view cleared.' : `"${active}" now applies when you open Legal Requests.`, 'success')
+        })
+      },
+    },
+    {
+      label: `Delete "${active}"`, danger: true, separatorBefore: true,
+      onClick: () => { void sv.remove(active).then((ok) => { if (ok) { onActive(''); toast('View deleted.', 'success') } }) },
+    },
+  ]
+  return (
+    <div className="flex items-center gap-1.5">
+      <select
+        aria-label="Saved request views"
+        value={sv.views.some((v) => v.name === active) ? active : ''}
+        onChange={(e) => {
+          const v = sv.views.find((x) => x.name === e.target.value)
+          if (v) onApply(v.name, v.config)
+          else onActive('')
+        }}
+        className="min-h-[40px] max-w-[11rem] rounded-lg border border-white/10 bg-ink-900 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-badge-500"
+      >
+        <option value="">Saved views</option>
+        {sv.views.map((v) => <option key={v.name} value={v.name}>{v.name}{v.isDefault ? ' · default' : ''}</option>)}
+      </select>
+      <Button
+        size="sm"
+        className="min-h-[40px]"
+        title="Save the current search, type and status filters as a named view"
+        onClick={() => { void sv.saveViaPrompt(currentConfig, 'Name this request view.').then((n) => { if (n) onActive(n) }) }}
+      >
+        Save view
+      </Button>
+      {active && <ActionMenu label={`Actions for view "${active}"`} buttonClassName="min-h-[40px]" items={menu} />}
     </div>
   )
 }

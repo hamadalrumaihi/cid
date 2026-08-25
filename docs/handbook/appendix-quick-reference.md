@@ -67,7 +67,9 @@ bureau_lead → deputy_director → director.
   narcotic_hotspots, ballistics_benches, ballistic_footprints, indicators,
   media, cid_records, operations, tickets, commendations, documents,
   documents_versions
-- **Own-row**: notifications, watchlist, shift_reports, feedback, profiles
+- **Own-row**: notifications, watchlist, shift_reports, feedback, profiles;
+  personalization (owner-only, no audit, no realtime): user_pins,
+  user_drafts, user_prefs
 - **System**: audit_log, announcements, app_secrets
 
 ## Remaining enums
@@ -88,6 +90,14 @@ Enter submits quick-add rows.
 ## localStorage keys (the `cid-portal-v3` blob — legacy-shared, don't rename)
 
 `tab` · `collapsed` · `accent` · `density` · `annSeen` · `annDismissed` ·
-`casesScope` · `casesView` · `caseFilters` · `caseViews` · `recentCases` ·
-`pinnedCases` · `benchType` · `watchSeen` · `recentSearches` ·
-`graphLayout:<caseId>`.
+`casesScope` · `casesView` · `caseFilters` · `benchType` · `watchSeen` ·
+`recentSearches` · `recentRecords` (ids-only recents trail, `lib/recents`) ·
+`caseSeen:<caseId>` · `graphLayout:<caseId>` · per-registry view/sort/filter
+keys (`personFilters`, `personsView`, `personsSort`, `narcoticsView`,
+`narcoticsFilters`, `sopsShelfView`, `sopsShelfSort`).
+
+Retired keys still honored for migration/legacy: `caseViews` (lifted into
+`user_prefs` `views:cases` on first load — `lib/savedViews`); `pinnedCases` /
+`recentCases` (superseded by `user_pins` / `recentRecords` — the legacy site
+still writes them, this app no longer reads them). Cross-device per-user
+state lives in `user_pins`/`user_drafts`/`user_prefs`, not here.
