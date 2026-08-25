@@ -128,7 +128,10 @@ body {
 select option, select optgroup { background-color: #0b1220; color: #f8fafc; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible,
 textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
+  /* Follows the data-accent remap (--acc-400 is defined on :root for first
+     paint); the hex is only a fallback for var()-less engines. */
   outline: 2px solid #60a5fa;
+  outline-color: rgb(var(--acc-400));
   outline-offset: 2px;
 }
 

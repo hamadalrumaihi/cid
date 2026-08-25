@@ -133,9 +133,44 @@ export async function updateNoSelect<T extends TableName>(table: T, id: string, 
   return { data: null, error: asDbError(error) }
 }
 
+/** Insert-or-update on a conflict target (e.g. a composite key like
+ *  'user_id,document_id'). Returns { error } like insert(). `select` narrows
+ *  the returning projection the same way insert()'s does. The former ad-hoc
+ *  upserts (sops DocReader's update-then-insert fallback, useLibrary's raw
+ *  client call) route through this. */
+export async function upsert<T extends TableName>(
+  table: T,
+  values: TablesInsert<T> | TablesInsert<T>[],
+  onConflict: string,
+  select = '*',
+): Promise<MutationResult<Tables<T>[]>> {
+  const { data, error } = await raw().from(table).upsert(values, { onConflict }).select(select)
+  return { data: data as unknown as Tables<T>[] | null, error: asDbError(error) }
+}
+
 export async function remove<T extends TableName>(table: T, id: string): Promise<MutationResult<null>> {
   const { error } = await raw().from(table).delete().eq('id', id)
   return { data: null, error: asDbError(error) }
+}
+
+/** Conditional delete for rows keyed by non-id columns (composite-key link
+ *  rows). GUARD: throws if the predicate is empty — an unscoped DELETE must
+ *  be impossible to express through this helper. Returns the deleted rows
+ *  ({ data: [] } with no error = the predicate matched nothing). */
+export async function removeWhere<T extends TableName>(
+  table: T,
+  where: { eq?: Partial<Record<keyof Tables<T> & string, unknown>>; is?: Partial<Record<keyof Tables<T> & string, null | boolean>> },
+): Promise<MutationResult<Tables<T>[]>> {
+  const eqEntries = Object.entries(where.eq ?? {})
+  const isEntries = Object.entries(where.is ?? {})
+  if (!eqEntries.length && !isEntries.length) {
+    throw new Error('removeWhere: refusing an unscoped delete — pass at least one predicate')
+  }
+  let q = raw().from(table).delete()
+  for (const [k, v] of eqEntries) q = q.eq(k, v)
+  for (const [k, v] of isEntries) q = q.is(k, v as null)
+  const { data, error } = await q.select()
+  return { data: data as Tables<T>[] | null, error: asDbError(error) }
 }
 
 type Fn = keyof Database['public']['Functions']

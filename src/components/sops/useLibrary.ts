@@ -14,8 +14,7 @@
  *  signal); later failures keep stale rows visible and surface `error` so the
  *  shelf can show ErrorNotice + retry — never a false all-clear. */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { list, withRetry } from '@/lib/db'
-import { supabase } from '@/lib/supabase'
+import { list, upsert, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
@@ -125,11 +124,13 @@ export function useLibrary(): Library {
       return next
     })
     apply(on) // optimistic — revert on failure
-    // No shared upsert helper exists in lib/db; the typed client's upsert on
-    // the (user_id, document_id) primary key is the one-round-trip write.
-    const { error: err } = await supabase()
-      .from('document_user_state')
-      .upsert({ user_id: userId, document_id: docId, bookmarked: on }, { onConflict: 'user_id,document_id' })
+    // One-round-trip write via the shared upsert helper on the
+    // (user_id, document_id) primary key.
+    const { error: err } = await upsert(
+      'document_user_state',
+      { user_id: userId, document_id: docId, bookmarked: on },
+      'user_id,document_id',
+    )
     if (err) {
       apply(!on)
       toast(`Bookmark failed: ${err.message}`, 'danger')

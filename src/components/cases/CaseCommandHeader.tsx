@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Button } from '@/components/ui/Button'
 import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -29,7 +30,7 @@ import { officerName } from '@/lib/profiles'
 import { useWatchlistStore } from '@/lib/watchlist'
 import { caseCourtHint, caseStatusTint, CASE_STATUSES, signoffLabel, signoffTint } from '@/lib/signoff'
 import { isJtfAssigned, isRoutingBureau } from '@/lib/legalWorkflow'
-import type { CaseAssessment, CaseStage } from '@/lib/caseWorkflow'
+import type { CaseAssessment } from '@/lib/caseWorkflow'
 import { jointReasonText, type CaseJointInfo } from '@/lib/opsJoint'
 import { gatherCasePacket, packetDocx, packetMarkdown, packetPdfSpec, type PacketData } from '@/lib/packet'
 import { toast } from '@/lib/toast'
@@ -59,16 +60,6 @@ const INVESTIGATIVE_STAGE_LABEL: Record<InvestigativeStage, string> = {
 
 export const investigativeStageLabel = (s?: string | null): string =>
   INVESTIGATIVE_STAGE_LABEL[(s ?? 'intake') as InvestigativeStage] ?? (s || 'Intake')
-
-/** Workflow chip follows the app's status temperatures (lib/tint). */
-const STAGE_TINTS: Record<CaseStage, string> = {
-  investigation: 'bg-emerald-500/15 text-emerald-300',
-  awaiting_signoff: 'bg-amber-500/15 text-amber-300',
-  returned_signoff: 'bg-rose-500/15 text-rose-300',
-  doj_review: 'bg-blue-500/15 text-blue-300',
-  dormant: 'bg-blue-500/15 text-blue-300',
-  closed: 'bg-slate-500/20 text-slate-300',
-}
 
 const CONTROL = 'min-h-[40px] rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white'
 
@@ -308,7 +299,9 @@ export function CaseCommandHeader({
         </DlField>
         {!canEdit && <span className="rounded-lg border border-white/10 px-2 py-0.5 text-xs text-slate-300">Read-only</span>}
         {assessment && (
-          <DlField label="Workflow"><Badge tint={STAGE_TINTS[assessment.stage]}>{assessment.stageLabel}</Badge></DlField>
+          // Workflow chip — label + tint from the central registry (lib/status
+          // caseStage domain), which folded the former local STAGE_TINTS map.
+          <DlField label="Workflow"><StatusBadge domain="caseStage" value={assessment.stage} /></DlField>
         )}
         <DlField label="Unit">{isJtfAssigned(c) ? 'JTF (operational)' : bureauShort(c.bureau)}</DlField>
         <DlField label="Responsible bureau">

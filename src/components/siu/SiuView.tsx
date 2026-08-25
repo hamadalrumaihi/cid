@@ -405,7 +405,7 @@ function InvestigationsSection() {
   )
 }
 
-function NewInvestigationModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export function NewInvestigationModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const router = useRouter()
   const [title, setTitle] = useState('')
   const [summary, setSummary] = useState('')

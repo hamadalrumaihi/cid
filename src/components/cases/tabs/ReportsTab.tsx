@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useToolNav } from '@/components/tools/useToolNav'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Button } from '@/components/ui/Button'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
@@ -15,7 +16,7 @@ import { caseLink } from '@/lib/caseLinks'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
-import { FORM_SCHEMAS, REPORT_TEMPLATES, WARRANT_TINT, WARRANT_TPLS, formToText, reportFinalizeGaps, reportTitle, warrantStatusOf, type FormSchema, type FormValues } from '@/lib/forms'
+import { FORM_SCHEMAS, REPORT_TEMPLATES, WARRANT_TPLS, formToText, reportFinalizeGaps, reportTitle, warrantStatusOf, type FormSchema, type FormValues } from '@/lib/forms'
 import { mediaRefLine, parseMediaRefEntries, resolveMediaRefText } from '@/lib/mediaRefs'
 import { isCommandRole } from '@/lib/roles'
 import { parseFormValues } from '@/lib/jsonShapes'
@@ -261,7 +262,9 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
           <button onClick={onBack} className="rounded-lg py-2 pr-2 text-sm font-bold text-badge-200 hover:text-white">← Back to reports</button>
           <h3 className="min-w-0 truncate font-bold text-white">{reportTitle(r)}</h3>
           <Badge tone={r.finalized ? 'good' : 'neutral'}>{r.finalized ? 'Sealed' : 'Draft'}</Badge>
-          {WARRANT_TPLS[r.template] && <Badge tint={WARRANT_TINT[status] || WARRANT_TINT.draft} className="uppercase">{status}</Badge>}
+          {/* Registry chip: 'returned' renders as "Return filed" — the return
+              was filed with the court, NOT sent back for revision. */}
+          {WARRANT_TPLS[r.template] && <StatusBadge domain="warrant" value={status} className="uppercase" />}
           {WARRANT_TPLS[r.template] && canEdit && <select aria-label="Set warrant status" value={status} onChange={(e) => void setWarrant(e.target.value)} className="rounded-lg border border-white/10 bg-ink-900 px-2 py-1.5 text-xs font-bold text-white">{['draft', 'signed', 'executed', 'returned'].map((o) => <option key={o} value={o}>{o}</option>)}</select>}
         </div>
         <div className="flex flex-wrap items-center gap-2">

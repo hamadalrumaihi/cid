@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { Field, Input, Select, Textarea } from './Field'
+import { Field, Input, Select, Textarea, fieldErrorId } from './Field'
 
 /** Form primitives. <Field> generates the id and wires htmlFor, so every
  *  control is programmatically labelled — pass the render-prop id to the
@@ -60,6 +60,24 @@ export const TextareaField: Story = {
   render: () => (
     <Field label="Summary" className="max-w-md">
       {(id) => <Textarea id={id} rows={4} placeholder="What happened?" />}
+    </Field>
+  ),
+}
+
+/** Validation error: Field renders the rose line (id = fieldErrorId(id));
+ *  the caller passes `invalid` + aria-describedby to the control via the
+ *  render prop — Field cannot reach the child itself. */
+export const WithError: Story = {
+  render: () => (
+    <Field label="Case number" required error="A case number is required." className="max-w-sm">
+      {(id) => (
+        <Input
+          id={id}
+          invalid
+          aria-describedby={fieldErrorId(id)}
+          placeholder="CID-26-0000"
+        />
+      )}
     </Field>
   ),
 }

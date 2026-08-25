@@ -85,7 +85,7 @@ export function BallisticsView() {
                     role="tab"
                     aria-selected={benchType === t}
                     onClick={() => pick(t)}
-                    className={`rounded-md px-4 py-2 text-xs font-semibold transition ${benchType === t ? 'bg-gradient-to-r from-badge-500 to-blue-700 text-white shadow-glow' : 'text-slate-300 hover:text-white'}`}
+                    className={`rounded-md px-4 py-2 text-xs font-semibold transition ${benchType === t ? 'bg-badge-500 text-white' : 'text-slate-300 hover:text-white'}`}
                   >
                     {label}
                   </button>

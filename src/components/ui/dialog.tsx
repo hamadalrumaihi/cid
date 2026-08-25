@@ -112,9 +112,12 @@ function DialogCard({ dialog, finish }: { dialog: PendingDialog; finish: (v: boo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Flat solids matching ui/Button's variants (danger / primary). Classes are
+  // copied rather than importing Button: db.ts imports uiConfirm from here,
+  // and Button → useAction would risk a require cycle through the data layer.
   const okCls = dialog.danger
     ? 'bg-rose-600 hover:bg-rose-500'
-    : 'bg-gradient-to-r from-badge-500 to-blue-700 hover:brightness-110'
+    : 'bg-badge-500 hover:brightness-110'
 
   return (
     <div

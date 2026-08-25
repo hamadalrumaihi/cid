@@ -13,7 +13,7 @@ export default function NotFound() {
         </p>
         <Link
           href="/command"
-          className="mt-6 inline-block rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-bold text-white shadow-glow transition hover:brightness-110"
+          className="mt-6 inline-block rounded-lg bg-badge-500 px-4 py-2 text-sm font-bold text-white transition hover:brightness-110"
         >
           ← Back to the Dashboard
         </Link>

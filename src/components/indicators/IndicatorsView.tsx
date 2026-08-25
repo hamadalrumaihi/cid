@@ -261,7 +261,7 @@ function KindChip({ label, active, onClick }: { label: string; active: boolean; 
 
 /* ---- Create / edit modal ------------------------------------------------ */
 
-function IndicatorModal({ record, cases, onClose, onSaved }: {
+export function IndicatorModal({ record, cases, onClose, onSaved }: {
   record: IndicatorRow | null
   cases: CaseOption[]
   onClose: () => void

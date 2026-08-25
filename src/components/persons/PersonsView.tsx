@@ -15,7 +15,7 @@
  *  Kept: paged grid (24/page + load-more), quick-add from an empty search,
  *  bulk multi-select delete (command), `?person=` profile drill-down,
  *  `?q=` seeding, attach-to-case (now a durable case_intel_links row). */
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { deleteWithUndo, list, rpc, withRetry } from '@/lib/db'
 import { fmtDate, timeAgo, todayISO } from '@/lib/format'
@@ -23,6 +23,7 @@ import { useAuth } from '@/lib/auth'
 import { useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { useRegistry } from '@/lib/useRegistry'
+import { useNarrow } from '@/lib/useNarrow'
 import { useNow } from '@/lib/useNow'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
@@ -73,15 +74,6 @@ function PresenceChip({ busy }: { busy: boolean }) {
   )
 }
 
-// Narrow-viewport signal for the table→cards fallback (see `narrow` below).
-const NARROW_MQ = '(max-width: 639px)'
-function subscribeNarrow(onChange: () => void): () => void {
-  const mq = window.matchMedia(NARROW_MQ)
-  mq.addEventListener('change', onChange)
-  return () => mq.removeEventListener('change', onChange)
-}
-const narrowSnapshot = (): boolean => window.matchMedia(NARROW_MQ).matches
-
 export function PersonsView() {
   const { state, canEdit, canDelete } = useAuth()
   const router = useRouter()
@@ -100,10 +92,10 @@ export function PersonsView() {
   // `?q=` seeds the search — how global-search results land here prefiltered.
   const [query, setQuery] = useState(() => sp.get('q') ?? '')
   const [view, setView] = useState<'grid' | 'table'>(() => (Store.get<string>('personsView', 'grid') === 'table' ? 'table' : 'grid'))
-  // DataTable doesn't stack on narrow screens, so table view falls back to
-  // cards below sm — via matchMedia, NOT CSS hiding: a css-hidden duplicate
-  // list still loads every mugshot and doubles the DOM.
-  const narrow = useSyncExternalStore(subscribeNarrow, narrowSnapshot, () => false)
+  // Table view falls back to cards below sm — via lib/useNarrow (matchMedia,
+  // NOT CSS hiding: a css-hidden duplicate list still loads every mugshot and
+  // doubles the DOM).
+  const narrow = useNarrow()
   const [sort, setSort] = useState<RegistrySort>(() => loadRegistrySort())
   const [filters, setFilters] = useState<RegistryFilters>(() => loadRegistryFilters())
   const [pageState, setPageState] = useState({ sig: '', shown: PAGE })

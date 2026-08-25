@@ -373,7 +373,7 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
   )
 }
 
-function AccountModal({ account, persons, onClose, onSaved }: { account?: Account; persons: PersonLite[]; onClose: () => void; onSaved: () => void }) {
+export function AccountModal({ account, persons, onClose, onSaved }: { account?: Account; persons: PersonLite[]; onClose: () => void; onSaved: () => void }) {
   const editing = !!account
   const [platform, setPlatform] = useState<string>(account?.platform ?? ACCOUNT_PLATFORMS[0])
   const [handle, setHandle] = useState(account?.handle ?? '')

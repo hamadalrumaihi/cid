@@ -28,15 +28,20 @@ export const SIGNOFF_LABEL: Record<string, string> = {
   denied: 'Denied',
 }
 
+/** Normalized to the app-wide status temperatures (lib/status registry):
+ *  awaiting_* → amber, approved* → emerald, ready_doj → accent (a handoff, not
+ *  a completion), changes_requested/denied → rose, none → slate. The former
+ *  orange (changes_requested) and blue (approved_deputy) one-offs are gone —
+ *  bounced work reads rose everywhere, approvals read emerald everywhere. */
 export const SIGNOFF_TINT: Record<string, string> = {
   none: 'bg-slate-500/15 text-slate-300',
   awaiting_bureau_lead: 'bg-amber-500/15 text-amber-300',
   awaiting_deputy: 'bg-amber-500/15 text-amber-300',
   awaiting_director: 'bg-amber-500/15 text-amber-300',
-  approved_deputy: 'bg-blue-500/15 text-blue-300',
+  approved_deputy: 'bg-emerald-500/15 text-emerald-300',
   approved_complete: 'bg-emerald-500/15 text-emerald-300',
-  ready_doj: 'bg-emerald-500/15 text-emerald-300',
-  changes_requested: 'bg-orange-500/15 text-orange-300',
+  ready_doj: 'bg-blue-500/15 text-blue-300',
+  changes_requested: 'bg-rose-500/15 text-rose-300',
   denied: 'bg-rose-500/15 text-rose-300',
 }
 

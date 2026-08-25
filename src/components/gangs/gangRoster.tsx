@@ -11,6 +11,7 @@ import { rpc } from '@/lib/db'
 import { toast } from '@/lib/toast'
 import { safeUrl } from '@/lib/safeUrl'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { ProvenanceBadge } from '@/components/ui/IntelBadges'
 import { EmptyState } from '@/components/ui/Notice'
 import { useToolNav } from '@/components/tools/useToolNav'
@@ -230,7 +231,7 @@ export function RosterSection({ members, personNames, canEdit, canDelete, onAddM
           </div>
         </div>
         {canEdit && (
-          <button onClick={onAddMember} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ Member</button>
+          <Button variant="primary" size="sm" onClick={onAddMember}>+ Member</Button>
         )}
       </div>
 

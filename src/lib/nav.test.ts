@@ -48,6 +48,10 @@ describe('nav — Investigative Tools consolidation', () => {
     expect(TAB_CATEGORY.tools).toBe('intel')
     expect(CAT_DEFAULT.intel).toBe('tools')
   })
+
+  it("legacy Intelligence tabs map to 'intel' (their routes redirect into /tools)", () => {
+    for (const t of TOOL_TABS) expect(TAB_CATEGORY[t], `TAB_CATEGORY['${t}']`).toBe('intel')
+  })
 })
 
 describe('nav — general invariants', () => {
@@ -82,6 +86,25 @@ describe('nav — general invariants', () => {
   it('isValidTab rejects the retired/unknown slugs the router falls back on', () => {
     for (const bad of ['reports', 'intel', 'nope', '']) {
       expect(isValidTab(bad), `isValidTab('${bad}')`).toBe(false)
+    }
+  })
+
+  it('TAB_CATEGORY covers EVERY PAGE_META tab (no silent Command fallback)', () => {
+    for (const t of Object.keys(PAGE_META)) {
+      expect(TAB_CATEGORY[t] !== undefined, `TAB_CATEGORY['${t}'] must be a category id or null`).toBe(true)
+    }
+  })
+
+  it('standalone surfaces belong to NO category (null → no strip highlight, no Subtabs)', () => {
+    for (const t of ['profile', 'owner', 'command-center', 'concern', 'siu', 'feedback']) {
+      expect(TAB_CATEGORY[t], `TAB_CATEGORY['${t}']`).toBeNull()
+    }
+  })
+
+  it('every non-null TAB_CATEGORY value is a real CID category id', () => {
+    const catIds = new Set(NAV_CATEGORIES.map((c) => c.id))
+    for (const [t, cat] of Object.entries(TAB_CATEGORY)) {
+      if (cat !== null) expect(catIds.has(cat), `TAB_CATEGORY['${t}'] = '${cat}'`).toBe(true)
     }
   })
 })

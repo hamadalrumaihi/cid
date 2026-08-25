@@ -33,7 +33,6 @@ import {
   caseChargeJailLabel,
   caseChargeNext,
   caseChargeStatusLabel,
-  caseChargeStatusMeaning,
   caseChargeTotalIsProvisional,
   loadCaseChargeTotals,
   loadCaseCharges,
@@ -48,15 +47,8 @@ import { toast } from '@/lib/toast'
 import { useAction } from '@/lib/useAction'
 import { EmptyState } from '@/components/ui/Notice'
 import { Button } from '@/components/ui/Button'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Stat, type CaseRow } from './shared'
-
-const STATUS_TINT: Record<CaseChargeStatus, string> = {
-  approved: 'border-blue-500/30 bg-blue-500/10 text-blue-300',
-  filed: 'border-badge-500/30 bg-badge-500/10 text-badge-200',
-  convicted: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
-  dismissed: 'border-white/10 bg-white/5 text-slate-500',
-  withdrawn: 'border-white/10 bg-white/5 text-slate-500',
-}
 
 export function ChargesTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boolean; onChanged: () => void }) {
   const [rows, setRows] = useState<CaseChargeRow[]>([])
@@ -212,10 +204,7 @@ export function ChargesTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boo
                   {ch.note && <p className="mt-1 text-xs text-slate-500">{ch.note}</p>}
                 </div>
                 <div className="flex flex-col items-end gap-1">
-                  <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${STATUS_TINT[ch.status]}`}
-                    title={caseChargeStatusMeaning(ch.status)}>
-                    {caseChargeStatusLabel(ch.status)}
-                  </span>
+                  <StatusBadge domain="caseCharge" value={ch.status} className="uppercase" />
                   <span className="font-mono text-sm text-white">x{ch.counts}</span>
                 </div>
               </div>

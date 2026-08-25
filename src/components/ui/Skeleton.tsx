@@ -14,7 +14,7 @@ export function Skeleton({ className = '' }: { className?: string }) {
 /** A card-shaped placeholder matching the registry card grid. */
 export function CardSkeleton() {
   return (
-    <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+    <div className="rounded-lg border border-white/5 bg-ink-900/60 p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-2">
           <Skeleton className="h-4 w-2/3" />
@@ -65,7 +65,7 @@ export function DetailSkeleton({ blocks = 2 }: { blocks?: number }) {
         <Skeleton className="h-3 w-1/4" />
       </div>
       {Array.from({ length: blocks }, (_, i) => (
-        <div key={i} className="space-y-2 rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+        <div key={i} className="space-y-2 rounded-lg border border-white/5 bg-ink-900/60 p-5">
           <Skeleton className="h-4 w-1/4" />
           <Skeleton className="h-3 w-full" />
           <Skeleton className="h-3 w-5/6" />

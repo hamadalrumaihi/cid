@@ -543,7 +543,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
             ))}
           </dl>
           {selData.href && (
-            <Link href={selData.href} className="mt-4 block rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-2 text-center text-sm font-bold text-white shadow-glow hover:brightness-110">
+            <Link href={selData.href} className="mt-4 block rounded-lg bg-badge-500 px-3 py-2 text-center text-sm font-bold text-white transition hover:brightness-110">
               {selData.hrefLabel ?? 'Open'} →
             </Link>
           )}

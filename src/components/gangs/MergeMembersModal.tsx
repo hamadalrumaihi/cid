@@ -14,6 +14,7 @@
 import { useMemo, useState } from 'react'
 import { deleteWithUndo, update } from '@/lib/db'
 import { toast } from '@/lib/toast'
+import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { uiConfirm } from '@/components/ui/dialog'
 import { MERGE_FIELDS, planMerge, type DuplicateCluster, type MergeField, type MergeValue } from './gangIntel'
@@ -151,9 +152,9 @@ export function MergeMembersModal({ cluster, onClose, onMerged }: {
 
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-300 hover:bg-white/10">Cancel</button>
-          <button onClick={() => void doMerge()} disabled={busy || others.length === 0} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50">
+          <Button variant="primary" loading={busy} disabled={others.length === 0} onClick={() => void doMerge()}>
             {busy ? 'Merging…' : `Merge into "${survivor.name}"`}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

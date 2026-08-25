@@ -178,7 +178,7 @@ function CasesViewInner() {
         : <CaseTable items={filtered} canDelete={canDelete} showDept={siu.inSiu} selected={selected} onSelect={(id, on) => setSelected((s) => on ? [...s, id] : s.filter((x) => x !== id))} onOpen={openCase} />}
       {!loading && !filtered.length && view !== 'table' && <Notice text="No cases match this view." />}
 
-      {selected.length > 0 && <div className="sticky bottom-4 z-20 flex items-center justify-between rounded-2xl border border-white/10 bg-ink-850 p-3 shadow-glow">
+      {selected.length > 0 && <div className="sticky bottom-4 z-20 flex items-center justify-between rounded-2xl border border-white/10 bg-ink-850 p-3">
         <p className="text-sm font-bold text-white">{selected.length} selected</p>
         <div className="flex gap-2"><Button onClick={() => setSelected([])}>Clear</Button><Button variant="danger" onClick={() => void archiveSelected()}>{showArchived ? 'Restore selected' : 'Archive selected'}</Button></div>
       </div>}
@@ -202,20 +202,10 @@ function CaseTable({ items, canDelete, showDept, selected, onSelect, onOpen }: {
   onSelect: (id: string, on: boolean) => void
   onOpen: (id: string) => void
 }) {
+  // The former hand-rolled checkbox column is DataTable's `selection` now —
+  // same canDelete gating, same parent-owned string[] state (adapted below).
+  const selectedSet = new Set(selected)
   const columns: DataColumn<CaseRow>[] = [
-    ...(canDelete ? [{
-      key: 'sel', label: '', value: () => '',
-      render: (c: CaseRow) => (
-        <input
-          type="checkbox"
-          aria-label={`Select ${c.case_number}`}
-          checked={selected.includes(c.id)}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => onSelect(c.id, e.target.checked)}
-        />
-      ),
-      className: 'w-8 px-3 py-1.5',
-    } satisfies DataColumn<CaseRow>] : []),
     {
       key: 'number', label: 'Case №', value: (c) => c.case_number,
       render: (c) => (
@@ -275,6 +265,15 @@ function CaseTable({ items, canDelete, showDept, selected, onSelect, onOpen }: {
       columns={columns}
       rows={items}
       rowKey={(c) => c.id}
+      selection={canDelete ? {
+        selected: selectedSet,
+        idOf: (c) => c.id,
+        onToggle: (id) => onSelect(id, !selectedSet.has(id)),
+        onToggleAll: (ids) => {
+          const all = ids.every((id) => selectedSet.has(id))
+          for (const id of ids) if (selectedSet.has(id) === all) onSelect(id, !all)
+        },
+      } : undefined}
       onRowClick={(c) => onOpen(c.id)}
       initialSort={{ key: 'updated', dir: 'desc' }}
       csvName="cases"

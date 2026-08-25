@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import type { Tables } from '@/lib/database.types'
 import { caseRow } from '@/mocks/fixtures/rows'
@@ -86,7 +87,8 @@ export const Empty: Story = {
 }
 
 /** 120 generated rows with pageSize 25 — exercises the pager and shows the
- *  count line ("120 cases · N matches" once you type in the filter). */
+ *  count line ("120 cases · N matches" once you type in the filter).
+ *  `pageSizeOptions` adds the rows-per-page select. */
 export const Paginated: Story = {
   render: () => {
     const areas = ['Vespucci', 'Del Perro', 'Mirror Park', 'La Mesa', 'Harmony', 'Paleto']
@@ -106,9 +108,50 @@ export const Paginated: Story = {
         rows={many}
         rowKey={(r) => r.id}
         pageSize={25}
+        pageSizeOptions={[25, 50, 100]}
         countLabel="cases"
         filterPlaceholder="Filter cases…"
       />
+    )
+  },
+}
+
+/** Multi-select: the `selection` opt-in renders a leading checkbox column
+ *  with a select-all-on-page header (indeterminate when partial) and
+ *  shift-click range select. Selection state stays with the caller. */
+export const WithSelection: Story = {
+  render: function WithSelectionStory() {
+    const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+    const toggle = (id: string) => setSelected((s) => {
+      const next = new Set(s)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+    return (
+      <div>
+        <p className="mb-2 text-xs text-slate-400">{selected.size} selected — try shift-click for a range.</p>
+        <DataTable
+          columns={COLUMNS}
+          rows={CASES}
+          rowKey={(r) => r.id}
+          countLabel="cases"
+          selection={{
+            selected,
+            idOf: (r) => r.id,
+            onToggle: toggle,
+            onToggleAll: (ids) => {
+              const all = ids.every((id) => selected.has(id))
+              setSelected((s) => {
+                const next = new Set(s)
+                for (const id of ids) { if (all) next.delete(id); else next.add(id) }
+                return next
+              })
+            },
+            // Closed cases can't be selected — shows the disabled state.
+            disabled: (r) => r.status === 'closed',
+          }}
+        />
+      </div>
     )
   },
 }

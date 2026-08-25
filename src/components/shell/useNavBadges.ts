@@ -9,9 +9,17 @@
  *   · signoff  — My Desk needs-attention count (sign-off reviews + bounced +
  *                unread mentions + my overdue/follow-up cases), vanilla
  *                inboxActionCount
- *  All inputs are RLS-scoped; realtime bumps keep the counts live. */
-import { useEffect, useMemo, useState } from 'react'
-import { list } from '@/lib/db'
+ *  All inputs are RLS-scoped; realtime bumps keep the counts live.
+ *
+ *  DATA LAYER: a module-level zustand store (same pattern as lib/watchlist /
+ *  lib/profiles). The hook is mounted TWICE (Sidebar + BottomNav); before the
+ *  store, that doubled every fetch. Each fetch is keyed on the realtime table
+ *  version it serves, so however many consumers mount, one version bump means
+ *  one fetch. Unread mentions come from countRows (HEAD count) — the list of
+ *  notification rows was fetched only to be counted. */
+import { useEffect, useMemo } from 'react'
+import { create } from 'zustand'
+import { countRows, list } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { todayISO } from '@/lib/format'
@@ -25,7 +33,6 @@ import { isStaleCase } from '@/components/cases/caseUtils'
 import { pendingMembership, type JusticeRequestLite } from '@/components/command-center/lib/membershipPending'
 
 type CaseRow = Tables<'cases'>
-type NotificationRow = Tables<'notifications'>
 
 const AWAITING = new Set(['awaiting_bureau_lead', 'awaiting_deputy', 'awaiting_director'])
 
@@ -40,6 +47,85 @@ function canReviewCase(c: CaseRow, profile: { id: string; role?: string | null; 
   return false
 }
 
+interface NavBadgeData {
+  anns: AnnouncementRow[]
+  cases: CaseRow[]
+  /** Unread chat_mention + mention notifications (counts only — countRows). */
+  mentions: number
+  /** Open DOJ/Judiciary applications (command/owner read). null = not
+   *  loaded/authorized — keeps the badge from counting justice applicants as
+   *  CID sign-ins. */
+  justiceReqs: JusticeRequestLite[] | null
+  // Version keys — one fetch per realtime bump, shared by every consumer.
+  annV: number
+  caseV: number
+  notifV: number
+  justiceV: number
+  rosterKey: string
+  fetchAnns: (v: number) => Promise<void>
+  fetchCases: (v: number) => Promise<void>
+  fetchMentions: (v: number) => Promise<void>
+  fetchJusticeReqs: (v: number) => Promise<void>
+  /** Shared-store refreshes (profiles / field standing / justice roster),
+   *  deduped on the composite key so twin consumers trigger one round. */
+  fetchRoster: (key: string, wantJustice: boolean) => Promise<void>
+}
+
+const useNavBadgeStore = create<NavBadgeData>((set, get) => ({
+  anns: [],
+  cases: [],
+  mentions: 0,
+  justiceReqs: null,
+  annV: -1,
+  caseV: -1,
+  notifV: -1,
+  justiceV: -1,
+  rosterKey: '',
+  async fetchAnns(v) {
+    if (get().annV === v) return
+    set({ annV: v })
+    // Projection: never announcement bodies — only what the memo reads.
+    try { set({ anns: await list('announcements', { select: 'id,author_id,audience,mentions,pinned,created_at', order: 'created_at', ascending: false }) }) }
+    catch { /* transient — keep the previous rows */ }
+  },
+  async fetchCases(v) {
+    if (get().caseV === v) return
+    set({ caseV: v })
+    // Minimal projection — workflow columns only, never notes/summaries.
+    try { set({ cases: await list('cases', { select: 'id,status,bureau,lead_detective_id,follow_up_at,updated_at,signoff_status,signoff_assignee_id,signoff_submitted_by' }) }) }
+    catch { /* transient */ }
+  },
+  async fetchMentions(v) {
+    if (get().notifV === v) return
+    set({ notifV: v })
+    try {
+      const [chat, plain] = await Promise.all([
+        countRows('notifications', { eq: { read: false, type: 'chat_mention' } }),
+        countRows('notifications', { eq: { read: false, type: 'mention' } }),
+      ])
+      set({ mentions: chat + plain })
+    } catch { /* transient */ }
+  },
+  async fetchJusticeReqs(v) {
+    if (get().justiceV === v) return
+    set({ justiceV: v })
+    try {
+      const rows = await list('justice_membership_requests', {
+        select: 'applicant_id,status',
+        in: { status: ['draft', 'pending', 'correction_requested'] },
+      })
+      set({ justiceReqs: rows as JusticeRequestLite[] })
+    } catch { /* transient */ }
+  },
+  async fetchRoster(key, wantJustice) {
+    if (get().rosterKey === key) return
+    set({ rosterKey: key })
+    void useProfilesStore.getState().fetch()
+    void useFieldStanding.getState().fetch()
+    if (wantJustice) void useJusticeRoster.getState().fetch()
+  },
+}))
+
 export interface NavBadges {
   pending: number
   announcements: number
@@ -51,18 +137,13 @@ export interface NavBadges {
 export function useNavBadges(): NavBadges {
   const { state, profile, isCommand, isOwner } = useAuth()
   const profiles = useProfilesStore((s) => s.profiles)
-  const fetchProfiles = useProfilesStore((s) => s.fetch)
   const justiceByUser = useJusticeRoster((s) => s.byUser)
   const fieldIds = useFieldStanding((s) => s.ids)
   const fieldLoaded = useFieldStanding((s) => s.loaded)
-  const fetchFieldStanding = useFieldStanding((s) => s.fetch)
-  const fetchJustice = useJusticeRoster((s) => s.fetch)
-  const [anns, setAnns] = useState<AnnouncementRow[]>([])
-  const [cases, setCases] = useState<CaseRow[]>([])
-  const [notifs, setNotifs] = useState<NotificationRow[]>([])
-  // Open DOJ/Judiciary applications (command/owner read): keeps the badge from
-  // counting justice applicants as CID sign-ins. null = not loaded/authorized.
-  const [justiceReqs, setJusticeReqs] = useState<JusticeRequestLite[] | null>(null)
+  const anns = useNavBadgeStore((s) => s.anns)
+  const cases = useNavBadgeStore((s) => s.cases)
+  const mentions = useNavBadgeStore((s) => s.mentions)
+  const justiceReqs = useNavBadgeStore((s) => s.justiceReqs)
   const vAnn = useTableVersion('announcements')
   const vCases = useTableVersion('cases')
   const vNotifs = useTableVersion('notifications')
@@ -71,52 +152,36 @@ export function useNavBadges(): NavBadges {
   const vJusticeReqs = useTableVersion('justice_membership_requests')
 
   // One effect per input so a realtime bump on one table refetches ONLY that
-  // table (the old single effect re-pulled all three lists + both stores on
-  // any of five version counters). Each fetch projects just the columns the
-  // memo below reads — never announcement bodies or case notes/summaries.
+  // table; the store's version keys make the fetch once-per-bump however many
+  // shell surfaces mount this hook. Deferred so no fetch starts during render.
   useEffect(() => {
     if (state !== 'in') return
-    const t = window.setTimeout(() => {
-      list('announcements', { select: 'id,author_id,audience,mentions,pinned,created_at', order: 'created_at', ascending: false }).then(setAnns).catch(() => undefined)
-    }, 0)
+    const t = window.setTimeout(() => { void useNavBadgeStore.getState().fetchAnns(vAnn) }, 0)
     return () => window.clearTimeout(t)
   }, [state, vAnn])
 
   useEffect(() => {
     if (state !== 'in') return
-    const t = window.setTimeout(() => {
-      list('cases', { select: 'id,status,bureau,lead_detective_id,follow_up_at,updated_at,signoff_status,signoff_assignee_id,signoff_submitted_by' }).then(setCases).catch(() => undefined)
-    }, 0)
+    const t = window.setTimeout(() => { void useNavBadgeStore.getState().fetchCases(vCases) }, 0)
     return () => window.clearTimeout(t)
   }, [state, vCases])
 
   useEffect(() => {
     if (state !== 'in') return
-    const t = window.setTimeout(() => {
-      list('notifications', { select: 'id,type,read', eq: { read: false } }).then(setNotifs).catch(() => undefined)
-    }, 0)
+    const t = window.setTimeout(() => { void useNavBadgeStore.getState().fetchMentions(vNotifs) }, 0)
     return () => window.clearTimeout(t)
   }, [state, vNotifs])
 
   useEffect(() => {
     if (state !== 'in') return
-    const t = window.setTimeout(() => {
-      void fetchProfiles()
-      void fetchFieldStanding()
-      if (isCommand || isOwner) void fetchJustice()
-    }, 0)
+    const key = `${vProfiles}|${vJustice}|${isCommand || isOwner}`
+    const t = window.setTimeout(() => { void useNavBadgeStore.getState().fetchRoster(key, isCommand || isOwner) }, 0)
     return () => window.clearTimeout(t)
-  }, [state, isCommand, isOwner, fetchProfiles, fetchJustice, fetchFieldStanding,
-      vProfiles, vJustice])
+  }, [state, isCommand, isOwner, vProfiles, vJustice])
 
   useEffect(() => {
     if (state !== 'in' || !(isCommand || isOwner)) return
-    const t = window.setTimeout(() => {
-      list('justice_membership_requests', {
-        select: 'applicant_id,status',
-        in: { status: ['draft', 'pending', 'correction_requested'] },
-      }).then((rows) => setJusticeReqs(rows as JusticeRequestLite[])).catch(() => undefined)
-    }, 0)
+    const t = window.setTimeout(() => { void useNavBadgeStore.getState().fetchJusticeReqs(vJusticeReqs) }, 0)
     return () => window.clearTimeout(t)
   }, [state, isCommand, isOwner, vJusticeReqs])
 
@@ -140,7 +205,6 @@ export function useNavBadges(): NavBadges {
 
     const review = cases.filter((c) => canReviewCase(c, profile))
     const bounced = cases.filter((c) => c.signoff_submitted_by === profile.id && (c.signoff_status === 'changes_requested' || c.signoff_status === 'denied'))
-    const mentions = notifs.filter((n) => !n.read && (n.type === 'chat_mention' || n.type === 'mention')).length
     const inSignoff = new Set([...review, ...bounced].map((c) => c.id))
     const today = todayISO()
     const mine = cases.filter((c) => c.lead_detective_id === profile.id && c.status !== 'closed' && c.status !== 'cold')
@@ -150,5 +214,5 @@ export function useNavBadges(): NavBadges {
 
     return { pending, announcements, signoff, command: pending + announcements + signoff }
   }, [state, profile, isCommand, isOwner, profiles, justiceByUser, justiceReqs,
-      fieldIds, fieldLoaded, anns, cases, notifs])
+      fieldIds, fieldLoaded, anns, cases, mentions])
 }

@@ -45,6 +45,20 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
 
   const setSection = (k: string, v: string) => setSummary((s) => ({ ...s, [k]: v }))
 
+  // Dirty guard (Modal confirms before discarding) — form state vs the
+  // initial record, same idea as CaseModal's.
+  const dirty = () =>
+    name !== (record?.name || '')
+    || aliases !== (record?.aliases || '')
+    || colors !== (record?.colors || '')
+    || threat !== (record?.threat_level || 'medium')
+    || classification !== (record?.classification || '')
+    || status !== (record?.status || '')
+    || confidence !== (record?.confidence || '')
+    || lead !== (record?.lead_detective_id || '')
+    || notes !== (record?.notes || '')
+    || JSON.stringify(summary) !== JSON.stringify(parseIntelSummary(record?.intelligence_summary))
+
   const save = async (markReviewed = false) => {
     if (!name.trim()) { toast('Gang name is required.', 'warn'); return }
     setBusy(true)
@@ -75,7 +89,7 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
   }
 
   return (
-    <Modal open wide onClose={onClose}>
+    <Modal open wide onClose={onClose} dirty={dirty}>
       <div className="max-h-[85vh] overflow-y-auto p-6">
         <ModalHeader title={`${record ? 'Edit' : 'New'} Gang`} onClose={onClose} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -135,9 +149,9 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
-          <button onClick={() => void save(false)} disabled={busy} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+          <Button variant="primary" className="flex-1" loading={busy} onClick={() => void save(false)}>
             {busy ? 'Saving…' : record ? 'Save changes' : 'Create gang'}
-          </button>
+          </Button>
           {record && <button onClick={() => void save(true)} disabled={busy} title="Save and stamp reviewed now (+90d next review)" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-60">Save &amp; mark reviewed</button>}
         </div>
       </div>
@@ -482,7 +496,7 @@ export function TurfModal({ gangId, onClose, onSaved }: { gangId: string; onClos
           <div><label htmlFor="turf-last" className={label}>Last confirmed</label><input id="turf-last" type="date" value={lastConf} onChange={(e) => setLastConf(e.target.value)} className={input} /></div>
           <div className="sm:col-span-2"><label htmlFor="turf-notes" className={label}>Notes</label><textarea id="turf-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className={input} /></div>
         </div>
-        <button onClick={() => void save()} disabled={busy} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">{busy ? 'Saving…' : 'Add Turf'}</button>
+        <Button variant="primary" className="mt-5 w-full" loading={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Add Turf'}</Button>
       </div>
     </Modal>
   )
@@ -538,7 +552,7 @@ export function AttachGangModal({ gang, caseOptions, onClose, onSaved }: { gang:
             <div><label htmlFor="attach-role" className={label}>Gang role in the case</label><input id="attach-role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="Subject, suspect org, rival…" className={input} /></div>
             <div><label htmlFor="attach-note" className={label}>Note (optional)</label><input id="attach-note" value={note} onChange={(e) => setNote(e.target.value)} className={input} /></div>
             <label className="flex items-center gap-2 text-xs text-slate-400"><input type="checkbox" checked={alsoPost} onChange={(e) => setAlsoPost(e.target.checked)} className="h-4 w-4 accent-badge-500" />Also post a note in the case channel</label>
-            <button onClick={() => void go()} disabled={busy} className="w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">{busy ? 'Linking…' : 'Create case link'}</button>
+            <Button variant="primary" className="w-full" loading={busy} onClick={() => void go()}>{busy ? 'Linking…' : 'Create case link'}</Button>
           </div>
         ) : (
           <p className="text-sm text-slate-400">No cases available to attach to.</p>
@@ -597,7 +611,7 @@ export function LinkPlaceModal({ gang, places, existing, onClose, onSaved }: {
               </div>
             </div>
             <div><label htmlFor="lp-note" className={label}>Note</label><input id="lp-note" value={note} onChange={(e) => setNote(e.target.value)} className={input} /></div>
-            <button onClick={() => void go()} disabled={busy} className="w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">{busy ? 'Linking…' : 'Link place'}</button>
+            <Button variant="primary" className="w-full" loading={busy} onClick={() => void go()}>{busy ? 'Linking…' : 'Link place'}</Button>
           </div>
         ) : (
           <p className="text-sm text-slate-400">All existing places are already linked, or none exist yet. Create places in the Places area first.</p>
@@ -657,7 +671,7 @@ export function AddGangPhotoModal({ gang, onClose, onSaved }: { gang: GangRow; o
             <div>
               <label htmlFor="gp-url" className={label}>Image URL</label>
               <input id="gp-url" value={url} onChange={(e) => setUrl(e.target.value)} className={input} />
-              <button onClick={() => void saveUrl()} disabled={busy} className="mt-3 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-2.5 text-sm font-semibold text-white shadow-glow disabled:opacity-60">{busy ? 'Saving…' : 'Add photo'}</button>
+              <Button variant="primary" className="mt-3 w-full" loading={busy} onClick={() => void saveUrl()}>{busy ? 'Saving…' : 'Add photo'}</Button>
             </div>
           )}
         </div>

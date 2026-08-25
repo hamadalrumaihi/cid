@@ -3,6 +3,8 @@
  *  leaf tabs; categories + the sub-tab strip are a grouping layer over them.
  *  Route ids, labels and grouping MUST stay identical to vanilla for parity. */
 
+import { TOOL_TABS } from './toolsModel'
+
 export interface PageMeta {
   title: string
   sub: string
@@ -159,8 +161,25 @@ export const SUBTAB_GROUPS: Record<string, { label: string; tabs: string[] }[]> 
   // Investigative Tools directory — see lib/toolsModel TOOL_GROUPS.)
 }
 
-export const TAB_CATEGORY: Record<string, string> = {}
+/** tab → category (or null: a valid route that belongs to NO category — the
+ *  Command strip must not light up for it and the sub-tab strip is
+ *  suppressed). Covers EVERY PAGE_META tab: category tabs from
+ *  NAV_CATEGORIES, the 14 legacy Intelligence tabs → 'intel' (their routes
+ *  redirect into /tools, so the strip highlights Investigative Tools during
+ *  the hop instead of mislighting Command), and the standalone surfaces
+ *  (profile / owner / command-center / concern / siu / feedback) → null.
+ *  Before this, anything absent from the map fell back to 'command' in
+ *  useNav and mislit the Command strip. */
+export const TAB_CATEGORY: Record<string, string | null> = {
+  profile: null,
+  owner: null,
+  'command-center': null,
+  concern: null,
+  siu: null,
+  feedback: null,
+}
 export const CAT_DEFAULT: Record<string, string> = {}
+for (const t of TOOL_TABS) TAB_CATEGORY[t] = 'intel'
 for (const c of NAV_CATEGORIES) {
   for (const t of c.tabs) TAB_CATEGORY[t] = c.id
   CAT_DEFAULT[c.id] = c.tabs[0]

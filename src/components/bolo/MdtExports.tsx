@@ -18,6 +18,7 @@ import { useAuth } from '@/lib/auth'
 import { toast } from '@/lib/toast'
 import { fmtDateTime } from '@/lib/format'
 import { useTableVersion } from '@/lib/realtime'
+import { statusMeta } from '@/lib/status'
 import { useNow } from '@/lib/useNow'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -31,12 +32,6 @@ type PersonLite = { id: string; name: string }
 type ExportKind = 'person_bolo' | 'caution' | 'arrest_warrant' | 'person_record' | 'vehicle_record' | 'account'
 
 const RISKS = ['low', 'medium', 'high', 'critical'] as const
-const RISK_TINT: Record<string, string> = {
-  low: 'bg-slate-500/15 text-slate-300',
-  medium: 'bg-amber-500/15 text-amber-300',
-  high: 'bg-orange-500/15 text-orange-300',
-  critical: 'bg-rose-500/15 text-rose-300',
-}
 const STATUS_TINT: Record<string, string> = {
   proposed: 'bg-amber-500/15 text-amber-300',
   exported: 'bg-emerald-500/15 text-emerald-300',
@@ -175,7 +170,7 @@ export function MdtExportsPanel({ persons, canPropose, isCommand }: { persons: P
                   {e.patrol_visible ? 'Patrol' : 'CID-only'}
                 </Badge>
               )}
-              {e.risk_level && <Badge tint={RISK_TINT[e.risk_level]}>{e.risk_level} risk</Badge>}
+              {e.risk_level && <Badge tint={statusMeta('boloRisk', e.risk_level).cls}>{e.risk_level} risk</Badge>}
               {expansion && e.expires_at && <DeadlineChip at={e.expires_at} kind="expires" now={now} />}
               {e.instructions && <span className="text-xs text-slate-400">— {e.instructions}</span>}
               <span className="ml-auto text-[11px] text-slate-500">{fmtDateTime(e.proposed_at)}</span>

@@ -570,7 +570,7 @@ function PlaceObservations({ placeId, count }: { placeId: string; count: number 
   )
 }
 
-function PlaceModal({ record, gangs, cases, drugs, onClose, onSaved }: {
+export function PlaceModal({ record, gangs, cases, drugs, onClose, onSaved }: {
   record: PlaceRow | null
   gangs: GangRow[]
   cases: CaseOption[]

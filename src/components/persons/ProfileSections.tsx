@@ -14,6 +14,7 @@ import { officerName } from '@/lib/profiles'
 import { priorityTint, statusTint } from '@/lib/tint'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, Input, Textarea, inputCls } from '@/components/ui/Field'
@@ -34,13 +35,6 @@ export function KV({ label, children }: { label: string; children: React.ReactNo
       <span className="min-w-0 text-right text-sm text-slate-200">{children}</span>
     </div>
   )
-}
-
-const REVIEW_STATE_TINT: Record<string, string> = {
-  fresh: 'bg-emerald-500/15 text-emerald-300',
-  due: 'bg-amber-500/15 text-amber-300',
-  stale: 'bg-rose-500/15 text-rose-300',
-  unreviewed: 'bg-slate-500/20 text-slate-300',
 }
 
 // ── Intelligence summary (structured sections + preserved legacy notes) ──────
@@ -162,7 +156,7 @@ export function InvestigationStatusCard({ person, now, warnings, canEdit, onMark
     <Card pad="lg">
       <div className="mb-1 flex items-center justify-between gap-2">
         <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Investigation status</h3>
-        <Badge tint={REVIEW_STATE_TINT[due] ?? REVIEW_STATE_TINT.unreviewed} title={`Review state: ${due}`} className="uppercase">{due}</Badge>
+        <StatusBadge domain="personReview" value={due} className="uppercase" />
       </div>
       <div className="divide-y divide-white/5">
         <KV label="Lead detective">{lead ?? '—'}</KV>

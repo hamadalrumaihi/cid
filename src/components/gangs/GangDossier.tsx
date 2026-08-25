@@ -21,6 +21,7 @@ import {
 } from '@/components/shell/icons'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { ErrorNotice, EmptyState } from '@/components/ui/Notice'
 import { ActionMenu } from '@/components/ui/ActionMenu'
@@ -582,7 +583,7 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {canEdit && <button onClick={onEdit} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Edit gang</button>}
+            {canEdit && <Button variant="primary" onClick={onEdit}>Edit gang</Button>}
             {canEdit && <button onClick={() => setMemberEditor('new')} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Add member</button>}
             {canEdit && <button onClick={onEdit} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-blue-200 hover:bg-white/10">Add intelligence</button>}
             {canEdit && <button onClick={() => setAttachOpen(true)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-blue-200 hover:bg-white/10">Attach to case</button>}
