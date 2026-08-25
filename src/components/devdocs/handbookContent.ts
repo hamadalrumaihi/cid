@@ -9,7 +9,7 @@ export interface HandbookPage {
   body: string
 }
 
-export const HANDBOOK_UPDATED = '2026-08-17'
+export const HANDBOOK_UPDATED = '2026-08-25'
 
 export const HANDBOOK_PAGES: HandbookPage[] = [
   {
@@ -32,8 +32,9 @@ without refreshing.
 Division members in four effective tiers (§[Ch. 9](09-auth.md) has the
 full model): regular members (\`detective\`, \`senior_detective\`), bureau
 leads, deputy directors, and command (\`director\`). Members also belong to a
-**bureau** — \`LSB\`, \`BCB\`, \`SAB\`, or \`JTF\` — and case visibility is
-bureau-scoped.
+**bureau** — \`major_crimes\` (Major Crimes), \`street_crimes\` (Street Crimes), or
+\`JTF\` — and case visibility is bureau-scoped (\`special_investigations\` marks
+SIB-authority cases).
 
 ## Main workflows
 
@@ -619,7 +620,7 @@ command, own/specific department, or just the mentioned members — the
 notification each, a recipient-count preview and confirm in the composer,
 and edits never re-notify unless explicitly requested), heatmap
 (weighted layers, pan/zoom SVG map), roster (membership requests: new
-sign-ins request ONE permanent department — LSB/BCB/SAB, never JTF — plus
+sign-ins request ONE permanent department — Major Crimes or Street Crimes (\`major_crimes\`/\`street_crimes\`), never JTF or SIB — plus
 any normal CID role (v1.16: detective … director; requesting grants
 nothing) from the inactive-account screen; the Approval Queue reviews them
 via \`review_membership_request()\` — approve / approve-with-changes (reason
@@ -813,7 +814,7 @@ SELECT-only for clients; these definer RPCs are the only write path.
 | \`legal_return_to_prosecutor_queue(p_request, p_reason?)\` | the holder steps back — or the AG returns abandoned work — to the shared queue |
 | \`review_legal_request_as_prosecutor(p_request, p_decision, p_note?, p_signature?, p_capacity?)\` | assigned prosecutor: approve → judicial queue / return (corrections required) / decline (terminal, reason required) / note; dual CID+DOJ members state their acting capacity |
 | \`claim_legal_request_as_judge\` / \`assign_judge\` / \`decide_legal_request_as_judge\` | judicial claim (non-sealed) or formal assignment (AG/Owner/approving prosecutor; only path for sealed), then decision — approve (reasoning required, optional conditions + expiry) / deny / return; conflict-of-role + investigator-history checked |
-| \`justice_appoint(p_user, p_role, p_reason?, p_bureau?)\` | DIRECT, immediate DOJ/judiciary assignment — no approval chain. A prosecutor appointment **requires the home bureau** (\`p_bureau\` ∈ LSB/BCB/SAB; forbidden for judge/AG). Authority: prosecutor/judge — active AG, DD+/Owner (**Owner only** for an Attorney General). An ACTIVE CID member (any rank/bureau, JTF included) is transferred inline in one transaction — settled \`member_transfers\` row, CID membership + assignments end, justice membership activates, and their open led cases are **reassigned to the acting authority as interim lead** (audited \`CASE_LEAD_INTERIM\` per case; command notified) — and requires DD+/Owner (a pure AG appoints only non-CID accounts). Inactive/unassigned accounts appoint directly. The staged transfer workflow below remains the deliberate hand-over-first alternative |
+| \`justice_appoint(p_user, p_role, p_reason?, p_bureau?)\` | DIRECT, immediate DOJ/judiciary assignment — no approval chain. A prosecutor appointment **requires the home bureau** (\`p_bureau\` ∈ \`major_crimes\`/\`street_crimes\`; forbidden for judge/AG). Authority: prosecutor/judge — active AG, DD+/Owner (**Owner only** for an Attorney General). An ACTIVE CID member (any rank/bureau, JTF included) is transferred inline in one transaction — settled \`member_transfers\` row, CID membership + assignments end, justice membership activates, and their open led cases are **reassigned to the acting authority as interim lead** (audited \`CASE_LEAD_INTERIM\` per case; command notified) — and requires DD+/Owner (a pure AG appoints only non-CID accounts). Inactive/unassigned accounts appoint directly. The staged transfer workflow below remains the deliberate hand-over-first alternative |
 | \`case_set_stage(p_case, p_stage, p_reason)\` | the ONLY path to move \`cases.investigative_stage\` (intake → active_investigation → legal_process → enforcement_ready → pending_closure → closed — manual, never automatic); reason required; case lead / Senior Detective+ / Owner; audited \`CASE_STAGE_CHANGED\`; direct column writes are trigger-frozen |
 | \`case_stage_history(p_case)\` | the member-visible stage trail (when / who / from → to / reason) for the case Record area — reads ONLY the \`CASE_STAGE_CHANGED\` audit rows of one case, gated on \`private.can_access_case\` (the audit log itself stays Owner-only); inaccessible cases return zero rows |
 | \`media_designate_evidence(p_media, p_ref?, p_clear?)\` | promote a case upload to a designated **evidence record** (reference auto-generated when omitted; designating actor + timestamp recorded; original uploader/timestamps untouched) or clear a designation; uploader / Senior Detective+ / Owner; audited |
@@ -827,7 +828,7 @@ SELECT-only for clients; these definer RPCs are the only write path.
 | \`transfer_doj_cancel(p_transfer, p_reason?)\` | requester/command/AG/Owner cancels a pre-effective transfer |
 | \`issue_legal_request\` / \`record_warrant_execution\` / \`record_warrant_return\` | CID-side warrant fulfilment (**a prosecutor or judge can never issue**) |
 | \`record_subpoena_service\` / \`record_subpoena_compliance\` | CID-side subpoena fulfilment (materials link back to the case) |
-| \`resolve_case_originating_bureau\` | Senior Detective+ SETS a JTF-assigned case's missing responsible bureau (LSB/BCB/SAB — never 'JTF', never a permanent-bureau case), Deputy Director+/Owner CHANGES an already-set one with a required reason. The server chain (\`private.legal_resolve_bureau\`: bureau → originating → case-number prefix → lead's division → creator's division) persists successful derivations automatically |
+| \`resolve_case_originating_bureau\` | Senior Detective+ SETS a JTF-assigned case's missing responsible bureau (\`major_crimes\`/\`street_crimes\` — never JTF, never a permanent-bureau case), Deputy Director+/Owner CHANGES an already-set one with a required reason. The server chain (\`private.legal_resolve_bureau\`: bureau → originating → case-number prefix → lead's division → creator's division) persists successful derivations automatically |
 | \`close_legal_request\` / \`withdraw_legal_request\` | close / expire / revoke; creator withdraw (records preserved) |
 | \`legal_search(q)\` | RLS-limited header search (SECURITY INVOKER — sealed rows undiscoverable) |
 | \`legal_internal_notes(p_request)\` | prosecution/judicial-side internal notes (column-revoked otherwise) |
@@ -897,7 +898,7 @@ live catalog (July 2026).
 | Enum | Values |
 |---|---|
 | \`app_role\` | detective, senior_detective, supervisor, bureau_lead, deputy_director, director, command *(supervisor/command are legacy labels; the app uses the 5-role ladder)* |
-| \`bureau\` | LSB, BCB, SAB, JTF |
+| \`bureau\` | major_crimes, street_crimes, special_investigations, JTF *(renamed in place 2026-08-25 — was LSB/BCB/SAB; \`special_investigations\` is SIB-authority cases only, \`JTF\` a temporary joint designation)* |
 | \`case_status\` | open, active, cold, closed |
 | \`assign_role\` / \`report_kind\` / \`evidence_tamper\` / \`media_type\` / \`doc_kind\` / \`location_type\` / \`bench_type\` / \`tracker_status\` / \`threat_level\` / \`density\` | see [Quick Reference](appendix-quick-reference.md) |
 
@@ -1209,10 +1210,15 @@ User clicks "Save" in a modal
 \`detective\` → \`senior_detective\` → \`bureau_lead\` → \`deputy_director\` →
 \`director\`. **Command staff** = bureau_lead (within their bureau) +
 deputy_director + director (global). Plus a bureau:
-\`LSB | BCB | SAB | JTF\` — JTF is a **temporary joint-case designation**
-(and the pre-approval profile default), never a permanent home. One
-canonical definition: \`src/lib/roles.ts\` (the client mirror of the server
-matrix \`private.can_assign_cid_role\`).
+\`major_crimes | street_crimes | special_investigations | JTF\` (the
+2026-08-25 restructure renamed the enum values in place — LSB→\`major_crimes\`,
+BCB→\`street_crimes\`; ex-SAB rows were redistributed). \`major_crimes\` (Major
+Crimes Bureau, MCB) and \`street_crimes\` (Street Crimes Bureau, SCB) are the
+only permanent homes; \`special_investigations\` (SIB) is reserved for
+SIB-authority cases and is never a membership assignment; JTF is a
+**temporary joint-case designation** (and the pre-approval profile default),
+never a permanent home. One canonical definition: \`src/lib/roles.ts\` (the
+client mirror of the server matrix \`private.can_assign_cid_role\`).
 
 **Unified assignment matrix (v1.16)** — who may grant a role (signup
 approval, promotion/demotion, transfer role changes all use the same rule):
@@ -1239,20 +1245,22 @@ are a separate identity domain and grant no CID assignment authority. (Retired
 Lead+ (\`private.is_command()\`) — see [DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md)
 Phase-1 banner.)
 
-### SIU — a second investigative authority
+### SIB — a second investigative authority
 
-The Special Investigation Unit is a **separate authority domain**, not another
+The Special Investigations Bureau (built as the Special Investigation Unit —
+the SIU→SIB rename changed terminology only, and every internal \`siu_*\`
+identifier below is unchanged) is a **separate authority domain**, not another
 rank: a member operates as CID (\`profiles.role\` + \`profiles.division\`) *or* as
-SIU (\`siu_memberships.siu_role\` — \`special_agent\` / \`senior_special_agent\` /
+SIB (\`siu_memberships.siu_role\` — \`special_agent\` / \`senior_special_agent\` /
 \`special_agent_in_charge\`, displayed as X-Ray 1). One resolver answers every
-SIU question:
+SIB question:
 \`private.siu_standing()\` server-side, mirrored by \`siuStanding()\` in
 \`src/lib/siu.ts\` and surfaced to components as \`useSiu()\` — never an inline
 \`user.role === …\` check.
 
-Visibility is deliberately **asymmetric**: SIU reads CID across every bureau
+Visibility is deliberately **asymmetric**: SIB reads CID across every bureau
 (read only — the superset \`private.can_read_case\` appears in SELECT policies
-and nowhere else), while CID gets **nothing** on an SIU case at any rank, in
+and nowhere else), while CID gets **nothing** on an SIB case at any rank, in
 any surface, with no placeholder to reveal that a record exists.
 \`siu_compartmented\` cases are allow-list only, with no exemption for X-1, the
 Attorney General or the owner flag. Membership is appointment-only
@@ -1266,14 +1274,14 @@ investigations, targets, intelligence and operations — via the read-only
 cannot open, assign, reclassify, author, designate, or delete anything.
 \`siu_restricted\` and above stay closed to them, which is what keeps an
 investigation *into* the Director, the AG or X-1 possible. On a CID case the
-SIU-only intelligence layer remains field-agent only, because the Director is a
+SIB-only intelligence layer remains field-agent only, because the Director is a
 plausible subject of an integrity flag.
 
-**Taking and releasing (§14/§15).** SIU command can **assume control** of a
+**Taking and releasing (§14/§15).** SIB command can **assume control** of a
 live CID case: one flip of \`cases.case_authority\` takes the case and every
 child row out of CID at every rank, with the case number, bureau, lead
 detective and all authorship untouched, and \`siu_release_control()\` gives it
-back. Going the other way, SIU releases a **single item** with \`siu_share()\` —
+back. Going the other way, SIB releases a **single item** with \`siu_share()\` —
 to the Division, to one case's members, or to one named officer. The release
 carries a snapshot of the text, never a pointer, so it can never widen into the
 investigation; CID reads it through \`siu_released_intelligence()\`, which
@@ -1283,12 +1291,12 @@ projects no origin at all.
 communications intelligence, and integrity reviews all ride the WRITE wall
 (\`private.siu_case_access\`), never the read superset — oversight reads the case
 file, not the tradecraft. Sources and legends narrow further to the handler and
-SIU command (\`private.siu_handler_access\`). Exports go through one logged RPC
+SIB command (\`private.siu_handler_access\`). Exports go through one logged RPC
 that always withholds source identities, legends and intercept content.
 
 **Build-phase gate:** while \`siu_settings.enabled_for_non_owner\` is false,
 \`siu_standing()\` resolves to \`owner\` for the Portal Owner and NULL for
-everybody else, so SIU does not exist for any other account. Full model:
+everybody else, so SIB does not exist for any other account. Full model:
 [AUTHORIZATION.md §4f](../AUTHORIZATION.md).
 
 ## Permissions (what may you do?) — three layers
@@ -1827,7 +1835,7 @@ shipped. Effort: S < 1d, M = days, L = week+.
 | **Sequence guard** | A counter/flag ensuring only the newest async request's result is applied. |
 | **CAS (compare-and-swap)** | An update that only applies if a column still has an expected value — prevents two tabs double-firing. |
 | **pg_trgm** | The Postgres extension powering typo-tolerant search. |
-| **Bureau** | A sub-division (\`LSB\`/\`BCB\`/\`SAB\`/\`JTF\`); most case access is scoped to it. |
+| **Bureau** | A sub-division (\`major_crimes\`/\`street_crimes\`/\`special_investigations\`/\`JTF\`); most case access is scoped to it. \`major_crimes\` and \`street_crimes\` are the permanent homes; \`special_investigations\` marks SIB-authority cases. |
 | **Sign-off chain** | The server-routed approval flow: bureau lead → deputy director → director. |
 | **Deconfliction** | Detecting the same identifier/person across separate cases. |
 | **BOLO** | "Be on the lookout" — flagged persons. |
@@ -1871,7 +1879,7 @@ rollback via Vercel dashboard → Deployments → Rollback).
 | Member | detective, senior_detective | ✓ | ✗ |
 | Command | bureau_lead, deputy_director, director | ✓ | ✓ |
 
-Bureaus: \`LSB\` · \`BCB\` · \`SAB\` · \`JTF\`. Sign-off chain:
+Bureaus: \`major_crimes\` (MCB) · \`street_crimes\` (SCB) · \`special_investigations\` (SIB, appointment-only) · \`JTF\` (temporary joint designation). Sign-off chain:
 bureau_lead → deputy_director → director.
 
 ## The db.ts contract
