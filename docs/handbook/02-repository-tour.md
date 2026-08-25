@@ -44,7 +44,8 @@ navigation implementation instead of one per screen. Details: [Ch. 6](06-compone
 vocabulary). Feature-agnostic — every feature folder builds on these.
 `src/components/shared/` holds the cross-feature record widgets extracted
 from the DOJ build (`RelatedRecordPicker`, `VersionViewer`,
-`SignatureViewer`) — see [Ch. 6](06-components.md).
+`SignatureViewer`) plus the entity-select set (`RecordSearchPicker` +
+`useListboxNav`, `LinkedPersonPanel`) — see [Ch. 6](06-components.md).
 
 ### `src/components/<feature>/` — the feature folders
 One folder per screen (`cases/`, `gangs/`, `heatmap/`, …). Each is

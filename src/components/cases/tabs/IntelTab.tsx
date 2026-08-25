@@ -92,7 +92,10 @@ export function IntelTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boole
   }, [c.id])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, v])
 
-  const label = (l: IntelRow) => names[l.ref_id] || l.ref_id
+  // A link whose target the viewer cannot read (or that no longer exists)
+  // must not surface its raw UUID — that is an access-denied hint. The
+  // neutral stub matches the RecordPeek restricted-state convention.
+  const label = (l: IntelRow) => names[l.ref_id] || 'Restricted record'
 
   return (
     <div className="space-y-4">
@@ -248,9 +251,23 @@ function LinkForm({ caseId, links, onLinked }: { caseId: string; links: IntelRow
 
   /** Create-new path: the existing PersonModal (duplicate notice + SIB
    *  visibility choice intact) with the typed name prefilled; on success the
-   *  fresh registry record auto-links to this case — never a detached copy. */
+   *  fresh registry record auto-links to this case — never a detached copy.
+   *  EXCEPT a record created SIB Only: the link row itself would be visible
+   *  to the whole case team (case_intel_links reads under can_access_case),
+   *  disclosing that a compartmented record exists — so the auto-link is
+   *  skipped and the agent is told to link it from the SIB workspace when
+   *  disclosure is intended (security review WARN-1). */
   const createPerson = (q: string) =>
-    create.open('person', { prefillName: q, onCreated: (id) => { void linkRef.current('person', id) } })
+    create.open('person', {
+      prefillName: q,
+      onCreated: (id, _name, opts) => {
+        if (opts.siuOnly) {
+          toast('Created SIB Only — not linked: a case link would reveal the record to the whole case team.', 'warn')
+          return
+        }
+        void linkRef.current('person', id)
+      },
+    })
 
   return (
     <Card pad="sm" className="space-y-3">

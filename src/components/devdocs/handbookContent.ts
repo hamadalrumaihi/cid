@@ -190,7 +190,8 @@ navigation implementation instead of one per screen. Details: [Ch. 6](06-compone
 vocabulary). Feature-agnostic — every feature folder builds on these.
 \`src/components/shared/\` holds the cross-feature record widgets extracted
 from the DOJ build (\`RelatedRecordPicker\`, \`VersionViewer\`,
-\`SignatureViewer\`) — see [Ch. 6](06-components.md).
+\`SignatureViewer\`) plus the entity-select set (\`RecordSearchPicker\` +
+\`useListboxNav\`, \`LinkedPersonPanel\`) — see [Ch. 6](06-components.md).
 
 ### \`src/components/<feature>/\` — the feature folders
 One folder per screen (\`cases/\`, \`gangs/\`, \`heatmap/\`, …). Each is
@@ -471,15 +472,60 @@ re-inline.
   \`audit_detail\` triggers record old/new content. **Reuse when**: any link
   table gains an editable attribute — never delete-and-recreate.
 - **\`shared/RecordSearchPicker.tsx\`** — bounded, RLS-scoped search picker
-  for attaching registry records. **Reuse when**: any "link a record" flow.
+  for attaching registry records (upgraded by the entity-select pass —
+  see below). **Reuse when**: any "link a record" flow.
 - **\`shared/DuplicateMatches.tsx\`** — non-blocking duplicate hints under
-  the name/plate field of the Person/Gang/Vehicle create modals.
+  the name/plate field of the Person/Gang/Vehicle/Place create modals
+  (plate hints compare \`normPlate\` equality, so punctuation variants
+  match).
 - **\`shared/PinButton.tsx\` + \`lib/pins.ts\`** — pin toggle (person,
   vehicle, gang, account, narcotics profiles + case headers).
 - **\`shell/CreateHost.tsx\`** — the universal "+ Create" provider:
   \`useCreate().open(kind)\` opens the exact exported registry modal,
   lazy-loaded, permission-gated. **Reuse when**: any surface wants a
   create shortcut — never fork a second copy of a create form.
+
+## The entity-select shared set (2026-08-25)
+The smart search/select/link/autofill pass — one picker contract for
+every "attach a record" flow. Same rule: reuse, don't re-inline.
+
+- **\`shared/RecordSearchPicker.tsx\`** — THE bounded record combobox. The
+  caller supplies the loader (so the picker can never widen access; \`''\`
+  lists recent rows), and full combobox a11y comes from
+  \`shared/useListboxNav\`. Everything beyond the base contract is opt-in
+  and default-off: thumbnails (\`getThumb\` → \`ui/RecordThumb\`), per-row
+  disable-with-reason (\`getDisabled\` — LOA/inactive/already-linked rows
+  stay visible, badged and unselectable), quick previews (\`peekType\`), a
+  create-new action row (\`onCreateNew\`), a free-text fallback
+  (\`allowFreeText\` — never the default), \`minChars\`, multi-select chips.
+  **Reuse when**: any "link a record" flow — and take the loader from
+  \`lib/entitySearch\`, never a hand-rolled query. (\`siu/SiuRegistryPicker\`
+  now runs this internally over the same \`siu_registry_search()\` RPC.)
+- **\`lib/entitySearch.ts\`** — the per-kind suggestion-query registry
+  (\`searchEntities(kind, q, opts)\` + typed arms such as
+  \`searchPersonHits\`/\`searchMemberHits\`): the indexed \`search_persons\`
+  two-step ranked RPC for persons, normalized-plate matching for
+  vehicles, gang/place/account/case/operation/narcotic/legal-request
+  arms, roster and penal-charge cache filters. Bounded (~20), RLS-scoped,
+  merged tombstones filtered, transient failure ⇒ \`[]\`. Matching-only
+  normalizers (\`normPlate\`/\`normPhone\`/\`normHandle\`) never alter display
+  values. **Reuse when**: any picker needs a loader.
+- **\`lib/autofill.ts\`** — pure save-choice engine: \`buildAutofill\`
+  (master data fills only user-empty fields, provenance tracked) and
+  \`diffForMasterUpdate\` (fill-the-master's-gaps only — never overwrites a
+  non-empty value, never writes blanks). No I/O — pair it with an
+  explicit \`uiConfirm\` and the audited \`update()\` path.
+- **\`shared/LinkedPersonPanel.tsx\` + \`shared/personCompletion.ts\`** — the
+  "linked to a registry profile" panel on the case link form: linked-state
+  clarity (badge + Open profile) plus optional completion of blank
+  profile fields with the explicit case-only-vs-update-profile choice.
+- **\`shared/useListboxNav.ts\`** — the combobox/listbox keyboard kernel
+  (\`aria-activedescendant\`, wrap-around arrows, disabled-row skipping,
+  Escape containment). **Reuse when**: any suggestion list under an
+  input.
+- **\`ui/RecordThumb.tsx\`** — unified record avatar/thumbnail
+  (safeUrl-guarded image, broken-image → initials fallback). Used by
+  picker rows, \`RegistryCard\` and the gang roster.
 
 ## \`cases/WatchButton.tsx\`
 Follow/unfollow for \`case|person|vehicle\`. Stops propagation (works inside
@@ -530,6 +576,7 @@ leaf nodes, safe to study, intricate to edit.`,
 | File | One-liner |
 |---|---|
 | \`auth.tsx\` | ⚠ Sign-in state machine + \`useAuth()\` context + capability booleans |
+| \`autofill.ts\` | Pure autofill/save-choice invariants — \`buildAutofill\` never replaces user input; \`diffForMasterUpdate\` fills only the master's gaps (no overwrites, no blanks); no I/O |
 | \`database.types.ts\` | ⚠ Hand-maintained TS mirror of the live schema |
 | \`db.ts\` | ⚠ THE data layer: list/insert/update/remove/rpc/deleteWithUndo/withRetry |
 | \`docx.ts\` | Dependency-free OOXML writer (byte-fragile ZIP) |
@@ -537,7 +584,8 @@ leaf nodes, safe to study, intricate to edit.`,
 | \`caseHealth.ts\` | Pure, clock-injected advisory health flags (hygiene + due/returned signals) — never fetches, skips flags whose inputs weren't passed; renders via \`cases/CaseHealthRow\` + the CasesView attention marker/"Needs attention" filter |
 | \`drafts.ts\` | localStorage draft primitive (\`cid-draft:\` keys) — now mostly \`userDrafts\`' local mirror; the legal wizard's stash keeps the legacy shared keys |
 | \`userDrafts.ts\` | DB-backed never-lose-work drafts (\`user_drafts\`, owner-only RLS, cross-device): debounced upsert, per-user local mirror, 60KB guard, offline degradation; feeds \`ui/SaveState\` |
-| \`entityPreview.ts\` | Lite RLS-scoped record projections + linked-record counts for \`ui/RecordPeek\` |
+| \`entityPreview.ts\` | Lite RLS-scoped record projections + linked-record counts for \`ui/RecordPeek\` (incl. case/operation/member kinds) |
+| \`entitySearch.ts\` | Shared entity-search registry — bounded per-kind picker loaders (\`searchEntities\` + typed arms), matching-only normalizers (\`normPlate\`/\`normPhone\`/\`normHandle\`), merged tombstones filtered |
 | \`fivemanage.ts\` | Media upload (multipart → hosted URL) |
 | \`format.ts\` | timeAgo/todayISO/fmtUSD/slug/downloadBlob/copyText |
 | \`forms.ts\` | 8 report schemas + warrant helpers + finalize-gap check |
@@ -591,9 +639,10 @@ leaf nodes, safe to study, intricate to edit.`,
 | \`ui/Toaster.tsx\` | Toast renderer |
 | \`ui/WorkflowTimeline.tsx\` / \`ui/DeadlineChip.tsx\` | v1.14 shared history render / deadline chip (see [Ch. 6](06-components.md)) |
 | \`ui/StatusBadge.tsx\` / \`ui/AccessBadge.tsx\` | Registry-backed status chip (tooltip: meaning + who acts next) / one chip for the three access vocabularies (SIB visibility, legal classification, SOP classification) |
-| \`ui/RecordPeek.tsx\` / \`ui/SaveState.tsx\` | Lazy record-preview card (data from \`lib/entityPreview\`) / autosave-state chip (fed by \`lib/userDrafts\`) |
+| \`ui/RecordPeek.tsx\` / \`ui/SaveState.tsx\` / \`ui/RecordThumb.tsx\` | Lazy record-preview card (data from \`lib/entityPreview\`) / autosave-state chip (fed by \`lib/userDrafts\`) / unified record avatar (safeUrl image → initials fallback) |
 | \`shared/RelatedRecordPicker.tsx\` / \`VersionViewer.tsx\` / \`SignatureViewer.tsx\` | v1.14 cross-feature record picker / version list / signature trail |
-| \`shared/LinkEditPopover.tsx\` / \`RecordSearchPicker.tsx\` / \`DuplicateMatches.tsx\` / \`PinButton.tsx\` / \`RecordPeekButton.tsx\` | Relationship-link editor (confidence/status/note over the link tables' UPDATE policies) / bounded registry search picker / non-blocking duplicate hints on create modals / pin toggle over \`lib/pins\` / peek trigger |
+| \`shared/LinkEditPopover.tsx\` / \`RecordSearchPicker.tsx\` / \`DuplicateMatches.tsx\` / \`PinButton.tsx\` / \`RecordPeekButton.tsx\` | Relationship-link editor (confidence/status/note over the link tables' UPDATE policies) / bounded registry search combobox (loaders from \`lib/entitySearch\`; opt-in thumbs, disable-with-reason, peeks, create-new, free-text, multi-select) / non-blocking duplicate hints on create modals / pin toggle over \`lib/pins\` / peek trigger |
+| \`shared/LinkedPersonPanel.tsx\` / \`personCompletion.ts\` / \`useListboxNav.ts\` | Case link form "Registry profile" panel with the case-only vs update-profile completion choice / its pure field-split + provenance-line logic / combobox keyboard kernel (aria-activedescendant, disabled-row skipping) |
 
 ## Feature views (main file per folder)
 
@@ -694,6 +743,28 @@ reads/writes, command deletes. The \`IntelProfile\` slide-over
 dossiers. All of these open as tabs inside the **Investigative Tools**
 workspace (\`/tools\`, \`src/components/tools/\`); the old per-tool routes
 redirect there with their params intact ([Ch. 5](05-pages.md)).
+
+**Entity search & linking (2026-08-25)**: every link/attach flow runs the
+shared entity-search registry (\`lib/entitySearch\` — bounded per-kind
+queries behind one \`searchEntities()\` door: the indexed \`search_persons\`
+two-step ranked RPC for persons, normalized-plate matching for vehicles
+(\`normPlate\`), roster/penal client caches for the member/charge arms;
+RLS-scoped, merged tombstones filtered, transient failure ⇒ no
+suggestions) through \`shared/RecordSearchPicker\`. Case person-linking
+(IntelTab) adds \`shared/LinkedPersonPanel\`: linked-state clarity
+("Registry profile" badge + Open profile) and optional completion of
+blank profile fields with an explicit save choice — provenance-labelled
+"(case record)" link-note lines (case only, \`shared/personCompletion\`) or
+a confirmed, audited, gaps-only \`persons\` update
+(\`lib/autofill.diffForMasterUpdate\` — never overwrites a non-empty value,
+never writes blanks). Report person fields commit name + canonical
+\`person_id\` atomically (ReportsTab \`PersonField\`; free text stays
+possible but renders "Not linked", and read views resolve only the
+referenced ids). The create-new escape hatch chains \`CreateHost\` →
+\`PersonModal onCreated\` to auto-link the fresh row to the case. The
+whole-registry preloads all this replaced (the reports persons datalist,
+accounts/vehicles owner selects, the surveillance 200-row pools,
+CreateHost option lists) are gone.
 
 ## 4.3 Deconfliction (three systems)
 
@@ -1358,6 +1429,8 @@ User clicks "Save" in a modal
 - \`persons/IntelProfile\` ← persons, bolo, gangs, network
 - \`cases/CaseDetail\` ← CasesView AND RicoView (internal \`RicoTab\` import)
 - \`lib/forms\` ← CaseDetail, BoloView, CaseGraphTab, dossier, packet
+- \`shared/RecordSearchPicker\` ← ~23 files (the one "attach a record"
+  contract) · \`lib/entitySearch\` ← ~14 components (its loaders)
 - \`guideContent.ts\` ← **generated from** \`docs/USER-GUIDE.md\``,
   },
   {
@@ -1753,9 +1826,11 @@ export function FeatureView() {
 - \`safeUrl()\` on EVERY DB-sourced href/src. No \`dangerouslySetInnerHTML\`
   (one sanctioned static exception in \`app/layout.tsx\`).
 - Never select \`profiles.email\` outside command paths (\`PROFILE_COLS\`).
-- FK-preservation: when an edit form's select options may not include the
-  currently-linked row (stale cache/restricted), render a synthetic
-  "(current … — loading…)" option so saving can't null the link.
+- FK-preservation: when an edit form's picker may not be able to resolve
+  the currently-linked row (stale cache/restricted/slow lookup), seed the
+  id synchronously under a placeholder label ("(current … — loading…)")
+  and upgrade it with one bounded \`in:{id}\` lookup — a failed read keeps
+  the placeholder, so saving can't null a link the editor didn't touch.
 
 ## Styling
 

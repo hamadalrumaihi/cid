@@ -111,12 +111,25 @@ export function LinkedPersonPanel({ personId, personLabel, onCaseOnly }: {
       { title: 'Update person profile', confirmText: 'Update profile', danger: false },
     )
     if (!ok) return
-    const res = await update('persons', personId, patch as TablesUpdate<'persons'>)
+    // Re-fetch immediately before writing: the never-overwrite invariant is
+    // computed client-side, so a field another officer filled since this
+    // panel loaded must drop out of the patch (TOCTOU — security review N1).
+    let final = patch
+    try {
+      const fresh = await list('persons', { select: PERSON_LIST_COLS, in: { id: [personId] } }) as unknown as RegistryPerson[]
+      if (fresh[0]) {
+        setMaster(fresh[0])
+        final = diffForMasterUpdate<Record<CompletionKey, string | null>>(fresh[0], proposal())
+      }
+    } catch { /* transient — the stale diff still only fills what WAS empty */ }
+    const finalKeys = PERSON_COMPLETION_FIELDS.filter((d) => typeof final[d.key] === 'string')
+    if (!finalKeys.length) { toast('Those fields were filled on the profile meanwhile — nothing to update.', 'info'); return }
+    const res = await update('persons', personId, final as TablesUpdate<'persons'>)
     if (res.error) { toast(res.error.message, 'danger'); return }
-    setMaster((m) => ({ ...m, ...patch }))
+    setMaster((m) => ({ ...m, ...final }))
     setProposed((prev) => {
       const next = { ...prev }
-      for (const d of added) delete next[d.key]
+      for (const d of finalKeys) delete next[d.key]
       return next
     })
     toast('Person profile updated.', 'success')

@@ -438,3 +438,55 @@ describe('RecordSearchPicker — combobox a11y and touch floor', () => {
     }
   })
 })
+
+describe('RecordSearchPicker — Change preserves the current value (QA W1)', () => {
+  /** Opening "Change" and walking away must never null the FK: the parent
+   *  only hears onChange on an explicit new pick or the explicit Clear.
+   *  Before this contract, Change fired onChange(null) immediately, so
+   *  "Change → find nothing → Save" silently blanked owner/lead/gang FKs. */
+  it('Change → Escape keeps the value; only Clear or a new pick notify the parent', async () => {
+    const ctl = controlledSearch()
+    const changes: (PickedRecord | null)[] = []
+    function Host() {
+      const [value, setValue] = useState<PickedRecord | null>(R('a', 'Current Owner'))
+      return (
+        <RecordSearchPicker
+          label="Owner" value={value} search={ctl.search}
+          onChange={(v) => { changes.push(v); setValue(v) }}
+        />
+      )
+    }
+    const view = await render(<Host />)
+    try {
+      // Collapsed value row with Change + an aria-labelled Clear.
+      expect(view.container.textContent).toContain('Current Owner')
+      const changeBtn = [...view.container.querySelectorAll('button')].find((b) => b.textContent === 'Change')!
+      await click(view, changeBtn)
+      // Search opened, seeded with the current label — parent NOT notified.
+      expect(changes).toEqual([])
+      expect(input(view).value).toBe('Current Owner')
+
+      // Escape without picking: collapsed row returns, value intact.
+      await key(view, 'Escape')
+      expect(changes).toEqual([])
+      expect(view.container.textContent).toContain('Current Owner')
+
+      // Change again, pick a different record: exactly one onChange(new).
+      const changeBtn2 = [...view.container.querySelectorAll('button')].find((b) => b.textContent === 'Change')!
+      await click(view, changeBtn2)
+      await view.settle(TICK)
+      ctl.resolve('Current Owner', [R('b', 'New Owner')])
+      await view.settle(20)
+      await click(view, option(view, 'New Owner'))
+      expect(changes).toEqual([R('b', 'New Owner')])
+      expect(view.container.textContent).toContain('New Owner')
+
+      // The explicit Clear is the ONLY path to null.
+      const clearBtn = view.container.querySelector('button[aria-label="Clear Owner"]')!
+      await click(view, clearBtn)
+      expect(changes).toEqual([R('b', 'New Owner'), null])
+    } finally {
+      await view.unmount()
+    }
+  })
+})

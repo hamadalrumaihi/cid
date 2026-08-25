@@ -46,7 +46,7 @@ export interface CreateCtx {
    *  set, the host closes the modal and stays put instead of navigating to
    *  the new record — the caller chains the next step (e.g. auto-linking the
    *  person to a case). Person kind only today. */
-  onCreated?: (id: string, name: string) => void
+  onCreated?: (id: string, name: string, opts: { siuOnly: boolean }) => void
 }
 
 interface CreateApi {
@@ -57,60 +57,21 @@ const NOOP: CreateApi = { open: () => {} }
 const Ctx = createContext<CreateApi>(NOOP)
 export const useCreate = (): CreateApi => useContext(Ctx)
 
-/* ── Session-cached option lists (RLS-scoped; ids/names only) ────────────── */
-/** `title` normalized to '' — IndicatorModal's CaseOption declares it
- *  non-null; the empty string satisfies it. */
-type CaseLite = { id: string; case_number: string; title: string }
-
-interface Options {
-  casesLite?: CaseLite[]
-}
-
-const NEEDS: Record<CreateKind, (keyof Options)[]> = {
-  case: [],
-  person: [],
-  vehicle: [],
-  gang: [],
-  place: [],
-  account: [],
-  indicator: ['casesLite'],
-  operation: [],
-  siu: [],
-}
-
-async function loadOption(key: keyof Options): Promise<Options[keyof Options]> {
-  switch (key) {
-    case 'casesLite': {
-      const rows = (await list('cases', { select: 'id,case_number,title', order: 'updated_at', ascending: false })) as unknown as { id: string; case_number: string; title: string | null }[]
-      return rows.map((r) => ({ id: r.id, case_number: r.case_number, title: r.title ?? '' }))
-    }
-  }
-}
+/* Every modal searches on demand through lib/entitySearch now — the old
+ * session-cached option bundles (personsLite/gangsLite/casesLite/…) are gone
+ * with their last consumers. */
 
 export function CreateHost({ children }: { children: React.ReactNode }) {
   const { profile, canEdit, isCommand, isOwner } = useAuth()
   const siu = useSiu()
   const { openHref, openRecord } = useToolNav()
   const [active, setActive] = useState<{ kind: CreateKind; ctx: CreateCtx } | null>(null)
-  const [options, setOptions] = useState<Options>({})
-  const inflight = useRef(new Set<keyof Options>())
-
-  const ensure = useCallback((key: keyof Options) => {
-    if (inflight.current.has(key)) return
-    inflight.current.add(key)
-    void loadOption(key)
-      .then((rows) => setOptions((o) => (key in o ? o : { ...o, [key]: rows })))
-      // Transient failure → allow a retry on the next open instead of caching
-      // an empty list as truth.
-      .catch(() => { inflight.current.delete(key) })
-  }, [])
 
   const open = useCallback((kind: CreateKind, ctx: CreateCtx = {}) => {
     // UX gate only — RLS/RPCs re-decide server-side, exactly as on the pages.
     if (kind === 'siu' ? !siu.isAgent : !canEdit) return
-    for (const key of NEEDS[kind]) ensure(key)
     setActive({ kind, ctx })
-  }, [canEdit, siu.isAgent, ensure])
+  }, [canEdit, siu.isAgent])
 
   const close = useCallback(() => setActive(null), [])
 
@@ -129,7 +90,6 @@ export function CreateHost({ children }: { children: React.ReactNode }) {
     })()
   }, [openRecord, openHref])
 
-  const ready = active ? NEEDS[active.kind].every((k) => options[k] !== undefined) : false
   const kind = active?.kind
   const createdCb = active?.ctx.onCreated
   const viewer: OpViewer = {
@@ -152,7 +112,7 @@ export function CreateHost({ children }: { children: React.ReactNode }) {
           record={null}
           prefillName={active?.ctx.prefillName}
           onClose={close}
-          onCreated={createdCb ? (row) => createdCb(row.id, row.name) : undefined}
+          onCreated={createdCb ? (row, opts) => createdCb(row.id, row.name, opts) : undefined}
           onSaved={createdCb ? close : () => openNewest('persons')}
         />
       )}
@@ -168,8 +128,8 @@ export function CreateHost({ children }: { children: React.ReactNode }) {
       {kind === 'account' && (
         <AccountModal onClose={close} onSaved={close} />
       )}
-      {kind === 'indicator' && ready && (
-        <IndicatorModal record={null} cases={options.casesLite!} onClose={close} onSaved={close} />
+      {kind === 'indicator' && (
+        <IndicatorModal record={null} onClose={close} onSaved={close} />
       )}
       {kind === 'operation' && (
         <OperationModal open record={null} viewer={viewer} onClose={close} onSaved={close} />

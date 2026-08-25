@@ -114,7 +114,7 @@ interface PersonModalProps {
   prefillName?: string
   /** Create mode only: called with the inserted row (before onSaved) so the
    *  opener can chain — e.g. auto-linking the new person to a case. */
-  onCreated?: (row: PersonRow) => void
+  onCreated?: (row: PersonRow, opts: { siuOnly: boolean }) => void
   onClose: () => void
   onSaved: () => void
 }
@@ -345,7 +345,7 @@ export function PersonModal({ record, prefillName, onCreated, onClose, onSaved }
     if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
     if (draftable) { wroteDraft.current = false; void clearDraft(PERSON_DRAFT_KEY) }
     const created = !record ? res.data?.[0] : undefined
-    if (created && onCreated) onCreated(created)
+    if (created && onCreated) onCreated(created, { siuOnly: siuChoice === 'siu_only' })
     toast(record ? 'Person updated'
       : siuChoice === 'siu_only' ? 'Person created, SIB Only. CID cannot see it.'
       : 'Person created', 'success')

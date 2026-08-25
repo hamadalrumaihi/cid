@@ -102,6 +102,10 @@ export function RecordSearchPicker<T extends PickedRecord>({
   const [query, setQuery] = useState(initialQuery ?? '')
   const [results, setResults] = useState<T[]>([])
   const [open, setOpen] = useState(false)
+  // "Change" enters search WITHOUT discarding the current value — the parent
+  // only hears about an explicit new pick or the explicit Clear, so opening
+  // the search and saving the form can never silently null an FK (QA W1).
+  const [changing, setChanging] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<unknown>(null)
   const [retryTick, setRetryTick] = useState(0)
@@ -135,6 +139,7 @@ export function RecordSearchPicker<T extends PickedRecord>({
     } else {
       onChange?.(r)
       setOpen(false)
+      setChanging(false)
     }
   }
 
@@ -144,7 +149,10 @@ export function RecordSearchPicker<T extends PickedRecord>({
     if (r && !rowDisabled(i)) pick(r)
   }
 
-  const nav = useListboxNav({ count, open, onActivate: activate, onEscape: () => setOpen(false), isDisabled: rowDisabled })
+  // Leaving the search without a pick (Escape / outside click) restores the
+  // collapsed value row — the previous selection was never discarded.
+  const closeList = () => { setOpen(false); if (changing) setChanging(false) }
+  const nav = useListboxNav({ count, open, onActivate: activate, onEscape: closeList, isDisabled: rowDisabled })
   const { setSel } = nav
 
   // Debounced loader — sequence-guarded so a slow early response can never
@@ -172,6 +180,7 @@ export function RecordSearchPicker<T extends PickedRecord>({
       const overlay = t instanceof Element ? t.closest('.modal-backdrop') : null
       if (overlay && !overlay.contains(boxRef.current)) return
       setOpen(false)
+      setChanging(false)
     }
     document.addEventListener('pointerdown', onDown)
     return () => document.removeEventListener('pointerdown', onDown)
@@ -199,7 +208,7 @@ export function RecordSearchPicker<T extends PickedRecord>({
 
   return (
     <Field label={label} required={required} hint={hint}>
-      {(id) => !multiple && value ? (
+      {(id) => !multiple && value && !changing ? (
         <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-1.5">
           {getThumb && <RecordThumb url={getThumb(value)} label={value.label} />}
           <span className="min-w-0 flex-1 truncate text-sm text-white">
@@ -207,9 +216,18 @@ export function RecordSearchPicker<T extends PickedRecord>({
             {value.sublabel && <span className="text-slate-400"> — {value.sublabel}</span>}
           </span>
           {peekType && <RecordPeekButton type={peekType} id={value.id} label={value.label} />}
-          <Button id={id} size="sm" disabled={disabled} onClick={() => { onChange?.(null); setOpen(true) }}>
+          <Button id={id} size="sm" disabled={disabled} onClick={() => { setQuery(value.label); setChanging(true); setOpen(true) }}>
             Change
           </Button>
+          <button
+            type="button"
+            aria-label={`Clear ${label}`}
+            disabled={disabled}
+            onClick={() => onChange?.(null)}
+            className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-lg text-lg leading-none text-slate-400 transition hover:bg-white/10 hover:text-white disabled:opacity-60 lg:h-9 lg:w-9"
+          >
+            &times;
+          </button>
         </div>
       ) : (
         <div ref={boxRef} className="space-y-1.5">

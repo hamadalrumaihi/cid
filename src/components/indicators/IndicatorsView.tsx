@@ -22,6 +22,8 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { inputCls, labelCls } from '@/components/ui/Field'
+import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
+import { searchCaseHits, type EntityHit } from '@/lib/entitySearch'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 
 type IndicatorRow = Tables<'indicators'>
@@ -61,16 +63,17 @@ export function IndicatorsView() {
   const vCases = useTableVersion('cases')
 
   // Registry owns rows/loading/error + the deferred, version-driven refetch.
-  // Case titles are a side-load (for labelling matches) — fetched here and
-  // held separately so the modal's case picker stays populated.
+  // Case labels are a side-load bounded to the cases the loaded indicators
+  // actually reference (the modal's picker searches on its own now).
   const { rows, loading, error: err, refresh } = useRegistry<IndicatorRow>({
     table: 'indicators',
     watch: [vCases],
     load: async () => {
-      const [ind, cs] = await Promise.all([
-        withRetry(() => list('indicators', { order: 'created_at', ascending: false })),
-        list('cases', { select: 'id,case_number,title', order: 'created_at', ascending: false }).catch(() => [] as Tables<'cases'>[]),
-      ])
+      const ind = await withRetry(() => list('indicators', { order: 'created_at', ascending: false }))
+      const ids = [...new Set(ind.map((r) => r.case_id).filter(Boolean))] as string[]
+      const cs = ids.length
+        ? await list('cases', { select: 'id,case_number,title', in: { id: ids } }).catch(() => [] as Tables<'cases'>[])
+        : []
       setCases(cs as unknown as CaseOption[])
       return ind
     },
@@ -239,7 +242,7 @@ export function IndicatorsView() {
       {editor && (
         <IndicatorModal
           record={editor.record}
-          cases={cases}
+          currentCase={editor.record?.case_id ? caseById.get(editor.record.case_id) ?? null : null}
           onClose={() => setEditor(null)}
           onSaved={() => { setEditor(null); void refresh() }}
         />
@@ -261,22 +264,26 @@ function KindChip({ label, active, onClick }: { label: string; active: boolean; 
 
 /* ---- Create / edit modal ------------------------------------------------ */
 
-export function IndicatorModal({ record, cases, onClose, onSaved }: {
+export function IndicatorModal({ record, currentCase, onClose, onSaved }: {
   record: IndicatorRow | null
-  cases: CaseOption[]
+  currentCase?: CaseOption | null
   onClose: () => void
   onSaved: () => void
 }) {
-  const [caseId, setCaseId] = useState(record?.case_id ?? '')
+  // FK-preservation guard: the linked case seeds the picker synchronously —
+  // as a labelled hit when the caller resolved it, or a placeholder when it
+  // is outside the viewer's access — so an unrelated edit can't silently
+  // re-point (or null) the indicator's case.
+  const [casePick, setCasePick] = useState<EntityHit | null>(() => {
+    if (!record?.case_id) return null
+    if (currentCase) return { id: currentCase.id, label: currentCase.case_number, sublabel: currentCase.title || undefined }
+    return { id: record.case_id, label: '(current case — outside your access)' }
+  })
+  const caseId = casePick?.id ?? ''
   const [kind, setKind] = useState(record?.kind ?? 'phone')
   const [value, setValue] = useState(record?.value ?? '')
   const [note, setNote] = useState(record?.note ?? '')
   const [busy, setBusy] = useState(false)
-
-  // FK-preservation guard: if the linked case isn't in the viewer's list
-  // (restricted or fetch failed), keep a synthetic option so an unrelated
-  // edit can't silently re-point the indicator.
-  const caseKnown = !record?.case_id || cases.some((c) => c.id === record.case_id)
 
   const dirty = () =>
     caseId !== (record?.case_id ?? '') || kind !== (record?.kind ?? 'phone') ||
@@ -302,14 +309,13 @@ export function IndicatorModal({ record, cases, onClose, onSaved }: {
     <Modal open onClose={onClose} dirty={dirty}>
       <ModalHeader title={record ? 'Edit Indicator' : 'New Indicator'} onClose={onClose} />
       <div className="space-y-3">
-        <div>
-          <label htmlFor="indicator-case" className={labelCls}>Case *</label>
-          <select id="indicator-case" value={caseId} onChange={(e) => setCaseId(e.target.value)} className={inputCls}>
-            <option value="">— pick a case —</option>
-            {!caseKnown && record?.case_id && <option value={record.case_id}>(current case — outside your access)</option>}
-            {cases.map((c) => <option key={c.id} value={c.id}>{c.case_number} — {c.title}</option>)}
-          </select>
-        </div>
+        <RecordSearchPicker<EntityHit>
+          label="Case *"
+          placeholder="Search cases by number or title…"
+          value={casePick}
+          onChange={setCasePick}
+          search={(q) => searchCaseHits(q)}
+        />
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="indicator-type" className={labelCls}>Type</label>
