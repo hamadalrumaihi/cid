@@ -41,6 +41,11 @@ export interface CreateCtx {
   caseNumber?: string
   personId?: string
   prefillName?: string
+  /** Called with the new record's id/name after a successful create. When
+   *  set, the host closes the modal and stays put instead of navigating to
+   *  the new record — the caller chains the next step (e.g. auto-linking the
+   *  person to a case). Person kind only today. */
+  onCreated?: (id: string, name: string) => void
 }
 
 interface CreateApi {
@@ -136,6 +141,7 @@ export function CreateHost({ children }: { children: React.ReactNode }) {
 
   const ready = active ? NEEDS[active.kind].every((k) => options[k] !== undefined) : false
   const kind = active?.kind
+  const createdCb = active?.ctx.onCreated
   const viewer: OpViewer = {
     userId: profile?.id ?? null,
     active: !!profile?.active,
@@ -152,7 +158,14 @@ export function CreateHost({ children }: { children: React.ReactNode }) {
         <CaseModal open record={null} onClose={close} onSaved={(id) => { close(); if (id) openHref(caseLink(id)) }} />
       )}
       {kind === 'person' && ready && (
-        <PersonModal record={null} prefillName={active?.ctx.prefillName} gangs={options.gangsLite!} onClose={close} onSaved={() => openNewest('persons')} />
+        <PersonModal
+          record={null}
+          prefillName={active?.ctx.prefillName}
+          gangs={options.gangsLite!}
+          onClose={close}
+          onCreated={createdCb ? (row) => createdCb(row.id, row.name) : undefined}
+          onSaved={createdCb ? close : () => openNewest('persons')}
+        />
       )}
       {kind === 'vehicle' && ready && (
         <VehicleModal record={null} persons={options.personsLite!} gangs={options.gangsLite!} onClose={close} onSaved={() => openNewest('vehicles')} />

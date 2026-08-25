@@ -102,12 +102,15 @@ interface PersonModalProps {
   record: PersonEditRecord | null
   /** Quick-add prefill for the "no persons match" inline create. */
   prefillName?: string
+  /** Create mode only: called with the inserted row (before onSaved) so the
+   *  opener can chain — e.g. auto-linking the new person to a case. */
+  onCreated?: (row: PersonRow) => void
   gangs: Pick<GangRow, 'id' | 'name'>[]
   onClose: () => void
   onSaved: () => void
 }
 
-export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: PersonModalProps) {
+export function PersonModal({ record, prefillName, onCreated, gangs, onClose, onSaved }: PersonModalProps) {
   const { profile, canDelete } = useAuth()
   const siu = useSiu()
   // A new record created by somebody with SIU standing needs a deliberate
@@ -302,6 +305,8 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
     const res = record ? await update('persons', record.id, payload) : await insert('persons', payload)
     if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
     if (draftable) { wroteDraft.current = false; void clearDraft(PERSON_DRAFT_KEY) }
+    const created = !record ? res.data?.[0] : undefined
+    if (created && onCreated) onCreated(created)
     toast(record ? 'Person updated'
       : siuChoice === 'siu_only' ? 'Person created, SIB Only. CID cannot see it.'
       : 'Person created', 'success')
