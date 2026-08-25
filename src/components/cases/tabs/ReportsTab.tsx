@@ -24,7 +24,8 @@ import { parseReopenLog, parseReportSignature } from '@/lib/schemas'
 import { RelatedRecordPicker } from '@/components/shared/RelatedRecordPicker'
 import { SignatureViewer, type SignatureItem } from '@/components/shared/SignatureViewer'
 import { VersionViewer } from '@/components/shared/VersionViewer'
-import { Drafts } from '@/lib/drafts'
+import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
+import { SaveState } from '@/components/ui/SaveState'
 import { toast } from '@/lib/toast'
 import { WarrantPrintButton } from './WarrantPrint'
 import type { CaseRow, EvidenceRow, MediaRow, PersonRow, ReportRow } from './shared'
@@ -71,15 +72,25 @@ export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: C
   const open = openId ? reports.find((r) => r.id === openId) ?? null : null
   const seed = (): FormValues => ({ case_number: c.case_number, report_type: 'Initial', filed_at: fmtDateTime(new Date()), det_name: profile?.display_name || '', narrative: c.summary || '', summary: c.summary || '' })
   // Never-lose-work: field values are stashed per case+template (or per
-  // report when editing) while typing, restored when the editor reopens,
+  // report when editing) while typing — DB-backed via userDrafts so a draft
+  // follows the detective across devices — restored when the editor reopens,
   // and cleared on a successful save. Closing/cancelling keeps the draft.
   const draftKey = (template: string, report?: ReportRow) => (report ? `report:edit:${report.id}` : `report:${c.id}:${template}`)
-  const openEditor = (template: string, report?: ReportRow) => {
-    const d = Drafts.load<FormValues>(draftKey(template, report))
+  const editorDraft = useDraftState(editing ? draftKey(editing.template, editing.report) : '')
+  const openEditor = async (template: string, report?: ReportRow) => {
+    const d = await loadDraft<FormValues>(draftKey(template, report))
     const base = report ? parseFormValues(report.fields) : seed()
     const useDraft = !!d?.data && (!report || d.at > new Date(report.updated_at ?? report.created_at).getTime())
     if (useDraft) toast('Unsaved draft restored.', 'info')
     setEditing({ template, values: useDraft ? d!.data : base, report })
+  }
+  // Explicit throw-away (the legal wizard's discard pattern): clears the
+  // stash everywhere and resets the form to the saved row / fresh seed.
+  const discardEditorDraft = async () => {
+    if (!editing) return
+    await clearDraft(draftKey(editing.template, editing.report))
+    setEditing((cur) => (cur ? { ...cur, values: cur.report ? parseFormValues(cur.report.fields) : seed() } : cur))
+    toast('Draft discarded.', 'info')
   }
   const save = async () => {
     if (!editing) return
@@ -99,7 +110,7 @@ export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: C
       reportId = res.data?.[0]?.id ?? null
     }
     if (hasMediaRefs && reportId) await syncReportMediaLinks(reportId, prevRefs, String(editing.values.media_refs ?? ''))
-    Drafts.clear(draftKey(editing.template, editing.report)); setEditing(null); toast('Report saved.', 'success'); void refresh()
+    void clearDraft(draftKey(editing.template, editing.report)); setEditing(null); toast('Report saved.', 'success'); void refresh()
   }
   const finalize = async (r: ReportRow) => {
     const res = await rpc('report_finalize', { p_report: r.id, p_badge: profile?.badge_number || undefined })
@@ -116,23 +127,34 @@ export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: C
       {open ? (
         <ReportDetail r={open} c={c} canEdit={canEdit} canDelete={canDelete} holdActive={holdActive}
           onBack={() => setOpenId(null)}
-          onEdit={() => openEditor(open.template, open)}
+          onEdit={() => void openEditor(open.template, open)}
           onFinalize={() => setConfirm({ kind: 'finalize', r: open })}
           onReopen={() => setConfirm({ kind: 'reopen', r: open })}
           onChanged={() => void refresh()}
           onDelete={() => { void deleteWithUndo('reports', open, { label: reportTitle(open), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }); setOpenId(null) }} />
       ) : (<>
-        {canEdit && <div className="flex flex-wrap gap-2">{REPORT_TEMPLATES.map((tpl) => <Button key={tpl.id} onClick={() => openEditor(tpl.id)}><TemplateIcon id={tpl.id} /> {tpl.name}</Button>)}</div>}
+        {canEdit && <div className="flex flex-wrap gap-2">{REPORT_TEMPLATES.map((tpl) => <Button key={tpl.id} onClick={() => void openEditor(tpl.id)}><TemplateIcon id={tpl.id} /> {tpl.name}</Button>)}</div>}
         <div className="space-y-2">
-          {reports.map((r) => <div key={r.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3"><button onClick={() => setOpenId(r.id)} className="min-w-0 flex-1 text-left"><p className="font-bold text-white">{reportTitle(r)}</p><p className="text-xs text-slate-500">{r.finalized ? 'Finalized' : 'Draft'} - {timeAgo(r.created_at)}</p></button>{!r.finalized && canEdit && <Button size="sm" variant="success" onClick={() => setConfirm({ kind: 'finalize', r })}>Finalize</Button>}{!r.finalized && canEdit && <button onClick={() => openEditor(r.template, r)} className="text-sm font-bold text-badge-200">Edit</button>}{canDelete && (holdActive ? <span title="A legal hold preserves this case's reports" className="text-sm font-bold text-rose-300/50">Held</span> : <button onClick={() => { void deleteWithUndo('reports', r, { label: reportTitle(r), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }) }} className="text-sm font-bold text-rose-300">Delete</button>)}</div>)}
+          {reports.map((r) => <div key={r.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3"><button onClick={() => setOpenId(r.id)} className="min-w-0 flex-1 text-left"><p className="font-bold text-white">{reportTitle(r)}</p><p className="text-xs text-slate-500">{r.finalized ? 'Finalized' : 'Draft'} - {timeAgo(r.created_at)}</p></button>{!r.finalized && canEdit && <Button size="sm" variant="success" onClick={() => setConfirm({ kind: 'finalize', r })}>Finalize</Button>}{!r.finalized && canEdit && <button onClick={() => void openEditor(r.template, r)} className="text-sm font-bold text-badge-200">Edit</button>}{canDelete && (holdActive ? <span title="A legal hold preserves this case's reports" className="text-sm font-bold text-rose-300/50">Held</span> : <button onClick={() => { void deleteWithUndo('reports', r, { label: reportTitle(r), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }) }} className="text-sm font-bold text-rose-300">Delete</button>)}</div>)}
           {!reports.length && <p className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-500">No reports yet.</p>}
         </div>
       </>)}
       <Modal open={!!editing} onClose={() => setEditing(null)} wide>
         <div className="p-5">
-          <ModalHeader title={editing ? FORM_SCHEMAS[editing.template]?.title || 'Report' : 'Report'} onClose={() => setEditing(null)} />
-          {editing && <FormEditor template={editing.template} caseId={c.id} reportId={editing.report?.id} values={editing.values} onChange={(values) => { setEditing({ ...editing, values }); Drafts.save(draftKey(editing.template, editing.report), values) }} />}
-          <div className="mt-5 flex justify-end gap-2"><Button onClick={() => setEditing(null)}>Cancel</Button><Button variant="primary" onAction={save}>Save</Button></div>
+          <ModalHeader
+            title={
+              <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {editing ? FORM_SCHEMAS[editing.template]?.title || 'Report' : 'Report'}
+                <SaveState status={editorDraft.status} lastSavedAt={editorDraft.lastSavedAt} />
+              </span>
+            }
+            onClose={() => setEditing(null)}
+          />
+          {editing && <FormEditor template={editing.template} caseId={c.id} reportId={editing.report?.id} values={editing.values} onChange={(values) => { setEditing({ ...editing, values }); void saveDraft(draftKey(editing.template, editing.report), values) }} />}
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+            <Button variant="ghost" className="text-rose-300 hover:text-rose-200" onAction={discardEditorDraft}>Discard draft</Button>
+            <div className="flex gap-2"><Button onClick={() => setEditing(null)}>Cancel</Button><Button variant="primary" onAction={save}>Save</Button></div>
+          </div>
         </div>
       </Modal>
       <Modal open={!!confirm} onClose={() => setConfirm(null)}>

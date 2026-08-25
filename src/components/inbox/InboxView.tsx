@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Json, Tables } from '@/lib/database.types'
-import { list, update } from '@/lib/db'
+import { list } from '@/lib/db'
+import { markAllRead, markRead } from '@/lib/notifications'
 import { caseLink } from '@/lib/caseLinks'
 import { todayISO, timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
@@ -237,13 +238,24 @@ export function InboxView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seenVer invalidates the Store-read watchSeen map
   }, [data, profile, seenVer])
 
+  // Shared helpers (lib/notifications) — the same writes the bell panel and
+  // the Action Center absorb make, so read-state stays consistent everywhere.
   async function markNotificationRead(n: NotificationRow) {
-    const res = await update('notifications', n.id, { read: true })
-    if (res.error) {
-      toast(`Could not mark notification read: ${res.error.message}`, 'danger')
+    const err = await markRead([n.id])
+    if (err) {
+      toast(`Could not mark notification read: ${err.message}`, 'danger')
       return
     }
     setData((prev) => ({ ...prev, notifications: prev.notifications.map((x) => (x.id === n.id ? { ...x, read: true } : x)) }))
+  }
+
+  async function markAllNotificationsRead() {
+    const err = await markAllRead() // ONE conditional update, RLS-scoped to my rows
+    if (err) {
+      toast(`Could not mark notifications read: ${err.message}`, 'danger')
+      return
+    }
+    setData((prev) => ({ ...prev, notifications: prev.notifications.map((x) => ({ ...x, read: true })) }))
   }
 
   if (state !== 'in') return <EmptyLine text="Sign in to view My Desk." />
@@ -390,7 +402,18 @@ export function InboxView() {
           )) : <EmptyLine text="Follow cases, persons or vehicles (the ☆ Follow button) to pin their changes here." />}
         </Panel>
 
-        <Panel title="Notifications" count={model.unread.length}>
+        <Panel
+          title="Notifications"
+          count={model.unread.length}
+          action={model.unread.length > 0 ? (
+            <button
+              onClick={() => { void markAllNotificationsRead() }}
+              className="-my-1.5 rounded border border-white/10 bg-white/5 px-2 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10"
+            >
+              Mark all read
+            </button>
+          ) : undefined}
+        >
           {data.notifications.length ? data.notifications.slice(0, 12).map((n) => (
             <button key={n.id} onClick={() => { if (!n.read) void markNotificationRead(n) }} className={`w-full text-left ${ROW} ${n.read ? 'text-slate-500' : 'bg-emerald-500/[0.06] text-emerald-100'}`}>
               <p className="text-xs font-black uppercase tracking-wide">{notifTitle(n)}</p>

@@ -24,7 +24,7 @@ const ACCENT: Record<string, string> = {
   low: 'border-l-white/15',
 }
 
-export type InlineActionKind = 'complete_task' | 'resolve_blocker' | 'decide_access' | 'mark_read'
+export type InlineActionKind = 'complete_task' | 'resolve_blocker' | 'decide_access' | 'mark_read' | 'discard_draft'
 
 /** Unread notifications absorbed by an item (marked read on act/open). */
 export function notificationIdsOf(it: ActionItem): string[] {
@@ -44,6 +44,10 @@ export function inlineActionOf(it: ActionItem): InlineActionKind | null {
       return 'resolve_blocker'
     case 'access_request':
       return 'decide_access'
+    case 'draft':
+      // The row's Open link resumes the draft; the inline write discards it
+      // (a confirmed removeWhere on the viewer's own user_drafts row).
+      return 'discard_draft'
     case 'mention':
     case 'handover':
     case 'other':
@@ -58,6 +62,7 @@ const ACTION_FALLBACK: Record<InlineActionKind, string> = {
   resolve_blocker: 'Resolve',
   decide_access: 'Decide',
   mark_read: 'Mark read',
+  discard_draft: 'Discard',
 }
 
 export function ActionItemRow({ item, now, muted, onOpen, onAction }: {

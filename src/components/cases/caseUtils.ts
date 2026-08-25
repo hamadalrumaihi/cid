@@ -1,9 +1,12 @@
 'use client'
 
 /** Client-side case helpers — staleness, pins/recents, filters and saved
- *  views. All persistence uses the SAME Store keys as vanilla casefiles.js
- *  (casesScope/casesView/caseFilters/caseViews/recentCases/pinnedCases) so
- *  personal presets carry over between the legacy site and this app. */
+ *  views. Filter/scope/layout persistence uses the SAME Store keys as vanilla
+ *  casefiles.js (casesScope/casesView/caseFilters/recentCases/pinnedCases) so
+ *  personal presets carry over between the legacy site and this app. Saved
+ *  views moved to the cross-device lib/savedViews store (user_prefs, section
+ *  'cases'); the old Store 'caseViews' blob is migrated on first load and
+ *  kept as an offline/legacy fallback. */
 import type { Tables } from '@/lib/database.types'
 import { countRows, list } from '@/lib/db'
 import { assessCase } from '@/lib/caseWorkflow'
@@ -115,12 +118,30 @@ export function applyCaseFilters(items: CaseRow[], f: CaseFilters, meId: string 
   })
 }
 
-export interface SavedCaseView {
-  name: string
+/** The opaque `config` a saved case view carries (lib/savedViews section
+ *  'cases'). Shape matches the legacy Store 'caseViews' entries minus `name`,
+ *  so the one-time server migration lifts them losslessly. */
+export interface SavedCaseViewConfig {
   filters: Partial<CaseFilters>
   scope?: string
   q?: string
 }
 
-export const caseViews = (): SavedCaseView[] => Store.get<SavedCaseView[]>('caseViews', [])
-export const setCaseViews = (v: SavedCaseView[]): void => Store.set('caseViews', v)
+/* ---- Bulk mutation pacing -------------------------------------------------
+ * Per-id write loops (bulk status / lead / archive) run in awaited chunks so
+ * a 100-row selection never fires 100 concurrent requests or freezes the UI.
+ * Progress is reported after every chunk for the "N of M…" readout. */
+export async function runChunked<T>(
+  items: T[],
+  fn: (item: T) => Promise<{ error: unknown }>,
+  onProgress?: (done: number, total: number) => void,
+  chunkSize = 10,
+): Promise<{ ok: number; failed: number }> {
+  let ok = 0, failed = 0
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const results = await Promise.all(items.slice(i, i + chunkSize).map((it) => fn(it)))
+    for (const r of results) { if (r.error) failed += 1; else ok += 1 }
+    onProgress?.(ok + failed, items.length)
+  }
+  return { ok, failed }
+}

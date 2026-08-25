@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildActionItems, priorityFromScore, NUDGE, STATUS_BASE,
-  type AcAccess, type AcBlocker, type AcCase, type AcDoc, type AcLegal, type AcNotif,
+  buildActionItems, describeDraftKey, priorityFromScore, NUDGE, STATUS_BASE,
+  type AcAccess, type AcBlocker, type AcBoloPerson, type AcCase, type AcDoc, type AcDraft,
+  type AcFieldSubmission, type AcLegal, type AcNotif,
   type AcObservation, type AcSuggestion, type AcSurvTarget, type AcTask, type AcTransfer,
   type ActionSources,
 } from './actionItems'
@@ -727,5 +728,114 @@ describe('surveillance (observations + targets)', () => {
       survTargets: [mkTarget({ status: 'active', requested_by: 'off-2', expires_at: '2026-07-16T12:00:00.000Z' })],
     }))
     expect(byKey(bystander, 'surv_tgt:st-1:expiry')).toBeUndefined()
+  })
+})
+
+/* ---- drafts / unassigned intel / expiring BOLOs (Wave 3) ------------------- */
+
+describe('drafts (user_drafts keys)', () => {
+  const mkDraft = (key: string): AcDraft => ({ key, updated_at: NOW_ISO })
+
+  it('describeDraftKey humanizes the key vocabulary — never a payload', () => {
+    expect(describeDraftKey('chat:c-1')).toMatchObject({
+      title: 'Case chat draft', caseId: 'c-1', deepLink: '/cases?case=c-1&tab=chat',
+    })
+    expect(describeDraftKey('notes:c-1').deepLink).toBe('/cases?case=c-1&tab=intel')
+    expect(describeDraftKey('report:c-1:arrest_report')).toMatchObject({
+      title: 'Report draft — Arrest Report', caseId: 'c-1', deepLink: '/cases?case=c-1&tab=reports',
+    })
+    expect(describeDraftKey('report:edit:r-9')).toMatchObject({ caseId: null, deepLink: '/cases' })
+    expect(describeDraftKey('legal:edit:lr-9').deepLink).toBe('/legal?request=lr-9')
+    expect(describeDraftKey('legal:new:search_warrant').title).toBe('Legal request draft — Search Warrant')
+    expect(describeDraftKey('person:new').deepLink).toBe('/persons')
+    expect(describeDraftKey('gang:new').deepLink).toBe('/gangs')
+    // Unknown prefixes degrade to a generic label, never raw JSON.
+    expect(describeDraftKey('mystery:x').title).toBe('Mystery draft')
+  })
+
+  it('a draft → informational personal item with a Discard inline action; case keys pick up case context', () => {
+    const q = buildActionItems(src({ cases: [mkCase()], myDrafts: [mkDraft('chat:c-1')] }))
+    const item = byKey(q, 'draft:chat:c-1')
+    expect(item).toMatchObject({
+      sourceType: 'draft', status: 'informational', canAct: true, actionLabel: 'Discard',
+      isPersonalItem: true, ownerId: ME, caseId: 'c-1', caseNumber: 'CID-26-001',
+      bureau: 'major_crimes', deepLink: '/cases?case=c-1&tab=chat',
+    })
+    expect(item?.sourceMetadata).toMatchObject({ draft_key: 'chat:c-1' })
+  })
+
+  it('drafts never outrank real queue work (low priority band)', () => {
+    const q = buildActionItems(src({ tasks: [mkTask()], myDrafts: [mkDraft('person:new')] }))
+    const task = byKey(q, 'task:t-1')!
+    const draft = byKey(q, 'draft:person:new')!
+    expect(draft.urgencyScore).toBeLessThan(task.urgencyScore)
+    expect(draft.priority).toBe('low')
+  })
+})
+
+describe('unassigned intel (field_submissions pickups)', () => {
+  const mkIntel = (over: Partial<AcFieldSubmission> = {}): AcFieldSubmission => ({
+    id: 'fs-1', submission_no: 'FI-26-010', summary: 'Vans staging at the docks',
+    status: 'new', assigned_to: null, jurisdiction: 'city',
+    submitted_at: NOW_ISO, created_at: NOW_ISO, updated_at: NOW_ISO, ...over,
+  })
+
+  it('an unassigned review-active submission → shared-queue needs_action item on /field-review', () => {
+    const q = buildActionItems(src({ fieldSubmissions: [mkIntel()] }))
+    expect(byKey(q, 'intel:fs-1')).toMatchObject({
+      sourceType: 'unassigned_intel', status: 'needs_action',
+      title: 'Unclaimed intel — FI-26-010', summary: 'Vans staging at the docks',
+      deepLink: '/field-review', isWaitingOnCurrentUser: true,
+      isCommandItem: false, isPersonalItem: false,
+    })
+  })
+
+  it('claimed or processed rows emit nothing (assigned_to set / status outside the review-active lane)', () => {
+    const claimed = buildActionItems(src({ fieldSubmissions: [mkIntel({ assigned_to: 'off-2' })] }))
+    expect(byKey(claimed, 'intel:fs-1')).toBeUndefined()
+    for (const status of ['draft', 'reviewed', 'actionable', 'archived']) {
+      const q = buildActionItems(src({ fieldSubmissions: [mkIntel({ status })] }))
+      expect(byKey(q, 'intel:fs-1'), status).toBeUndefined()
+    }
+  })
+
+  it('needs_info rows explain the officer is waiting too', () => {
+    const q = buildActionItems(src({ fieldSubmissions: [mkIntel({ status: 'needs_info' })] }))
+    expect(byKey(q, 'intel:fs-1')?.reason).toContain('waiting on the officer')
+  })
+})
+
+describe('expiring BOLOs (persons.bolo)', () => {
+  const mkBolo = (over: Partial<AcBoloPerson> = {}): AcBoloPerson => ({
+    id: 'p-1', name: 'Ray Vargas', bolo: true,
+    bolo_expires_at: '2026-07-18T12:00:00.000Z', bolo_risk: 'armed_and_dangerous',
+    updated_at: NOW_ISO, ...over,
+  })
+
+  it('a BOLO inside its last 7 days → due_soon renewal item opening the person record (editors only)', () => {
+    const q = buildActionItems(src({ canManageBolos: true, boloPersons: [mkBolo()] }))
+    const item = byKey(q, 'bolo:p-1')
+    expect(item).toMatchObject({
+      sourceType: 'bolo_expiring', status: 'due_soon',
+      title: 'BOLO expiring — Ray Vargas', dueAt: '2026-07-18T12:00:00.000Z',
+      deepLink: '/tools?tool=persons&record=p-1', isWaitingOnCurrentUser: true,
+    })
+    expect(item?.summary).toContain('Armed And Dangerous risk')
+    // Both the why and the next action are stated.
+    expect(item?.reason).toContain('renew it or stand it down')
+  })
+
+  it('a lapsed BOLO → overdue with the lapsed title', () => {
+    const q = buildActionItems(src({ canManageBolos: true, boloPersons: [mkBolo({ bolo_expires_at: '2026-07-10T12:00:00.000Z' })] }))
+    expect(byKey(q, 'bolo:p-1')).toMatchObject({ status: 'overdue', title: 'BOLO lapsed — Ray Vargas' })
+  })
+
+  it('far-future windows, bolo=false rows and non-editor viewers emit nothing', () => {
+    const far = buildActionItems(src({ canManageBolos: true, boloPersons: [mkBolo({ bolo_expires_at: '2026-09-01T00:00:00.000Z' })] }))
+    expect(byKey(far, 'bolo:p-1')).toBeUndefined()
+    const off = buildActionItems(src({ canManageBolos: true, boloPersons: [mkBolo({ bolo: false })] }))
+    expect(byKey(off, 'bolo:p-1')).toBeUndefined()
+    const viewer = buildActionItems(src({ boloPersons: [mkBolo()] }))
+    expect(byKey(viewer, 'bolo:p-1')).toBeUndefined()
   })
 })

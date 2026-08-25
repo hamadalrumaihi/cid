@@ -25,9 +25,11 @@ import { useTableVersion } from '@/lib/realtime'
 import { useRegistry } from '@/lib/useRegistry'
 import { useNarrow } from '@/lib/useNarrow'
 import { useNow } from '@/lib/useNow'
+import { useSavedViews, type SavedViewsApi } from '@/lib/savedViews'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
@@ -44,10 +46,10 @@ import { BoloBadge, RegistryCard } from './RegistryCard'
 import { RegistryAttachModal } from './RegistryAttachModal'
 import { RegistryFilterBar } from './RegistryFilterBar'
 import {
-  applyRegistryFilters, buildRegistryStats, isStaleRecord, loadRegistryFilters,
-  loadRegistrySort, persistRegistryFilters, sortRegistry,
+  activeRegistryFilterCount, applyRegistryFilters, buildRegistryStats, coerceRegistryFilters,
+  coerceRegistrySort, isStaleRecord, loadRegistryFilters, loadRegistrySort, persistRegistryFilters, sortRegistry,
   EMPTY_REGISTRY_FILTERS, LEGAL_LITE_COLS, PERSON_LIST_COLS,
-  type RegistryFilters, type RegistryPerson, type RegistrySort, type WarrantLite,
+  type RegistryFilters, type RegistryPerson, type RegistrySort, type RegistryViewConfig, type WarrantLite,
 } from './registryFilters'
 
 const PAGE = 24
@@ -60,6 +62,60 @@ interface VehicleLite { id: string; owner_id: string | null }
 interface PersonVehicleLite { person_id: string; vehicle_id: string }
 
 type EditorState = { record: RegistryPerson | null; prefillName?: string } | null
+
+/** Compact saved-views control for the registry toolbar: an apply select, a
+ *  Save button, and (for the applied view) an overflow menu with rename /
+ *  set-default / delete. Deliberately small — no layout blowup. */
+function RegistrySavedViews({ sv, active, currentConfig, onApply, onActive }: {
+  sv: SavedViewsApi<RegistryViewConfig>
+  active: string
+  currentConfig: RegistryViewConfig
+  onApply: (name: string, cfg: RegistryViewConfig) => void
+  onActive: (name: string) => void
+}) {
+  const isDefault = sv.defaultView?.name === active
+  const menu: ActionItem[] = [
+    { label: 'Rename…', onClick: () => { void sv.renameViaPrompt(active).then((n) => { if (n) onActive(n) }) } },
+    {
+      label: isDefault ? 'Clear default' : 'Set as default',
+      onClick: () => {
+        void sv.setDefault(isDefault ? null : active).then((ok) => {
+          if (ok) toast(isDefault ? 'Default view cleared.' : `"${active}" now applies when you open the registry.`, 'success')
+        })
+      },
+    },
+    {
+      label: `Delete "${active}"`, danger: true, separatorBefore: true,
+      onClick: () => { void sv.remove(active).then((ok) => { if (ok) { onActive(''); toast('View deleted.', 'success') } }) },
+    },
+  ]
+  return (
+    <div className="flex items-center gap-1.5">
+      <select
+        aria-label="Saved registry views"
+        value={sv.views.some((v) => v.name === active) ? active : ''}
+        onChange={(e) => {
+          const v = sv.views.find((x) => x.name === e.target.value)
+          if (v) onApply(v.name, v.config)
+          else onActive('')
+        }}
+        className="min-h-[40px] max-w-[11rem] rounded-lg border border-white/10 bg-ink-850 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-badge-500"
+      >
+        <option value="">Saved views</option>
+        {sv.views.map((v) => <option key={v.name} value={v.name}>{v.name}{v.isDefault ? ' · default' : ''}</option>)}
+      </select>
+      <Button
+        size="sm"
+        className="min-h-[40px]"
+        title="Save the current filters, sort, layout and search as a named view"
+        onClick={() => { void sv.saveViaPrompt(currentConfig, 'Name this registry view.').then((n) => { if (n) onActive(n) }) }}
+      >
+        Save view
+      </Button>
+      {active && <ActionMenu label={`Actions for view "${active}"`} buttonClassName="min-h-[40px]" items={menu} />}
+    </div>
+  )
+}
 
 /** live / syncing presence chip — stale rows stay visible while refreshing. */
 function PresenceChip({ busy }: { busy: boolean }) {
@@ -100,6 +156,35 @@ export function PersonsView() {
   const [filters, setFilters] = useState<RegistryFilters>(() => loadRegistryFilters())
   const [pageState, setPageState] = useState({ sig: '', shown: PAGE })
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+
+  // Saved registry views (lib/savedViews, section 'persons') — cross-device
+  // snapshots of {filters, sort, view, q}. Applying one only re-applies
+  // client filter state; RLS still scopes what the filters can match.
+  const savedViews = useSavedViews<RegistryViewConfig>('persons')
+  const [activeView, setActiveView] = useState('')
+  const applySavedView = (name: string, cfg: RegistryViewConfig) => {
+    setActiveView(name)
+    setFilters(coerceRegistryFilters(cfg.filters))
+    setSort(coerceRegistrySort(cfg.sort ?? 'updated'))
+    if (cfg.view === 'grid' || cfg.view === 'table') setView(cfg.view)
+    setQuery(cfg.q ?? '')
+  }
+  // Apply the default view once — only on a clean arrival (no ?q= / ?person=
+  // deep link, no persisted filters, no search), so it never stomps state.
+  const defaultApplied = useRef(false)
+  useEffect(() => {
+    if (defaultApplied.current || !savedViews.loaded) return
+    defaultApplied.current = true
+    if (sp.get('q') || sp.get('person')) return
+    if (activeRegistryFilterCount(filters) || query.trim()) return
+    const d = savedViews.defaultView
+    if (!d) return
+    // Deferred — never setState synchronously in the effect body.
+    const t = window.setTimeout(() => applySavedView(d.name, d.config), 0)
+    return () => window.clearTimeout(t)
+    // Snapshot semantics: runs once when the saved views finish loading.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedViews.loaded])
   const [editor, setEditor] = useState<EditorState>(null)
   const [attach, setAttach] = useState<RegistryPerson | null>(null)
 
@@ -417,6 +502,13 @@ export function PersonsView() {
             <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)} className={`min-h-[36px] rounded-md px-2.5 py-1 text-xs font-semibold capitalize ${view === v ? 'bg-badge-500 text-ink-950' : 'text-slate-300 hover:bg-white/10'}`}>{v}</button>
           ))}
         </div>
+        <RegistrySavedViews
+          sv={savedViews}
+          active={activeView}
+          onActive={setActiveView}
+          currentConfig={{ filters, sort, view, q: query }}
+          onApply={applySavedView}
+        />
         <Button onClick={() => void refresh()}>Refresh</Button>
       </div>
 

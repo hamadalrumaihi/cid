@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { insert, list, deleteWithUndo, ilikeAny, update } from '@/lib/db'
-import { Drafts } from '@/lib/drafts'
+import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
 import { copyText, downloadTextFile } from '@/lib/format'
 import { renderMarkdown } from '@/lib/markdown'
 import { useTableVersion } from '@/lib/realtime'
@@ -24,6 +24,7 @@ import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/Notice'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { RichEditor } from '@/components/ui/RichEditor'
+import { SaveState } from '@/components/ui/SaveState'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
 import { type CaseRow, type IntelRow } from './shared'
 
@@ -141,21 +142,24 @@ function WorkingNotes({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boolean;
   // Sync from the row only while the editor is CLOSED — a realtime refresh
   // mid-edit must not clobber the buffer (BUG-020).
   useEffect(() => { if (!editing) queueMicrotask(() => setText(c.notes ?? '')) }, [c.notes, editing])
-  // Never-lose-work: the buffer is stashed per case while typing (same Drafts
-  // idiom as ChatTab/ReportsTab), restored when the editor reopens, and
-  // cleared on a successful save.
+  // Never-lose-work: the buffer is stashed per case while typing (same
+  // userDrafts idiom as ChatTab/ReportsTab — DB-backed, local mirror),
+  // restored when the editor reopens, and cleared on a successful save.
   const draftKey = `notes:${c.id}`
-  const openEditor = () => {
-    const d = Drafts.load<string>(draftKey)
+  const draftState = useDraftState(draftKey)
+  const openEditor = async () => {
+    const d = await loadDraft<string>(draftKey)
     if (d?.data && d.data !== (c.notes ?? '')) { setText(d.data); toast('Unsaved draft restored.', 'info') }
     setEditing(true)
   }
-  const edit = (next: string) => { setText(next); if (next.trim()) Drafts.save(draftKey, next); else Drafts.clear(draftKey) }
+  const edit = (next: string) => { setText(next); if (next.trim()) void saveDraft(draftKey, next); else void clearDraft(draftKey) }
   const save = async () => {
     const res = await update('cases', c.id, { notes: text || null })
     if (res.error) toast(res.error.message, 'danger')
-    else { Drafts.clear(draftKey); toast('Notes saved.', 'success'); setEditing(false); onChanged() }
+    else { void clearDraft(draftKey); toast('Notes saved.', 'success'); setEditing(false); onChanged() }
   }
+  // Explicit throw-away: clears the stash and returns to the saved row text.
+  const discard = async () => { await clearDraft(draftKey); setText(c.notes ?? '') }
   return (
     <Card pad="sm">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -164,16 +168,22 @@ function WorkingNotes({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boolean;
           <div className="flex gap-2">
             <Button onClick={() => copyText(c.notes ?? '', 'Notes')}>Copy</Button>
             <Button onClick={() => downloadTextFile(`${c.case_number}-notes.md`, c.notes ?? '')}>.md</Button>
-            {canEdit && <Button onClick={openEditor}>Edit</Button>}
+            {canEdit && <Button onClick={() => void openEditor()}>Edit</Button>}
           </div>
         )}
       </div>
       {editing ? (
         <div className="space-y-3">
           <RichEditor value={text} onChange={edit} />
-          <div className="flex justify-end gap-2">
-            <Button onClick={() => setEditing(false)}>Cancel</Button>
-            <Button variant="primary" onClick={save}>Save</Button>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <SaveState status={draftState.status} lastSavedAt={draftState.lastSavedAt} />
+              <Button variant="ghost" size="sm" className="text-rose-300 hover:text-rose-200" onAction={discard}>Discard draft</Button>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={() => setEditing(false)}>Cancel</Button>
+              <Button variant="primary" onClick={save}>Save</Button>
+            </div>
           </div>
         </div>
       ) : (

@@ -49,6 +49,9 @@ export type ActionSourceType =
    *  assigned prosecutorial/judicial reviews). `transfer` is reused for
    *  member_transfers stage decisions (distinct `member_transfer:` keys). */
   | 'legal_queue'
+  /** Wave-3 queue sections: my server-saved drafts (user_drafts), unclaimed
+   *  review-active field intelligence, and BOLO windows closing/lapsed. */
+  | 'draft' | 'unassigned_intel' | 'bolo_expiring'
   | 'other'
 
 export type ActionPriority = 'critical' | 'high' | 'normal' | 'low'
@@ -135,6 +138,21 @@ export type AcObservation = Pick<Tables<'surveillance_observations'>,
  *  to lapse (authorized/active with expires_at inside 72h). */
 export type AcSurvTarget = Pick<Tables<'surveillance_targets'>,
   'id' | 'case_id' | 'label' | 'status' | 'expires_at' | 'requested_by' | 'updated_at' | 'created_at'>
+/** My server-saved drafts (user_drafts — RLS owner-only). Deliberately the
+ *  KEY and timestamp alone: payload contents are never fetched and never
+ *  shown; titles derive from the key vocabulary (describeDraftKey). */
+export type AcDraft = Pick<Tables<'user_drafts'>, 'key' | 'updated_at'>
+/** Unclaimed field intelligence still in the review-active lane
+ *  (assigned_to IS NULL, status in fieldReview's OPEN_STATUSES). RLS scopes
+ *  the read to active reviewers, so every row here is claimable work. */
+export type AcFieldSubmission = Pick<Tables<'field_submissions'>,
+  'id' | 'submission_no' | 'summary' | 'status' | 'assigned_to' | 'jurisdiction'
+  | 'submitted_at' | 'created_at' | 'updated_at'>
+/** BOLO subjects (persons.bolo = true) — renewal/stand-down work once the
+ *  expiry window is inside 7 days or already past. Editors only (the same
+ *  canEdit gate the BOLO board's maintenance controls use). */
+export type AcBoloPerson = Pick<Tables<'persons'>,
+  'id' | 'name' | 'bolo' | 'bolo_expires_at' | 'bolo_risk' | 'updated_at'>
 /** All notifications columns — notifText helpers take the full row. */
 export type AcNotif = Pick<Tables<'notifications'>,
   'id' | 'user_id' | 'type' | 'payload' | 'read' | 'created_at'>
@@ -240,6 +258,16 @@ export interface ActionSources {
   justiceRole?: 'prosecutor' | 'judge' | 'attorney_general' | null
   /** Additive (defaults []): open member_transfers rows (see AcMemberTransfer). */
   memberTransfers?: AcMemberTransfer[]
+  /** Additive (defaults []): my saved drafts — see AcDraft (owner-only). */
+  myDrafts?: AcDraft[]
+  /** Additive (defaults []): unclaimed review-active field submissions — the
+   *  loader only fetches for active reviewers (the RLS is_active() mirror). */
+  fieldSubmissions?: AcFieldSubmission[]
+  /** Additive (defaults []): bolo=true persons (slim projection). */
+  boloPersons?: AcBoloPerson[]
+  /** Additive (defaults false): mirrors useAuth().canEdit — gates the
+   *  BOLO-expiry items exactly like the board's maintenance controls. */
+  canManageBolos?: boolean
   notifications: AcNotif[]     // my UNREAD notifications (read = false)
   /** Additive (defaults []): library governance items, pre-derived. */
   documents?: AcDoc[]
@@ -278,6 +306,45 @@ export function priorityFromScore(score: number): ActionPriority {
 const AWAITING_SIGNOFF = new Set(['awaiting_bureau_lead', 'awaiting_deputy', 'awaiting_director'])
 const RETURNED_SIGNOFF = new Set(['changes_requested', 'denied'])
 const COMMAND_ROLES = new Set(['bureau_lead', 'deputy_director', 'director'])
+/** Same values as fieldReview's OPEN_STATUSES (review-active lane) —
+ *  redeclared so this module never imports the db-touching fieldReview lib. */
+const INTEL_REVIEW_ACTIVE = new Set(['new', 'reviewing', 'needs_info'])
+
+/* ---- draft-key vocabulary --------------------------------------------------
+ * Human description of a user_drafts KEY — never its payload. The vocabulary
+ * is exactly what the lib/drafts call sites write today:
+ *   report:<caseId>:<template> · report:edit:<reportId> · chat:<caseId>
+ *   notes:<caseId> · legal:new:<type> · legal:edit:<requestId>
+ *   person:* · gang:*
+ * Unknown prefixes degrade to "<Prefix> draft" and land on My Desk. */
+
+export interface DraftDescription {
+  title: string
+  summary: string
+  /** Set when the key embeds a case id — the builder enriches with case context. */
+  caseId: string | null
+  deepLink: string
+}
+
+export function describeDraftKey(key: string): DraftDescription {
+  const [head, a, b] = key.split(':')
+  if (head === 'report') {
+    if (a === 'edit') return { title: 'Report draft', summary: 'Unsaved report edits', caseId: null, deepLink: '/cases' }
+    return {
+      title: `Report draft — ${humanize(b || 'report')}`, summary: 'Unfinished case report',
+      caseId: a || null, deepLink: a ? caseLink(a, 'reports') : '/cases',
+    }
+  }
+  if (head === 'chat' && a) return { title: 'Case chat draft', summary: 'A message you started typing', caseId: a, deepLink: caseLink(a, 'chat') }
+  if (head === 'notes' && a) return { title: 'Intel notes draft', summary: 'Unsaved case intelligence notes', caseId: a, deepLink: caseLink(a, 'intel') }
+  if (head === 'legal') {
+    if (a === 'edit' && b) return { title: 'Legal request draft', summary: 'Unsaved legal request edits', caseId: null, deepLink: `/legal?request=${encodeURIComponent(b)}` }
+    return { title: `Legal request draft — ${humanize(b || 'request')}`, summary: 'Unfinished legal request', caseId: null, deepLink: '/legal' }
+  }
+  if (head === 'person') return { title: 'Person record draft', summary: 'Unfinished person record', caseId: null, deepLink: '/persons' }
+  if (head === 'gang') return { title: 'Gang record draft', summary: 'Unfinished gang record', caseId: null, deepLink: '/gangs' }
+  return { title: `${humanize(head || 'saved')} draft`, summary: 'Saved work in progress', caseId: null, deepLink: '/inbox' }
+}
 
 /* ---- pure date helpers ----------------------------------------------------- */
 
@@ -1004,6 +1071,83 @@ export function buildActionItems(s: ActionSources): ActionQueue {
         dedupeKey: `surv_tgt:${t.id}:expiry`,
       })
     }
+  }
+
+  /* 9g · unassigned intel — field intelligence still in the review-active
+   *      lane with no reviewer on it. Shared-queue pickup work: RLS scopes
+   *      the read to active reviewers (private.is_active()), so every row
+   *      given here is claimable by the viewer — the claim RPC re-decides. */
+  for (const f of s.fieldSubmissions ?? []) {
+    if (f.assigned_to || !INTEL_REVIEW_ACTIVE.has(f.status)) continue
+    add({
+      id: `intel:${f.id}`, sourceType: 'unassigned_intel', sourceId: f.id,
+      title: `Unclaimed intel — ${f.submission_no || 'field report'}`,
+      summary: f.summary || 'Field intelligence report',
+      reason: f.status === 'needs_info'
+        ? 'Unassigned and waiting on the officer — claim it so the thread has an owner'
+        : 'No reviewer has claimed this report — claim it in the Intelligence queue',
+      status: 'needs_action',
+      createdAt: f.created_at, updatedAt: f.updated_at,
+      waitingSince: f.submitted_at ?? f.created_at,
+      deepLink: '/field-review',
+      isWaitingOnCurrentUser: true,
+      sourceMetadata: { jurisdiction: f.jurisdiction, status: f.status },
+      dedupeKey: `intel:${f.id}`,
+    })
+  }
+
+  /* 9h · expiring BOLOs — a live BOLO whose window closes within 7 days (or
+   *      already lapsed) needs a renew-or-stand-down decision. Editors only
+   *      (canManageBolos mirrors useAuth().canEdit — the same gate the BOLO
+   *      board's maintenance controls use). Opens the person record. */
+  if (s.canManageBolos) {
+    for (const p of s.boloPersons ?? []) {
+      if (!p.bolo || !p.bolo_expires_at) continue
+      const at = tsMs(p.bolo_expires_at)
+      if (at === null || at - s.nowMs > 7 * DAY_MS) continue
+      const dl = deadlineInfo(p.bolo_expires_at, 'expires', { now: s.nowMs, soonHours: 168, urgentHours: 48 })
+      const lapsed = dl?.overdue ?? at <= s.nowMs
+      add({
+        id: `bolo:${p.id}`, sourceType: 'bolo_expiring', sourceId: p.id,
+        title: lapsed ? `BOLO lapsed — ${p.name}` : `BOLO expiring — ${p.name}`,
+        summary: [dl?.text, p.bolo_risk ? `${humanize(p.bolo_risk)} risk` : null].filter(Boolean).join(' · ') || 'BOLO window closing',
+        reason: lapsed
+          ? 'The BOLO window has passed — renew it or stand it down'
+          : 'The BOLO window closes within 7 days — renew it or stand it down',
+        status: lapsed ? 'overdue' : 'due_soon',
+        dueAt: p.bolo_expires_at,
+        createdAt: p.updated_at, updatedAt: p.updated_at,
+        deepLink: `/tools?tool=persons&record=${encodeURIComponent(p.id)}`,
+        isWaitingOnCurrentUser: true,
+        sourceMetadata: { person_id: p.id, bolo_risk: p.bolo_risk },
+        dedupeKey: `bolo:${p.id}`,
+      })
+    }
+  }
+
+  /* 9i · my drafts — server-saved work in progress (user_drafts, RLS
+   *      owner-only). Titles come from the KEY alone (describeDraftKey); the
+   *      payload is never fetched, never shown. Informational on purpose: a
+   *      draft nags gently from its own section and never outranks real
+   *      queue work. Inline action = Discard (removeWhere in the view). */
+  for (const d of s.myDrafts ?? []) {
+    const desc = describeDraftKey(d.key)
+    const c = desc.caseId ? caseById.get(desc.caseId) : undefined
+    add({
+      id: `draft:${d.key}`, sourceType: 'draft', sourceId: d.key,
+      title: desc.title,
+      summary: c ? `${c.case_number} · ${c.title || 'Untitled'}` : desc.summary,
+      reason: 'Unfinished draft saved by you — resume it or discard it',
+      status: 'informational',
+      createdAt: d.updated_at, updatedAt: d.updated_at,
+      ownerId: s.me, caseId: desc.caseId, caseNumber: c?.case_number ?? null,
+      bureau: c?.bureau ?? null,
+      deepLink: desc.deepLink,
+      actionLabel: 'Discard', canAct: true,
+      isPersonalItem: true,
+      sourceMetadata: { draft_key: d.key },
+      dedupeKey: `draft:${d.key}`,
+    })
   }
 
   /* 10 · notifications — suppressed when a structural item covers the same

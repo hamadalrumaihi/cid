@@ -4,9 +4,10 @@
  *  status), the structured identity sheet, and the activity timeline. Pure
  *  presentation plus the small editor modals that write the persons row; all
  *  data comes in through props from PersonProfile's per-section loaders. */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Json } from '@/lib/database.types'
 import { update } from '@/lib/db'
+import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
 import { useAuth } from '@/lib/auth'
 import { copyText, fmtDate } from '@/lib/format'
 import { parseIntelSummary } from '@/lib/jsonShapes'
@@ -20,6 +21,7 @@ import { Card } from '@/components/ui/Card'
 import { Field, Input, Textarea, inputCls } from '@/components/ui/Field'
 import { ConfidenceBadge, StaleIntelBadge } from '@/components/ui/IntelBadges'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { SaveState } from '@/components/ui/SaveState'
 import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTimeline'
 import { humanize } from '@/components/gangs/gangIntel'
 import {
@@ -104,6 +106,41 @@ export function SummaryEditorModal({ person, onClose, onSaved }: { person: Perso
   const [busy, setBusy] = useState(false)
   const initial = useMemo(() => JSON.stringify(parseIntelSummary(person.intelligence_summary)), [person.intelligence_summary])
 
+  // Never-lose-work (userDrafts): the section buffers are stashed per person
+  // while typing, restored on reopen with a dismissible banner, and cleared
+  // on a successful save. Drafts only — the row is written by Save alone.
+  const draftKey = `person:summary:${person.id}`
+  const draftState = useDraftState(draftKey)
+  const [draftBanner, setDraftBanner] = useState(false)
+  const summaryJson = JSON.stringify(summary)
+  const summaryJsonRef = useRef(summaryJson)
+  useEffect(() => { summaryJsonRef.current = summaryJson })
+  useEffect(() => {
+    let live = true
+    void loadDraft<Record<string, string>>(draftKey).then((d) => {
+      if (!live || !d?.data || summaryJsonRef.current !== initial) return
+      if (JSON.stringify(d.data) === initial) return
+      setSummary(d.data)
+      setDraftBanner(true)
+    })
+    return () => { live = false }
+  }, [draftKey, initial])
+  const wroteDraft = useRef(false)
+  useEffect(() => {
+    if (summaryJson === initial) {
+      if (wroteDraft.current) { wroteDraft.current = false; void clearDraft(draftKey) }
+      return
+    }
+    wroteDraft.current = true
+    void saveDraft(draftKey, JSON.parse(summaryJson) as Record<string, string>)
+  }, [draftKey, summaryJson, initial])
+  const discardDraft = () => {
+    wroteDraft.current = false
+    void clearDraft(draftKey)
+    setSummary(JSON.parse(initial) as Record<string, string>)
+    setDraftBanner(false)
+  }
+
   const save = async () => {
     setBusy(true)
     const clean: Record<string, string> = {}
@@ -111,6 +148,8 @@ export function SummaryEditorModal({ person, onClose, onSaved }: { person: Perso
     const res = await update('persons', person.id, { intelligence_summary: clean as unknown as Json })
     setBusy(false)
     if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
+    wroteDraft.current = false
+    void clearDraft(draftKey)
     toast('Intelligence summary saved', 'success')
     onSaved()
   }
@@ -118,7 +157,24 @@ export function SummaryEditorModal({ person, onClose, onSaved }: { person: Perso
   return (
     <Modal open wide onClose={onClose} dirty={() => JSON.stringify(summary) !== initial}>
       <div className="max-h-[85vh] overflow-y-auto p-6">
-        <ModalHeader title={`Intelligence — ${person.name}`} onClose={onClose} />
+        <ModalHeader
+          title={
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {`Intelligence — ${person.name}`}
+              <SaveState status={draftState.status} lastSavedAt={draftState.lastSavedAt} />
+            </span>
+          }
+          onClose={onClose}
+        />
+        {draftBanner && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2">
+            <p className="text-xs text-amber-200">Draft restored — your unsaved edits from last time.</p>
+            <span className="flex items-center gap-1">
+              <button type="button" onClick={discardDraft} className="rounded-md px-2 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/10 hover:text-white">Discard draft</button>
+              <button type="button" onClick={() => setDraftBanner(false)} aria-label="Dismiss restored-draft notice" className="grid h-8 w-8 place-items-center rounded-md text-amber-200/70 hover:bg-amber-500/10 hover:text-white">✕</button>
+            </span>
+          </div>
+        )}
         <div className="space-y-2">
           {PERSON_SUMMARY_SECTIONS.map((s) => (
             <Field key={s.key} label={s.label}>

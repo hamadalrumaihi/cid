@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/Button'
 import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
-import { Drafts } from '@/lib/drafts'
+import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
+import { SaveState } from '@/components/ui/SaveState'
 import { notify } from '@/lib/notify'
 import { officerName, activeProfiles } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
@@ -40,14 +41,16 @@ export function ChatTab({ c }: { c: CaseRow }) {
     } catch (e) { setErr(e) }
   }, [c.id])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, v])
-  // Never-lose-work: restore a half-typed message for THIS case on mount;
-  // keep the stash current while typing; clear it on successful send.
+  // Never-lose-work: restore a half-typed message for THIS case on mount
+  // (userDrafts: server copy or local mirror, whichever is newer); keep the
+  // stash current while typing; clear it on successful send.
+  const composerDraft = useDraftState(`chat:${c.id}`)
   useEffect(() => {
-    const t = window.setTimeout(() => {
-      const d = Drafts.load<string>(`chat:${c.id}`)
-      if (d?.data) setBody((prev) => prev || d.data)
-    }, 0)
-    return () => window.clearTimeout(t)
+    let live = true
+    void loadDraft<string>(`chat:${c.id}`).then((d) => {
+      if (live && d?.data) setBody((prev) => prev || d.data)
+    })
+    return () => { live = false }
   }, [c.id])
   const [sending, setSending] = useState(false)
   const addMention = (val: string) => {
@@ -66,7 +69,7 @@ export function ChatTab({ c }: { c: CaseRow }) {
     for (const m of mentions) {
       if (m.id !== profile?.id) void notify(m.id, 'chat_mention', { case_id: c.id, case_number: c.case_number, detective: profile?.display_name ?? 'Officer', reason: `${profile?.display_name ?? 'An officer'} mentioned you in the ${c.case_number} channel.` })
     }
-    setBody(''); setMentions([]); Drafts.clear(`chat:${c.id}`); void refresh()
+    setBody(''); setMentions([]); void clearDraft(`chat:${c.id}`); void refresh()
   }
   const rowMentions = (m: MessageRow): string[] => parseStringArray(m.mentions)
   return (
@@ -94,7 +97,19 @@ export function ChatTab({ c }: { c: CaseRow }) {
           ))}
         </div>
       )}
-      <textarea value={body} onChange={(e) => { setBody(e.target.value); if (e.target.value.trim()) Drafts.save(`chat:${c.id}`, e.target.value); else Drafts.clear(`chat:${c.id}`) }} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }} rows={3} className="w-full rounded-xl border border-white/10 bg-ink-950 p-3 text-sm text-white" placeholder="Message the case room..." />
+      <textarea value={body} onChange={(e) => { setBody(e.target.value); if (e.target.value.trim()) void saveDraft(`chat:${c.id}`, e.target.value); else void clearDraft(`chat:${c.id}`) }} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }} rows={3} className="w-full rounded-xl border border-white/10 bg-ink-950 p-3 text-sm text-white" placeholder="Message the case room..." />
+      {/* Draft only — sending stays an explicit action. */}
+      <div className="-mt-1 flex min-h-4 items-center justify-between gap-2">
+        <SaveState status={composerDraft.status} lastSavedAt={composerDraft.lastSavedAt} />
+        {!!body.trim() && (
+          <button
+            onClick={() => { setBody(''); setMentions([]); void clearDraft(`chat:${c.id}`) }}
+            className="rounded-lg px-1 py-1 text-[11px] font-semibold text-slate-400 hover:text-rose-300"
+          >
+            Discard draft
+          </button>
+        )}
+      </div>
       <div className="flex items-center justify-between gap-2">
         <select value="" onChange={(e) => addMention(e.target.value)} aria-label="Mention an officer" className="rounded-lg border border-white/10 bg-ink-900 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-badge-500">
           <option value="">＠ Mention…</option>

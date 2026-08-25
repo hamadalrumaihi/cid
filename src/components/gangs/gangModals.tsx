@@ -1,14 +1,16 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ilikeAny, insert, list, rpc, update } from '@/lib/db'
 import type { TablesInsert } from '@/lib/database.types'
+import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/lib/toast'
 import { safeUrl } from '@/lib/safeUrl'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { parseIntelSummary } from '@/lib/jsonShapes'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { SaveState } from '@/components/ui/SaveState'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
@@ -23,6 +25,26 @@ import { MEMBER_CONFIDENCE, MEMBER_STATUSES, RANK_SUGGEST, type CaseOption, type
 const input = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
 const label = 'mb-1 block text-xs font-semibold text-slate-400'
 interface Officer { id: string; display_name: string | null }
+
+/** Everything the CREATE gang form types — stashed under `gang:new`
+ *  (userDrafts) so a refresh mid-entry loses nothing. On EDIT only the
+ *  structured-intel textareas are drafted (`gang:intel:<id>`); the scalar
+ *  fields' source of truth is the row. Key order must match the draftJson
+ *  literal in GangModal (JSON equality). */
+interface GangDraftShape {
+  name: string; aliases: string; colors: string; threat: ThreatLevel
+  classification: string; status: string; confidence: string; lead: string
+  notes: string; summary: Record<string, string>
+}
+
+const GANG_DRAFT_KEY = 'gang:new'
+
+const EMPTY_GANG_DRAFT: GangDraftShape = {
+  name: '', aliases: '', colors: '', threat: 'medium',
+  classification: '', status: '', confidence: '', lead: '',
+  notes: '', summary: {},
+}
+const EMPTY_GANG_DRAFT_JSON = JSON.stringify(EMPTY_GANG_DRAFT)
 
 export function GangModal({ record, onClose, onSaved }: { record: GangRow | null; onClose: () => void; onSaved: () => void }) {
   const { profile } = useAuth()
@@ -65,6 +87,61 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
 
   const setSection = (k: string, v: string) => setSummary((s) => ({ ...s, [k]: v }))
 
+  // ── Drafts (userDrafts) ───────────────────────────────────────────────────
+  // Create: the whole form under 'gang:new'. Edit: the structured-intel
+  // textareas only, under 'gang:intel:<id>'. Restored on reopen behind a
+  // dismissible banner; cleared on a successful save; kept on cancel.
+  const draftKey = record ? `gang:intel:${record.id}` : GANG_DRAFT_KEY
+  const draftState = useDraftState(draftKey)
+  const [draftBanner, setDraftBanner] = useState(false)
+  const initialSummaryJson = useMemo(() => JSON.stringify(parseIntelSummary(record?.intelligence_summary)), [record])
+  const applyCreateDraft = useCallback((s: GangDraftShape) => {
+    setName(s.name); setAliases(s.aliases); setColors(s.colors); setThreat(s.threat)
+    setClassification(s.classification); setStatus(s.status); setConfidence(s.confidence)
+    setLead(s.lead); setNotes(s.notes)
+    setSummary(s.summary && typeof s.summary === 'object' ? s.summary : {})
+  }, [])
+  const draftJson = record
+    ? JSON.stringify(summary)
+    : JSON.stringify({ name, aliases, colors, threat, classification, status, confidence, lead, notes, summary } satisfies GangDraftShape)
+  const pristineJson = record ? initialSummaryJson : EMPTY_GANG_DRAFT_JSON
+  const draftJsonRef = useRef(draftJson)
+  useEffect(() => { draftJsonRef.current = draftJson })
+  // Restore once on mount — never over something already typed.
+  useEffect(() => {
+    let live = true
+    void loadDraft<GangDraftShape | Record<string, string>>(draftKey).then((d) => {
+      if (!live || !d?.data || draftJsonRef.current !== pristineJson) return
+      if (record) {
+        const s = d.data as Record<string, string>
+        if (JSON.stringify(s) === initialSummaryJson) return
+        setSummary(s)
+      } else {
+        applyCreateDraft({ ...EMPTY_GANG_DRAFT, ...(d.data as GangDraftShape) })
+      }
+      setDraftBanner(true)
+    })
+    return () => { live = false }
+  }, [draftKey, pristineJson, record, initialSummaryJson, applyCreateDraft])
+  // Autosave while dirty; clear (once) when typed back to pristine. Drafts
+  // only — the gangs row is written by Save alone.
+  const wroteDraft = useRef(false)
+  useEffect(() => {
+    if (draftJson === pristineJson) {
+      if (wroteDraft.current) { wroteDraft.current = false; void clearDraft(draftKey) }
+      return
+    }
+    wroteDraft.current = true
+    void saveDraft(draftKey, JSON.parse(draftJson) as unknown)
+  }, [draftKey, draftJson, pristineJson])
+  const discardDraft = () => {
+    wroteDraft.current = false
+    void clearDraft(draftKey)
+    if (record) setSummary(parseIntelSummary(record.intelligence_summary))
+    else applyCreateDraft(EMPTY_GANG_DRAFT)
+    setDraftBanner(false)
+  }
+
   // Dirty guard (Modal confirms before discarding) — form state vs the
   // initial record, same idea as CaseModal's.
   const dirty = () =>
@@ -104,6 +181,8 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
     const res = record ? await update('gangs', record.id, payload) : await insert('gangs', payload)
     setBusy(false)
     if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
+    wroteDraft.current = false
+    void clearDraft(draftKey)
     toast(record ? 'Gang updated' : 'Gang created', 'success')
     onSaved()
   }
@@ -111,7 +190,26 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
   return (
     <Modal open wide onClose={onClose} dirty={dirty}>
       <div className="max-h-[85vh] overflow-y-auto p-6">
-        <ModalHeader title={`${record ? 'Edit' : 'New'} Gang`} onClose={onClose} />
+        <ModalHeader
+          title={record ? 'Edit Gang' : (
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              New Gang
+              <SaveState status={draftState.status} lastSavedAt={draftState.lastSavedAt} />
+            </span>
+          )}
+          onClose={onClose}
+        />
+        {draftBanner && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2">
+            <p className="text-xs text-amber-200">
+              {record ? 'Draft restored — unsaved structured-intel edits from last time.' : 'Draft restored — your unsaved entry from last time.'}
+            </p>
+            <span className="flex items-center gap-1">
+              <button type="button" onClick={discardDraft} className="rounded-md px-2 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/10 hover:text-white">Discard draft</button>
+              <button type="button" onClick={() => setDraftBanner(false)} aria-label="Dismiss restored-draft notice" className="grid h-8 w-8 place-items-center rounded-md text-amber-200/70 hover:bg-amber-500/10 hover:text-white">✕</button>
+            </span>
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="gang-name" className={label}>Name *</label>
@@ -157,7 +255,10 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
           </div>
         </div>
 
-        <p className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Structured intelligence</p>
+        <div className="mb-2 mt-5 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Structured intelligence</p>
+          {record && <SaveState status={draftState.status} lastSavedAt={draftState.lastSavedAt} />}
+        </div>
         <div className="space-y-2">
           {SUMMARY_SECTIONS.map((s) => (
             <div key={s.key}>

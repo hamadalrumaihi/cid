@@ -147,12 +147,20 @@ export const EMPTY_REGISTRY_FILTERS: RegistryFilters = {
 const BOOL_KEYS = ['bolo', 'warrant', 'stale', 'duplicate', 'missingMugshot', 'missingDob', 'noReview', 'recent', 'highFelony', 'includeMerged'] as const
 const TEXT_KEYS = ['gang', 'classification', 'lifecycle', 'confidence', 'cases', 'vehicles'] as const
 
-export function loadRegistryFilters(): RegistryFilters {
-  const f = Store.get<Partial<RegistryFilters>>('personFilters', {})
+/** Key-by-key coercion into a full RegistryFilters — shared by the Store
+ *  loader and saved-view application, so a stale/foreign blob can never leak
+ *  unexpected keys or types into the filter state. */
+export function coerceRegistryFilters(f: Partial<RegistryFilters> | null | undefined): RegistryFilters {
   const out: RegistryFilters = { ...EMPTY_REGISTRY_FILTERS }
-  for (const k of BOOL_KEYS) if (typeof f[k] === 'boolean') out[k] = f[k]
-  for (const k of TEXT_KEYS) if (typeof f[k] === 'string') out[k] = f[k]
+  if (f && typeof f === 'object') {
+    for (const k of BOOL_KEYS) if (typeof f[k] === 'boolean') out[k] = f[k]
+    for (const k of TEXT_KEYS) if (typeof f[k] === 'string') out[k] = f[k]
+  }
   return out
+}
+
+export function loadRegistryFilters(): RegistryFilters {
+  return coerceRegistryFilters(Store.get<Partial<RegistryFilters>>('personFilters', {}))
 }
 export const persistRegistryFilters = (f: RegistryFilters): void => Store.set('personFilters', f)
 
@@ -240,9 +248,21 @@ export const REGISTRY_SORTS = [
 ] as const
 export type RegistrySort = (typeof REGISTRY_SORTS)[number]['value']
 
-export const loadRegistrySort = (): RegistrySort => {
-  const s = Store.get<string>('personsSort', 'updated')
-  return REGISTRY_SORTS.some((x) => x.value === s) ? (s as RegistrySort) : 'updated'
+export const coerceRegistrySort = (s: unknown): RegistrySort =>
+  REGISTRY_SORTS.some((x) => x.value === s) ? (s as RegistrySort) : 'updated'
+
+export const loadRegistrySort = (): RegistrySort =>
+  coerceRegistrySort(Store.get<string>('personsSort', 'updated'))
+
+/** The opaque `config` a saved persons view carries (lib/savedViews section
+ *  'persons'): the whole browse state — filters, sort, layout and search.
+ *  Every field is re-coerced on application (coerceRegistryFilters /
+ *  coerceRegistrySort), so a view saved by an older client stays safe. */
+export interface RegistryViewConfig {
+  filters: Partial<RegistryFilters>
+  sort?: RegistrySort
+  view?: 'grid' | 'table'
+  q?: string
 }
 
 const PRIORITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
