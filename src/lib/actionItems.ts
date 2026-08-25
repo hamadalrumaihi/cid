@@ -341,7 +341,10 @@ export function describeDraftKey(key: string): DraftDescription {
     if (a === 'edit' && b) return { title: 'Legal request draft', summary: 'Unsaved legal request edits', caseId: null, deepLink: `/legal?request=${encodeURIComponent(b)}` }
     return { title: `Legal request draft — ${humanize(b || 'request')}`, summary: 'Unfinished legal request', caseId: null, deepLink: '/legal' }
   }
-  if (head === 'person') return { title: 'Person record draft', summary: 'Unfinished person record', caseId: null, deepLink: '/persons' }
+  if (head === 'person') {
+    if (a === 'summary' && b) return { title: 'Person intel summary draft', summary: 'Unsaved intelligence summary edits', caseId: null, deepLink: `/tools?tool=persons&record=${encodeURIComponent(b)}` }
+    return { title: 'Person record draft', summary: 'Unfinished person record', caseId: null, deepLink: '/persons' }
+  }
   if (head === 'gang') return { title: 'Gang record draft', summary: 'Unfinished gang record', caseId: null, deepLink: '/gangs' }
   return { title: `${humanize(head || 'saved')} draft`, summary: 'Saved work in progress', caseId: null, deepLink: '/inbox' }
 }

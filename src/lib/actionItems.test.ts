@@ -748,6 +748,7 @@ describe('drafts (user_drafts keys)', () => {
     expect(describeDraftKey('legal:edit:lr-9').deepLink).toBe('/legal?request=lr-9')
     expect(describeDraftKey('legal:new:search_warrant').title).toBe('Legal request draft — Search Warrant')
     expect(describeDraftKey('person:new').deepLink).toBe('/persons')
+    expect(describeDraftKey('person:summary:p-7').deepLink).toBe('/tools?tool=persons&record=p-7')
     expect(describeDraftKey('gang:new').deepLink).toBe('/gangs')
     // Unknown prefixes degrade to a generic label, never raw JSON.
     expect(describeDraftKey('mystery:x').title).toBe('Mystery draft')
