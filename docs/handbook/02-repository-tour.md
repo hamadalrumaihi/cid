@@ -59,8 +59,11 @@ big ones. Details: [Ch. 4](04-features.md).
 ### `src/lib/` — the shared foundation ⭐
 30+ files defining every contract the features obey: the data layer
 (`db.ts`), auth (`auth.tsx`), realtime (`realtime.ts`), navigation model
-(`nav.ts`), domain logic (sign-off, forms, penal code, exports, search,
-notifications), and utilities (toast, format, safeUrl, markdown, store).
+(`nav.ts`), domain logic (sign-off, the central status registry
+(`status.ts`), forms, penal code, exports, search, notifications), the
+per-user personalization layer (`pins`, `recents`, `userDrafts`,
+`savedViews` — over the owner-only `user_pins`/`user_drafts`/`user_prefs`
+tables), and utilities (toast, format, safeUrl, markdown, store).
 **Read this folder before touching features.** Details: [Ch. 3](03-architecture.md),
 [File Index](appendix-file-index.md).
 

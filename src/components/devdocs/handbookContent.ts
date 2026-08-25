@@ -203,8 +203,11 @@ big ones. Details: [Ch. 4](04-features.md).
 ### \`src/lib/\` — the shared foundation ⭐
 30+ files defining every contract the features obey: the data layer
 (\`db.ts\`), auth (\`auth.tsx\`), realtime (\`realtime.ts\`), navigation model
-(\`nav.ts\`), domain logic (sign-off, forms, penal code, exports, search,
-notifications), and utilities (toast, format, safeUrl, markdown, store).
+(\`nav.ts\`), domain logic (sign-off, the central status registry
+(\`status.ts\`), forms, penal code, exports, search, notifications), the
+per-user personalization layer (\`pins\`, \`recents\`, \`userDrafts\`,
+\`savedViews\` — over the owner-only \`user_pins\`/\`user_drafts\`/\`user_prefs\`
+tables), and utilities (toast, format, safeUrl, markdown, store).
 **Read this folder before touching features.** Details: [Ch. 3](03-architecture.md),
 [File Index](appendix-file-index.md).
 
@@ -316,13 +319,22 @@ not hypotheticals.
   editing a delete's cascade config without checking the FK schema.
 
 ## Block 7 — Domain Libraries
-\`src/lib/{signoff,forms,penal,packet,pdf,docx,search,notify,notifText,watchlist,operations,fivemanage}.ts\`
+\`src/lib/{signoff,status,forms,penal,packet,pdf,docx,search,notify,notifText,notifications,watchlist,pins,recents,userDrafts,savedViews,entityPreview,operations,fivemanage}.ts\`
 - **Responsibility**: business logic shared across views — sign-off
-  vocabulary (read-only interpreter; the chain is SQL!), report schemas,
-  penal calculators, the export pipeline, search, notifications.
+  vocabulary (read-only interpreter; the chain is SQL!), the central status
+  registry (\`status.ts\` — label/tint/meaning/next-actor for every status
+  vocabulary, rendered via \`ui/StatusBadge\`), report schemas, penal
+  calculators, the export pipeline, search, notifications (shared
+  mark-read/unread-count/mute actions in \`notifications.ts\`), and the
+  per-user personalization layer: \`pins.ts\` (\`user_pins\`), \`recents.ts\`
+  (device-local ids-only trail), \`userDrafts.ts\` (\`user_drafts\` autosave),
+  \`savedViews.ts\` (\`user_prefs\`) — all ids-only where records are
+  referenced, titles re-resolved through the viewer's RLS at render.
 - **Risk: MEDIUM.** Mostly pure functions.
 - **Common mistakes**: renaming a \`FORM_SCHEMAS\` field key (orphans saved
-  report data); making \`signoff.ts\` *decide* anything.
+  report data); making \`signoff.ts\` *decide* anything; adding a status
+  vocabulary as ad-hoc chip classes instead of a \`status.ts\` domain;
+  storing titles/labels in pins, recents or any personalization row.
 
 ## Block 8 — UI Primitives
 \`src/components/ui/*\`, \`src/lib/{toast,format,markdown,safeUrl,store,drafts}.ts\`
@@ -338,6 +350,13 @@ not hypotheticals.
 RLS on every table, \`private.*\` helper predicates and trigger functions,
 all workflow writes through SECURITY DEFINER RPCs, realtime publication on
 most tables (live counts: \`npm run check:schema\` / the schema snapshot).
+Per-user personalization lives in three owner-only tables (\`user_pins\`,
+\`user_drafts\`, \`user_prefs\` — \`20260826010000_ux_personalization.sql\`):
+RLS admits only the owner, no audit triggers, no realtime, size-capped
+jsonb. The same migration added \`private.audit_detail()\` (old/new row
+snapshots into \`audit_log.detail\` on the relationship-link tables), the
+\`case_intel_links\` UPDATE policy, the \`create_notification\` 1-hour
+identical-unread dedupe guard, and the \`search_all\` bolo/task arms.
 - **Risk: HIGHEST.** Deployed bundles and open tabs keep querying the old
   shape — migrations must be **additive only**.
 - **Common mistakes**: forgetting to hand-update \`database.types.ts\`;
@@ -377,8 +396,11 @@ any feedback. Never \`alert()\`.
 
 ## \`ui/DataTable.tsx\`
 Declarative columns (\`value()\` feeds sort/filter/CSV; optional \`render()\`,
-\`sortValue\`, hidden \`searchText\`); pagination; CSV export guarded against
-formula injection (\`csvCell\`, unit-tested). Currently used by AuditView.
+\`sortValue\`, hidden \`searchText\`); pagination + page-size options; sticky
+header; row selection (shift-range, select-all, disabled rows) for bulk
+actions; \`mobileCard\` narrow fallback; keyboard-activatable rows; CSV
+export guarded against formula injection (\`csvCell\`, unit-tested). Used by
+AuditView, CasesView and PersonsView.
 **Reuse when**: any tabular list — don't hand-roll another table.
 
 ## \`ui/RichEditor.tsx\`
@@ -414,6 +436,48 @@ don't re-inline the pattern.
   joint-case access expiry (OverviewTab), case follow-ups (CaseDetail).
   **Reuse when**: any surface shows a due/expiry timestamp — same
   vocabulary everywhere.
+
+## The UX-pass shared set (2026-08-25)
+Extracted or introduced by the portal-wide UX pass — same rule: reuse, don't
+re-inline.
+
+- **\`ui/StatusBadge.tsx\` + \`lib/status.ts\`** — THE status chip. Every
+  status vocabulary (case, stage, sign-off, legal review, warrant, field
+  submission, priority, threat, confidence, provenance, BOLO risk, seized
+  items, person review, account ownership, charges) renders through the
+  central registry: consistent label + tint, a tooltip carrying the
+  status's meaning and (for workflows) who acts next. **Reuse when**: any
+  status renders as a chip — never hand-pick chip classes for a status
+  again.
+- **\`ui/AccessBadge.tsx\`** — one chip for the three access vocabularies
+  (SIB visibility, legal classification, SOP classification) with
+  who-can-access titles. **Reuse when**: a record's access level renders.
+- **\`ui/SaveState.tsx\` + \`lib/userDrafts.ts\`** — the autosave layer:
+  debounced DB-backed drafts (\`user_drafts\`) with a per-user local mirror
+  and the Saving/Saved/Offline chip. Used by report forms, case
+  notes/chat, person/gang creation, intel summaries. **Reuse when**: any
+  long-form input should never lose work. (The legal wizard keeps its own
+  stash flow deliberately.)
+- **\`ui/RecordPeek.tsx\` + \`shared/RecordPeekButton.tsx\` +
+  \`lib/entityPreview.ts\`** — the "is this the record I think it is?"
+  preview card (lite RLS-scoped projection, status chips, linked counts,
+  access-restricted stub for invisible rows). **Reuse when**: a linked
+  record deserves a glance without navigation.
+- **\`shared/LinkEditPopover.tsx\`** — the ONE editor for an existing
+  relationship-link row (confidence / current-historical-disputed status /
+  role / note) over the link tables' UPDATE policies; the server-side
+  \`audit_detail\` triggers record old/new content. **Reuse when**: any link
+  table gains an editable attribute — never delete-and-recreate.
+- **\`shared/RecordSearchPicker.tsx\`** — bounded, RLS-scoped search picker
+  for attaching registry records. **Reuse when**: any "link a record" flow.
+- **\`shared/DuplicateMatches.tsx\`** — non-blocking duplicate hints under
+  the name/plate field of the Person/Gang/Vehicle create modals.
+- **\`shared/PinButton.tsx\` + \`lib/pins.ts\`** — pin toggle (person,
+  vehicle, gang, account, narcotics profiles + case headers).
+- **\`shell/CreateHost.tsx\`** — the universal "+ Create" provider:
+  \`useCreate().open(kind)\` opens the exact exported registry modal,
+  lazy-loaded, permission-gated. **Reuse when**: any surface wants a
+  create shortcut — never fork a second copy of a create form.
 
 ## \`cases/WatchButton.tsx\`
 Follow/unfollow for \`case|person|vehicle\`. Stops propagation (works inside
@@ -468,23 +532,30 @@ leaf nodes, safe to study, intricate to edit.`,
 | \`db.ts\` | ⚠ THE data layer: list/insert/update/remove/rpc/deleteWithUndo/withRetry |
 | \`docx.ts\` | Dependency-free OOXML writer (byte-fragile ZIP) |
 | \`deadlines.ts\` | Shared deadline engine (v1.14) — feeds \`ui/DeadlineChip\`; \`justice.ts\` delegates to it |
-| \`drafts.ts\` | Never-lose-work localStorage stash — reports, chat, and (v1.14) the legal create/edit forms |
+| \`drafts.ts\` | localStorage draft primitive (\`cid-draft:\` keys) — now mostly \`userDrafts\`' local mirror; the legal wizard's stash keeps the legacy shared keys |
+| \`userDrafts.ts\` | DB-backed never-lose-work drafts (\`user_drafts\`, owner-only RLS, cross-device): debounced upsert, per-user local mirror, 60KB guard, offline degradation; feeds \`ui/SaveState\` |
+| \`entityPreview.ts\` | Lite RLS-scoped record projections + linked-record counts for \`ui/RecordPeek\` |
 | \`fivemanage.ts\` | Media upload (multipart → hosted URL) |
 | \`format.ts\` | timeAgo/todayISO/fmtUSD/slug/downloadBlob/copyText |
 | \`forms.ts\` | 8 report schemas + warrant helpers + finalize-gap check |
 | \`markdown.tsx\` | Safe mini-Markdown → React (no innerHTML, ever) |
 | \`nav.ts\` | ⚠ PAGE_META / categories / labels — the nav contract |
 | \`notify.ts\` / \`notifText.ts\` | Notification write (RPC, unforgeable) / render vocabulary |
+| \`notifications.ts\` | Shared notification actions — mark-read, mark-all (one conditional update), accurate unread count, mute prefs (\`user_prefs\` key \`notif_muted\`; only \`OPTIONAL_NOTIF_CATEGORIES\` are mutable) |
 | \`operations.ts\` | Operations zustand cache + status colors |
 | \`packet.ts\` / \`pdf.tsx\` | Case-packet gathering / court-styled PDF renderer (dynamic import) |
 | \`penal.ts\` | Static penal code (162 charges) + calculators |
+| \`pins.ts\` | DB-backed pinned records (\`user_pins\`, owner-only RLS, cross-device, ids only, soft cap 24) — distinct from the Follow watchlist |
 | \`profiles.ts\` | Roster cache + \`officerName()\` |
+| \`recents.ts\` | Device-local recently-opened trail (Store blob, ids only, pushed on deliberate opens) |
+| \`savedViews.ts\` | Per-user saved views over \`user_prefs\` (\`views:<section>\` rows, opaque caller-shaped config, one default per section; one-time migration of the legacy \`caseViews\` Store key) |
 | \`realtime.ts\` | ⚠ One channel per table → version counters (\`useTableVersion\`) |
 | \`roles.ts\` | Role/bureau vocabulary + seniority + command predicates |
 | \`safeUrl.ts\` | ⚠ XSS scheme allow-list for DB-sourced URLs (tested) |
 | \`schemas.ts\` | Zod tolerant parsers for structured JSON payloads (v1.14) — legal form_data, packet manifests, notification payloads, report signatures/reopen logs, security overview |
-| \`search.ts\` | \`search_all\` RPC wrapper + penal hits + recents |
+| \`search.ts\` | \`search_all\` RPC wrapper (now incl. bolo/task arms) + client-side charge/member/intel-tip hits, kind metadata (\`SEARCH_KINDS\`) + recent searches |
 | \`signoff.ts\` | Read-only sign-off vocabulary/tints/"whose court" hint |
+| \`status.ts\` | ⚠ Central status registry — label/tint/meaning/who-acts-next for every status vocabulary (composes \`tint.ts\` + domain vocabularies; disambiguates warrant "Return filed" from legal "Returned for revision"); render via \`ui/StatusBadge\` |
 | \`store.ts\` | The shared localStorage blob (legacy-compatible keys) |
 | \`supabase.ts\` | ⚠ Lazy client singleton + \`isConfigured\` |
 | \`toast.ts\` | Toast store + \`humanizeError\` |
@@ -505,8 +576,9 @@ leaf nodes, safe to study, intricate to edit.`,
 | \`shell/Header.tsx\` | Title bar, \`/\` & ⌘K shortcuts, LOA, sign-out |
 | \`shell/Sidebar.tsx\` | ⚠ Categories, badges, body-class collapse |
 | \`shell/BottomNav.tsx\` / \`Subtabs.tsx\` | Mobile bar / in-category tab strip |
-| \`shell/SearchPalette.tsx\` | ⚠ ⌘K search + quick actions |
-| \`shell/NotificationsBell.tsx\` | Live bell + mark-read |
+| \`shell/SearchPalette.tsx\` | ⚠ ⌘K search + permission-gated go-to/create commands (full-screen sheet below \`lg\`) |
+| \`shell/CreateHost.tsx\` | Universal "+ Create" context provider — lazy-loads the exported registry modals; \`useCreate().open(kind)\` |
+| \`shell/NotificationsBell.tsx\` | Live bell — grouped clusters, accurate unread count, mark-all, mute settings (via \`lib/notifications\`) |
 | \`shell/useNav.ts\` / \`useNavBadges.ts\` | Routing helpers / ⚠ badge logic mirroring server rules |
 | \`shell/ConnBanner\` / \`AppearanceModal\` / \`MyProfileModal\` / \`icons\` | Offline pill / accent+density / self-profile / SVG icons |
 | \`ui/Modal.tsx\` | ⚠ Focus trap, dirty guard, scroll-lock, ref-routed handlers |
@@ -515,7 +587,10 @@ leaf nodes, safe to study, intricate to edit.`,
 | \`ui/RichEditor.tsx\` | Tiptap markdown editor |
 | \`ui/Toaster.tsx\` | Toast renderer |
 | \`ui/WorkflowTimeline.tsx\` / \`ui/DeadlineChip.tsx\` | v1.14 shared history render / deadline chip (see [Ch. 6](06-components.md)) |
+| \`ui/StatusBadge.tsx\` / \`ui/AccessBadge.tsx\` | Registry-backed status chip (tooltip: meaning + who acts next) / one chip for the three access vocabularies (SIB visibility, legal classification, SOP classification) |
+| \`ui/RecordPeek.tsx\` / \`ui/SaveState.tsx\` | Lazy record-preview card (data from \`lib/entityPreview\`) / autosave-state chip (fed by \`lib/userDrafts\`) |
 | \`shared/RelatedRecordPicker.tsx\` / \`VersionViewer.tsx\` / \`SignatureViewer.tsx\` | v1.14 cross-feature record picker / version list / signature trail |
+| \`shared/LinkEditPopover.tsx\` / \`RecordSearchPicker.tsx\` / \`DuplicateMatches.tsx\` / \`PinButton.tsx\` / \`RecordPeekButton.tsx\` | Relationship-link editor (confidence/status/note over the link tables' UPDATE policies) / bounded registry search picker / non-blocking duplicate hints on create modals / pin toggle over \`lib/pins\` / peek trigger |
 
 ## Feature views (main file per folder)
 
@@ -571,7 +646,10 @@ Owner-only.
    Intel & Notes, Charges, RICO — conditional, shown when the case has
    tracker data or the viewer enables tracking, Reports, Tasks, Legal,
    Sign-off, Chat, Timeline) each fetch and write their own case-scoped
-   tables. Custody transfers append to the immutable \`custody_chain\`.
+   tables. Visited tabs stay mounted (\`display:none\` keep-alive) with
+   per-tab scroll restore, section pills carry counts + attention markers,
+   and the \`caseSeen\` recap stamp is written on case *exit*, not on tab
+   switches. Custody transfers append to the immutable \`custody_chain\`.
 3. **Move it** — drag on the board → \`update('cases', {status})\`; triggers
    stamp \`closed_at\`/\`updated_at\`.
 4. **Stale escalation (automatic)** — once per session, \`CasesView\` finds
@@ -625,13 +703,23 @@ redirect there with their params intact ([Ch. 5](05-pages.md)).
 ## 4.4 Global search & commands (⌘K)
 
 \`Header\` shortcut → \`SearchPalette\` → debounced \`runSearch\` → \`search_all\`
-RPC (pg_trgm fuzzy, RLS-scoped, SECURITY INVOKER) + static penal-code
-hits + quick actions (New case, LOA, sign out, go-to-tab). A sequence
-guard drops out-of-order responses. Enter deep-links (\`?case=\`, \`?q=\`,
+RPC (pg_trgm fuzzy, RLS-scoped, SECURITY INVOKER) + client-side hits
+(static penal charges, cached-roster members — never email — and intel
+tips via \`field_submission_search\`). Kinds now also include \`bolo\` and
+\`task\` (server arms, \`20260826010000\`; a task hit carries its task id in
+\`term\` and deep-links the case Tasks tab). Results render grouped with
+per-kind tags (\`SEARCH_KINDS\`); record hits open as Investigative Tools
+record tabs and push the recents trail. A sequence guard drops
+out-of-order responses. Enter deep-links (\`?case=\`, \`?q=\`,
 and since v1.14 \`/legal?request=\` for legal-request hits). v1.14 added a
 \`legal\` kind to \`search_all\`: header fields only, and because the function
 is SECURITY INVOKER every hit passes the \`legal_requests\` SELECT policy —
-sealed requests never surface.
+sealed requests never surface. Commands are permission-gated: go-to
+entries exist only for tabs the viewer may open (owner/audit/devdocs/
+command-center/SIB are not disclosed to everyone), and the New-record set
+runs through the shared \`CreateHost\` provider (\`useCreate()\`), which
+lazy-loads the exact modals the registry views export. Below \`lg\` the
+palette is a full-screen sheet.
 
 ## 4.5 Command tools
 
@@ -663,10 +751,21 @@ in Ch. 8.
 
 ## 4.6 Personal tools
 
-My Desk (ten derived panels over eight live tables), watchlist (follow +
-"updated" chips via localStorage seen-stamps), calendar (follow-ups, task
-due dates, report weeks), shift reports (one per week enforced by unique
-key, auto-rollup), notifications bell.
+My Desk (ten derived panels over eight live tables), the Action Center
+(\`useActionItems\` slim fetches → the pure \`buildActionItems\` model;
+wave-3 lanes add Unassigned intel, Expiring BOLOs and Drafts — the drafts
+lane describes \`user_drafts\` KEYS, never payloads), watchlist (follow +
+"updated" chips via localStorage seen-stamps), pins & recents (the Command
+dashboard "Jump back in" strip — DB pins + device recents, both ids-only,
+titles RLS-resolved at render), saved views on the Cases/Persons/Legal/
+BOLO lists (\`lib/savedViews\` over \`user_prefs\`; re-applying a view only
+re-applies client filter state — RLS still decides what it matches),
+autosaved drafts (\`lib/userDrafts\` + the \`ui/SaveState\` chip on reports,
+case notes, chat, person/gang creation, intel summaries), calendar
+(follow-ups, task due dates, report weeks), shift reports (one per week
+enforced by unique key, auto-rollup), notifications bell (grouped
+clusters, exact unread count, mark-all, optional-stream mutes; the server
+suppresses identical unread duplicates inside an hour).
 
 ## 4.7 Reference & exports
 
@@ -710,12 +809,12 @@ One row per leaf tab in \`PAGE_META\` (\`src/lib/nav.ts\` — the routing truth)
 
 | Slug | Screen (component) | Data highlights | Extra permissions |
 |---|---|---|---|
-| \`command\` | Dashboard (\`CommandView\` + 8 widgets) | cases, evidence, tickets, trackers, raid comp | filter bar/scorecards command-only |
+| \`command\` | Dashboard (\`CommandView\` + 8 widgets, incl. the "Jump back in" pins/recents strip — \`command/JumpBack.tsx\`) | cases, evidence, tickets, trackers, raid comp, user_pins | filter bar/scorecards command-only |
 | \`analytics\` | Division Analytics | cases, evidence, persons (charts) | — |
 | \`announce\` | Announcements | announcements | posting = command |
 | \`heatmap\` | Crime Heatmap | cases, turf, places, raids | — |
 | \`personnel\` | Roster & Commendations | profiles (+ admin RPCs), commendations | admin panel = command |
-| \`cases\` | Case board + detail | the whole case constellation | bureau-scoped |
+| \`cases\` | Case board + detail (keep-alive case sections; saved views via \`lib/savedViews\`; DataTable row-selection bulk status/lead/archive — chunked, preview-confirmed, no bulk delete) | the whole case constellation | bureau-scoped; bulk lead assign command-only |
 | \`operations\` | Task Forces | operations, cases | — |
 | \`case-files\` | Attachments | case_files + FiveManage | delete = command |
 | \`rico\` | RICO tracker | rico_cases, predicate_acts | — |
@@ -740,7 +839,7 @@ One row per leaf tab in \`PAGE_META\` (\`src/lib/nav.ts\` — the routing truth)
 | \`sops\` | SOPs & Library | documents + versions | writes = command |
 | \`guide\` | User Guide | static visual guide (generated from docs/USER-GUIDE.md) | — |
 | \`devdocs\` | Developer Handbook (\`DevDocsView\`) | generated handbook content | **owner-only** |
-| \`action\` | Action Center (\`ActionCenterView\`) | prioritized pending decisions across cases, command, personnel | self-scoped |
+| \`action\` | Action Center (\`ActionCenterView\`) | prioritized pending decisions across cases, command, personnel + Unassigned intel / Expiring BOLOs / Drafts lanes (\`lib/actionItems\`), type + bureau filters | self-scoped |
 | \`inbox\` | My Desk (\`InboxView\`) | self-scoped rollup panels (sign-offs, returned cases, follow-ups, tasks, mentions, following, drafts…) | self-scoped |
 | \`calendar\` | Calendar | cases, tasks, shift weeks | — |
 | \`shifts\` | Shift Reports | shift_reports | edit own |
@@ -785,7 +884,7 @@ SECURITY DEFINER (run privileged, then check the caller inside) except
 
 | RPC | Request | Response | Called from | Why it exists |
 |---|---|---|---|---|
-| \`search_all(q)\` | search string | ranked hits across 10 tables (v1.14 adds \`legal\` — header fields only, never narratives; INVOKER + RLS keep sealed requests undiscoverable) | SearchPalette | one round-trip fuzzy search, RLS-scoped |
+| \`search_all(q)\` | search string | ranked hits, capped per kind (v1.14 adds \`legal\` — header fields only, never narratives; INVOKER + RLS keep sealed requests undiscoverable; \`20260826010000\` appends \`bolo\` and \`task\` arms — a task hit rides its task id in \`term\`, its case id in the row id) | SearchPalette | one round-trip fuzzy search, RLS-scoped |
 | \`signoff_submit(p_case)\` | case id | updated case | CaseDetail | atomically route + stamp + history + notify; columns are trigger-locked |
 | \`signoff_decide(p_case, p_decision, p_note)\` | case id, approve/deny/changes, note | updated case | CaseDetail | reviewer decision, validated against the current assignee |
 | \`signoff_owner_action(p_case, p_action)\` | case id, complete/escalate/… | updated case | CaseDetail | owner-side chain actions |
@@ -802,7 +901,7 @@ SECURITY DEFINER (run privileged, then check the caller inside) except
 | \`reject_transfer(p_id, p_note?)\` / \`cancel_transfer(p_id)\` | transfer id | transfer row | PromotionsTransfers | **LEGACY** (same reason) — either side's Lead or DD+ rejects a pre-existing open row; the requester or DD+ cancels it |
 | \`admin_member_emails()\` | — | roster emails | PersonnelView | command-only bypass of the email column grant |
 | \`admin_remove_member(p_target, p_reason?)\` / \`admin_restore_member(p_target)\` | profile id (+ optional reason) | void | AdminPanel | soft remove/restore (\`removed_at\`) under the unified authority matrix: Bureau Leads remove own-bureau detectives/senior detectives; Deputy Directors anyone below deputy; Directors anyone except owner accounts; the Owner anyone; system accounts refused; self-removal and removing the last active director blocked. Restore is Director/Owner-only and returns the member INACTIVE (they re-enter through review) |
-| \`create_notification(user, type, payload)\` | recipient + payload | void | \`lib/notify.ts\` | insert for ANOTHER user with the actor stamped server-side (no forgery) |
+| \`create_notification(user, type, payload)\` | recipient + payload | void | \`lib/notify.ts\` | insert for ANOTHER user with the actor stamped server-side (no forgery); since \`20260826010000\` an identical still-unread notification created within the last hour is silently dropped (dedupe guard) |
 | \`mo_crossref(terms[])\` | term list | existence-only case matches | ModusView | controlled cross-bureau M.O. matching |
 | \`report_reopen(p_report)\` | report id | report row | CaseDetail Reports | bureau-scoped seal break; prior signature kept in \`fields._reopen_log\` |
 | \`warrant_set_status(p_report, p_status)\` | report id + status | report row | CaseDetail Reports | validated warrant lifecycle; only path on sealed warrants |
@@ -982,10 +1081,20 @@ policy delegates to the same helper.
 active member's browser. **Deleted by** command via \`deleteWithUndo\`.
 
 ### Own-row (keyed to \`auth.uid()\`)
-\`notifications\` (insert ONLY via RPC — actor can't be forged), \`watchlist\`,
+\`notifications\` (insert ONLY via RPC — actor can't be forged; since
+\`20260826010000\` \`create_notification\` drops an identical unread duplicate
+created within the last hour), \`watchlist\`,
 \`shift_reports\` (command may read/update all), \`feedback\` (+2 triage
 owners), \`profiles\` (self-update allowed; \`guard_profile\` trigger blocks
-self-changing role/active/bureau; \`email\` column readable by command only).
+self-changing role/active/bureau; \`email\` column readable by command only),
+and the three **personalization tables** (\`20260826010000_ux_personalization.sql\`,
+the \`document_user_state\` contract): \`user_pins\` (pinned record refs, ids
+only), \`user_drafts\` (autosaved drafts, 64 KiB jsonb cap, touch-trigger
+\`updated_at\`), \`user_prefs\` (small keyed jsonb ≤32 KiB — saved views,
+notification mutes). All three are **owner-only in every direction** (RLS
+admits only \`user_id = auth.uid()\`, which also defaults server-side), carry
+no audit triggers and are not in the realtime publication — they hold
+convenience state, never shared records.
 
 ### System
 \`audit_log\` (written ONLY by the \`private.audit()\` trigger and the
@@ -1061,6 +1170,7 @@ logic.
 | Family | Tables | Effect |
 |---|---|---|
 | \`private.audit()\` AFTER I/U/D | every audited table (see the schema snapshot) | The app's audit logging — no client write path |
+| \`private.audit_detail()\` AFTER I/U/D | the relationship-link tables (\`person_relationships\`, \`person_places\`, \`person_vehicles\`, \`gang_places\`, \`case_intel_links\`, \`account_links\`) | Audit rows that also snapshot **old/new row jsonb** into \`audit_log.detail\` — a link edit (confidence/status/role/note, via \`LinkEditPopover\`) records what changed, not just that it changed (\`20260826010000\`) |
 | \`touch\` family BEFORE UPDATE | most tables (see the schema snapshot) | Honest \`updated_at\` (drives staleness + analytics) |
 | \`stamp_author_identity\` BEFORE INSERT | case_messages, announcements | Real author enforced server-side |
 | Guard triggers | profiles, cases, reports, trackers | Block self-promotion, direct sign-off/finalize writes, self-co-sign |
@@ -1110,7 +1220,14 @@ and the schema snapshot is the complete table list:
 - **Case archival + Owner-only permanent deletion** (\`20260807130000\`) —
   \`cases.archived_at/by\` (trigger-guarded), \`case_archive\`/\`case_restore\`
   (command, restorable), \`case_delete_preview\`/\`case_permanent_delete\`
-  (Owner only; refuses cases with legal requests).`,
+  (Owner only; refuses cases with legal requests).
+- **UX personalization pass** (\`20260826010000\`, mapped in
+  \`supabase/MIGRATION-HISTORY.md\`) — \`user_pins\`/\`user_drafts\`/\`user_prefs\`
+  (owner-only, see 8.2), \`private.audit_detail()\` old/new link snapshots
+  (see 8.5), the missing \`case_intel_links\` UPDATE policy (role/note
+  editable; the legal-hold trigger still vetoes), the \`create_notification\`
+  1-hour dedupe guard, and \`search_all\` \`bolo\` + \`task\` arms (+ a
+  \`case_tasks\` title trgm index).`,
   },
   {
     slug: "state",
@@ -1124,10 +1241,20 @@ widest:
 | Component state (\`useState\`) | Screen-local rows, filters, modal state, form fields (modals mount fresh per open) | every view |
 | Derived state (\`useMemo\`) | Filtering, grouping, chart buckets, graph building | big views |
 | React Context | Two: \`AuthProvider\` (session/profile/capabilities) and \`ToolsWorkspaceContext\` (the Investigative Tools workspace — open tabs, active key, open/close/dirty ops; \`useToolsWorkspace()\` returns null outside \`/tools\` so hosted views no-op) | \`lib/auth.tsx\`, \`components/tools/ToolsWorkspaceContext.tsx\` |
-| zustand stores | Toasts, dialogs, realtime versions, profiles cache, operations cache, watchlist — singletons that non-React code must reach | \`lib/*\`, \`ui/dialog\` |
-| localStorage (\`Store\`) | Device preferences + legacy-app continuity, ONE JSON blob (\`cid-portal-v3\`) | \`lib/store.ts\` |
+| zustand stores | Toasts, dialogs, realtime versions, profiles cache, operations cache, watchlist, pins, draft save-state — singletons that non-React code must reach | \`lib/*\`, \`ui/dialog\` |
+| localStorage (\`Store\`) | Device preferences + legacy-app continuity, ONE JSON blob (\`cid-portal-v3\`); includes the ids-only recents trail (\`lib/recents.ts\`) | \`lib/store.ts\` |
+| localStorage (\`Drafts\`) | Draft mirror keys (\`cid-draft:…\`) — \`lib/userDrafts\` mirrors per-user (\`u:<uid>:<key>\`) before every server save; legacy shared keys survive for the legal stash | \`lib/drafts.ts\` |
 | sessionStorage | Investigative Tools open tabs, per signed-in user, **ids only** (\`cid-tools-workspace:<uid>\`) — titles are re-fetched RLS-scoped on restore, invisible rows close silently | \`components/tools/ToolsView.tsx\` |
+| **Per-user DB state** | Cross-device personal state, owner-only RLS, never shared data: \`user_pins\` (pinned records, ids only — \`lib/pins.ts\`), \`user_drafts\` (autosaved drafts, 64 KiB cap — \`lib/userDrafts.ts\`), \`user_prefs\` (small keyed jsonb: saved views \`views:<section>\` — \`lib/savedViews.ts\`; notification mutes \`notif_muted\` — \`lib/notifications.ts\`) | Supabase |
 | The database | ALL shared data — every screen refetches on mount and on realtime bumps | Supabase |
+
+**Personalization rule**: anything per-user that should follow the member
+across devices goes in one of the three \`user_*\` tables above (owner-only
+RLS, no audit triggers, no realtime, size-capped jsonb); anything genuinely
+device-local goes in the \`Store\` blob. Ids only for anything referencing
+records — consumers re-resolve titles through the viewer's RLS at render, so
+lost access hides entries instead of leaking stale labels. Don't invent a
+fourth mechanism.
 
 ## The refresh idiom (memorize — it's in ~30 files)
 
@@ -1689,6 +1816,10 @@ export function FeatureView() {
 | \`FORM_SCHEMAS\` field keys | Saved \`reports.fields\` JSON (old reports must still render), \`formToText\`, warrant matching | Field keys ARE the storage format |
 | A case-satellite FK / cascade | \`CaseDetail\` delete config; \`GangsView\`/\`PlacesView\`/\`PersonsView\` children/setNullRefs | Undo restores exactly what the config lists |
 | \`Store\` keys | The legacy vanilla app, \`page.tsx\` deep-link shim, the pre-hydration \`PREF_APPLIER\` | Shared localStorage blob = cross-app contract |
+| A status vocabulary (values or labels) | \`lib/status.ts\` domain + its source vocabulary (\`signoff\`/\`forms\`/\`caseCharges\`/…), \`ui/StatusBadge\` call sites, \`lib/status.test.ts\` | The registry is the single presentation source; a value missing from its domain renders a bare fallback chip |
+| \`user_prefs\`/\`user_drafts\`/\`user_pins\` shapes | \`lib/savedViews.ts\` parse/serialize, \`lib/userDrafts.ts\` size guard, \`lib/pins.ts\`, \`lib/notifications.ts\` mute prefs, the Action Center drafts lane | Owner-only jsonb with size caps — parsers are tolerant (garbage → empty), so a silently-changed shape loses data, not errors |
+| \`OPTIONAL_NOTIF_CATEGORIES\` / notification \`type\` strings | \`lib/notifText.ts\` vocabulary, the bell's mute panel, the \`create_notification\` dedupe (matches on type+payload) | Only allow-listed types are mutable; mandatory streams must never become mutable |
+| A saved-view \`config\` shape (per list) | That list's apply/save functions only (\`caseUtils\`, registry filter modules) | \`lib/savedViews\` treats config as opaque — each list owns its own migration/tolerance |
 | \`globals.css\` accent remap / \`.nav-collapsed\` | Sidebar collapse logic, \`PREF_APPLIER\`, AppearanceModal | The class/dataset contracts live in three places |
 | CSP (\`next.config.ts\`) | PDF export (WASM), Supabase REST+WSS, FiveManage, Discord | The allow-lists are exact |
 | \`docs/USER-GUIDE.md\` | Regenerate \`guideContent.ts\` | Dual-copy system |
@@ -1712,6 +1843,9 @@ export function FeatureView() {
    to see the *server's* reason for a refusal.
 4. **\`audit_log\`** (owner account, Oversight → Audit) — every mutation on
    the audited tables with actor + payload. Great for "who changed this?".
+   On the relationship-link tables the \`detail\` column also snapshots the
+   old/new row jsonb (\`private.audit_detail()\`), so "what did the link say
+   before the edit?" is answerable too.
 5. **Vercel deployment logs** — build failures only (no runtime server).
 
 ## Common bugs and their usual causes
@@ -1801,7 +1935,7 @@ shipped. Effort: S < 1d, M = days, L = week+.
 |---|---|---|
 | ~~Drop unused deps (\`react-hook-form\`, \`@tanstack/react-query\`)~~ **done** — dropped; zod kept and adopted (\`src/lib/schemas.ts\`) | Zero imports; smaller install/audit surface | none |
 | Drop/verify \`bootstrap_*\` RPCs | Close a setup-era privileged path | none (verify first) |
-| ~~Wire or delete \`lib/drafts.ts\`~~ **done** — wired into the report/chat/legal editors | Never-lose-work code | none |
+| ~~Wire or delete \`lib/drafts.ts\`~~ **done** — wired into the report/chat/legal editors; **superseded 2026-08-25** by the DB-backed \`lib/userDrafts.ts\` (\`user_drafts\`, cross-device, per-user local mirror) — \`drafts.ts\` survives as its mirror primitive + the legal stash | Never-lose-work code | none |
 | ~~Script + CI check for \`guideContent.ts\` generation~~ **done** — \`npm run gen:guide\` + drift check | Kills a proven drift class | none |
 | ~~Fix the guide's hardcoded case-tab illustration~~ **done** — the guide regenerates from \`docs/USER-GUIDE.md\` | Was drifting from the real tabs | none |
 | Fold \`chargeByCode\` into \`penalByCode\`; migrate off deprecated \`roles.isCommand\` | Naming hygiene | trivial |
@@ -1835,8 +1969,9 @@ shipped. Effort: S < 1d, M = days, L = week+.
   checklist completion (\`HARDENING.md\`).
 - **DX**: guide generation script, JSON typing, more unit tests around
   pure domain logic (penal totals, matchKey).
-- **UX/A11y**: heat-tint labels, keyboard board moves, notification
-  mute preferences, mark-all in the bell.
+- **UX/A11y**: heat-tint labels, keyboard board moves; ~~notification
+  mute preferences, mark-all in the bell~~ **done 2026-08-25**
+  (\`lib/notifications.ts\` — optional-stream mutes + one-update mark-all).
 - **Scalability**: pagination + selective realtime payloads (use the
   event's row data instead of refetching) — a natural pair.`,
   },
@@ -1955,7 +2090,9 @@ bureau_lead → deputy_director → director.
   narcotic_hotspots, ballistics_benches, ballistic_footprints, indicators,
   media, cid_records, operations, tickets, commendations, documents,
   documents_versions
-- **Own-row**: notifications, watchlist, shift_reports, feedback, profiles
+- **Own-row**: notifications, watchlist, shift_reports, feedback, profiles;
+  personalization (owner-only, no audit, no realtime): user_pins,
+  user_drafts, user_prefs
 - **System**: audit_log, announcements, app_secrets
 
 ## Remaining enums
@@ -1976,9 +2113,17 @@ Enter submits quick-add rows.
 ## localStorage keys (the \`cid-portal-v3\` blob — legacy-shared, don't rename)
 
 \`tab\` · \`collapsed\` · \`accent\` · \`density\` · \`annSeen\` · \`annDismissed\` ·
-\`casesScope\` · \`casesView\` · \`caseFilters\` · \`caseViews\` · \`recentCases\` ·
-\`pinnedCases\` · \`benchType\` · \`watchSeen\` · \`recentSearches\` ·
-\`graphLayout:<caseId>\`.`,
+\`casesScope\` · \`casesView\` · \`caseFilters\` · \`benchType\` · \`watchSeen\` ·
+\`recentSearches\` · \`recentRecords\` (ids-only recents trail, \`lib/recents\`) ·
+\`caseSeen:<caseId>\` · \`graphLayout:<caseId>\` · per-registry view/sort/filter
+keys (\`personFilters\`, \`personsView\`, \`personsSort\`, \`narcoticsView\`,
+\`narcoticsFilters\`, \`sopsShelfView\`, \`sopsShelfSort\`).
+
+Retired keys still honored for migration/legacy: \`caseViews\` (lifted into
+\`user_prefs\` \`views:cases\` on first load — \`lib/savedViews\`); \`pinnedCases\` /
+\`recentCases\` (superseded by \`user_pins\` / \`recentRecords\` — the legacy site
+still writes them, this app no longer reads them). Cross-device per-user
+state lives in \`user_pins\`/\`user_drafts\`/\`user_prefs\`, not here.`,
   },
   {
     slug: "faq",
@@ -2050,9 +2195,15 @@ learn steps 1–6 of the [Learning Path](20-learning-path.md) first. Safe
 starter areas: \`PenalView\`, \`GuideView\`, any registry view.
 
 **Where do I put temporary/draft user input?**
-Modals guard dirty state automatically. For persistence there's
-\`lib/drafts.ts\` — currently unwired (zero importers) — or the \`Store\`
-blob for preferences. Don't invent a third mechanism.
+Modals guard dirty state automatically. For persistence use
+\`lib/userDrafts.ts\` — DB-backed (\`user_drafts\`, owner-only RLS,
+cross-device) with a per-user localStorage mirror and the \`ui/SaveState\`
+chip; \`lib/drafts.ts\` remains only as its local-mirror primitive (and the
+legal wizard's deliberate device-local stash). Per-user *preferences* go in
+\`user_prefs\` (\`lib/savedViews.ts\` shows the pattern) when they should follow
+the member across devices, or the \`Store\` blob when they're genuinely
+device-local. Per-user record bookmarks are \`user_pins\` (\`lib/pins.ts\`).
+Don't invent another mechanism.
 
 **How do I test realtime behavior?**
 Two browsers (or one normal + one incognito) signed in as different

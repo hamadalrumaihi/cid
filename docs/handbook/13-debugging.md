@@ -14,6 +14,9 @@
    to see the *server's* reason for a refusal.
 4. **`audit_log`** (owner account, Oversight → Audit) — every mutation on
    the audited tables with actor + payload. Great for "who changed this?".
+   On the relationship-link tables the `detail` column also snapshots the
+   old/new row jsonb (`private.audit_detail()`), so "what did the link say
+   before the edit?" is answerable too.
 5. **Vercel deployment logs** — build failures only (no runtime server).
 
 ## Common bugs and their usual causes
