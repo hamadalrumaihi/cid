@@ -463,9 +463,9 @@ export function GuideView() {
       </Section>
 
       {/* SIB visibility */}
-      <Section id="siu" title="SIU visibility, in plain terms" blurb="Shared registries are one dataset — SIU can take a record out of CID's view, and give it back.">
+      <Section id="siu" title="SIB visibility, in plain terms" blurb="Shared registries are one dataset — SIB can take a record out of CID's view, and give it back.">
         <div className="flex flex-wrap gap-1.5" aria-hidden>
-          <span className={`rounded px-2 py-1 text-[11px] font-semibold ${visibilityTint('siu_only')}`}>SIU only</span>
+          <span className={`rounded px-2 py-1 text-[11px] font-semibold ${visibilityTint('siu_only')}`}>SIB only</span>
           <span className={`rounded px-2 py-1 text-[11px] font-semibold ${visibilityTint('partial')}`}>Sections restricted</span>
           <span className={`rounded px-2 py-1 text-[11px] font-semibold ${visibilityTint('revealed')}`}>Revealed to CID</span>
           <span className={`rounded px-2 py-1 text-[11px] font-semibold ${visibilityTint('unclassified')}`}>Origin not established</span>

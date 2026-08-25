@@ -97,7 +97,7 @@ describe('referring', () => {
   it('needs a real category and a reason', () => {
     expect(referralProblem('', 'because')).toMatch(/categories/)
     expect(referralProblem('not_a_thing', 'because')).toMatch(/categories/)
-    expect(referralProblem('organized_crime', '   ')).toMatch(/why this needs SIU/)
+    expect(referralProblem('organized_crime', '   ')).toMatch(/why this needs SIB/)
     expect(referralProblem('organized_crime', 'enterprise, not an incident')).toBeNull()
   })
 
@@ -123,12 +123,12 @@ describe('the SIU history in words', () => {
   it('reads as sentences', () => {
     expect(siuActionLine(act(), name)).toBe('Reyes flagged possible organized crime')
     expect(siuActionLine(act({ action: 'referred' }), name))
-      .toBe('Reyes referred it to SIU — Organized crime')
-    expect(siuActionLine(act({ action: 'accepted' }), name)).toBe('Reyes accepted it for SIU')
+      .toBe('Reyes referred it to SIB — Organized crime')
+    expect(siuActionLine(act({ action: 'accepted' }), name)).toBe('Reyes accepted it for SIB')
     expect(siuActionLine(act({ action: 'assigned', to_user: 'x2' }), name))
       .toBe('Reyes assigned it to Vance')
     expect(siuActionLine(act({ action: 'sensitive_on' }), name))
-      .toBe('Reyes restricted this report to SIU')
+      .toBe('Reyes restricted this report to SIB')
   })
 
   it('falls back to the raw action rather than dropping a line', () => {
@@ -270,7 +270,7 @@ describe('the SIU history covers the new steps', () => {
   const name = () => 'Reyes'
   it('says what happened in words', () => {
     expect(siuActionLine(act({ action: 'case_linked' }), name))
-      .toBe('Reyes linked it to an SIU investigation')
+      .toBe('Reyes linked it to an SIB investigation')
     expect(siuActionLine(act({ action: 'target_designated' }), name))
       .toBe('Reyes designated a target from it')
   })
