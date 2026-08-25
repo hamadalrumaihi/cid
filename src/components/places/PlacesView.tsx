@@ -593,16 +593,11 @@ function PlaceObservations({ placeId, count }: { placeId: string; count: number 
  *  preloads. An existing FK resolves its label via ONE in:{id} lookup; a slow
  *  or failed lookup keeps the id under a placeholder label, so saving never
  *  nulls a link the editor didn't touch (the old "(current … - loading)"
- *  guard, picker-shaped). CreateHost still passes its legacy option bundles —
- *  accepted and ignored for compatibility. */
+ *  guard, picker-shaped). */
 export function PlaceModal({ record, onClose, onSaved }: {
   record: PlaceRow | null
   onClose: () => void
   onSaved: () => void
-  /** @deprecated Legacy preload bundles (CreateHost) — unused. */
-  gangs?: unknown
-  cases?: unknown
-  drugs?: unknown
 }) {
   const [name, setName] = useState(record?.name || '')
   const [type, setType] = useState<LocationType>(record?.type || 'drug_lab')

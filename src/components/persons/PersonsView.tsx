@@ -580,7 +580,6 @@ export function PersonsView() {
         <PersonModal
           record={editor.record}
           prefillName={editor.prefillName}
-          gangs={gangs}
           onClose={() => setEditor(null)}
           onSaved={() => { setEditor(null); void refresh() }}
         />

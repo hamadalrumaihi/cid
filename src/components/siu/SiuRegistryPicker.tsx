@@ -18,15 +18,17 @@
  *  Sometimes the subject genuinely is not in any registry yet, and forcing an
  *  agent to invent a `persons` row to record a watch would be worse than the
  *  problem this replaces. So `allowUnknown` offers an unidentified stub — but
- *  it is behind a link, worded as a fallback, and never the default. */
+ *  it is behind a link, worded as a fallback, and never the default.
+ *
+ *  Internally the search runs through the shared RecordSearchPicker (debounced,
+ *  sequence-guarded, keyboard-navigable) over the SAME RPC — the picker only
+ *  renders what `siu_registry_search()` answers, so nothing here widens what a
+ *  caller can see. */
 
-import { useState } from 'react'
-import { siuRegistrySearch, siuWatchEntityLabel, SIU_WATCH_REGISTRY_TYPES,
-         type SiuRegistryMatch } from '@/lib/siu'
-import { toast } from '@/lib/toast'
-import { Badge } from '@/components/ui/Badge'
-import { Button } from '@/components/ui/Button'
+import { useCallback } from 'react'
+import { siuRegistrySearch, siuWatchEntityLabel, SIU_WATCH_REGISTRY_TYPES } from '@/lib/siu'
 import { Field, Input, Select } from '@/components/ui/Field'
+import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
 
 export interface SiuRegistryChoice {
   /** `unknown` when the caller used the escape hatch. */
@@ -46,6 +48,10 @@ export const emptyChoice: SiuRegistryChoice = {
 export const choiceIsComplete = (c: SiuRegistryChoice) =>
   c.entityType === 'unknown' ? !!c.label?.trim() : !!c.entityId
 
+/** PickedRecord plus the RPC's already-watched flag (the watchlist's own
+ *  duplicate rule — surfaced as a disabled row, not a save-time failure). */
+type RegistryHit = PickedRecord & { alreadyWatched: boolean }
+
 export function SiuRegistryPicker({
   value, onChange, allowUnknown = true, excludeWatched = false, types,
 }: {
@@ -59,29 +65,24 @@ export function SiuRegistryPicker({
   excludeWatched?: boolean
   types?: readonly string[]
 }) {
-  const [q, setQ] = useState('')
-  const [matches, setMatches] = useState<SiuRegistryMatch[]>([])
-  const [searched, setSearched] = useState(false)
-  const [busy, setBusy] = useState(false)
-
   const offered = types ?? SIU_WATCH_REGISTRY_TYPES
   const stub = value.entityType === 'unknown'
+  const entityType = value.entityType
 
-  const search = async () => {
-    if (!q.trim()) return
-    setBusy(true)
-    try {
-      const rows = await siuRegistrySearch(value.entityType, q)
-      setMatches(rows)
-      setSearched(true)
-    } catch (e) { toast(e instanceof Error ? e.message : String(e), 'danger') }
-    finally { setBusy(false) }
-  }
-
-  const reset = (entityType: string) => {
-    setMatches([]); setSearched(false); setQ('')
+  const reset = (entityType: string) =>
     onChange({ entityType, entityId: null, label: null, displayName: '' })
-  }
+
+  // Bounded loader over the SECURITY INVOKER RPC. Debounce, race-guarding and
+  // the inline error/Retry rendering all come from RecordSearchPicker.
+  const search = useCallback(async (q: string): Promise<RegistryHit[]> => {
+    const rows = await siuRegistrySearch(entityType, q)
+    return rows.map((m) => ({
+      id: m.id,
+      label: m.display_name,
+      sublabel: m.secondary ?? undefined,
+      alreadyWatched: m.already_watched,
+    }))
+  }, [entityType])
 
   if (stub) {
     return (
@@ -125,73 +126,36 @@ export function SiuRegistryPicker({
         )}
       </Field>
 
-      <Field
+      {/* Remount per type — switching the registry starts a fresh search, the
+          same reset the old Search-button flow performed. */}
+      <RecordSearchPicker<RegistryHit>
+        key={entityType}
         label="Find the record"
         required
         hint="Pointing at the registry record keeps the subject's name, affiliations and vehicles current without anyone retyping them."
-      >
-        {(id) => (
-          <div className="flex gap-2">
-            <Input
-              id={id}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void search() } }}
-              placeholder="Search by name, plate or handle"
-            />
-            <Button disabled={busy} onClick={() => void search()}>
-              {busy ? 'Searching…' : 'Search'}
-            </Button>
-          </div>
-        )}
-      </Field>
-
-      {value.entityId ? (
-        <div className="flex items-center gap-2 rounded-xl border border-sky-500/30 bg-sky-500/5 p-3">
-          <p className="min-w-0 truncate text-sm font-semibold text-slate-100">
-            {value.displayName}
-          </p>
-          <button
-            type="button"
-            className="ml-auto shrink-0 text-[11px] text-slate-400 underline-offset-2 hover:underline"
-            onClick={() => reset(value.entityType)}
-          >
-            Change
-          </button>
-        </div>
-      ) : matches.length ? (
-        <ul className="max-h-56 space-y-1 overflow-y-auto">
-          {matches.map((m) => {
-            const blocked = excludeWatched && m.already_watched
-            return (
-              <li key={m.id}>
-                <button
-                  type="button"
-                  disabled={blocked}
-                  className="flex w-full items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-left hover:border-white/25 disabled:cursor-not-allowed disabled:opacity-50"
-                  onClick={() => onChange({
-                    entityType: value.entityType, entityId: m.id,
-                    label: null, displayName: m.display_name,
-                  })}
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm text-slate-100">{m.display_name}</span>
-                    {m.secondary && (
-                      <span className="block truncate text-[11px] text-slate-400">{m.secondary}</span>
-                    )}
-                  </span>
-                  {blocked && <Badge tone="neutral" className="ml-auto">Already watched</Badge>}
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      ) : searched ? (
-        <p className="text-xs text-slate-400">
-          Nothing in the registry matches that. Create the record in CID first so everyone works
-          from the same one{allowUnknown ? ', or record an unidentified subject below' : ''}.
-        </p>
-      ) : null}
+        placeholder="Search by name, plate or handle"
+        minChars={1}
+        value={value.entityId
+          ? { id: value.entityId, label: value.displayName, alreadyWatched: false }
+          : null}
+        onChange={(v) => onChange(v
+          ? { entityType, entityId: v.id, label: null, displayName: v.label }
+          : { entityType, entityId: null, label: null, displayName: '' })}
+        search={search}
+        getDisabled={excludeWatched ? (h) => (h.alreadyWatched ? 'Already watched' : null) : undefined}
+        emptyState={
+          <>
+            Nothing in the registry matches that. Create the record in CID first so everyone works
+            from the same one{allowUnknown ? ', or record an unidentified subject below' : ''}.
+          </>
+        }
+        allowFreeText={allowUnknown ? {
+          label: 'The subject is not in the registry',
+          onPick: (text) => onChange({
+            entityType: 'unknown', entityId: null, label: text, displayName: text,
+          }),
+        } : undefined}
+      />
 
       {allowUnknown && (
         <button

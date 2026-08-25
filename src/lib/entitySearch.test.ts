@@ -75,6 +75,39 @@ describe('rankPersonRows — exact matches first, then RPC rank, stable', () => 
     expect(rankPersonRows(rows, order, 'nomatch').map((r) => r.id)).toEqual(['z', 'x', 'y'])
   })
 
+  it('multi-token exactness is whitespace- and case-insensitive on aliases too', () => {
+    const rows = [
+      row('a', { name: 'Lil Ghost Rider' }), // partial — contains the tokens
+      row('b', { alias: 'Lil Ghost' }),      // exact normalized alias — wins
+    ]
+    const order = new Map([['a', 0], ['b', 1]])
+    expect(rankPersonRows(rows, order, '  LIL   ghost ').map((r) => r.id)).toEqual(['b', 'a'])
+  })
+
+  it('phone exactness compares normalized digits, and a leading + is significant', () => {
+    const rows = [
+      row('a', { name: 'Phone Partial 555' }),
+      row('b', { phone: '+1 (555) 010-2000' }),
+    ]
+    const order = new Map([['a', 0], ['b', 1]])
+    // Same digits, same + prefix → exact regardless of separators.
+    expect(rankPersonRows(rows, order, '+1 555 010 2000').map((r) => r.id)).toEqual(['b', 'a'])
+    // Digits-only query does NOT equal a stored + number: '+15550102000' vs
+    // '15550102000' are different normalized identifiers (normPhone contract),
+    // so the RPC rank order stands.
+    expect(rankPersonRows(rows, order, '1 (555) 010-2000').map((r) => r.id)).toEqual(['a', 'b'])
+  })
+
+  it('an exact name outranks an exact-looking substring even at worse RPC rank', () => {
+    const rows = [
+      row('a', { name: 'Ghost Writer' }), // best RPC rank, partial
+      row('b', { name: 'ghost' }),        // exact after normalization
+      row('c', { alias: 'Ghostface' }),   // partial alias
+    ]
+    const order = new Map([['a', 0], ['c', 1], ['b', 2]])
+    expect(rankPersonRows(rows, order, 'Ghost').map((r) => r.id)).toEqual(['b', 'a', 'c'])
+  })
+
   it('a blank query promotes nothing (input order by rank only)', () => {
     const rows = [row('a', { name: '' }), row('b', { name: 'Someone' })]
     const order = new Map([['a', 0], ['b', 1]])

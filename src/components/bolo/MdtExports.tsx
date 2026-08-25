@@ -28,7 +28,6 @@ import { RecordSearchPicker, type PickedRecord } from '@/components/shared/Recor
 import { isMdtExpansionConfigured } from './mdtExpansionConfig'
 
 type MdtExport = Tables<'mdt_exports'>
-type PersonLite = { id: string; name: string }
 /** PickedRecord plus the mugshot for the picker's thumb/collapsed row. */
 type PersonPick = PickedRecord & { thumbUrl?: string | null }
 type ExportKind = 'person_bolo' | 'caution' | 'arrest_warrant' | 'person_record' | 'vehicle_record' | 'account'
@@ -55,10 +54,10 @@ const EXPANDED_KINDS: ReadonlyArray<{ id: ExportKind; label: string }> = [
   { id: 'account', label: 'Account (CID-only)' },
 ]
 
-// `persons` (the caller's flagged list) is retained in the contract but no
-// longer read — the person target is now a bounded search over the same
-// eligibility (bolo=true) so the picker scales past a dropdown-sized list.
-export function MdtExportsPanel({ canPropose, isCommand }: { persons: PersonLite[]; canPropose: boolean; isCommand: boolean }) {
+// The person target is a bounded search over the eligibility rule itself
+// (bolo=true) — no caller-supplied flagged list, so the picker scales past a
+// dropdown-sized list.
+export function MdtExportsPanel({ canPropose, isCommand }: { canPropose: boolean; isCommand: boolean }) {
   const expansion = isMdtExpansionConfigured()
   const myId = useAuth().profile?.id
   const now = useNow()

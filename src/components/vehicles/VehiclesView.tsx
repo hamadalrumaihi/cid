@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
 import { deleteWithUndo, ilikeAny, insert, list, update, withRetry } from '@/lib/db'
-import { searchGangHits, searchPersonHits, type EntityHit } from '@/lib/entitySearch'
+import { normPlate, searchGangHits, searchPersonHits, type EntityHit } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
@@ -231,22 +231,26 @@ export function VehicleModal({ record, onClose, onSaved }: {
     return () => { live = false }
   }, [record])
 
-  // Duplicate hint at create time — an exact normalized-plate match against a
-  // bounded ilike lookup. Advisory only (the UNIQUE plate key still guards).
+  // Duplicate hint at create time — an exact normalized-plate match ('AB-123'
+  // hints against a stored 'AB123'): probe a bounded candidate set on the
+  // normalized prefix, then compare normPlate equality (the DB's own unique
+  // key is upper(plate), so punctuation variants slip past a raw compare).
+  // Advisory only (the UNIQUE plate key still guards).
   const [dupes, setDupes] = useState<DuplicateMatch[]>([])
   useEffect(() => {
     if (record) return
-    const p = plate.trim().toUpperCase()
+    const np = normPlate(plate)
     let live = true
     const t = window.setTimeout(async () => {
-      if (p.length < 2) { if (live) setDupes([]); return }
-      const or = ilikeAny(['plate'], p)
+      if (!np || np.length < 2) { if (live) setDupes([]); return }
+      const or = ilikeAny(['plate'], np.slice(0, 2))
       if (!or) { if (live) setDupes([]); return }
-      const rows = await list('vehicles', { select: 'id,plate', or, limit: 3 })
+      const rows = await list('vehicles', { select: 'id,plate', or, limit: 25 })
         .then((r) => r as unknown as { id: string; plate: string }[]).catch(() => [])
       if (!live) return
       setDupes(rows
-        .filter((v) => (v.plate || '').trim().toUpperCase() === p)
+        .filter((v) => normPlate(v.plate) === np)
+        .slice(0, 3)
         .map((v) => ({ type: 'vehicle', id: v.id, label: v.plate })))
     }, 400)
     return () => { live = false; window.clearTimeout(t) }

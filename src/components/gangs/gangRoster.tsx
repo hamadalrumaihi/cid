@@ -9,11 +9,11 @@
 import { useMemo, useState } from 'react'
 import { rpc } from '@/lib/db'
 import { toast } from '@/lib/toast'
-import { safeUrl } from '@/lib/safeUrl'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ProvenanceBadge } from '@/components/ui/IntelBadges'
 import { EmptyState } from '@/components/ui/Notice'
+import { RecordThumb } from '@/components/ui/RecordThumb'
 import { useToolNav } from '@/components/tools/useToolNav'
 import {
   findDuplicateMembers, groupByTier, humanize, normalizeName,
@@ -28,15 +28,6 @@ const felonyFlag = (n: number | null) => (n ?? 0) >= 8
  *  stored on the membership row. */
 const displayName = (m: MemberRow, names?: Map<string, string>) =>
   (m.person_id && names?.get(m.person_id)) || m.name || 'Unknown'
-
-function Mug({ url, size = 'h-10 w-10' }: { url: string | null; size?: string }) {
-  const [broken, setBroken] = useState(false)
-  const src = safeUrl(url ?? '')
-  if (src && !broken)
-    // eslint-disable-next-line @next/next/no-img-element -- external mugshot CDN
-    return <img src={src} alt="" onError={() => setBroken(true)} className={`${size} flex-shrink-0 rounded-md object-cover`} />
-  return <div className={`${size} grid flex-shrink-0 place-items-center rounded-md bg-ink-700 text-[10px] font-semibold text-slate-400`} aria-hidden="true">POI</div>
-}
 
 function MemberName({ m, name, dup, openPerson }: { m: MemberRow; name: string; dup: boolean; openPerson: (id: string, name?: string) => void }) {
   const inner = (
@@ -84,7 +75,7 @@ function MemberLine({ m, name, dup, openPerson, canEdit, onEdit, onReview, revie
 }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-white/5 bg-ink-850 p-2.5">
-      <Mug url={m.mugshot_url} />
+      <RecordThumb url={m.mugshot_url} label={name} size="base" placeholder="POI" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm"><MemberName m={m} name={name} dup={dup} openPerson={openPerson} /></div>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-400">
@@ -351,7 +342,7 @@ export function RosterSection({ members, personNames, canEdit, canDelete, onAddM
                 <tr key={m.id} className="hover:bg-white/5">
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
-                      <Mug url={m.mugshot_url} size="h-8 w-8" />
+                      <RecordThumb url={m.mugshot_url} label={displayName(m, personNames)} size="sm" placeholder="POI" />
                       <div className="min-w-0">
                         <div className="truncate"><MemberName m={m} name={displayName(m, personNames)} dup={dupIds.has(m.id)} openPerson={openPerson} /></div>
                         {m.callsign && <p className="truncate text-[11px] text-slate-500">“{m.callsign}”</p>}

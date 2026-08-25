@@ -16,7 +16,7 @@
  *  other sections are marked stale and reload on next open. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { deleteWithUndo, list, update } from '@/lib/db'
+import { deleteWithUndo, update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { SiuPersonActions } from '@/components/siu/SiuPersonActions'
 import { RestrictToSiuButton } from '@/components/siu/RestrictToSiu'
@@ -53,7 +53,7 @@ import {
   PERSON_REVIEW_DAYS, classificationLabel, isPersonStale, legalStatusOf, personQualityWarnings,
   placeRoleLabel, relationshipLabel, vehicleRoleLabel,
 } from './personIntel'
-import { PERSON_NULL_REFS, PersonModal, parseProperties, type GangRow, type PersonRow, type PersonProperty } from './PersonModal'
+import { PERSON_NULL_REFS, PersonModal, parseProperties, type PersonRow, type PersonProperty } from './PersonModal'
 import { dossierParas, dossierPdfSpec, gatherPersonDossier } from './dossier'
 import {
   loadActivityData, loadCasesData, loadMediaRows, loadPersonCore, loadPlacesData, loadProfileCounts, loadRelations,
@@ -121,7 +121,6 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
   const [core, setCore] = useState<PersonCore | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [slices, setSlices] = useState<Slices>({})
-  const [gangsForEdit, setGangsForEdit] = useState<GangRow[] | null>(null)
 
   // Modal state
   const [editing, setEditing] = useState(false)
@@ -266,14 +265,9 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
 
   const legalBuckets = useMemo(() => legalStatusOf(legal, today), [legal, today])
 
-  // The full gang list is only needed by the edit modal's picker — fetched on
-  // first Edit click, never as part of the profile load.
-  const openEdit = useCallback(() => {
-    setEditing(true)
-    if (!gangsForEdit) {
-      void list('gangs', { order: 'name' }).then(setGangsForEdit).catch(() => setGangsForEdit([]))
-    }
-  }, [gangsForEdit])
+  // The edit modal's gang picker is server-backed (bounded entity search) —
+  // no gang preload is needed anymore.
+  const openEdit = useCallback(() => { setEditing(true) }, [])
 
   const setLifecycle = async (lifecycle: string, confirmText?: string) => {
     if (!p) return
@@ -537,7 +531,6 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
       {editing && p && (
         <PersonModal
           record={p}
-          gangs={gangsForEdit ?? (gang ? [gang] : [])}
           onClose={() => setEditing(false)}
           onSaved={() => { setEditing(false); refresh() }}
         />

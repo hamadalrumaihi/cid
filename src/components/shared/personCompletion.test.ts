@@ -67,4 +67,16 @@ describe('appendNoteLines', () => {
   it('returns the note unchanged when there are no lines', () => {
     expect(appendNoteLines('keep me', [])).toBe('keep me')
   })
+
+  it('case-only round-trip: provenance lines land after existing note text, and a second pass appends again (append-only, never rewrites)', () => {
+    // The LinkedPersonPanel "Case only" flow composes these two helpers: the
+    // investigator's own note text must survive verbatim, and adding another
+    // field later appends rather than reformatting what is already there.
+    const first = appendNoteLines('Seen at the docks', caseOnlyNoteLines({ dob: '1990-01-01', alias: ' Ghost ' }))
+    expect(first).toBe('Seen at the docks; DOB (case record): 1990-01-01; Alias (case record): Ghost')
+    const second = appendNoteLines(first, caseOnlyNoteLines({ phone: '555-0100' }))
+    expect(second).toBe(
+      'Seen at the docks; DOB (case record): 1990-01-01; Alias (case record): Ghost; Phone (case record): 555-0100',
+    )
+  })
 })

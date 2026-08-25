@@ -8,14 +8,17 @@
  *  block (reason/risk/instructions/expiry; issued_by/at stamped when the flag
  *  is newly raised). Legacy fields — status text, CCW/VCH/felonies, notes,
  *  and the repeatable Known Properties rows — are preserved verbatim, as is
- *  the gang-preservation guard (a stale gangs cache can't null gang_id).
+ *  the gang-preservation guard, now picker-shaped: the current gang_id/lead id
+ *  is seeded synchronously under a placeholder label, upgraded by one bounded
+ *  in:{id} lookup, and never nulled by a slow or failed read.
  *  Mounted fresh per open. */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Json, Tables, TablesInsert } from '@/lib/database.types'
 import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
 import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
 import { useAuth } from '@/lib/auth'
-import { activeProfiles, officerName } from '@/lib/profiles'
+import { searchGangHits, searchMemberHits, type EntityHit } from '@/lib/entitySearch'
+import { useProfilesStore } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
 import { useSiu } from '@/lib/useSiu'
 import { reserveVisibility, restrictPreview } from '@/lib/siuVisibility'
@@ -26,6 +29,7 @@ import { HelpTip } from '@/components/ui/HelpTip'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { SaveState } from '@/components/ui/SaveState'
 import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
+import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import {
   CONFIDENCE_LEVELS, PERSON_CLASSIFICATIONS, PERSON_LIFECYCLES, PERSON_PRIORITIES,
   classificationLabel, confidenceLabel, lifecycleLabel, parsePersonIdentity, priorityLabel,
@@ -60,6 +64,12 @@ export const PERSON_NULL_REFS = [
 ]
 
 const splitLines = (s: string): string[] => s.split('\n').map((x) => x.trim()).filter(Boolean)
+
+/** Advisory row state for the lead-detective picker — inactive/LOA officers
+ *  stay visible but badged and unselectable (searchMemberHits meta flags; the
+ *  gangModals idiom). */
+const memberDisabled = (h: EntityHit): string | null =>
+  h.meta?.active === 'false' ? 'Inactive' : h.meta?.loa === 'true' ? 'On LOA' : null
 
 /** Everything the CREATE form types — stashed under `person:new` (userDrafts:
  *  per-user local mirror + DB row) so a refresh mid-entry loses nothing.
@@ -105,12 +115,11 @@ interface PersonModalProps {
   /** Create mode only: called with the inserted row (before onSaved) so the
    *  opener can chain — e.g. auto-linking the new person to a case. */
   onCreated?: (row: PersonRow) => void
-  gangs: Pick<GangRow, 'id' | 'name'>[]
   onClose: () => void
   onSaved: () => void
 }
 
-export function PersonModal({ record, prefillName, onCreated, gangs, onClose, onSaved }: PersonModalProps) {
+export function PersonModal({ record, prefillName, onCreated, onClose, onSaved }: PersonModalProps) {
   const { profile, canDelete } = useAuth()
   const siu = useSiu()
   // A new record created by somebody with SIU standing needs a deliberate
@@ -126,6 +135,9 @@ export function PersonModal({ record, prefillName, onCreated, gangs, onClose, on
   const [phone, setPhone] = useState(record?.phone || '')
   const [dob, setDob] = useState(record?.dob?.slice(0, 10) || '')
   const [gangId, setGangId] = useState(record?.gang_id || '')
+  // Resolved gang name for the picker's collapsed row; null = not yet resolved
+  // (a bounded in:{id} lookup below upgrades the placeholder).
+  const [gangLabel, setGangLabel] = useState<string | null>(null)
   const [status, setStatus] = useState(record?.status || 'Person of Interest')
   const [classification, setClassification] = useState(record?.classification || '')
   const [confidence, setConfidence] = useState(record?.confidence || '')
@@ -161,7 +173,8 @@ export function PersonModal({ record, prefillName, onCreated, gangs, onClose, on
   const draftState = useDraftState(draftable ? PERSON_DRAFT_KEY : '')
   const [draftBanner, setDraftBanner] = useState(false)
   const applyDraft = useCallback((s: PersonDraftShape) => {
-    setName(s.name); setAlias(s.alias); setPhone(s.phone); setDob(s.dob); setGangId(s.gangId)
+    setName(s.name); setAlias(s.alias); setPhone(s.phone); setDob(s.dob)
+    setGangId(s.gangId); setGangLabel(null) // restored id → re-resolve its label
     setStatus(s.status); setClassification(s.classification); setConfidence(s.confidence)
     setPriority(s.priority); setLifecycle(s.lifecycle); setMugshot(s.mugshot)
     setIdAliases(s.idAliases); setIdStreet(s.idStreet); setIdLicenses(s.idLicenses)
@@ -212,9 +225,35 @@ export function PersonModal({ record, prefillName, onCreated, gangs, onClose, on
     setDraftBanner(false)
   }
 
-  const gangKnown = !gangId || gangs.some((g) => g.id === gangId)
-  const detectives = activeProfiles()
-  const leadKnown = !leadId || detectives.some((p) => p.id === leadId)
+  // ── Picker values (FK-preservation guard, picker-shaped) ────────────────
+  // The string ids stay the form state (draft shape unchanged); the pickers
+  // render a derived hit. An id whose label hasn't resolved keeps a
+  // placeholder — the FK itself is never dropped by a slow or failed read.
+  const gangValue = useMemo<EntityHit | null>(
+    () => (gangId ? { id: gangId, label: gangLabel ?? '(current gang — loading…)' } : null),
+    [gangId, gangLabel])
+  useEffect(() => {
+    if (!gangId || gangLabel !== null) return
+    let live = true
+    void list('gangs', { select: 'id,name', in: { id: [gangId] } })
+      .then((r) => {
+        const n = (r as unknown as { id: string; name: string }[])[0]?.name
+        if (live && n) setGangLabel(n)
+      })
+      .catch(() => { /* keep the placeholder — the id is preserved */ })
+    return () => { live = false }
+  }, [gangId, gangLabel])
+
+  // Lead-detective picker runs on the shared roster cache (searchMemberHits)
+  // — warm it once; the label below re-resolves when it lands.
+  const rosterProfiles = useProfilesStore((s) => s.profiles)
+  const rosterLoaded = useProfilesStore((s) => s.loaded)
+  useEffect(() => { if (!rosterLoaded) void useProfilesStore.getState().fetch() }, [rosterLoaded])
+  const leadValue = useMemo<EntityHit | null>(() => {
+    if (!leadId) return null
+    const p = rosterProfiles.find((x) => x.id === leadId)
+    return { id: leadId, label: p?.display_name || '(current lead)', thumbUrl: p?.avatar_url ?? null }
+  }, [leadId, rosterProfiles])
 
   // Duplicate hint at create time — debounced name search through the indexed,
   // RLS-safe `search_persons` RPC (the LinkAssociateModal pattern). Purely
@@ -365,15 +404,14 @@ export function PersonModal({ record, prefillName, onCreated, gangs, onClose, on
           <Field label="Alias">{(id) => <Input id={id} value={alias} onChange={(e) => setAlias(e.target.value)} />}</Field>
           <Field label="Phone">{(id) => <Input id={id} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="555-0100" />}</Field>
           <Field label="Date of birth">{(id) => <Input id={id} type="date" value={dob} onChange={(e) => setDob(e.target.value)} />}</Field>
-          <Field label="Gang">
-            {(id) => (
-              <Select id={id} value={gangId} onChange={(e) => setGangId(e.target.value)}>
-                <option value="">— no gang —</option>
-                {!gangKnown && <option value={gangId}>(current gang — loading…)</option>}
-                {gangs.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-              </Select>
-            )}
-          </Field>
+          <RecordSearchPicker<EntityHit>
+            label="Gang"
+            placeholder="Search gangs…"
+            value={gangValue}
+            onChange={(v) => { setGangId(v?.id ?? ''); setGangLabel(v?.label ?? null) }}
+            search={searchGangHits}
+            peekType="gang"
+          />
           <Field label="Status" hint="Free-text legacy status (e.g. Person of Interest).">
             {(id) => <Input id={id} value={status} onChange={(e) => setStatus(e.target.value)} />}
           </Field>
@@ -478,15 +516,15 @@ export function PersonModal({ record, prefillName, onCreated, gangs, onClose, on
           <Field label="Next review date">
             {(id) => <Input id={id} type="date" value={nextReview} onChange={(e) => setNextReview(e.target.value)} />}
           </Field>
-          <Field label="Lead detective">
-            {(id) => (
-              <Select id={id} value={leadId} onChange={(e) => setLeadId(e.target.value)}>
-                <option value="">— unassigned —</option>
-                {!leadKnown && <option value={leadId}>{officerName(leadId) || '(current lead)'}</option>}
-                {detectives.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}
-              </Select>
-            )}
-          </Field>
+          <RecordSearchPicker<EntityHit>
+            label="Lead detective"
+            placeholder="Search name, badge or bureau…"
+            value={leadValue}
+            onChange={(v) => setLeadId(v?.id ?? '')}
+            search={async (q) => searchMemberHits(q)}
+            getThumb={(h) => h.thumbUrl}
+            getDisabled={memberDisabled}
+          />
 
           <GroupLabel>BOLO</GroupLabel>
           <Field label="Active BOLO" className={bolo ? undefined : 'sm:col-span-2'}>
