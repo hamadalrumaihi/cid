@@ -4,15 +4,16 @@
  *  surface can ask to open a create modal: `useCreate().open('person')`. It
  *  reuses the EXACT modals the registry views export (CaseModal, PersonModal,
  *  VehicleModal, …) — same fields, same validation, same RLS-scoped writes —
- *  lazy-loaded so none of those view chunks ride in the shell bundle. Option
- *  lists (gangs/persons/cases/narcotics) load on first need through the
- *  viewer's RLS and are cached for the session. Pages keep their own
- *  specialized New buttons; this is an additional door, not a replacement. */
+ *  lazy-loaded so none of those view chunks ride in the shell bundle. The one
+ *  remaining option list (cases, for IndicatorModal) loads on first need
+ *  through the viewer's RLS and is cached for the session; every entity picker
+ *  inside the modals runs the bounded entity-search registry instead of
+ *  preloads. Pages keep their own specialized New buttons; this is an
+ *  additional door, not a replacement. */
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useAuth } from '@/lib/auth'
 import { caseLink } from '@/lib/caseLinks'
-import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import type { OpViewer } from '@/lib/opsJoint'
 import { useSiu } from '@/lib/useSiu'
@@ -41,6 +42,11 @@ export interface CreateCtx {
   caseNumber?: string
   personId?: string
   prefillName?: string
+  /** Called with the new record's id/name after a successful create. When
+   *  set, the host closes the modal and stays put instead of navigating to
+   *  the new record — the caller chains the next step (e.g. auto-linking the
+   *  person to a case). Person kind only today. */
+  onCreated?: (id: string, name: string, opts: { siuOnly: boolean }) => void
 }
 
 interface CreateApi {
@@ -51,71 +57,21 @@ const NOOP: CreateApi = { open: () => {} }
 const Ctx = createContext<CreateApi>(NOOP)
 export const useCreate = (): CreateApi => useContext(Ctx)
 
-/* ── Session-cached option lists (RLS-scoped; ids/names only) ────────────── */
-type Lite = { id: string; name: string }
-/** `title` normalized to '' — IndicatorModal's CaseOption declares it
- *  non-null, PlaceModal's accepts null; the empty string satisfies both. */
-type CaseLite = { id: string; case_number: string; title: string }
-type GangRow = Tables<'gangs'>
-type NarcoticRow = Tables<'narcotics'>
-
-interface Options {
-  personsLite?: Lite[]
-  gangsLite?: Lite[]
-  gangsFull?: GangRow[]
-  casesLite?: CaseLite[]
-  narcotics?: NarcoticRow[]
-}
-
-const NEEDS: Record<CreateKind, (keyof Options)[]> = {
-  case: [],
-  person: ['gangsLite'],
-  vehicle: ['personsLite', 'gangsLite'],
-  gang: [],
-  place: ['gangsFull', 'casesLite', 'narcotics'],
-  account: ['personsLite'],
-  indicator: ['casesLite'],
-  operation: [],
-  siu: [],
-}
-
-async function loadOption(key: keyof Options): Promise<Options[keyof Options]> {
-  switch (key) {
-    case 'personsLite': return (await list('persons', { select: 'id,name', order: 'name' })) as unknown as Lite[]
-    case 'gangsLite': return (await list('gangs', { select: 'id,name', order: 'name' })) as unknown as Lite[]
-    case 'gangsFull': return await list('gangs', { order: 'name' })
-    case 'casesLite': {
-      const rows = (await list('cases', { select: 'id,case_number,title', order: 'updated_at', ascending: false })) as unknown as { id: string; case_number: string; title: string | null }[]
-      return rows.map((r) => ({ id: r.id, case_number: r.case_number, title: r.title ?? '' }))
-    }
-    case 'narcotics': return await list('narcotics', { order: 'name' })
-  }
-}
+/* Every modal searches on demand through lib/entitySearch now — the old
+ * session-cached option bundles (personsLite/gangsLite/casesLite/…) are gone
+ * with their last consumers. */
 
 export function CreateHost({ children }: { children: React.ReactNode }) {
   const { profile, canEdit, isCommand, isOwner } = useAuth()
   const siu = useSiu()
   const { openHref, openRecord } = useToolNav()
   const [active, setActive] = useState<{ kind: CreateKind; ctx: CreateCtx } | null>(null)
-  const [options, setOptions] = useState<Options>({})
-  const inflight = useRef(new Set<keyof Options>())
-
-  const ensure = useCallback((key: keyof Options) => {
-    if (inflight.current.has(key)) return
-    inflight.current.add(key)
-    void loadOption(key)
-      .then((rows) => setOptions((o) => (key in o ? o : { ...o, [key]: rows })))
-      // Transient failure → allow a retry on the next open instead of caching
-      // an empty list as truth.
-      .catch(() => { inflight.current.delete(key) })
-  }, [])
 
   const open = useCallback((kind: CreateKind, ctx: CreateCtx = {}) => {
     // UX gate only — RLS/RPCs re-decide server-side, exactly as on the pages.
     if (kind === 'siu' ? !siu.isAgent : !canEdit) return
-    for (const key of NEEDS[kind]) ensure(key)
     setActive({ kind, ctx })
-  }, [canEdit, siu.isAgent, ensure])
+  }, [canEdit, siu.isAgent])
 
   const close = useCallback(() => setActive(null), [])
 
@@ -134,8 +90,8 @@ export function CreateHost({ children }: { children: React.ReactNode }) {
     })()
   }, [openRecord, openHref])
 
-  const ready = active ? NEEDS[active.kind].every((k) => options[k] !== undefined) : false
   const kind = active?.kind
+  const createdCb = active?.ctx.onCreated
   const viewer: OpViewer = {
     userId: profile?.id ?? null,
     active: !!profile?.active,
@@ -151,32 +107,29 @@ export function CreateHost({ children }: { children: React.ReactNode }) {
       {kind === 'case' && (
         <CaseModal open record={null} onClose={close} onSaved={(id) => { close(); if (id) openHref(caseLink(id)) }} />
       )}
-      {kind === 'person' && ready && (
-        <PersonModal record={null} prefillName={active?.ctx.prefillName} gangs={options.gangsLite!} onClose={close} onSaved={() => openNewest('persons')} />
+      {kind === 'person' && (
+        <PersonModal
+          record={null}
+          prefillName={active?.ctx.prefillName}
+          onClose={close}
+          onCreated={createdCb ? (row, opts) => createdCb(row.id, row.name, opts) : undefined}
+          onSaved={createdCb ? close : () => openNewest('persons')}
+        />
       )}
-      {kind === 'vehicle' && ready && (
-        <VehicleModal record={null} persons={options.personsLite!} gangs={options.gangsLite!} onClose={close} onSaved={() => openNewest('vehicles')} />
+      {kind === 'vehicle' && (
+        <VehicleModal record={null} onClose={close} onSaved={() => openNewest('vehicles')} />
       )}
       {kind === 'gang' && (
         <GangModal record={null} onClose={close} onSaved={() => openNewest('gangs')} />
       )}
-      {kind === 'place' && ready && (
-        <PlaceModal
-          record={null}
-          gangs={options.gangsFull!}
-          cases={options.casesLite!}
-          // PlaceModal reads only row.id/row.name from the bundles; the
-          // precursor/hotspot detail belongs to the dossier, not the picker.
-          drugs={options.narcotics!.map((row) => ({ row, precursors: [], hotspots: [] }))}
-          onClose={close}
-          onSaved={close}
-        />
+      {kind === 'place' && (
+        <PlaceModal record={null} onClose={close} onSaved={close} />
       )}
-      {kind === 'account' && ready && (
-        <AccountModal persons={options.personsLite!} onClose={close} onSaved={close} />
+      {kind === 'account' && (
+        <AccountModal onClose={close} onSaved={close} />
       )}
-      {kind === 'indicator' && ready && (
-        <IndicatorModal record={null} cases={options.casesLite!} onClose={close} onSaved={close} />
+      {kind === 'indicator' && (
+        <IndicatorModal record={null} onClose={close} onSaved={close} />
       )}
       {kind === 'operation' && (
         <OperationModal open record={null} viewer={viewer} onClose={close} onSaved={close} />

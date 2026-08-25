@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Button } from '@/components/ui/Button'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
+import { searchPersonHits, type EntityHit } from '@/lib/entitySearch'
 import type { Json, Tables } from '@/lib/database.types'
 import { copyText, downloadTextFile, fmtDateTime, timeAgo } from '@/lib/format'
 import { caseLink } from '@/lib/caseLinks'
@@ -21,6 +22,9 @@ import { mediaRefLine, parseMediaRefEntries, resolveMediaRefText } from '@/lib/m
 import { isCommandRole } from '@/lib/roles'
 import { parseFormValues } from '@/lib/jsonShapes'
 import { parseReopenLog, parseReportSignature } from '@/lib/schemas'
+import { Field } from '@/components/ui/Field'
+import { RecordPeekButton } from '@/components/shared/RecordPeekButton'
+import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import { RelatedRecordPicker } from '@/components/shared/RelatedRecordPicker'
 import { SignatureViewer, type SignatureItem } from '@/components/shared/SignatureViewer'
 import { VersionViewer } from '@/components/shared/VersionViewer'
@@ -28,7 +32,7 @@ import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDraft
 import { SaveState } from '@/components/ui/SaveState'
 import { toast } from '@/lib/toast'
 import { WarrantPrintButton } from './WarrantPrint'
-import type { CaseRow, EvidenceRow, MediaRow, PersonRow, ReportRow } from './shared'
+import type { CaseRow, EvidenceRow, MediaRow, ReportRow } from './shared'
 import { DocumentIcon, EyeIcon, RadioIcon, ReceiptIcon, ReportIcon, ScaleIcon, SearchIcon } from '@/components/shell/icons'
 
 /** Report-template glyphs, drawn from the shared icon set (was an emoji map in lib/forms). */
@@ -42,6 +46,27 @@ function TemplateIcon({ id }: { id: string }) {
     case 'cid_investigative_report': return <ReportIcon size={14} />
     default: return <DocumentIcon size={14} />
   }
+}
+
+/** Lite persons projection the read view resolves report-referenced ids to. */
+type PersonRef = { id: string; name: string | null }
+
+/** Person ids a report's fields reference — the `_${key}_person_id` companions
+ *  the kv person fields write and the `person_id` cells of grid rows with a
+ *  person column. Pure (exported for the unit tests); tolerant of legacy
+ *  shapes: missing keys, non-array grids and name-only rows yield nothing. */
+export function collectReportPersonIds(schema: FormSchema | undefined, values: FormValues): string[] {
+  if (!schema) return []
+  const out = new Set<string>()
+  const add = (v: unknown) => { const id = typeof v === 'string' ? v.trim() : ''; if (id) out.add(id) }
+  for (const s of schema.sections) {
+    if (s.type === 'kv') { for (const f of s.fields) if (f.person) add(values[`_${f.key}_person_id`]) }
+    else if (s.type === 'grid' && s.cols.some((col) => col.person)) {
+      const rows = Array.isArray(values[s.id]) ? (values[s.id] as unknown[]) : []
+      for (const row of rows) if (row && typeof row === 'object') add((row as Record<string, unknown>).person_id)
+    }
+  }
+  return [...out]
 }
 
 export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: CaseRow; canEdit: boolean; canDelete: boolean; holdActive?: boolean }) {
@@ -177,8 +202,9 @@ export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: C
 }
 
 /** In-page read view of one report — replaces the template row + list while
- *  open. Loads case evidence/attachments + the persons registry so ReportView
- *  can make referenced items clickable; every load is best-effort. */
+ *  open. Loads case evidence/attachments plus ONLY the persons this report's
+ *  fields reference (bounded in:{id} lookup — never the whole registry) so
+ *  ReportView can make referenced items clickable; every load is best-effort. */
 function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, onFinalize, onReopen, onChanged, onDelete }: { r: ReportRow; c: CaseRow; canEdit: boolean; canDelete: boolean; holdActive: boolean; onBack: () => void; onEdit: () => void; onFinalize: () => void; onReopen: () => void; onChanged: () => void; onDelete: () => void }) {
   const router = useRouter()
   const nav = useToolNav()
@@ -205,7 +231,7 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
     const suspectPid = suspects.find((s) => s.person_id)?.person_id || ''
     const suspectName = suspects.map((s) => s.full_name).filter(Boolean).join(', ')
     if (!suspectPid) {
-      toast('Link the suspect to a Persons-registry record first — the Full Name in Suspect Information must match a registry person.', 'warn')
+      toast('No suspect is linked to a registry profile — edit the report and use the Full Name picker in Suspect Information to link one.', 'warn')
       return
     }
     const title = String(vals.warrant_title ?? '').trim() || `Arrest Warrant — ${suspectName || c.case_number}`
@@ -226,21 +252,37 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
     else toast('Legal request created — build the packet, then submit for CID review.', 'success')
     router.push(`/legal?request=${encodeURIComponent(res.data.id)}`)
   }
-  const [pools, setPools] = useState<{ evidence: EvidenceRow[]; media: MediaRow[]; linked: MediaRow[]; persons: PersonRow[] }>({ evidence: [], media: [], linked: [], persons: [] })
+  const [pools, setPools] = useState<{ evidence: EvidenceRow[]; media: MediaRow[]; linked: MediaRow[] }>({ evidence: [], media: [], linked: [] })
   useEffect(() => {
     let alive = true
     void (async () => {
-      const [ev, m, lk, p] = await Promise.all([
+      const [ev, m, lk] = await Promise.all([
         list('evidence', { eq: { case_id: c.id }, order: 'created_at' }).catch(() => [] as EvidenceRow[]),
         list('media', { eq: { case_id: c.id } }).catch(() => [] as MediaRow[]),
         // Typed-FK linked media (media.report_id) — thumbnails below.
         list('media', { eq: { report_id: r.id } }).catch(() => [] as MediaRow[]),
-        list('persons', { select: 'id,name', order: 'name' }).catch(() => [] as PersonRow[]),
       ])
-      if (alive) setPools({ evidence: ev, media: m, linked: lk, persons: p })
+      if (alive) setPools({ evidence: ev, media: m, linked: lk })
     })()
     return () => { alive = false }
   }, [c.id, r.id])
+  // Persons pool: resolve ONLY the ids captured by the editor's person pickers
+  // (this report's fields now; each seal snapshot's fields when history opens)
+  // with bounded in:{id} lookups. Name-only legacy values stay plain text.
+  const personIds = useMemo(() => collectReportPersonIds(schema, parseFormValues(r.fields)), [schema, r.fields])
+  const [personRefs, setPersonRefs] = useState<PersonRef[]>([])
+  const fetchPersonRefs = useCallback(async (ids: string[]) => {
+    if (!ids.length) return
+    try {
+      const rows: PersonRef[] = await list('persons', { select: 'id,name', in: { id: ids } })
+      setPersonRefs((prev) => {
+        const seen = new Set(prev.map((p) => p.id))
+        const fresh = rows.filter((p) => !seen.has(p.id))
+        return fresh.length ? [...prev, ...fresh] : prev
+      })
+    } catch { /* the stored name snapshots still render */ }
+  }, [])
+  useEffect(() => { queueMicrotask(() => { void fetchPersonRefs(personIds) }) }, [personIds, fetchPersonRefs])
   // Reference resolution pool: case media + report-linked rows (a linked row
   // can outlive its case_id), deduped by id.
   const mediaPool = useMemo(() => {
@@ -273,7 +315,13 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
     const next = !showVersions
     setShowVersions(next)
     if (next) void (async () => {
-      try { setVersions(await list('report_versions', { eq: { report_id: r.id }, order: 'version_number', ascending: false })) }
+      try {
+        const vers = await list('report_versions', { eq: { report_id: r.id }, order: 'version_number', ascending: false })
+        setVersions(vers)
+        // Old snapshots can reference persons the live report no longer does.
+        const ids = new Set(vers.flatMap((ver) => collectReportPersonIds(schema, parseFormValues(ver.fields))))
+        void fetchPersonRefs([...ids])
+      }
       catch { setVersions([]) }
     })()
   }
@@ -329,7 +377,7 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
                   <div className="space-y-3">
                     {vsig && <SignatureViewer signatures={[{ id: ver.id, name: vsig.officer, badge: vsig.badge ?? null, action: 'report seal', at: vsig.signed_at ?? null, versionLabel: `v${ver.version_number}` }]} />}
                     {schema
-                      ? <ReportView schema={schema} values={parseFormValues(ver.fields)} evidence={pools.evidence} media={mediaPool} persons={pools.persons} onOpenPerson={(id) => nav.openRecord('persons', id)} />
+                      ? <ReportView schema={schema} values={parseFormValues(ver.fields)} evidence={pools.evidence} media={mediaPool} persons={personRefs} onOpenPerson={(id) => nav.openRecord('persons', id)} />
                       : <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{JSON.stringify(ver.fields, null, 2)}</pre>}
                   </div>
                 )
@@ -361,7 +409,7 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
         </div>
       )}
       {schema
-        ? <ReportView schema={schema} values={parseFormValues(r.fields)} evidence={pools.evidence} media={mediaPool} persons={pools.persons} onOpenPerson={(id) => nav.openRecord('persons', id)} />
+        ? <ReportView schema={schema} values={parseFormValues(r.fields)} evidence={pools.evidence} media={mediaPool} persons={personRefs} onOpenPerson={(id) => nav.openRecord('persons', id)} />
         : <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{JSON.stringify(r.fields, null, 2)}</pre>}
     </div>
   )
@@ -400,10 +448,8 @@ function FormEditor({ template, caseId, reportId, values, onChange }: { template
   // evidencePick or mediaPick. Loaded once per editor; a load failure shows a
   // muted notice (kv lookup) or hides the pickers, never blocks the form.
   const needsLookup = !!schema?.sections.some((s) => (s.type === 'kv' && s.evidenceLookup) || (s.type === 'grid' && s.evidencePick) || (s.type === 'textarea' && s.mediaPick))
-  const needsPersons = !!schema?.sections.some((s) => (s.type === 'kv' && s.fields.some((f) => f.person)) || (s.type === 'grid' && s.cols.some((col) => col.person)))
   const [pool, setPool] = useState<{ evidence: EvidenceRow[]; media: MediaRow[]; reports: ReportRow[] } | null>(null)
   const [poolErr, setPoolErr] = useState(false)
-  const [personsReg, setPersonsReg] = useState<{ id: string; name: string | null }[]>([])
   useEffect(() => {
     if (!needsLookup) return
     let alive = true
@@ -421,19 +467,6 @@ function FormEditor({ template, caseId, reportId, values, onChange }: { template
     })()
     return () => { alive = false }
   }, [caseId, needsLookup])
-  useEffect(() => {
-    if (!needsPersons) return
-    let alive = true
-    void (async () => {
-      try { const p = await list('persons', { select: 'id,name', order: 'name' }); if (alive) setPersonsReg(p) }
-      catch { /* autocomplete is optional */ }
-    })()
-    return () => { alive = false }
-  }, [needsPersons])
-  const personNames = Array.from(new Set(personsReg.map((x) => (x.name || '').trim()).filter(Boolean)))
-  // Canonical-record capture: when a person-flagged field exactly matches a
-  // registry name, the person's id is stored alongside the display snapshot.
-  const pidOf = (v: string) => { const t = v.trim().toLowerCase(); return (t && personsReg.find((p) => (p.name || '').trim().toLowerCase() === t)?.id) || '' }
   if (!schema) return <p className="text-sm text-slate-400">Unknown report template.</p>
   const set = (key: string, value: unknown) => onChange({ ...values, [key]: value })
   // Free-text append into a single-line field: join picks with '; '.
@@ -465,8 +498,6 @@ function FormEditor({ template, caseId, reportId, values, onChange }: { template
             }}
           />
         </div>
-  const dlId = `persons-${template}`
-  const dlAttr = (person?: boolean) => (person && personNames.length ? dlId : undefined)
   const labelCls = 'mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500'
   const inputCls = 'w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white'
   // Tolerant read for checks: legacy reports stored comma-joined strings.
@@ -498,13 +529,18 @@ function FormEditor({ template, caseId, reportId, values, onChange }: { template
         {rows.map((row, i) => <div key={i} className="mb-2 flex items-start gap-2">
           <div className="grid min-w-0 flex-1 gap-2 md:grid-cols-2">{s.cols.map((col) => {
             const cellId = `${template}-${s.id}-${i}-${col.key}`
+            // Person columns: registry picker (writes the name snapshot AND the
+            // row's canonical person_id in one commit). PersonField labels
+            // itself, so the cell's own <label> is skipped.
+            if (col.person) return <PersonField key={col.key} label={col.label} name={row[col.key] || ''} personId={row.person_id || ''}
+              onCommit={(nm, pid) => set(s.id, rows.map((r, idx) => (idx === i ? { ...r, [col.key]: nm, person_id: pid } : r)))} />
             return <div key={col.key}>
               <label htmlFor={cellId} className={labelCls}>{col.label}</label>
               {col.type === 'select' && col.opts
                 ? <select id={cellId} value={row[col.key] || ''} onChange={(e) => setCell(i, col.key, e.target.value)} className={inputCls}><option value="">{col.label || '—'}</option>{col.opts.filter(Boolean).map((o) => <option key={o} value={o}>{o}</option>)}</select>
                 : col.type === 'money'
                   ? moneyInput(cellId, row[col.key] || '', (t) => setCell(i, col.key, t), col.label)
-                  : <input id={cellId} value={row[col.key] || ''} onChange={(e) => (col.person ? set(s.id, rows.map((r, idx) => (idx === i ? { ...r, [col.key]: e.target.value, person_id: pidOf(e.target.value) } : r))) : setCell(i, col.key, e.target.value))} placeholder={col.label} list={dlAttr(col.person)} className={inputCls} />}
+                  : <input id={cellId} value={row[col.key] || ''} onChange={(e) => setCell(i, col.key, e.target.value)} placeholder={col.label} className={inputCls} />}
             </div>
           })}</div>
           <button onClick={() => set(s.id, rows.filter((_, idx) => idx !== i))} aria-label={`Remove row ${i + 1} from ${s.label}`} title="Remove row" className="mt-5 shrink-0 rounded-lg border border-white/10 px-2.5 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/10">✕</button>
@@ -521,10 +557,62 @@ function FormEditor({ template, caseId, reportId, values, onChange }: { template
         return <fieldset key={f.key} className="md:col-span-2"><legend className={labelCls}>{f.label}</legend><div className="flex flex-wrap gap-2">{(f.opts || []).filter(Boolean).map((o) => { const on = cur.includes(o); return <label key={o} className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${on ? 'border-badge-500/50 bg-badge-500/15 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}`}><input type="checkbox" checked={on} onChange={() => set(f.key, on ? cur.filter((x) => x !== o) : [...cur, o])} className="accent-amber-500" /> {o}</label> })}</div></fieldset>
       }
       if (f.type === 'money') return <div key={f.key}><label htmlFor={id} className={labelCls}>{f.label}</label>{moneyInput(id, String(values[f.key] ?? ''), (t) => set(f.key, t), f.label)}</div>
+      // Person fields: registry picker — the display-name snapshot stays in
+      // values[f.key] exactly as before, and the picker's commit writes the
+      // canonical id into the `_${f.key}_person_id` companion key.
+      if (f.person) return <PersonField key={f.key} label={f.label}
+        name={Array.isArray(values[f.key]) ? (values[f.key] as string[]).join(', ') : String(values[f.key] ?? '')}
+        personId={String(values[`_${f.key}_person_id`] ?? '')}
+        onCommit={(nm, pid) => onChange({ ...values, [f.key]: nm, [`_${f.key}_person_id`]: pid })} />
       const quickNow = f.type === 'text' && DATE_QUICK.has(f.key)
-      return <div key={f.key}><label htmlFor={id} className={labelCls}>{f.label}</label><div className="flex gap-2"><input id={id} value={Array.isArray(values[f.key]) ? (values[f.key] as string[]).join(', ') : String(values[f.key] ?? '')} onChange={(e) => (f.person ? onChange({ ...values, [f.key]: e.target.value, [`_${f.key}_person_id`]: pidOf(e.target.value) }) : set(f.key, e.target.value))} placeholder={f.label} list={dlAttr(f.person)} className={`${inputCls} min-w-0 flex-1`} />{quickNow && <button type="button" onClick={() => set(f.key, new Date().toLocaleString('en-US'))} aria-label={`Set ${f.label} to now`} className="shrink-0 rounded-lg border border-white/10 px-2.5 py-2 text-xs font-bold text-slate-200 hover:bg-white/10">Now</button>}</div></div>
+      return <div key={f.key}><label htmlFor={id} className={labelCls}>{f.label}</label><div className="flex gap-2"><input id={id} value={Array.isArray(values[f.key]) ? (values[f.key] as string[]).join(', ') : String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} placeholder={f.label} className={`${inputCls} min-w-0 flex-1`} />{quickNow && <button type="button" onClick={() => set(f.key, new Date().toLocaleString('en-US'))} aria-label={`Set ${f.label} to now`} className="shrink-0 rounded-lg border border-white/10 px-2.5 py-2 text-xs font-bold text-slate-200 hover:bg-white/10">Now</button>}</div></div>
     })}</div></div>
-  })}{needsPersons && personNames.length > 0 && <datalist id={dlId}>{personNames.map((n) => <option key={n} value={n} />)}</datalist>}</div>
+  })}</div>
+}
+
+/** Person-typed report field — the smart-picker replacement for the audit's
+ *  worst offender (the whole-registry datalist + exact-name-match id capture).
+ *  A committed value shows as a summary row: a "Registry profile" badge (with
+ *  quick preview) when the canonical id is attached, a muted "Not linked" hint
+ *  when it's free text. Editing opens the bounded RecordSearchPicker; picking
+ *  a profile commits name + id together, and the "Use as typed" escape hatch
+ *  commits free text with an EMPTY id — every commit writes both, so a changed
+ *  name can never carry a stale person id. */
+function PersonField({ label, name, personId, onCommit }: { label: string; name: string; personId: string; onCommit: (name: string, personId: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  if (name && !editing) {
+    return (
+      <Field label={label}>
+        {(id) => (
+          <div className="flex min-h-11 items-center gap-2 rounded-lg border border-white/10 bg-ink-900 py-1 pl-3 pr-1.5">
+            <span className="min-w-0 flex-1 truncate text-sm text-white">{name}</span>
+            {personId
+              ? <Badge tone="good">Registry profile</Badge>
+              : <span className="flex-shrink-0 text-xs text-slate-500" title="Free text — not linked to a Persons-registry record">Not linked</span>}
+            {personId && <RecordPeekButton type="person" id={personId} label={name} />}
+            <Button id={id} size="sm" onClick={() => setEditing(true)}>Change</Button>
+            <button type="button" aria-label={`Clear ${label}`} title="Clear" onClick={() => onCommit('', '')} className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
+          </div>
+        )}
+      </Field>
+    )
+  }
+  return (
+    <div>
+      <RecordSearchPicker<EntityHit>
+        label={label}
+        value={null}
+        onChange={(hit) => { if (hit) { onCommit(hit.label, hit.id); setEditing(false) } }}
+        search={searchPersonHits}
+        getThumb={(h) => h.thumbUrl}
+        peekType="person"
+        initialQuery={name}
+        placeholder="Search the Persons registry…"
+        allowFreeText={{ label: 'Use as typed (not linked)', onPick: (t) => { onCommit(t, ''); setEditing(false) } }}
+      />
+      {editing && name && <Button size="sm" variant="ghost" className="mt-1" onClick={() => setEditing(false)}>Cancel — keep &ldquo;{name}&rdquo;</Button>}
+    </div>
+  )
 }
 
 /** Read-only rendering of a saved report — walks the same FORM_SCHEMAS the
@@ -537,9 +625,19 @@ function ReportView({ schema, values, evidence = [], media = [], persons = [], o
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const toggle = (k: string) => setExpanded((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n })
   const text = (v: unknown) => (Array.isArray(v) ? v.join(', ') : String(v ?? '')).trim()
-  const personOf = (v: string) => { const t = v.trim().toLowerCase(); return t ? persons.find((p) => (p.name || '').trim().toLowerCase() === t) : undefined }
-  // Prefer the canonical person id captured at edit time; fall back to a name match.
-  const personText = (v: string, pid?: string) => { const id = pid || (onOpenPerson ? personOf(v)?.id : undefined); return onOpenPerson && id ? <button onClick={() => onOpenPerson(id)} className="font-semibold text-badge-200 hover:underline">{v}</button> : v }
+  // Canonical person ids only (captured by the editor's picker) — the old
+  // fuzzy name-match fallback is gone with the whole-registry load. Name-only
+  // legacy values render as the plain text they are, with a subtle hint. The
+  // persons pool holds just this report's referenced ids: when it resolved and
+  // an id is missing, the registry row is gone (or RLS-hidden), so the stored
+  // snapshot renders instead of a dead link; an empty pool (lookup pending or
+  // failed) keeps the link, matching the old always-clickable behavior.
+  const personHint = (v: string, hint: string) => <>{v} <span className="text-xs text-slate-500">({hint})</span></>
+  const personText = (v: string, pid?: string) => {
+    if (!pid || !onOpenPerson) return pid ? v : personHint(v, 'not linked')
+    if (persons.length && !persons.some((p) => p.id === pid)) return personHint(v, 'profile unavailable')
+    return <button onClick={() => onOpenPerson(pid)} className="font-semibold text-badge-200 hover:underline">{v}</button>
+  }
   const findEvidence = (entry: string) => evidence.find((ev) => (!!ev.item_code && !!ev.description && entry === `${ev.item_code} — ${ev.description}`) || (!!ev.item_code && entry.startsWith(ev.item_code)))
   const detailPanel = (line: string) => <span className="mt-1 block rounded-lg border border-white/10 bg-ink-900 px-2.5 py-1.5 text-left text-xs text-slate-300">{line}</span>
   // ev_items/ev_files render '; '-separated entries; entries that match a

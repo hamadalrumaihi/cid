@@ -58,6 +58,10 @@ export function RicoTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolea
   const addPredicate = async () => {
     const row = await ensure(); if (!row) return
     if (!form.predicate_type) { toast('Choose a predicate type.', 'warn'); return }
+    // predicate_acts.predicate_type stores the free-text "CODE Title" string —
+    // there is no FK to the penal catalog (schema limitation, documented in
+    // the project report). The select above constrains input to the current
+    // published code, but stored rows do not follow later catalog edits.
     const res = await insert('predicate_acts', { rico_case_id: row.id, predicate_type: form.predicate_type, evidence_id: form.evidence_id || null, evidence_ref: form.evidence_ref || null, act_date: form.act_date || null, note: form.note || null })
     if (res.error) toast(res.error.message, 'danger')
     else { setForm({ predicate_type: '', evidence_id: '', evidence_ref: '', act_date: todayISO(), note: '' }); toast('Predicate added.', 'success'); void refresh() }

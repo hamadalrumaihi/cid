@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ilikeAny, insert, list, rpc, update } from '@/lib/db'
 import type { TablesInsert } from '@/lib/database.types'
+import { searchMemberHits, type EntityHit } from '@/lib/entitySearch'
+import { useProfilesStore } from '@/lib/profiles'
 import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/lib/toast'
@@ -24,7 +26,11 @@ import { MEMBER_CONFIDENCE, MEMBER_STATUSES, RANK_SUGGEST, type CaseOption, type
 
 const input = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
 const label = 'mb-1 block text-xs font-semibold text-slate-400'
-interface Officer { id: string; display_name: string | null }
+
+/** Advisory row state for member pickers — inactive/LOA officers stay visible
+ *  but badged and unselectable (searchMemberHits meta flags). */
+const memberDisabled = (h: EntityHit): string | null =>
+  h.meta?.active === 'false' ? 'Inactive' : h.meta?.loa === 'true' ? 'On LOA' : null
 
 /** Everything the CREATE gang form types — stashed under `gang:new`
  *  (userDrafts) so a refresh mid-entry loses nothing. On EDIT only the
@@ -58,14 +64,21 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
   const [lead, setLead] = useState(record?.lead_detective_id || '')
   const [notes, setNotes] = useState(record?.notes || '')
   const [summary, setSummary] = useState<Record<string, string>>(() => parseIntelSummary(record?.intelligence_summary))
-  const [officers, setOfficers] = useState<Officer[]>([])
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    void list('profiles', { select: 'id,display_name', order: 'display_name' })
-      .then((r) => setOfficers(r as unknown as Officer[]))
-      .catch(() => setOfficers([]))
-  }, [])
+  // Lead-detective picker runs on the shared roster cache (searchMemberHits)
+  // — warm it once; the label below re-resolves when it lands.
+  const rosterProfiles = useProfilesStore((s) => s.profiles)
+  const rosterLoaded = useProfilesStore((s) => s.loaded)
+  useEffect(() => { if (!rosterLoaded) void useProfilesStore.getState().fetch() }, [rosterLoaded])
+  // FK guard: an assigned officer missing from the cache (removed, or the
+  // cache is still warming) keeps the id under a placeholder label — the
+  // assignment is never nulled by a slow read.
+  const leadValue = useMemo<EntityHit | null>(() => {
+    if (!lead) return null
+    const p = rosterProfiles.find((x) => x.id === lead)
+    return { id: lead, label: p?.display_name || '(assigned officer)', thumbUrl: p?.avatar_url ?? null }
+  }, [lead, rosterProfiles])
 
   // Duplicate hint at create time — bounded ilike name search, never blocking.
   const [dupes, setDupes] = useState<DuplicateMatch[]>([])
@@ -245,14 +258,15 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
               {CONFIDENCE_LEVELS.map((c) => <option key={c} value={c}>{humanize(c)}</option>)}
             </select>
           </div>
-          <div>
-            <label htmlFor="gang-lead" className={label}>Lead detective</label>
-            <select id="gang-lead" value={lead} onChange={(e) => setLead(e.target.value)} className={input}>
-              <option value="">— unassigned —</option>
-              {lead && !officers.some((o) => o.id === lead) && <option value={lead}>(assigned officer)</option>}
-              {officers.map((o) => <option key={o.id} value={o.id}>{o.display_name || o.id.slice(0, 8)}</option>)}
-            </select>
-          </div>
+          <RecordSearchPicker<EntityHit>
+            label="Lead detective"
+            placeholder="Search name, badge or bureau…"
+            value={leadValue}
+            onChange={(v) => setLead(v?.id ?? '')}
+            search={async (q) => searchMemberHits(q)}
+            getThumb={(h) => h.thumbUrl}
+            getDisabled={memberDisabled}
+          />
         </div>
 
         <div className="mb-2 mt-5 flex flex-wrap items-center gap-x-3 gap-y-1">

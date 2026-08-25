@@ -66,6 +66,28 @@ dossiers. All of these open as tabs inside the **Investigative Tools**
 workspace (`/tools`, `src/components/tools/`); the old per-tool routes
 redirect there with their params intact ([Ch. 5](05-pages.md)).
 
+**Entity search & linking (2026-08-25)**: every link/attach flow runs the
+shared entity-search registry (`lib/entitySearch` — bounded per-kind
+queries behind one `searchEntities()` door: the indexed `search_persons`
+two-step ranked RPC for persons, normalized-plate matching for vehicles
+(`normPlate`), roster/penal client caches for the member/charge arms;
+RLS-scoped, merged tombstones filtered, transient failure ⇒ no
+suggestions) through `shared/RecordSearchPicker`. Case person-linking
+(IntelTab) adds `shared/LinkedPersonPanel`: linked-state clarity
+("Registry profile" badge + Open profile) and optional completion of
+blank profile fields with an explicit save choice — provenance-labelled
+"(case record)" link-note lines (case only, `shared/personCompletion`) or
+a confirmed, audited, gaps-only `persons` update
+(`lib/autofill.diffForMasterUpdate` — never overwrites a non-empty value,
+never writes blanks). Report person fields commit name + canonical
+`person_id` atomically (ReportsTab `PersonField`; free text stays
+possible but renders "Not linked", and read views resolve only the
+referenced ids). The create-new escape hatch chains `CreateHost` →
+`PersonModal onCreated` to auto-link the fresh row to the case. The
+whole-registry preloads all this replaced (the reports persons datalist,
+accounts/vehicles owner selects, the surveillance 200-row pools,
+CreateHost option lists) are gone.
+
 ## 4.3 Deconfliction (three systems)
 
 - **Indicators registry** (server data): hard identifiers per case; a

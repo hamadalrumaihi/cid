@@ -8,6 +8,80 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Smart entity search & linking — 2026-08-25
+
+One coordinated pass over every "pick a record" surface: search-first,
+bounded, linked-by-id. No RLS or workflow semantics changed — every
+suggestion query runs on the caller's own RLS-scoped client, and free
+text stays possible where a form always allowed it (now clearly marked).
+
+**Shared foundation**
+- `src/lib/entitySearch.ts` — ONE per-kind suggestion-query registry
+  behind pickers and link modals (`searchEntities()` + typed arms): the
+  indexed `search_persons` two-step ranked RPC for persons (mugshot
+  thumb, dob · status · gang sublabel), vehicles with normalized-plate
+  matching, gang/place/account/case/operation/narcotic/legal-request
+  arms, a roster filter carrying LOA/inactive flags, and a penal-charge
+  catalog arm. Bounded (~20), merged tombstones filtered, transient
+  failure degrades to no suggestions. Matching-only normalizers
+  (`normPlate`/`normPhone`/`normHandle`) never alter display values.
+- `src/lib/autofill.ts` — pure save-choice engine: `buildAutofill`
+  (master data fills only user-empty fields, provenance tracked),
+  `diffForMasterUpdate` (fill-the-master's-gaps only — never overwrites
+  a non-empty value, never writes blanks), `mergeIdentityArrays`.
+- `shared/RecordSearchPicker` upgraded: full combobox a11y via the new
+  `shared/useListboxNav` kernel (aria-activedescendant, wrap-around
+  arrows, disabled-row skipping), thumbnails via the new `ui/RecordThumb`
+  (consolidating the RegistryCard/gang-roster mugshot idiom), per-row
+  disable-with-reason badges, record peeks, create-new and free-text
+  escape hatches (opt-in, never defaults), multi-select chips, and
+  skeleton / no-result / retry states. `lib/entityPreview` gained
+  case/operation/member preview kinds.
+
+**Add Person to Case**
+- The case link form (Intel & Notes) shows smart person suggestions
+  (mugshot, dob/status/gang, inline preview); a picked person renders the
+  `shared/LinkedPersonPanel` "Registry profile" linked state with an Open
+  profile jump. A missing-info panel offers the profile's blank quick
+  fields (dob/phone/alias/classification/status) with an explicit save
+  choice: **case only** (provenance-labelled "(case record)" lines
+  appended to the link note — `shared/personCompletion`) or **Update
+  person profile** (a named confirmation, then an audited,
+  blank-protected `persons` update via `diffForMasterUpdate`). Linking
+  never waits on completion.
+- Create-new: the picker's "New person" row opens the normal PersonModal
+  (duplicate candidates intact) with the typed name prefilled and
+  auto-links the fresh record to the case (`CreateHost` `onCreated`
+  chaining) — never a detached copy.
+
+**Portal-wide adoption**
+- Reports: person fields are registry pickers that commit name +
+  canonical `person_id` atomically ("Registry profile" badge + peek;
+  "Use as typed" keeps free text, clearly marked "Not linked"). Both
+  unbounded person loads are gone — the editor's whole-registry datalist
+  and the read view's registry preload (read views now resolve only the
+  ids a report references; the fuzzy name-match fallback is retired).
+  The warrant-gate error copy points at the Full Name picker.
+- Vehicles/accounts owner pickers and Places' gang/case/narcotic arms
+  replace whole-table selects; person merge is scoped to picked
+  candidates; the surveillance per-kind pickers drop the 200-row
+  ceiling; Places gains a create-time duplicate hint and the vehicle
+  plate hint matches on `normPlate` equality (punctuation variants).
+- Member pickers (gang lead, case lead, case support officers, operation
+  lead, chat mentions) badge LOA/inactive/already-assigned rows visible
+  but unselectable; operation case linking, the BOLO flagged-person
+  search (bounded over `bolo=true`), the extraction platform vocabulary
+  (account-platform select + "Other…", closing the duplicate-account
+  vector) and the legal wizard's thumbs/previews all run the shared
+  picker; `SiuRegistryPicker` runs RecordSearchPicker internally over
+  the same `siu_registry_search()` RPC (contract unchanged).
+
+**Tests**
+- New units: `entitySearch` (query shapes/ranking/normalizers),
+  `autofill`, `personCompletion`, `useListboxNav`, ReportsTab person-id
+  collection, the toast classifier; an MSW behavior suite for the
+  upgraded picker (`tests/msw/record-search-picker-behavior`).
+
 ### Master dashboard pass — 2026-08-25
 
 One coordinated dashboard restructure across every workspace. No RLS or

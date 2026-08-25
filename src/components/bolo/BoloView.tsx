@@ -79,16 +79,21 @@ export function BoloView() {
     setErr(null)
     try {
       // Only flagged persons — never the whole registry, never `reports`.
-      const [p, g] = await Promise.all([
-        withRetry(() => list('persons', { eq: { bolo: true }, order: 'updated_at', ascending: false })),
-        list('gangs', { order: 'name' }).catch(() => [] as GangRow[]),
-      ])
+      const p = await withRetry(() => list('persons', { eq: { bolo: true }, order: 'updated_at', ascending: false }))
       const ids = p.map((x) => x.id)
-      const lr = ids.length
-        ? await list('legal_requests', { select: LEGAL_COLS, in: { person_id: ids } })
-            .then((r) => r as unknown as LegalLite[])
-            .catch(() => [] as LegalLite[])
-        : []
+      // Gang names resolve via one bounded in:{id} lookup over the gang_ids
+      // the flagged persons actually reference — never the whole gangs table.
+      const gangIds = [...new Set(p.map((x) => x.gang_id).filter((x): x is string => !!x))]
+      const [g, lr] = await Promise.all([
+        gangIds.length
+          ? list('gangs', { in: { id: gangIds } }).catch(() => [] as GangRow[])
+          : Promise.resolve([] as GangRow[]),
+        ids.length
+          ? list('legal_requests', { select: LEGAL_COLS, in: { person_id: ids } })
+              .then((r) => r as unknown as LegalLite[])
+              .catch(() => [] as LegalLite[])
+          : Promise.resolve([] as LegalLite[]),
+      ])
       setPersons(p)
       setGangs(g)
       setLegal(lr)
@@ -159,7 +164,7 @@ export function BoloView() {
       </div>
 
       {state === 'in' && (
-        <MdtExportsPanel persons={persons.map((p) => ({ id: p.id, name: p.name }))} canPropose={canEdit} isCommand={isCommand} />
+        <MdtExportsPanel canPropose={canEdit} isCommand={isCommand} />
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -198,7 +203,7 @@ export function BoloView() {
       </div>
 
       {profile && <IntelProfile initial={profile} gangs={gangs} onClose={() => setProfile(null)} />}
-      {editor && <PersonModal record={editor} gangs={gangs} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); void refresh() }} />}
+      {editor && <PersonModal record={editor} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); void refresh() }} />}
       {manage && <ManageBoloModal person={manage} onClose={() => setManage(null)} onSaved={() => { setManage(null); void refresh() }} />}
     </section>
   )

@@ -99,9 +99,9 @@ database RPCs; see [Handbook Ch. 7](handbook/07-api.md).
 | `src/components/tools/` | The Investigative Tools workspace (`/tools`): tool directory, keep-alive tab strip, the legacy-route redirect shim, and the lazy per-tool component registry. |
 | `src/components/ui/` | Shared primitives (Modal, Toaster, dialog host, headers, …) everything is assembled from. |
 | `src/components/shell/` | The constant chrome (`AppShell`, sidebar, nav badges, the ⌘K `SearchPalette`, the notifications bell, and `CreateHost` — the universal "+ Create" provider that lazy-loads the registry views' exported create modals via `useCreate()`). |
-| `src/components/shared/` | Cross-feature record widgets — `LinkEditPopover` (relationship-link editing), `RecordSearchPicker`, `DuplicateMatches`, `PinButton`, `RecordPeekButton`. |
+| `src/components/shared/` | Cross-feature record widgets — `LinkEditPopover` (relationship-link editing), `RecordSearchPicker` (the bounded entity-search combobox; loaders from `lib/entitySearch`, keyboard kernel in `useListboxNav`), `LinkedPersonPanel` (case link form's registry-profile panel + completion choice), `DuplicateMatches`, `PinButton`, `RecordPeekButton`. |
 | `src/components/auth/` | The `Gate` screens (login, pending approval, retry, setup). |
-| `src/lib/` | Domain libraries and infrastructure — data access, auth, realtime, sign-off vocabulary, the central status registry (`status.ts`, rendered by `ui/StatusBadge`), record previews (`entityPreview.ts` → `ui/RecordPeek`), the per-user personalization layer (`pins.ts`, `recents.ts`, `userDrafts.ts`, `savedViews.ts`), notification actions (`notifications.ts`), form schemas, exports. |
+| `src/lib/` | Domain libraries and infrastructure — data access, auth, realtime, sign-off vocabulary, the central status registry (`status.ts`, rendered by `ui/StatusBadge`), record previews (`entityPreview.ts` → `ui/RecordPeek`), the entity-search and autofill layer (`entitySearch.ts` — bounded per-kind picker queries; `autofill.ts` — blank-protected fill-the-gaps invariants), the per-user personalization layer (`pins.ts`, `recents.ts`, `userDrafts.ts`, `savedViews.ts`), notification actions (`notifications.ts`), form schemas, exports. |
 
 The [Handbook Ch. 6](handbook/06-components.md) catalogs the reusable
 building blocks; [Ch. 5](handbook/05-pages.md) maps every URL to its

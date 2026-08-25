@@ -75,9 +75,11 @@ export function FeatureView() {
 - `safeUrl()` on EVERY DB-sourced href/src. No `dangerouslySetInnerHTML`
   (one sanctioned static exception in `app/layout.tsx`).
 - Never select `profiles.email` outside command paths (`PROFILE_COLS`).
-- FK-preservation: when an edit form's select options may not include the
-  currently-linked row (stale cache/restricted), render a synthetic
-  "(current … — loading…)" option so saving can't null the link.
+- FK-preservation: when an edit form's picker may not be able to resolve
+  the currently-linked row (stale cache/restricted/slow lookup), seed the
+  id synchronously under a placeholder label ("(current … — loading…)")
+  and upgrade it with one bounded `in:{id}` lookup — a failed read keeps
+  the placeholder, so saving can't null a link the editor didn't touch.
 
 ## Styling
 

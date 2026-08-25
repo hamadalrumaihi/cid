@@ -51,4 +51,6 @@ User clicks "Save" in a modal
 - `persons/IntelProfile` ← persons, bolo, gangs, network
 - `cases/CaseDetail` ← CasesView AND RicoView (internal `RicoTab` import)
 - `lib/forms` ← CaseDetail, BoloView, CaseGraphTab, dossier, packet
+- `shared/RecordSearchPicker` ← ~23 files (the one "attach a record"
+  contract) · `lib/entitySearch` ← ~14 components (its loaders)
 - `guideContent.ts` ← **generated from** `docs/USER-GUIDE.md`

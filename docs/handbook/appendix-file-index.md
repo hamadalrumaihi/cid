@@ -26,6 +26,7 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | File | One-liner |
 |---|---|
 | `auth.tsx` | ⚠ Sign-in state machine + `useAuth()` context + capability booleans |
+| `autofill.ts` | Pure autofill/save-choice invariants — `buildAutofill` never replaces user input; `diffForMasterUpdate` fills only the master's gaps (no overwrites, no blanks); no I/O |
 | `database.types.ts` | ⚠ Hand-maintained TS mirror of the live schema |
 | `db.ts` | ⚠ THE data layer: list/insert/update/remove/rpc/deleteWithUndo/withRetry |
 | `docx.ts` | Dependency-free OOXML writer (byte-fragile ZIP) |
@@ -33,7 +34,8 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | `caseHealth.ts` | Pure, clock-injected advisory health flags (hygiene + due/returned signals) — never fetches, skips flags whose inputs weren't passed; renders via `cases/CaseHealthRow` + the CasesView attention marker/"Needs attention" filter |
 | `drafts.ts` | localStorage draft primitive (`cid-draft:` keys) — now mostly `userDrafts`' local mirror; the legal wizard's stash keeps the legacy shared keys |
 | `userDrafts.ts` | DB-backed never-lose-work drafts (`user_drafts`, owner-only RLS, cross-device): debounced upsert, per-user local mirror, 60KB guard, offline degradation; feeds `ui/SaveState` |
-| `entityPreview.ts` | Lite RLS-scoped record projections + linked-record counts for `ui/RecordPeek` |
+| `entityPreview.ts` | Lite RLS-scoped record projections + linked-record counts for `ui/RecordPeek` (incl. case/operation/member kinds) |
+| `entitySearch.ts` | Shared entity-search registry — bounded per-kind picker loaders (`searchEntities` + typed arms), matching-only normalizers (`normPlate`/`normPhone`/`normHandle`), merged tombstones filtered |
 | `fivemanage.ts` | Media upload (multipart → hosted URL) |
 | `format.ts` | timeAgo/todayISO/fmtUSD/slug/downloadBlob/copyText |
 | `forms.ts` | 8 report schemas + warrant helpers + finalize-gap check |
@@ -87,9 +89,10 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | `ui/Toaster.tsx` | Toast renderer |
 | `ui/WorkflowTimeline.tsx` / `ui/DeadlineChip.tsx` | v1.14 shared history render / deadline chip (see [Ch. 6](06-components.md)) |
 | `ui/StatusBadge.tsx` / `ui/AccessBadge.tsx` | Registry-backed status chip (tooltip: meaning + who acts next) / one chip for the three access vocabularies (SIB visibility, legal classification, SOP classification) |
-| `ui/RecordPeek.tsx` / `ui/SaveState.tsx` | Lazy record-preview card (data from `lib/entityPreview`) / autosave-state chip (fed by `lib/userDrafts`) |
+| `ui/RecordPeek.tsx` / `ui/SaveState.tsx` / `ui/RecordThumb.tsx` | Lazy record-preview card (data from `lib/entityPreview`) / autosave-state chip (fed by `lib/userDrafts`) / unified record avatar (safeUrl image → initials fallback) |
 | `shared/RelatedRecordPicker.tsx` / `VersionViewer.tsx` / `SignatureViewer.tsx` | v1.14 cross-feature record picker / version list / signature trail |
-| `shared/LinkEditPopover.tsx` / `RecordSearchPicker.tsx` / `DuplicateMatches.tsx` / `PinButton.tsx` / `RecordPeekButton.tsx` | Relationship-link editor (confidence/status/note over the link tables' UPDATE policies) / bounded registry search picker / non-blocking duplicate hints on create modals / pin toggle over `lib/pins` / peek trigger |
+| `shared/LinkEditPopover.tsx` / `RecordSearchPicker.tsx` / `DuplicateMatches.tsx` / `PinButton.tsx` / `RecordPeekButton.tsx` | Relationship-link editor (confidence/status/note over the link tables' UPDATE policies) / bounded registry search combobox (loaders from `lib/entitySearch`; opt-in thumbs, disable-with-reason, peeks, create-new, free-text, multi-select) / non-blocking duplicate hints on create modals / pin toggle over `lib/pins` / peek trigger |
+| `shared/LinkedPersonPanel.tsx` / `personCompletion.ts` / `useListboxNav.ts` | Case link form "Registry profile" panel with the case-only vs update-profile completion choice / its pure field-split + provenance-line logic / combobox keyboard kernel (aria-activedescendant, disabled-row skipping) |
 
 ## Feature views (main file per folder)
 

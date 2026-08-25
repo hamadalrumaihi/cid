@@ -42,7 +42,7 @@ import { useToolNav } from '@/components/tools/useToolNav'
 import {
   CONFIDENCE_LEVELS, LINK_STATUSES, VEHICLE_ROLES, confidenceLabel, linkStatusLabel, vehicleRoleLabel,
 } from '@/components/persons/personIntel'
-import { VehicleModal, type GangOption, type PersonOption } from './VehiclesView'
+import { VehicleModal } from './VehiclesView'
 
 type VehicleRow = Tables<'vehicles'>
 
@@ -485,8 +485,8 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
   const { state, canEdit } = useAuth()
   const nav = useToolNav()
   const [vehicle, setVehicle] = useState<VehicleRow | null>(null)
-  const [persons, setPersons] = useState<PersonOption[]>([])
-  const [gangs, setGangs] = useState<GangOption[]>([])
+  const [ownerName, setOwnerName] = useState<string | null>(null)
+  const [gangName, setGangName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
@@ -499,16 +499,17 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
     setErr(null)
     try {
       // Primary lookup stays unwrapped (real error message, not "not found");
-      // owner/gang name lookups degrade to [] like the registry's options.
-      const [v, p, g] = await Promise.all([
-        withRetry(() => list('vehicles', { eq: { id } })),
-        list('persons', { select: 'id,name', order: 'name' }).catch(() => [] as Tables<'persons'>[]),
-        list('gangs', { select: 'id,name', order: 'name' }).catch(() => [] as Tables<'gangs'>[]),
-      ])
+      // owner/gang name lookups are bounded in:{id} probes on just the linked
+      // ids and degrade to null like the old best-effort option fetches.
+      const v = await withRetry(() => list('vehicles', { eq: { id } }))
       if (!v[0]) throw new Error('Vehicle not found — it may have been deleted.')
       setVehicle(v[0])
-      setPersons(p as unknown as PersonOption[])
-      setGangs(g as unknown as GangOption[])
+      const [p, g] = await Promise.all([
+        v[0].owner_id ? list('persons', { select: 'id,name', in: { id: [v[0].owner_id] } }).catch(() => []) : Promise.resolve([]),
+        v[0].gang_id ? list('gangs', { select: 'id,name', in: { id: [v[0].gang_id] } }).catch(() => []) : Promise.resolve([]),
+      ])
+      setOwnerName((p as unknown as { id: string; name: string }[])[0]?.name ?? null)
+      setGangName((g as unknown as { id: string; name: string }[])[0]?.name ?? null)
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
     } finally {
@@ -525,8 +526,8 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
   useEffect(() => { pushRecent('vehicle', id) }, [id])
 
   const v = vehicle
-  const owner = v?.owner_id ? persons.find((p) => p.id === v.owner_id)?.name ?? null : null
-  const gang = v?.gang_id ? gangs.find((g) => g.id === v.gang_id)?.name ?? null : null
+  const owner = v?.owner_id ? ownerName : null
+  const gang = v?.gang_id ? gangName : null
   const swatch = v?.color ? colorSwatch(v.color) : null
 
   return (
@@ -661,8 +662,6 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
       {editing && v && (
         <VehicleModal
           record={v}
-          persons={persons}
-          gangs={gangs}
           onClose={() => setEditing(false)}
           onSaved={() => { setEditing(false); void refresh() }}
         />

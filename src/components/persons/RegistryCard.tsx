@@ -3,13 +3,12 @@
 /** Registry grid card + the shared BOLO/lifecycle chips (the table view reuses
  *  them so BOLO state never reads differently between layouts). Colour is
  *  never the only signal — every chip carries a text label. */
-import { useState } from 'react'
-import { initials, timeAgo } from '@/lib/format'
-import { safeUrl } from '@/lib/safeUrl'
+import { timeAgo } from '@/lib/format'
 import { priorityTint } from '@/lib/tint'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import { ConfidenceBadge, StaleIntelBadge } from '@/components/ui/IntelBadges'
+import { RecordThumb } from '@/components/ui/RecordThumb'
 import { boloState, classificationLabel, lifecycleLabel, priorityLabel, PERSON_REVIEW_DAYS } from './personIntel'
 import type { RegistryPerson } from './registryFilters'
 
@@ -72,19 +71,10 @@ export function RegistryCard({
   p, gang, caseCount, vehicleCount, warrantCount, duplicate, now, today,
   canEdit, canDelete, selected, onSelect, onProfile, onEdit, onDelete, onAttach,
 }: RegistryCardProps) {
-  const [imgBroken, setImgBroken] = useState(false)
-  const mug = safeUrl(p.mugshot_url ?? '')
   return (
     <Card interactive>
       <div className="flex items-start gap-3">
-        {mug && !imgBroken ? (
-          /* eslint-disable-next-line @next/next/no-img-element -- external mugshot CDN */
-          <img src={mug} alt="" onError={() => setImgBroken(true)} className="h-14 w-14 flex-shrink-0 rounded-lg object-cover" />
-        ) : (
-          <div className="grid h-14 w-14 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-sm font-bold text-slate-400" aria-hidden="true">
-            {initials(p.name)}
-          </div>
-        )}
+        <RecordThumb url={p.mugshot_url} label={p.name} size="md" />
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold text-white">{p.name}</p>
           <p className="truncate text-xs text-slate-400">

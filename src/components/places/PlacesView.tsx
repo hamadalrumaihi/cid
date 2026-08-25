@@ -13,6 +13,7 @@ import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import type { Database, Json, Tables } from '@/lib/database.types'
 import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
+import { searchCaseHits, searchGangHits, searchNarcoticHits, searchPlaceHits } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { useTableVersion } from '@/lib/realtime'
@@ -27,17 +28,13 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { EntityLink } from '@/components/ui/EntityLink'
 import { EntityLegalLine, fetchEntityLegalRefs, type EntityLegalRef } from '@/components/justice/EntityLegalSection'
+import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
 import { searchCaseOptions } from '@/components/persons/ProfileRelations'
 
 type PlaceRow = Tables<'places'>
-type GangRow = Tables<'gangs'>
-type NarcoticRow = Tables<'narcotics'>
-type PrecursorRow = Tables<'narcotic_precursors'>
-type HotspotRow = Tables<'narcotic_hotspots'>
 type LocationType = Database['public']['Enums']['location_type']
-type CaseOption = Pick<Tables<'cases'>, 'id' | 'case_number' | 'title'>
 type PlacePhoto = Pick<Tables<'media'>, 'id' | 'title' | 'type' | 'external_url' | 'storage_path' | 'place_id'>
 
 const LOC_TYPES: { value: LocationType; label: string }[] = [
@@ -63,10 +60,14 @@ const InvestigationMap = dynamic(() => import('@/components/map/InvestigationMap
 
 const PLACE_DELETE_CHILDREN = [{ table: 'place_process_steps' as const, column: 'place_id' }]
 
-interface DrugBundle {
-  row: NarcoticRow
-  precursors: PrecursorRow[]
-  hotspots: HotspotRow[]
+/** The narcotic detail the cards actually render — resolved via bounded
+ *  in:{id} lookups on just the referenced substances, never a whole-registry
+ *  preload. */
+interface DrugInfo {
+  id: string
+  name: string
+  category: string | null
+  precursorCount: number
 }
 
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '')
@@ -88,9 +89,11 @@ export function PlacesView() {
   const placeId = sp.get('place')
   const placeSeeded = useRef(false)
   const [places, setPlaces] = useState<PlaceRow[]>([])
-  const [gangs, setGangs] = useState<GangRow[]>([])
-  const [cases, setCases] = useState<CaseOption[]>([])
-  const [drugs, setDrugs] = useState<DrugBundle[]>([])
+  // Bounded label maps for the FK chips — resolved from ONLY the ids the
+  // loaded places reference (the IntelTab idiom), never whole-table preloads.
+  const [gangNames, setGangNames] = useState<ReadonlyMap<string, string>>(new Map())
+  const [caseNumbers, setCaseNumbers] = useState<ReadonlyMap<string, string>>(new Map())
+  const [drugInfo, setDrugInfo] = useState<ReadonlyMap<string, DrugInfo>>(new Map())
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [photos, setPhotos] = useState<PlacePhoto[]>([])
@@ -119,15 +122,8 @@ export function PlacesView() {
     setLoading(true)
     setErr(null)
     try {
-      const [pl, g, c, n, prec, hot, ph, lg, ob] = await Promise.all([
+      const [pl, ph, lg, ob] = await Promise.all([
         withRetry(() => list('places', { order: 'updated_at', ascending: false })),
-        list('gangs', { order: 'name' }).catch(() => [] as GangRow[]),
-        list('cases', { select: 'id,case_number,title', order: 'updated_at', ascending: false })
-          .then((rows) => rows as unknown as CaseOption[])
-          .catch(() => [] as CaseOption[]),
-        list('narcotics', { order: 'name' }).catch(() => [] as NarcoticRow[]),
-        list('narcotic_precursors', {}).catch(() => [] as PrecursorRow[]),
-        list('narcotic_hotspots', {}).catch(() => [] as HotspotRow[]),
         list('media', { select: 'id,title,type,external_url,storage_path,place_id', is: { archived_at: null }, order: 'created_at' })
           .then((rows) => (rows as unknown as PlacePhoto[]).filter((m) => m.place_id))
           .catch(() => [] as PlacePhoto[]),
@@ -141,19 +137,42 @@ export function PlacesView() {
           .then((rows) => (rows as unknown as { id: string; place_id: string | null }[]).filter((o) => o.place_id))
           .catch(() => [] as { id: string; place_id: string | null }[]),
       ])
+      // FK labels + narcotic detail: one bounded in:{id} lookup per kind,
+      // best-effort (a degraded read simply leaves those chips unlabeled).
+      const idsOf = (k: 'controlling_gang_id' | 'case_id' | 'narcotic_id') =>
+        [...new Set(pl.map((p) => p[k]).filter((x): x is string => !!x))]
+      const gangIds = idsOf('controlling_gang_id')
+      const caseIds = idsOf('case_id')
+      const narcIds = idsOf('narcotic_id')
+      const [g, c, n, prec] = await Promise.all([
+        gangIds.length
+          ? list('gangs', { select: 'id,name', in: { id: gangIds } })
+              .then((r) => r as unknown as { id: string; name: string }[]).catch(() => [])
+          : [],
+        caseIds.length
+          ? list('cases', { select: 'id,case_number', in: { id: caseIds } })
+              .then((r) => r as unknown as { id: string; case_number: string }[]).catch(() => [])
+          : [],
+        narcIds.length
+          ? list('narcotics', { select: 'id,name,category', in: { id: narcIds } })
+              .then((r) => r as unknown as { id: string; name: string; category: string | null }[]).catch(() => [])
+          : [],
+        narcIds.length
+          ? list('narcotic_precursors', { select: 'id,narcotic_id', in: { narcotic_id: narcIds } })
+              .then((r) => r as unknown as { id: string; narcotic_id: string }[]).catch(() => [])
+          : [],
+      ])
       setPlaces(pl)
-      setGangs(g)
-      setCases(c)
+      setGangNames(new Map(g.map((x) => [x.id, x.name])))
+      setCaseNumbers(new Map(c.map((x) => [x.id, x.case_number])))
+      const pc = new Map<string, number>()
+      for (const p of prec) pc.set(p.narcotic_id, (pc.get(p.narcotic_id) ?? 0) + 1)
+      setDrugInfo(new Map(n.map((x) => [x.id, { id: x.id, name: x.name, category: x.category, precursorCount: pc.get(x.id) ?? 0 }])))
       setPhotos(ph)
       setLegalRefs(lg)
       const oc = new Map<string, number>()
       for (const o of ob) oc.set(o.place_id!, (oc.get(o.place_id!) ?? 0) + 1)
       setObsCounts(oc)
-      setDrugs(n.map((row) => ({
-        row,
-        precursors: prec.filter((p) => p.narcotic_id === row.id),
-        hotspots: hot.filter((h) => h.narcotic_id === row.id),
-      })))
       setSelected((sel) => new Set([...sel].filter((id) => pl.some((x) => x.id === id))))
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -175,9 +194,9 @@ export function PlacesView() {
     queueMicrotask(() => setQuery(p.name))
   }, [placeId, places])
 
-  const gangName = (id: string | null) => (id && gangs.find((g) => g.id === id)?.name) || null
-  const caseNum = (id: string | null) => (id && cases.find((c) => c.id === id)?.case_number) || null
-  const drugById = (id: string | null) => (id && drugs.find((d) => d.row.id === id)) || null
+  const gangName = (id: string | null) => (id && gangNames.get(id)) || null
+  const caseNum = (id: string | null) => (id && caseNumbers.get(id)) || null
+  const drugById = (id: string | null) => (id && drugInfo.get(id)) || null
   const photosByPlace = useMemo(() => {
     const m = new Map<string, PlacePhoto[]>()
     photos.forEach((p) => { if (p.place_id) m.set(p.place_id, [...(m.get(p.place_id) ?? []), p]) })
@@ -331,9 +350,6 @@ export function PlacesView() {
       {editor && (
         <PlaceModal
           record={editor === 'new' ? null : editor}
-          gangs={gangs}
-          cases={cases}
-          drugs={drugs}
           onClose={() => setEditor(null)}
           onSaved={() => { setEditor(null); void refresh() }}
         />
@@ -445,7 +461,7 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, observationCo
   place: PlaceRow
   gang: string | null
   caseNumber: string | null
-  drug: DrugBundle | null
+  drug: DrugInfo | null
   photos: PlacePhoto[]
   legal: EntityLegalRef[]
   observationCount: number
@@ -482,7 +498,7 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, observationCo
       <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
         {gang && <span className="rounded-md bg-violet-500/10 px-2 py-1 text-violet-300">{gang}</span>}
         {caseNumber && <span className="rounded-md bg-blue-500/10 px-2 py-1 font-mono text-blue-300">{caseNumber}</span>}
-        {drug && <EntityLink kind="narcotic" id={drug.row.id} label={drug.row.name} title={`Open ${drug.row.name} dossier`} />}
+        {drug && <EntityLink kind="narcotic" id={drug.id} label={drug.name} title={`Open ${drug.name} dossier`} />}
       </div>
       {place.notes && <p className="mt-3 text-xs text-slate-400">{place.notes}</p>}
       {/* Structured legal references (RLS-trimmed): requests naming this place
@@ -527,19 +543,19 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, observationCo
         <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-amber-300/70">Suspected production site</p>
           <p className="text-xs text-slate-300">
-            <span className="text-white">{drug.row.name}</span>
-            {drug.row.category ? ` · ${cap(drug.row.category)}` : ''}
+            <span className="text-white">{drug.name}</span>
+            {drug.category ? ` · ${cap(drug.category)}` : ''}
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Generalized production stages">
             {PRODUCTION_STAGES.map((stage) => (
               <span key={stage} className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-slate-400">{stage}</span>
             ))}
           </div>
-          {drug.precursors.length > 0 && (
+          {drug.precursorCount > 0 && (
             <p className="mt-2 text-[11px] text-slate-400">Precursors of interest recorded on linked cases/evidence.</p>
           )}
           <div className="mt-3">
-            <EntityLink kind="narcotic" id={drug.row.id} label="View substance intelligence →" title={`Open ${drug.row.name} dossier`} />
+            <EntityLink kind="narcotic" id={drug.id} label="View substance intelligence →" title={`Open ${drug.name} dossier`} />
           </div>
         </div>
       )}
@@ -572,25 +588,74 @@ function PlaceObservations({ placeId, count }: { placeId: string; count: number 
   )
 }
 
-export function PlaceModal({ record, gangs, cases, drugs, onClose, onSaved }: {
+/** Create/edit a location. The gang/case/narcotic arms are bounded,
+ *  server-backed pickers (shared entity-search registry) — never whole-table
+ *  preloads. An existing FK resolves its label via ONE in:{id} lookup; a slow
+ *  or failed lookup keeps the id under a placeholder label, so saving never
+ *  nulls a link the editor didn't touch (the old "(current … - loading)"
+ *  guard, picker-shaped). */
+export function PlaceModal({ record, onClose, onSaved }: {
   record: PlaceRow | null
-  gangs: GangRow[]
-  cases: CaseOption[]
-  drugs: DrugBundle[]
   onClose: () => void
   onSaved: () => void
 }) {
   const [name, setName] = useState(record?.name || '')
   const [type, setType] = useState<LocationType>(record?.type || 'drug_lab')
   const [area, setArea] = useState(record?.area || '')
-  const [gangId, setGangId] = useState(record?.controlling_gang_id || '')
-  const [caseId, setCaseId] = useState(record?.case_id || '')
-  const [narcoticId, setNarcoticId] = useState(record?.narcotic_id || '')
+  const [gangSel, setGangSel] = useState<PickedRecord | null>(
+    record?.controlling_gang_id ? { id: record.controlling_gang_id, label: '(current gang)' } : null)
+  const [caseSel, setCaseSel] = useState<PickedRecord | null>(
+    record?.case_id ? { id: record.case_id, label: '(linked case)' } : null)
+  const [narcSel, setNarcSel] = useState<PickedRecord | null>(
+    record?.narcotic_id ? { id: record.narcotic_id, label: '(current narcotic)' } : null)
   const [notes, setNotes] = useState(record?.notes || '')
   const input = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
-  const gangKnown = !gangId || gangs.some((g) => g.id === gangId)
-  const caseKnown = !caseId || cases.some((c) => c.id === caseId)
-  const drugKnown = !narcoticId || drugs.some((d) => d.row.id === narcoticId)
+
+  // Bounded current-FK label resolution (id-only lookups). A row the viewer
+  // cannot read (RLS) or a failed read keeps the placeholder — the FK itself
+  // is never dropped.
+  useEffect(() => {
+    if (!record) return
+    let live = true
+    const relabel = (
+      set: React.Dispatch<React.SetStateAction<PickedRecord | null>>, id: string, text: string | undefined,
+    ) => { if (live && text) set((s) => (s?.id === id ? { id, label: text } : s)) }
+    const gid = record.controlling_gang_id
+    if (gid) {
+      void list('gangs', { select: 'id,name', in: { id: [gid] } })
+        .then((r) => relabel(setGangSel, gid, (r as unknown as { name: string }[])[0]?.name))
+        .catch(() => { /* keep the id under its placeholder */ })
+    }
+    const cid = record.case_id
+    if (cid) {
+      void list('cases', { select: 'id,case_number', in: { id: [cid] } })
+        .then((r) => relabel(setCaseSel, cid, (r as unknown as { case_number: string }[])[0]?.case_number))
+        .catch(() => {})
+    }
+    const nid = record.narcotic_id
+    if (nid) {
+      void list('narcotics', { select: 'id,name', in: { id: [nid] } })
+        .then((r) => relabel(setNarcSel, nid, (r as unknown as { name: string }[])[0]?.name))
+        .catch(() => {})
+    }
+    return () => { live = false }
+  }, [record])
+
+  // Duplicate hint at create time — the GangModal/PersonModal pattern:
+  // debounced bounded name search, advisory only, never blocks saving.
+  const [dupes, setDupes] = useState<DuplicateMatch[]>([])
+  useEffect(() => {
+    if (record) return // edit mode — the record IS the existing one
+    const q = name.trim()
+    let live = true
+    const t = window.setTimeout(async () => {
+      if (q.length < 2) { if (live) setDupes([]); return }
+      const hits = await searchPlaceHits(q, { limit: 5 })
+      if (!live) return
+      setDupes(hits.slice(0, 3).map((h) => ({ type: 'place', id: h.id, label: h.label, sublabel: h.sublabel })))
+    }, 400)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [name, record])
 
   const save = async () => {
     if (!name.trim()) { toast('Location name is required.', 'warn'); return }
@@ -598,9 +663,9 @@ export function PlaceModal({ record, gangs, cases, drugs, onClose, onSaved }: {
       name: name.trim(),
       type,
       area: area.trim() || null,
-      controlling_gang_id: gangId || null,
-      case_id: caseId || null,
-      narcotic_id: type === 'drug_lab' && narcoticId ? narcoticId : null,
+      controlling_gang_id: gangSel?.id ?? null,
+      case_id: caseSel?.id ?? null,
+      narcotic_id: type === 'drug_lab' && narcSel ? narcSel.id : null,
       notes: notes.trim() || null,
     }
     const res = record ? await update('places', record.id, payload) : await insert('places', payload)
@@ -611,8 +676,8 @@ export function PlaceModal({ record, gangs, cases, drugs, onClose, onSaved }: {
 
   const dirty = () =>
     name.trim() !== (record?.name || '') || type !== (record?.type || 'drug_lab') ||
-    area.trim() !== (record?.area || '') || gangId !== (record?.controlling_gang_id || '') ||
-    caseId !== (record?.case_id || '') || narcoticId !== (record?.narcotic_id || '') ||
+    area.trim() !== (record?.area || '') || (gangSel?.id ?? '') !== (record?.controlling_gang_id || '') ||
+    (caseSel?.id ?? '') !== (record?.case_id || '') || (narcSel?.id ?? '') !== (record?.narcotic_id || '') ||
     notes.trim() !== (record?.notes || '')
 
   return (
@@ -620,7 +685,11 @@ export function PlaceModal({ record, gangs, cases, drugs, onClose, onSaved }: {
       <div className="p-6">
         <ModalHeader title={`${record ? 'Edit' : 'New'} Location`} onClose={onClose} />
         <div className="space-y-3">
-          <div><label htmlFor="place-name" className="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input id="place-name" value={name} onChange={(e) => setName(e.target.value)} className={input} /></div>
+          <div>
+            <label htmlFor="place-name" className="mb-1 block text-xs font-semibold text-slate-400">Name *</label>
+            <input id="place-name" value={name} onChange={(e) => setName(e.target.value)} className={input} />
+            {!record && <DuplicateMatchNotice matches={dupes} />}
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label htmlFor="place-type" className="mb-1 block text-xs font-semibold text-slate-400">Type</label>
@@ -630,33 +699,31 @@ export function PlaceModal({ record, gangs, cases, drugs, onClose, onSaved }: {
             </div>
             <div><label htmlFor="place-area" className="mb-1 block text-xs font-semibold text-slate-400">Area</label><input id="place-area" value={area} onChange={(e) => setArea(e.target.value)} className={input} /></div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="place-gang" className="mb-1 block text-xs font-semibold text-slate-400">Controlling Gang</label>
-              <select id="place-gang" value={gangId} onChange={(e) => setGangId(e.target.value)} className={input}>
-                <option value="">- none -</option>
-                {!gangKnown && <option value={gangId}>(current gang - loading...)</option>}
-                {gangs.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="place-case" className="mb-1 block text-xs font-semibold text-slate-400">Linked Case</label>
-              <select id="place-case" value={caseId} onChange={(e) => setCaseId(e.target.value)} className={input}>
-                <option value="">- none -</option>
-                {!caseKnown && <option value={caseId}>(linked case - other bureau)</option>}
-                {cases.map((c) => <option key={c.id} value={c.id}>{c.case_number}</option>)}
-              </select>
-            </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <RecordSearchPicker
+              label="Controlling Gang"
+              value={gangSel}
+              onChange={setGangSel}
+              search={searchGangHits}
+              peekType="gang"
+              placeholder="Search gangs…"
+            />
+            <RecordSearchPicker
+              label="Linked Case"
+              value={caseSel}
+              onChange={setCaseSel}
+              search={searchCaseHits}
+              placeholder="Search case number or title…"
+            />
           </div>
           {type === 'drug_lab' && (
-            <div>
-              <label htmlFor="place-narcotic" className="mb-1 block text-xs font-semibold text-slate-400">Produced Narcotic</label>
-              <select id="place-narcotic" value={narcoticId} onChange={(e) => setNarcoticId(e.target.value)} className={input}>
-                <option value="">- none -</option>
-                {!drugKnown && <option value={narcoticId}>(current narcotic - loading...)</option>}
-                {drugs.map((d) => <option key={d.row.id} value={d.row.id}>{d.row.name}</option>)}
-              </select>
-            </div>
+            <RecordSearchPicker
+              label="Produced Narcotic"
+              value={narcSel}
+              onChange={setNarcSel}
+              search={searchNarcoticHits}
+              placeholder="Search narcotics…"
+            />
           )}
           <div><label htmlFor="place-notes" className="mb-1 block text-xs font-semibold text-slate-400">Notes</label><textarea id="place-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className={input} /></div>
         </div>

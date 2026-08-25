@@ -28,7 +28,8 @@ import { RecordSearchPicker, type PickedRecord } from '@/components/shared/Recor
 import { isMdtExpansionConfigured } from './mdtExpansionConfig'
 
 type MdtExport = Tables<'mdt_exports'>
-type PersonLite = { id: string; name: string }
+/** PickedRecord plus the mugshot for the picker's thumb/collapsed row. */
+type PersonPick = PickedRecord & { thumbUrl?: string | null }
 type ExportKind = 'person_bolo' | 'caution' | 'arrest_warrant' | 'person_record' | 'vehicle_record' | 'account'
 
 const RISKS = ['low', 'medium', 'high', 'critical'] as const
@@ -53,12 +54,15 @@ const EXPANDED_KINDS: ReadonlyArray<{ id: ExportKind; label: string }> = [
   { id: 'account', label: 'Account (CID-only)' },
 ]
 
-export function MdtExportsPanel({ persons, canPropose, isCommand }: { persons: PersonLite[]; canPropose: boolean; isCommand: boolean }) {
+// The person target is a bounded search over the eligibility rule itself
+// (bolo=true) — no caller-supplied flagged list, so the picker scales past a
+// dropdown-sized list.
+export function MdtExportsPanel({ canPropose, isCommand }: { canPropose: boolean; isCommand: boolean }) {
   const expansion = isMdtExpansionConfigured()
   const myId = useAuth().profile?.id
   const now = useNow()
   const [rows, setRows] = useState<MdtExport[] | null>(null)
-  const [personId, setPersonId] = useState('')
+  const [person, setPerson] = useState<PersonPick | null>(null)
   const [kind, setKind] = useState<ExportKind>('person_bolo')
   const [account, setAccount] = useState<PickedRecord | null>(null)
   const [vehicle, setVehicle] = useState<PickedRecord | null>(null)
@@ -79,6 +83,23 @@ export function MdtExportsPanel({ persons, canPropose, isCommand }: { persons: P
 
   const active = useMemo(() => (rows ?? []).filter((r) => r.status !== 'cleared'), [rows])
 
+  // Person targets: only BOLO-flagged persons are eligible, so the search is
+  // scoped eq:{bolo:true} directly — bounded + RLS-scoped, merged tombstones
+  // drop out. Blank query lists the most recently flagged.
+  const searchFlaggedPersons = useCallback(async (q: string): Promise<PersonPick[]> => {
+    const or = ilikeAny(['name', 'alias'], q)
+    const r = (await list('persons', {
+      select: 'id,name,alias,bolo_risk,mugshot_url,lifecycle', eq: { bolo: true },
+      order: 'updated_at', ascending: false, limit: 20, ...(or ? { or } : {}),
+    })) as unknown as { id: string; name: string; alias: string | null; bolo_risk: string | null; mugshot_url: string | null; lifecycle: string }[]
+    return r.filter((p) => p.lifecycle !== 'merged').map((p) => ({
+      id: p.id,
+      label: p.name || 'Person',
+      sublabel: [p.alias ? `“${p.alias}”` : null, p.bolo_risk ? `${p.bolo_risk} risk` : null].filter(Boolean).join(' · ') || undefined,
+      thumbUrl: p.mugshot_url,
+    }))
+  }, [])
+
   // Only reachable with the expansion flag on (the pickers never render
   // without it). Bounded + RLS-scoped; merged tombstones drop out.
   const searchAccounts = useCallback(async (q: string): Promise<PickedRecord[]> => {
@@ -95,7 +116,7 @@ export function MdtExportsPanel({ persons, canPropose, isCommand }: { persons: P
   const isAccountKind = kind === 'account'
   const isVehicleKind = kind === 'vehicle_record'
   const isPersonKind = !isAccountKind && !isVehicleKind
-  const canSubmit = isAccountKind ? !!account : isVehicleKind ? !!vehicle : !!personId
+  const canSubmit = isAccountKind ? !!account : isVehicleKind ? !!vehicle : !!person
 
   const propose = async () => {
     if (busy || !canSubmit) return
@@ -105,9 +126,8 @@ export function MdtExportsPanel({ persons, canPropose, isCommand }: { persons: P
     } else if (isVehicleKind && vehicle) {
       target = { person: null, vehicle: vehicle.id, account: null, snapshot: vehicle.sublabel ? `${vehicle.label} (${vehicle.sublabel})` : vehicle.label }
     } else {
-      const name = persons.find((p) => p.id === personId)?.name
-      if (!name) return
-      target = { person: personId, vehicle: null, account: null, snapshot: name }
+      if (!person) return
+      target = { person: person.id, vehicle: null, account: null, snapshot: person.label }
     }
     // Parse the expiry BEFORE setBusy — an unparseable datetime-local value
     // would otherwise throw mid-flight and leave the button stuck disabled.
@@ -129,7 +149,7 @@ export function MdtExportsPanel({ persons, canPropose, isCommand }: { persons: P
     setBusy(false)
     if (res.error) { toast(res.error.message, 'danger'); return }
     toast('Proposed for MDT export — a command member must approve it.', 'success')
-    setPersonId(''); setAccount(null); setVehicle(null); setExpiry(''); setRisk(''); setInstructions(''); setReason('')
+    setPerson(null); setAccount(null); setVehicle(null); setExpiry(''); setRisk(''); setInstructions(''); setReason('')
     void fetchRows()
   }
 
@@ -194,10 +214,17 @@ export function MdtExportsPanel({ persons, canPropose, isCommand }: { persons: P
       {canPropose && (
         <div className="mt-4 grid gap-2 border-t border-white/5 pt-4 sm:grid-cols-2">
           {isPersonKind ? (
-            <select className={INPUT} value={personId} onChange={(e) => setPersonId(e.target.value)} aria-label="Subject">
-              <option value="">Choose a flagged person…</option>
-              {persons.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <RecordSearchPicker<PersonPick>
+              label="Subject"
+              required
+              hint="Only BOLO-flagged persons are eligible."
+              placeholder="Search flagged persons…"
+              value={person}
+              onChange={setPerson}
+              search={searchFlaggedPersons}
+              getThumb={(p) => p.thumbUrl}
+              peekType="person"
+            />
           ) : isAccountKind ? (
             <RecordSearchPicker
               label="Account"
@@ -207,6 +234,7 @@ export function MdtExportsPanel({ persons, canPropose, isCommand }: { persons: P
               value={account}
               onChange={setAccount}
               search={searchAccounts}
+              peekType="account"
             />
           ) : (
             <RecordSearchPicker
@@ -216,6 +244,7 @@ export function MdtExportsPanel({ persons, canPropose, isCommand }: { persons: P
               value={vehicle}
               onChange={setVehicle}
               search={searchVehicles}
+              peekType="vehicle"
             />
           )}
           <select className={INPUT} value={kind} onChange={(e) => setKind(e.target.value as ExportKind)} aria-label="Kind">

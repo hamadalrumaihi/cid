@@ -104,15 +104,60 @@ re-inline.
   `audit_detail` triggers record old/new content. **Reuse when**: any link
   table gains an editable attribute — never delete-and-recreate.
 - **`shared/RecordSearchPicker.tsx`** — bounded, RLS-scoped search picker
-  for attaching registry records. **Reuse when**: any "link a record" flow.
+  for attaching registry records (upgraded by the entity-select pass —
+  see below). **Reuse when**: any "link a record" flow.
 - **`shared/DuplicateMatches.tsx`** — non-blocking duplicate hints under
-  the name/plate field of the Person/Gang/Vehicle create modals.
+  the name/plate field of the Person/Gang/Vehicle/Place create modals
+  (plate hints compare `normPlate` equality, so punctuation variants
+  match).
 - **`shared/PinButton.tsx` + `lib/pins.ts`** — pin toggle (person,
   vehicle, gang, account, narcotics profiles + case headers).
 - **`shell/CreateHost.tsx`** — the universal "+ Create" provider:
   `useCreate().open(kind)` opens the exact exported registry modal,
   lazy-loaded, permission-gated. **Reuse when**: any surface wants a
   create shortcut — never fork a second copy of a create form.
+
+## The entity-select shared set (2026-08-25)
+The smart search/select/link/autofill pass — one picker contract for
+every "attach a record" flow. Same rule: reuse, don't re-inline.
+
+- **`shared/RecordSearchPicker.tsx`** — THE bounded record combobox. The
+  caller supplies the loader (so the picker can never widen access; `''`
+  lists recent rows), and full combobox a11y comes from
+  `shared/useListboxNav`. Everything beyond the base contract is opt-in
+  and default-off: thumbnails (`getThumb` → `ui/RecordThumb`), per-row
+  disable-with-reason (`getDisabled` — LOA/inactive/already-linked rows
+  stay visible, badged and unselectable), quick previews (`peekType`), a
+  create-new action row (`onCreateNew`), a free-text fallback
+  (`allowFreeText` — never the default), `minChars`, multi-select chips.
+  **Reuse when**: any "link a record" flow — and take the loader from
+  `lib/entitySearch`, never a hand-rolled query. (`siu/SiuRegistryPicker`
+  now runs this internally over the same `siu_registry_search()` RPC.)
+- **`lib/entitySearch.ts`** — the per-kind suggestion-query registry
+  (`searchEntities(kind, q, opts)` + typed arms such as
+  `searchPersonHits`/`searchMemberHits`): the indexed `search_persons`
+  two-step ranked RPC for persons, normalized-plate matching for
+  vehicles, gang/place/account/case/operation/narcotic/legal-request
+  arms, roster and penal-charge cache filters. Bounded (~20), RLS-scoped,
+  merged tombstones filtered, transient failure ⇒ `[]`. Matching-only
+  normalizers (`normPlate`/`normPhone`/`normHandle`) never alter display
+  values. **Reuse when**: any picker needs a loader.
+- **`lib/autofill.ts`** — pure save-choice engine: `buildAutofill`
+  (master data fills only user-empty fields, provenance tracked) and
+  `diffForMasterUpdate` (fill-the-master's-gaps only — never overwrites a
+  non-empty value, never writes blanks). No I/O — pair it with an
+  explicit `uiConfirm` and the audited `update()` path.
+- **`shared/LinkedPersonPanel.tsx` + `shared/personCompletion.ts`** — the
+  "linked to a registry profile" panel on the case link form: linked-state
+  clarity (badge + Open profile) plus optional completion of blank
+  profile fields with the explicit case-only-vs-update-profile choice.
+- **`shared/useListboxNav.ts`** — the combobox/listbox keyboard kernel
+  (`aria-activedescendant`, wrap-around arrows, disabled-row skipping,
+  Escape containment). **Reuse when**: any suggestion list under an
+  input.
+- **`ui/RecordThumb.tsx`** — unified record avatar/thumbnail
+  (safeUrl-guarded image, broken-image → initials fallback). Used by
+  picker rows, `RegistryCard` and the gang roster.
 
 ## `cases/WatchButton.tsx`
 Follow/unfollow for `case|person|vehicle`. Stops propagation (works inside
