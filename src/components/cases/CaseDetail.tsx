@@ -37,7 +37,7 @@ import { usePinsStore } from '@/lib/pins'
 import { pushRecent } from '@/lib/recents'
 import { Store } from '@/lib/store'
 import { useNarrow } from '@/lib/useNarrow'
-import { confirmCaseClose, enableRicoSession, pushRecentCase, ricoSessionEnabled } from './caseUtils'
+import { confirmCaseClose, enableRicoSession, ricoSessionEnabled } from './caseUtils'
 import { CaseModal } from './CaseModal'
 import { CaseCommandHeader } from './CaseCommandHeader'
 import { ReassignBureauModal } from './ReassignBureauModal'
@@ -167,10 +167,8 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       if (rows[0]) {
         setEverLoadedId(id)
         // Recents record deliberate opens only — the FIRST successful load of
-        // this id, never the realtime-bump refetches that follow. Both trails:
-        // the legacy per-case Store key (Command Jump-back) and the unified
-        // recents blob (lib/recents).
-        if (firstLoadOfId) { pushRecentCase(rows[0].id); pushRecent('case', rows[0].id) }
+        // this id, never the realtime-bump refetches that follow.
+        if (firstLoadOfId) pushRecent('case', rows[0].id)
       }
     } catch (e) {
       toast(e instanceof Error ? e.message : e, 'danger')

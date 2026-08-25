@@ -32,7 +32,7 @@ import { useAction } from '@/lib/useAction'
 import { bureauLabel, bureauShort } from '@/lib/roles'
 import { officerName } from '@/lib/profiles'
 import { useWatchlistStore } from '@/lib/watchlist'
-import { CASE_STATUSES } from '@/lib/signoff'
+import { CASE_STATUSES, caseCourtHint } from '@/lib/signoff'
 import { caseDepartment, siuClassificationLabel } from '@/lib/siu'
 import { isJtfAssigned, isRoutingBureau } from '@/lib/legalWorkflow'
 import type { CaseAssessment } from '@/lib/caseWorkflow'
@@ -138,6 +138,7 @@ export function CaseCommandHeader({
   onGoTab: (tab: string) => void
 }) {
   const { profile, isCommand, isOwner } = useAuth()
+  const hint = caseCourtHint(c, profile?.id ?? null, officerName(c.signoff_assignee_id))
   const [followUpOpen, setFollowUpOpen] = useState(false)
   const [stageOpen, setStageOpen] = useState(false)
   const [packetOpen, setPacketOpen] = useState(false)
@@ -325,8 +326,10 @@ export function CaseCommandHeader({
         <Meta label="Lead">{officerName(c.lead_detective_id) || 'Unassigned'}</Meta>
         <Meta label="Updated"><span title={c.updated_at}>{timeAgo(c.updated_at)}</span></Meta>
         {!canEdit && <span className="rounded-lg border border-white/10 px-2 py-0.5 text-[11px] text-slate-300">Read-only</span>}
-        {/* Sign-off chip — registry label/tint/tooltip (lib/status). */}
-        <StatusBadge domain="signoff" value={c.signoff_status} />
+        {/* Sign-off chip — registry label/tint (lib/status); the tooltip is
+            the personalized whose-court-is-it hint when one applies (the
+            former line-3 banner, folded into the chip). */}
+        <StatusBadge domain="signoff" value={c.signoff_status} title={hint?.t} />
         {c.follow_up_at && (canEdit ? (
           <button
             onClick={() => setFollowUpOpen(true)}

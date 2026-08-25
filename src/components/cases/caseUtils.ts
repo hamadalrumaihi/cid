@@ -47,19 +47,11 @@ export async function confirmCaseClose(c: CaseRow, meId: string | null = null): 
   )
 }
 
-/* ---- Pins + recents (Jump-back data; the strip renders on Command) -------
- * Pin WRITES moved to the DB-backed lib/pins store (usePinsStore, 'case') —
- * the case header's Pin/Unpin no longer touches the pinnedCases Store key.
- * These legacy READERS stay until the Command Jump-back strip migrates to
- * the store; recents are additionally mirrored into lib/recents. */
-export const recentCaseIds = (): string[] => Store.get<string[]>('recentCases', [])
-export const pinnedCaseIds = (): string[] => Store.get<string[]>('pinnedCases', [])
-
-export function pushRecentCase(id: string): void {
-  if (!id) return
-  const r = recentCaseIds().filter((x) => x !== id)
-  Store.set('recentCases', [id, ...r].slice(0, 8))
-}
+/* ---- Pins + recents --------------------------------------------------------
+ * Migrated off the legacy Store keys: pins live in the DB-backed lib/pins
+ * store (usePinsStore, type 'case' — the case header toggles it) and recents
+ * in the unified lib/recents trail (pushRecent('case', …) on deliberate
+ * opens). The Command Jump-back strip reads both stores directly. */
 
 /* ---- RICO tab session reveal ---------------------------------------------
  * The RICO tab is conditional (lib/caseWorkflow.ricoTabVisible): hidden until
