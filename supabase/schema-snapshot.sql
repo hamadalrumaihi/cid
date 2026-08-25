@@ -4203,6 +4203,45 @@ alter table public.watchlist add constraint watchlist_user_id_fkey FOREIGN KEY (
 alter table public.watchlist add constraint watchlist_target_type_check CHECK ((target_type = ANY (ARRAY['case'::text, 'person'::text, 'vehicle'::text])));
 alter table public.watchlist enable row level security;
 
+-- Per-user personalization (20260826010000): pins, autosave drafts, and
+-- generic preferences (saved views, notification prefs). Same privacy
+-- contract as document_user_state — RLS admits only the owner, no audit
+-- triggers, no aggregate RPC, never in the realtime publication.
+create table public.user_pins (
+  user_id uuid not null default auth.uid(),
+  target_type text not null,
+  target_id uuid not null,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.user_pins add constraint user_pins_pkey PRIMARY KEY (user_id, target_type, target_id);
+alter table public.user_pins add constraint user_pins_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.user_pins add constraint user_pins_target_type_check CHECK ((target_type = ANY (ARRAY['case'::text, 'person'::text, 'vehicle'::text, 'gang'::text, 'place'::text, 'account'::text, 'narcotic'::text, 'legal_request'::text, 'document'::text, 'operation'::text, 'field_submission'::text])));
+alter table public.user_pins enable row level security;
+
+create table public.user_drafts (
+  user_id uuid not null default auth.uid(),
+  key text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.user_drafts add constraint user_drafts_pkey PRIMARY KEY (user_id, key);
+alter table public.user_drafts add constraint user_drafts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.user_drafts add constraint user_drafts_key_len CHECK (((char_length(key) >= 1) AND (char_length(key) <= 200)));
+alter table public.user_drafts add constraint user_drafts_data_size CHECK ((pg_column_size(data) <= 65536));
+alter table public.user_drafts enable row level security;
+
+create table public.user_prefs (
+  user_id uuid not null default auth.uid(),
+  key text not null,
+  value jsonb not null default '{}'::jsonb,
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.user_prefs add constraint user_prefs_pkey PRIMARY KEY (user_id, key);
+alter table public.user_prefs add constraint user_prefs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.user_prefs add constraint user_prefs_key_len CHECK (((char_length(key) >= 1) AND (char_length(key) <= 100)));
+alter table public.user_prefs add constraint user_prefs_value_size CHECK ((pg_column_size(value) <= 32768));
+alter table public.user_prefs enable row level security;
+
 -- ============================================================
 -- Views
 -- ============================================================
@@ -4701,6 +4740,8 @@ CREATE INDEX vehicles_model_trgm ON public.vehicles USING gin (model extensions.
 CREATE INDEX vehicles_color_trgm ON public.vehicles USING gin (color extensions.gin_trgm_ops);
 CREATE INDEX vehicles_notes_trgm ON public.vehicles USING gin (notes extensions.gin_trgm_ops);
 CREATE INDEX watchlist_user_idx ON public.watchlist USING btree (user_id);
+CREATE INDEX user_pins_user_idx ON public.user_pins USING btree (user_id);
+CREATE INDEX case_tasks_title_trgm ON public.case_tasks USING gin (title extensions.gin_trgm_ops);
 
 -- ============================================================
 -- Functions (public + private, non-extension)
@@ -4720,6 +4761,33 @@ begin
   rid := coalesce((j->>'id')::uuid, (j->>'feedback_id')::uuid);
   insert into public.audit_log (actor_id, action, entity, entity_id)
   values ((select auth.uid()), tg_op, tg_table_name, rid);
+  return coalesce(new, old);
+end $function$
+;
+
+-- Detail-carrying sibling of private.audit() (20260826010000): snapshots the
+-- old/new row jsonb into audit_log.detail. Attached only to the small link
+-- tables where the whole row IS the fact being audited, so "who unlinked X
+-- from Y and what did the link say" is answerable after the row is gone.
+CREATE OR REPLACE FUNCTION private.audit_detail()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (
+    (select auth.uid()),
+    tg_op,
+    tg_table_name,
+    case tg_op when 'DELETE' then old.id else new.id end,
+    case tg_op
+      when 'DELETE' then jsonb_build_object('old', to_jsonb(old))
+      when 'INSERT' then jsonb_build_object('new', to_jsonb(new))
+      else jsonb_build_object('old', to_jsonb(old), 'new', to_jsonb(new))
+    end
+  );
   return coalesce(new, old);
 end $function$
 ;
@@ -5501,6 +5569,7 @@ AS $function$
 declare
   v_actor uuid := (select auth.uid());
   v_case uuid := nullif(p_payload->>'case_id', '')::uuid;
+  v_payload jsonb;
 begin
   if v_actor is null or not private.is_active() then
     raise exception 'not authorized';
@@ -5541,18 +5610,37 @@ begin
     if p_user_id <> v_actor then raise exception 'not authorized'; end if;
   end if;
 
-  insert into public.notifications (user_id, type, payload)
-  values (
-    p_user_id,
-    p_type,
+  v_payload :=
     (coalesce(p_payload, '{}'::jsonb)
       || case when p_payload ? 'reason' then jsonb_build_object('reason', left(p_payload->>'reason', 500)) else '{}'::jsonb end
       || case when p_payload ? 'title'  then jsonb_build_object('title',  left(p_payload->>'title', 300))  else '{}'::jsonb end)
       || jsonb_build_object(
         'actor_id', v_actor,
         'actor_name', (select display_name from public.profiles where id = v_actor)
-      )
-  );
+      );
+
+  -- Dedupe guard (20260826010000): an identical UNREAD notification in the
+  -- last hour (same recipient, same type, same payload identity — volatile
+  -- actor stamps excluded) suppresses this one. Read notifications never
+  -- suppress, so a re-ping after the user handled the first still lands.
+  if exists (
+    select 1 from public.notifications n
+    where n.user_id = p_user_id
+      and n.type = p_type
+      and n.read = false
+      and n.created_at > now() - interval '1 hour'
+      and n.payload->>'case_id'    is not distinct from v_payload->>'case_id'
+      and n.payload->>'request_id' is not distinct from v_payload->>'request_id'
+      and n.payload->>'task_id'    is not distinct from v_payload->>'task_id'
+      and n.payload->>'reason'     is not distinct from v_payload->>'reason'
+      and n.payload->>'title'      is not distinct from v_payload->>'title'
+      and n.payload->>'target'     is not distinct from v_payload->>'target'
+  ) then
+    return;
+  end if;
+
+  insert into public.notifications (user_id, type, payload)
+  values (p_user_id, p_type, v_payload);
 end $function$
 ;
 
@@ -8146,7 +8234,7 @@ CREATE TRIGGER field_submissions_before_insert BEFORE INSERT ON public.field_sub
 CREATE TRIGGER field_submissions_before_update BEFORE UPDATE ON public.field_submissions FOR EACH ROW EXECUTE FUNCTION private.field_submission_before_update();
 CREATE TRIGGER gang_members_audit AFTER INSERT OR DELETE OR UPDATE ON public.gang_members FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER gang_members_touch BEFORE UPDATE ON public.gang_members FOR EACH ROW EXECUTE FUNCTION private.touch();
-CREATE TRIGGER gang_places_audit AFTER INSERT OR DELETE OR UPDATE ON public.gang_places FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER gang_places_audit AFTER INSERT OR DELETE OR UPDATE ON public.gang_places FOR EACH ROW EXECUTE FUNCTION private.audit_detail();
 CREATE TRIGGER gang_places_touch BEFORE UPDATE ON public.gang_places FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER gang_turf_audit AFTER INSERT OR DELETE OR UPDATE ON public.gang_turf FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER gang_turf_touch BEFORE UPDATE ON public.gang_turf FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -8172,12 +8260,16 @@ CREATE TRIGGER narcotics_audit AFTER INSERT OR DELETE OR UPDATE ON public.narcot
 CREATE TRIGGER narcotics_guard BEFORE INSERT OR UPDATE ON public.narcotics FOR EACH ROW EXECUTE FUNCTION private.guard_narcotic();
 CREATE TRIGGER narcotics_touch BEFORE UPDATE ON public.narcotics FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER case_intel_links_block_change_under_hold BEFORE UPDATE OR DELETE ON public.case_intel_links FOR EACH ROW EXECUTE FUNCTION private.block_intel_link_change_under_hold();
+CREATE TRIGGER case_intel_links_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_intel_links FOR EACH ROW EXECUTE FUNCTION private.audit_detail();
+CREATE TRIGGER account_links_audit AFTER INSERT OR DELETE OR UPDATE ON public.account_links FOR EACH ROW EXECUTE FUNCTION private.audit_detail();
+CREATE TRIGGER user_drafts_touch BEFORE UPDATE ON public.user_drafts FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER user_prefs_touch BEFORE UPDATE ON public.user_prefs FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER operations_touch BEFORE UPDATE ON public.operations FOR EACH ROW EXECUTE FUNCTION private.touch();
-CREATE TRIGGER person_places_audit AFTER INSERT OR DELETE OR UPDATE ON public.person_places FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER person_places_audit AFTER INSERT OR DELETE OR UPDATE ON public.person_places FOR EACH ROW EXECUTE FUNCTION private.audit_detail();
 CREATE TRIGGER person_places_touch BEFORE UPDATE ON public.person_places FOR EACH ROW EXECUTE FUNCTION private.touch();
-CREATE TRIGGER person_relationships_audit AFTER INSERT OR DELETE OR UPDATE ON public.person_relationships FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER person_relationships_audit AFTER INSERT OR DELETE OR UPDATE ON public.person_relationships FOR EACH ROW EXECUTE FUNCTION private.audit_detail();
 CREATE TRIGGER person_relationships_touch BEFORE UPDATE ON public.person_relationships FOR EACH ROW EXECUTE FUNCTION private.touch();
-CREATE TRIGGER person_vehicles_audit AFTER INSERT OR DELETE OR UPDATE ON public.person_vehicles FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER person_vehicles_audit AFTER INSERT OR DELETE OR UPDATE ON public.person_vehicles FOR EACH ROW EXECUTE FUNCTION private.audit_detail();
 CREATE TRIGGER person_vehicles_touch BEFORE UPDATE ON public.person_vehicles FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER persons_audit AFTER INSERT OR DELETE OR UPDATE ON public.persons FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER persons_touch BEFORE UPDATE ON public.persons FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -8411,6 +8503,11 @@ create policy case_intel_links_sel on public.case_intel_links
   as permissive for select to authenticated
   using (private.can_access_case(case_id));
 
+create policy case_intel_links_upd on public.case_intel_links
+  as permissive for update to authenticated
+  using (private.can_access_case(case_id))
+  with check (private.can_access_case(case_id));
+
 create policy cm_del on public.case_messages
   as permissive for delete to authenticated
   using ((((author_id = ( SELECT auth.uid() AS uid)) OR ( SELECT private.is_command() AS is_command)) AND ( SELECT private.can_access_case(case_messages.case_id) AS can_access_case)));
@@ -8595,6 +8692,57 @@ create policy doc_state_sel on public.document_user_state
   using ((user_id = ( SELECT auth.uid() AS uid)));
 
 create policy doc_state_upd on public.document_user_state
+  as permissive for update to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)))
+  with check ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy user_pins_del on public.user_pins
+  as permissive for delete to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy user_pins_ins on public.user_pins
+  as permissive for insert to authenticated
+  with check ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy user_pins_sel on public.user_pins
+  as permissive for select to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy user_pins_upd on public.user_pins
+  as permissive for update to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)))
+  with check ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy user_drafts_del on public.user_drafts
+  as permissive for delete to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy user_drafts_ins on public.user_drafts
+  as permissive for insert to authenticated
+  with check ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy user_drafts_sel on public.user_drafts
+  as permissive for select to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy user_drafts_upd on public.user_drafts
+  as permissive for update to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)))
+  with check ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy user_prefs_del on public.user_prefs
+  as permissive for delete to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy user_prefs_ins on public.user_prefs
+  as permissive for insert to authenticated
+  with check ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy user_prefs_sel on public.user_prefs
+  as permissive for select to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy user_prefs_upd on public.user_prefs
   as permissive for update to authenticated
   using ((user_id = ( SELECT auth.uid() AS uid)))
   with check ((user_id = ( SELECT auth.uid() AS uid)));
@@ -11596,7 +11744,9 @@ create policy wl_sel on public.watchlist
 -- (kind,id,label,sublabel,term,rank). The rendered search_all body above is a
 -- pre-20260807110000 generation and is not re-rendered — changes are tracked
 -- here. Definitive SQL in
--- supabase/migrations/20260808400000_search_hardening.sql.
+-- supabase/migrations/20260826010000_ux_personalization.sql (CHUNK 6), which
+-- re-emits the 20260808400000_search_hardening.sql body verbatim and appends
+-- the 'bolo' and 'task' arms (task id rides in `term`; case id in `id`).
 
 -- ============================================================
 -- 20260810120000_jtf_operations (Joint / JTF Operations):
