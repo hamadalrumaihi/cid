@@ -27,6 +27,7 @@ import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionTabs, type SectionTab } from '@/components/ui/SectionTabs'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { useToolNav } from '@/components/tools/useToolNav'
 import { NarcoticsRegistryCard } from './NarcoticsRegistryCard'
 import {
   applyNarcoticFilters, buildAliasMap, buildNarcoticMetrics, categoryLabel, countByNarcotic,
@@ -66,6 +67,7 @@ function PresenceChip({ busy }: { busy: boolean }) {
 export function NarcoticsView() {
   const { state, canEdit } = useAuth()
   const router = useRouter()
+  const nav = useToolNav()
   const sp = useSearchParams()
   const now = useNow()
 
@@ -223,13 +225,17 @@ export function NarcoticsView() {
   const visible = items.slice(0, shown)
   const remaining = Math.max(0, items.length - visible.length)
 
-  // `?drug=<id>` drills into the dossier.
-  if (drugId) {
+  // `?drug=<id>` drills into the dossier (standalone only — inside the
+  // workspace a dossier is its own record tab and this list never swaps out).
+  if (drugId && !nav.inWorkspace) {
     if (state !== 'in') return <Notice text="Live narcotics records require sign-in." />
     return <NarcoticsDossier drugId={drugId} onClose={() => router.push('/narcotics')} />
   }
 
-  const openDrug = (id: string) => router.push(`/narcotics?drug=${encodeURIComponent(id)}`)
+  const openDrug = (id: string, name?: string) => {
+    if (nav.inWorkspace) nav.openRecord('narcotics', id, name)
+    else router.push(`/narcotics?drug=${encodeURIComponent(id)}`)
+  }
 
   const grid = () => (
     <div className={GRID}>
@@ -244,7 +250,7 @@ export function NarcoticsView() {
           gangCount={stats.gangCounts.get(n.id) ?? 0}
           seizureCount={stats.seizureCounts.get(n.id) ?? 0}
           now={now}
-          onOpen={() => openDrug(n.id)}
+          onOpen={() => openDrug(n.id, n.name)}
         />
       ))}
       {remaining > 0 && (

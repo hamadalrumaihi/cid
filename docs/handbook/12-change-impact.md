@@ -6,6 +6,7 @@
 |---|---|---|
 | A table's schema (live migration) | `database.types.ts` (hand-add), `select` projection strings (grep the column), RLS policies, realtime publication, FK index | Types don't auto-regen; projections fail at runtime; new tables are invisible without policies, stale without publication |
 | `PAGE_META` / adding a screen | Category tabs + `TAB_LABEL` + the `[tab]` switch; guide screen-count + regeneration | The three-way nav contract + docs ([FAQ](appendix-faq.md) has the recipe) |
+| An Investigative Tools tool (`src/lib/toolsModel.ts`) | `TOOL_TABS`/`TOOL_GROUPS`/`RECORD_PARAM`/`RECORD_TAB_TOOLS`/`RECORD_TITLE_SOURCE` + the component maps in `components/tools/toolRegistry.tsx`; keep the slug in `nav.ts` (redirect contract) | The workspace, the directory, the redirect shim and the RLS-verified restore all read the model; a `ToolId` missing from `TOOL_LIST_COMPONENT` breaks the workspace render |
 | `lib/db.ts` contract | Every view's read try/catch and write `res.error` check | Throw-vs-return is assumed app-wide |
 | `useAuth` shape / capability booleans | ~40 consumers, Gate branches | canEdit/canDelete gate every button |
 | An RLS policy or `private.*` helper | The matching UI gates, `useNavBadges.canReviewCase`, zero-rows checks | UI mirrors must match or users see phantom buttons/badges |

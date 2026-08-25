@@ -55,7 +55,9 @@ ballistics, media vault, records, BOLO board — all one uniform pattern
 canEdit/canDelete gates, `deleteWithUndo`). Shared RLS: any active member
 reads/writes, command deletes. The `IntelProfile` slide-over
 (persons/gangs) rolls up everything linked to a subject and exports
-dossiers.
+dossiers. All of these open as tabs inside the **Investigative Tools**
+workspace (`/tools`, `src/components/tools/`); the old per-tool routes
+redirect there with their params intact ([Ch. 5](05-pages.md)).
 
 ## 4.3 Deconfliction (three systems)
 

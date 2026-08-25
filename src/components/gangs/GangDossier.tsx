@@ -32,6 +32,7 @@ import { ConfidenceBadge, ProvenanceBadge, StaleIntelBadge } from '@/components/
 import { EntityLink } from '@/components/ui/EntityLink'
 import { uiConfirm } from '@/components/ui/dialog'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
+import { useToolNav } from '@/components/tools/useToolNav'
 import { useNow } from '@/lib/useNow'
 import { RosterSection } from './gangRoster'
 import { MemberModal, TurfModal, LinkPlaceModal, AddGangPhotoModal, GangPhotoLightbox, AttachGangModal } from './gangModals'
@@ -227,7 +228,7 @@ const PLACE_ICON: Record<string, (p: { size?: number; className?: string }) => R
 function PlacesSection({ linked, media, canEdit, canDelete, onLink, onUnlink }: {
   linked: LinkedPlace[]; media: MediaRow[]; canEdit: boolean; canDelete: boolean; onLink: () => void; onUnlink: (l: GangPlaceRow) => void
 }) {
-  const router = useRouter()
+  const nav = useToolNav()
   const photoFor = (placeId: string) => media.find((m) => m.place_id === placeId)
   return (
     <div className="space-y-3">
@@ -252,7 +253,7 @@ function PlacesSection({ linked, media, canEdit, canDelete, onLink, onUnlink }: 
                   <div className="grid h-16 w-20 flex-shrink-0 place-items-center rounded-md bg-ink-700 text-slate-400" aria-hidden><PlaceGlyph size={22} /></div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <button onClick={() => router.push(`/places?q=${encodeURIComponent(place.name)}`)} className="truncate text-left text-sm font-semibold text-white hover:text-blue-200" title="Open place">{place.name}</button>
+                  <button onClick={() => nav.openHref(`/places?q=${encodeURIComponent(place.name)}`)} className="truncate text-left text-sm font-semibold text-white hover:text-blue-200" title="Open place">{place.name}</button>
                   <p className="text-[11px] text-slate-400">{humanize(place.type)}{place.area ? ` · ${place.area}` : ''}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     {link?.role && <Badge tone="accent">{link.role}</Badge>}
@@ -273,7 +274,7 @@ function PlacesSection({ linked, media, canEdit, canDelete, onLink, onUnlink }: 
 
 // ── Vehicles ─────────────────────────────────────────────────────────────────
 function VehiclesSection({ vehicles }: { vehicles: VehicleRow[] }) {
-  const router = useRouter()
+  const nav = useToolNav()
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2"><h3 className="text-sm font-bold text-white">Vehicles</h3><Badge>{vehicles.length}</Badge></div>
@@ -284,7 +285,7 @@ function VehiclesSection({ vehicles }: { vehicles: VehicleRow[] }) {
           {vehicles.map((v) => (
             <Card key={v.id} pad="sm" className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <button onClick={() => router.push(`/vehicles?vehicle=${encodeURIComponent(v.id)}`)} className="truncate text-left text-sm font-semibold text-white hover:text-blue-200">{v.plate || 'Unknown plate'}</button>
+                <button onClick={() => nav.openRecord('vehicles', v.id, v.plate || undefined)} className="truncate text-left text-sm font-semibold text-white hover:text-blue-200">{v.plate || 'Unknown plate'}</button>
                 <p className="text-[11px] text-slate-400">{[v.color, v.model].filter(Boolean).join(' ') || '—'}</p>
               </div>
               <Badge tone="accent" title="Related through a direct gang link">Gang-linked</Badge>
@@ -391,6 +392,7 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
   children?: React.ReactNode
 }) {
   const router = useRouter()
+  const nav = useToolNav()
   const sp = useSearchParams()
   const now = useNow()
 
@@ -414,13 +416,21 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
   const [attachOpen, setAttachOpen] = useState(false)
   const [lightbox, setLightbox] = useState<MediaRow | null>(null)
 
-  const section = (SECTION_IDS.includes(sp.get('section') as SectionId) ? sp.get('section') : 'overview') as SectionId
+  // Inside the workspace the section is LOCAL state (a URL write would route
+  // back through the redirect shim and remount every open tab); the query
+  // string still seeds the initial section so old `?section=` links land
+  // right. Standalone keeps the URL-addressed section unchanged.
+  const inWorkspace = nav.inWorkspace
+  const [localSection, setLocalSection] = useState<SectionId | null>(null)
+  const urlSection = (SECTION_IDS.includes(sp.get('section') as SectionId) ? sp.get('section') : 'overview') as SectionId
+  const section = inWorkspace ? (localSection ?? urlSection) : urlSection
   const setSection = useCallback((next: SectionId) => {
+    if (inWorkspace) { setLocalSection(next); return }
     const params = new URLSearchParams(sp.toString())
     params.set('gang', gang.id)
     params.set('section', next)
     router.replace(`/gangs?${params.toString()}`)
-  }, [sp, gang.id, router])
+  }, [inWorkspace, sp, gang.id, router])
 
   const load = useCallback(async () => {
     setErr(null)
@@ -542,7 +552,7 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
 
   const menuItems = [
     { label: 'Open intel profile', onClick: onProfile, icon: <ArchiveIcon size={14} /> },
-    { label: 'Open in Network', onClick: () => router.push(`/network?focus=g:${gang.id}`), icon: <NetworkIcon size={14} /> },
+    { label: 'Open in Network', onClick: () => nav.openHref(`/network?focus=g:${gang.id}`), icon: <NetworkIcon size={14} /> },
     { label: 'View on map', onClick: () => router.push(`/heatmap?gang=${encodeURIComponent(gang.id)}`), icon: <MapIcon size={14} /> },
     ...(canEdit ? [gang.status === 'disbanded'
       ? { label: 'Mark active', onClick: () => void setLifecycle('active'), icon: <UndoIcon size={14} />, separatorBefore: true }

@@ -8,6 +8,30 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Investigative Tools workspace
+
+**Fourteen intelligence tabs, one nav item.** The Intelligence category's
+tabs (Persons, BOLO Board, Gangs, Places, Vehicles, Accounts, Indicators,
+Intelligence, Network, Narcotics, Ballistics, M.O. Detector, Media Vault,
+Records) are consolidated behind a single **Investigative Tools** item
+(`/tools`) in both the CID and SIB sidebars: a grouped tool directory
+(Intelligence Records · Operational Tools · Analysis, with live RLS-scoped
+counts) plus a multi-tab workspace — open several tools side by side as
+tabs, switch instantly (open tabs stay mounted, so searches, filters and
+scroll survive), drag to reorder, close one / others / all with a
+dirty-tab guard, and an "Open tabs" dropdown on small screens. Persons and
+Vehicles open individual records as their own tabs
+(`RECORD_TAB_TOOLS`). Open tabs persist per signed-in user for the session
+as **ids only** and restore with titles re-fetched through the RLS-scoped
+client — a record the viewer can no longer see closes silently. **No
+functionality removed, no permissions or RLS changed**: every tool renders
+the same RLS-scoped view it always did, and the old routes (`/persons`,
+`/persons?person=<id>`, …) stay valid — a redirect shim
+(`ToolTabRedirect`) forwards them into the workspace with their query
+params intact, so bookmarks, notifications and cross-links keep working.
+Model in `src/lib/toolsModel.ts` (data only); workspace, lazy tool
+registry and shim in `src/components/tools/`.
+
 ### Bureau restructure — Major Crimes / Street Crimes / SIB
 
 **Three bureaus replace the geographic model.** The database migration is live

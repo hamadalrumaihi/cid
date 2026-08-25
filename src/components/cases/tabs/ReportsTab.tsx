@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useToolNav } from '@/components/tools/useToolNav'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -157,6 +158,7 @@ export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: C
  *  can make referenced items clickable; every load is best-effort. */
 function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, onFinalize, onReopen, onChanged, onDelete }: { r: ReportRow; c: CaseRow; canEdit: boolean; canDelete: boolean; holdActive: boolean; onBack: () => void; onEdit: () => void; onFinalize: () => void; onReopen: () => void; onChanged: () => void; onDelete: () => void }) {
   const router = useRouter()
+  const nav = useToolNav()
   const { profile } = useAuth()
   const schema = FORM_SCHEMAS[r.template]
   const status = warrantStatusOf(r)
@@ -302,7 +304,7 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
                   <div className="space-y-3">
                     {vsig && <SignatureViewer signatures={[{ id: ver.id, name: vsig.officer, badge: vsig.badge ?? null, action: 'report seal', at: vsig.signed_at ?? null, versionLabel: `v${ver.version_number}` }]} />}
                     {schema
-                      ? <ReportView schema={schema} values={parseFormValues(ver.fields)} evidence={pools.evidence} media={mediaPool} persons={pools.persons} onOpenPerson={(id) => router.push(`/persons?person=${encodeURIComponent(id)}`)} />
+                      ? <ReportView schema={schema} values={parseFormValues(ver.fields)} evidence={pools.evidence} media={mediaPool} persons={pools.persons} onOpenPerson={(id) => nav.openRecord('persons', id)} />
                       : <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{JSON.stringify(ver.fields, null, 2)}</pre>}
                   </div>
                 )
@@ -334,7 +336,7 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
         </div>
       )}
       {schema
-        ? <ReportView schema={schema} values={parseFormValues(r.fields)} evidence={pools.evidence} media={mediaPool} persons={pools.persons} onOpenPerson={(id) => router.push(`/persons?person=${encodeURIComponent(id)}`)} />
+        ? <ReportView schema={schema} values={parseFormValues(r.fields)} evidence={pools.evidence} media={mediaPool} persons={pools.persons} onOpenPerson={(id) => nav.openRecord('persons', id)} />
         : <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{JSON.stringify(r.fields, null, 2)}</pre>}
     </div>
   )

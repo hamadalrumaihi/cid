@@ -226,7 +226,7 @@ test.describe('Records & Requests — Phase-0 screenshot verification', () => {
     test.setTimeout(120_000)
     const errs = watch(page)
     await inject(page, fx().actors.lead)
-    await page.goto('/bolo')
+    await page.goto('/tools?tool=bolo')
     await expect(page.getByRole('heading', { level: 1, name: 'BOLO Board' })).toBeVisible({ timeout: 30_000 })
     await expect(page.getByRole('heading', { name: 'Patrol MDT exports' })).toBeVisible({ timeout: 20_000 })
     if (ext().mdtApproved) {
@@ -241,7 +241,7 @@ test.describe('Records & Requests — Phase-0 screenshot verification', () => {
     test.setTimeout(120_000)
     const errs = watch(page)
     await inject(page, fx().actors.lsb)
-    await page.goto('/accounts')
+    await page.goto('/tools?tool=accounts')
     await expect(page.getByRole('heading', { level: 1, name: 'Account Registry' })).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText(`@${ext().accountHandle}`).first()).toBeVisible({ timeout: 20_000 })
     await page.screenshot({ path: path.join(OUT, 'd1-accounts-registry.png'), fullPage: true })
@@ -260,7 +260,7 @@ test.describe('Records & Requests — Phase-0 screenshot verification', () => {
     // it and the tab can never activate (deep-link OR click both snap back to
     // Overview). We capture the (broken) state and assert the defect rather than
     // claim the surface works.
-    await page.goto(`/persons?person=${fx().personId}`)
+    await page.goto(`/tools?tool=persons&record=${fx().personId}`)
     await expect(page.getByRole('heading', { level: 1, name: fx().personName })).toBeVisible({ timeout: 30_000 })
     await page.waitForTimeout(1500) // hydrate before the tab click
     const acctTab = page.getByRole('tablist', { name: 'Person sections' }).getByRole('tab', { name: 'Accounts' })

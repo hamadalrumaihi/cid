@@ -1,7 +1,9 @@
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { PAGE_META } from '@/lib/nav'
+import { TOOL_TABS } from '@/lib/toolsModel'
 import { ViewPlaceholder } from '@/components/ViewPlaceholder'
+import { ToolTabRedirect } from '@/components/tools/ToolTabRedirect'
 import { CasesView } from '@/components/cases/CasesView'
 import { CommandView } from '@/components/command/CommandView'
 import { OperationsView } from '@/components/operations/OperationsView'
@@ -9,32 +11,24 @@ import { InboxView } from '@/components/inbox/InboxView'
 import { ActionCenterView } from '@/components/actioncenter/ActionCenterView'
 import { PersonnelView } from '@/components/personnel/PersonnelView'
 import { AnnounceView } from '@/components/announce/AnnounceView'
-import { PersonsView } from '@/components/persons/PersonsView'
-import { GangsView } from '@/components/gangs/GangsView'
-import { BoloView } from '@/components/bolo/BoloView'
-import { PlacesView } from '@/components/places/PlacesView'
-import { VehiclesView } from '@/components/vehicles/VehiclesView'
-import { AccountsView } from '@/components/accounts/AccountsView'
 import { PenalView } from '@/components/penal/PenalView'
-import { RecordsView } from '@/components/records/RecordsView'
 import { ShiftsView } from '@/components/shifts/ShiftsView'
-import { MediaView } from '@/components/media/MediaView'
 import { CaseFilesView } from '@/components/casefiles/CaseFilesView'
 import { SopsView } from '@/components/sops/SopsView'
 import { GuideView } from '@/components/guide/GuideView'
 import { CalendarView } from '@/components/calendar/CalendarView'
 import { AnalyticsView } from '@/components/analytics/AnalyticsView'
-import { IndicatorsView } from '@/components/indicators/IndicatorsView'
-import { FieldReviewView } from '@/components/field/FieldReviewView'
 import { ProfileView } from '@/components/profile/ProfileView'
 import { CommandCenterView } from '@/components/command-center/CommandCenterView'
 import { LegalView } from '@/components/legal/LegalView'
 // Long-tail screens are code-split (client dynamic wrappers, ssr off) so the
 // heavy/rare views — owner tooling, the handbook, chart-heavy analysis tabs —
 // stay out of the page chunk every route shares. Hot paths stay static above.
+// The 14 Intelligence tool views moved into the Investigative Tools workspace
+// (components/tools/toolRegistry); their routes below redirect into /tools.
 import {
-  AuditView, BallisticsView, ConcernView, DevDocsView, FeedbackView, HeatmapView,
-  ModusView, NarcoticsView, NetworkView, OwnerView, RicoView, SiuView,
+  AuditView, ConcernView, DevDocsView, FeedbackView, HeatmapView,
+  OwnerView, RicoView, SiuView, ToolsView,
 } from './lazyViews'
 
 /** One route per leaf tab, statically prerendered via generateStaticParams. */
@@ -49,6 +43,20 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
   // anything unknown falls back to command.
   if (tab === 'reports') redirect('/cases')
   if (!(tab in PAGE_META)) redirect('/command')
+  // Legacy Intelligence tool routes → the Investigative Tools workspace. The
+  // routes stay prerendered and valid (deep links, bookmarks, notifications,
+  // case cross-links); a tiny client shim maps their query params onto
+  // /tools?tool=…&record=… and router.replaces.
+  if ((TOOL_TABS as readonly string[]).includes(tab)) {
+    return <ToolTabRedirect tab={tab} />
+  }
+  if (tab === 'tools') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="tools" />}>
+        <ToolsView />
+      </Suspense>
+    )
+  }
   if (tab === 'command') {
     return (
       <Suspense fallback={<ViewPlaceholder tab="command" />}>
@@ -98,59 +106,10 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
       </Suspense>
     )
   }
-  if (tab === 'persons') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="persons" />}>
-        <PersonsView />
-      </Suspense>
-    )
-  }
-  if (tab === 'gangs') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="gangs" />}>
-        <GangsView />
-      </Suspense>
-    )
-  }
-  if (tab === 'bolo') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="bolo" />}>
-        <BoloView />
-      </Suspense>
-    )
-  }
-  if (tab === 'places') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="places" />}>
-        <PlacesView />
-      </Suspense>
-    )
-  }
-  if (tab === 'vehicles') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="vehicles" />}>
-        <VehiclesView />
-      </Suspense>
-    )
-  }
-  if (tab === 'accounts') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="accounts" />}>
-        <AccountsView />
-      </Suspense>
-    )
-  }
   if (tab === 'penal') {
     return (
       <Suspense fallback={<ViewPlaceholder tab="penal" />}>
         <PenalView />
-      </Suspense>
-    )
-  }
-  if (tab === 'records') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="records" />}>
-        <RecordsView />
       </Suspense>
     )
   }
@@ -182,20 +141,6 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
       </Suspense>
     )
   }
-  if (tab === 'narcotics') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="narcotics" />}>
-        <NarcoticsView />
-      </Suspense>
-    )
-  }
-  if (tab === 'ballistics') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="ballistics" />}>
-        <BallisticsView />
-      </Suspense>
-    )
-  }
   if (tab === 'rico') {
     return (
       <Suspense fallback={<ViewPlaceholder tab="rico" />}>
@@ -207,27 +152,6 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="heatmap" />}>
         <HeatmapView />
-      </Suspense>
-    )
-  }
-  if (tab === 'network') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="network" />}>
-        <NetworkView />
-      </Suspense>
-    )
-  }
-  if (tab === 'modus') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="modus" />}>
-        <ModusView />
-      </Suspense>
-    )
-  }
-  if (tab === 'media') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="media" />}>
-        <MediaView />
       </Suspense>
     )
   }
@@ -263,20 +187,6 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="analytics" />}>
         <AnalyticsView />
-      </Suspense>
-    )
-  }
-  if (tab === 'indicators') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="indicators" />}>
-        <IndicatorsView />
-      </Suspense>
-    )
-  }
-  if (tab === 'field-review') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="field-review" />}>
-        <FieldReviewView />
       </Suspense>
     )
   }

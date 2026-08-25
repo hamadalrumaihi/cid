@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { insert, list, rpc, update } from '@/lib/db'
 import type { TablesInsert } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
@@ -13,6 +12,7 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
+import { useToolNav } from '@/components/tools/useToolNav'
 import {
   CONFIDENCE_LEVELS, GANG_CLASSIFICATIONS, GANG_STATUSES, PROVENANCE_KINDS, SUMMARY_SECTIONS, TURF_STATUSES, humanize,
 } from './gangIntel'
@@ -222,7 +222,7 @@ export function MemberModal({ gangId, member, roster, cases, canDelete, onClose,
   onSaved: () => void
   onDelete: (member: MemberRow) => void
 }) {
-  const router = useRouter()
+  const nav = useToolNav()
   const editing = !!member
   const [picked, setPicked] = useState<PickedRecord | null>(null)
   const [rank, setRank] = useState(member?.rank || 'Soldier')
@@ -313,7 +313,7 @@ export function MemberModal({ gangId, member, roster, cases, canDelete, onClose,
             <div className="flex items-center justify-between gap-2">
               <span className="min-w-0 truncate text-sm text-white">{member.name || 'Linked person'}</span>
               {member.person_id && (
-                <Button size="sm" onClick={() => router.push(`/persons?person=${encodeURIComponent(member.person_id!)}`)}>View profile</Button>
+                <Button size="sm" onClick={() => nav.openRecord('persons', member.person_id!, member.name || undefined)}>View profile</Button>
               )}
             </div>
             <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-400">
@@ -335,7 +335,7 @@ export function MemberModal({ gangId, member, roster, cases, canDelete, onClose,
               emptyState={
                 <span>
                   No matching person found. Create the person in the{' '}
-                  <button type="button" onClick={() => router.push('/persons')} className="font-semibold text-blue-300 underline hover:text-blue-200">Persons registry</button>{' '}
+                  <button type="button" onClick={() => nav.openHref('/persons')} className="font-semibold text-blue-300 underline hover:text-blue-200">Persons registry</button>{' '}
                   first.
                 </span>
               }

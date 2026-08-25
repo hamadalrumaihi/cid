@@ -8,7 +8,6 @@
  *  visibleAnnouncements is only a client complement, so non-command members
  *  legitimately see fewer rows. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useProfilesStore } from '@/lib/profiles'
@@ -22,6 +21,7 @@ import { Modal } from '@/components/ui/Modal'
 import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { AnnouncementModal } from './AnnouncementModal'
+import { useToolNav } from '@/components/tools/useToolNav'
 import {
   REC_LINK, audienceLabel, mentionLabel, parseLinks, parseMentions, visibleAnnouncements,
   type AnnounceViewer, type AnnouncementRow,
@@ -230,13 +230,15 @@ function AnnouncementCard({ a, canManage, onOpen, onEdit, onDismiss }: {
 }
 
 function AnnouncementViewModal({ a, onClose }: { a: AnnouncementRow; onClose: () => void }) {
-  const router = useRouter()
+  // Workspace-aware push: tool tabs land as Investigative Tools tabs, cases
+  // behave exactly like router.push.
+  const { openHref } = useToolNav()
   const mentions = parseMentions(a.mentions)
   const links = parseLinks(a.links)
   const openLink = (l: { type: string; id: string }) => {
     onClose()
-    if (l.type === 'case') router.push(`/cases?case=${encodeURIComponent(l.id)}`)
-    else router.push(`/${REC_LINK[l.type]?.tab || 'cases'}`)
+    if (l.type === 'case') openHref(`/cases?case=${encodeURIComponent(l.id)}`)
+    else openHref(`/${REC_LINK[l.type]?.tab || 'cases'}`)
   }
   return (
     <Modal open wide onClose={onClose}>

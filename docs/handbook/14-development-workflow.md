@@ -47,7 +47,10 @@ instant rollback available in the Vercel dashboard).
    start by copying a registry view (VehiclesView is the cleanest
    template) and keep its idioms.
 2. **Route**: add the tab to `lib/nav.ts` (PAGE_META + a category's tabs +
-   TAB_LABEL) and the switch in `app/(app)/[tab]/page.tsx`.
+   TAB_LABEL) and the switch in `app/(app)/[tab]/page.tsx`. (A new
+   *intelligence tool* registers in `lib/toolsModel.ts` +
+   `components/tools/toolRegistry.tsx` instead of the switch — tool slugs
+   redirect into the `/tools` workspace.)
 3. **Data**: if a new table is needed — additive migration on the live
    project, RLS policies (copy the closest pattern in [Ch. 8](08-database.md)),
    realtime publication, FK indexes, then hand-add to

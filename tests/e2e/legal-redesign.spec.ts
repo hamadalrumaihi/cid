@@ -288,7 +288,7 @@ test.describe('Legal workflow — E2E', () => {
   /* ── 8 · entity cross-cuts ─────────────────────────────────────────────── */
   test('vehicle profile: the Legal panel lists requests naming the vehicle as a structured target', async ({ page }) => {
     await as(page, fx().actors.lsb)
-    await page.goto(`/vehicles?vehicle=${fx().vehicleId}`)
+    await page.goto(`/tools?tool=vehicles&record=${fx().vehicleId}`)
     await expect(page.getByText(fx().vehiclePlate).first()).toBeVisible({ timeout: 30_000 })
     await expect(page.getByRole('heading', { name: 'Legal', exact: true })).toBeVisible()
     await expect(page.getByText(fx().entityDraft.number)).toBeVisible({ timeout: 15_000 })
@@ -300,7 +300,7 @@ test.describe('Legal workflow — E2E', () => {
 
   test('place card: the Legal block chips requests naming the place as a structured target', async ({ page }) => {
     await as(page, fx().actors.lsb)
-    await page.goto('/places')
+    await page.goto('/tools?tool=places')
     await expect(page.getByText(fx().placeName).first()).toBeVisible({ timeout: 30_000 })
     // The structured reference renders as a linked chip with the rationale.
     await expect(page.getByRole('button', { name: new RegExp(fx().entityDraft.number) })).toBeVisible({ timeout: 15_000 })

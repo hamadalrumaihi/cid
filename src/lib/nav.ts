@@ -59,6 +59,10 @@ export const PAGE_META: Record<string, PageMeta> = {
   // (useSiu()), and the view itself renders the ordinary nothing-here surface
   // for everyone else. RLS is the real wall.
   siu:        { title: 'Special Investigations Bureau', sub: 'SIB investigations, personnel & oversight of CID activity' },
+  // The Intelligence category's 14 tabs, consolidated into one multi-tab
+  // workspace (§toolsModel). The old tab ids above stay registered so deep
+  // links keep resolving; their routes redirect into /tools.
+  tools:      { title: 'Investigative Tools', sub: 'Intelligence records, operational boards & analysis — one workspace' },
   // The CID-facing door into SIU intake (§14). Deliberately NOT named after
   // SIU: a route labelled for the unit would disclose it to every detective,
   // and to the subjects of its investigations. See ConcernView.
@@ -80,7 +84,10 @@ export const NAV_CATEGORIES: NavCategory[] = [
   // there. Central Command (the shared dashboard) follows it.
   { id: 'command',   label: 'Command',      tabs: ['inbox', 'action', 'command', 'analytics', 'announce', 'heatmap', 'personnel'] },
   { id: 'cases',     label: 'Cases',        tabs: ['cases', 'operations', 'legal', 'case-files', 'rico'] },
-  { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'accounts', 'indicators', 'field-review', 'network', 'narcotics', 'ballistics', 'modus', 'media', 'records'] },
+  // The 14 intelligence tabs now live INSIDE the Investigative Tools
+  // workspace (/tools) — the old leaf routes still resolve and redirect there,
+  // so nothing is lost; the category is just one nav item now.
+  { id: 'intel',     label: 'Investigative Tools', tabs: ['tools'] },
   { id: 'reference', label: 'Reference',    tabs: ['penal', 'sops', 'guide', 'devdocs'] },
   { id: 'oversight', label: 'Oversight',    tabs: ['calendar', 'shifts', 'audit'] },
 ]
@@ -120,7 +127,7 @@ export const SIU_NAV_CATEGORIES: NavCategory[] = [
   { id: 'siu-unit',      label: 'Bureau',       tabs: ['siu'] },
   { id: 'siu-command',   label: 'Command',      tabs: ['inbox', 'action', 'command', 'analytics', 'announce', 'heatmap', 'personnel'] },
   { id: 'siu-cases',     label: 'Cases',        tabs: ['cases', 'operations', 'legal', 'case-files', 'rico'] },
-  { id: 'siu-intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'accounts', 'indicators', 'field-review', 'network', 'narcotics', 'ballistics', 'modus', 'media', 'records'] },
+  { id: 'siu-intel',     label: 'Investigative Tools', tabs: ['tools'] },
   { id: 'siu-ref',       label: 'Reference',    tabs: ['penal', 'sops', 'guide', 'devdocs'] },
   { id: 'siu-oversight', label: 'Oversight',    tabs: ['calendar', 'shifts', 'audit'] },
 ]
@@ -140,6 +147,7 @@ export const TAB_LABEL: Record<string, string> = {
   persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', accounts: 'Accounts', indicators: 'Indicators', 'field-review': 'Intelligence',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
   media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide', devdocs: 'Developer Handbook',
+  tools: 'Investigative Tools',
   inbox: 'My Desk', action: 'Action Center', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', owner: 'Owner Portal', profile: 'My Profile', 'command-center': 'Command Center', siu: 'Special Investigations Bureau',
 }
 
@@ -147,18 +155,8 @@ export const TAB_LABEL: Record<string, string> = {
  *  the SAME tabs in the SAME order. NAV_CATEGORIES stays the routing truth
  *  (vanilla parity untouched); the strip just draws labels/dividers. */
 export const SUBTAB_GROUPS: Record<string, { label: string; tabs: string[] }[]> = {
-  intel: [
-    { label: 'Registries', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'accounts', 'indicators', 'field-review'] },
-    { label: 'Analysis', tabs: ['network', 'narcotics', 'ballistics', 'modus'] },
-    { label: 'Archive', tabs: ['media', 'records'] },
-  ],
-  // Same grouping under SIU's category id, so the shared registries read the
-  // same way in both workspaces.
-  'siu-intel': [
-    { label: 'Registries', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'accounts', 'indicators', 'field-review'] },
-    { label: 'Analysis', tabs: ['network', 'narcotics', 'ballistics', 'modus'] },
-    { label: 'Archive', tabs: ['media', 'records'] },
-  ],
+  // (Currently empty: the former Intelligence groupings moved into the
+  // Investigative Tools directory — see lib/toolsModel TOOL_GROUPS.)
 }
 
 export const TAB_CATEGORY: Record<string, string> = {}

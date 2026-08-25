@@ -17,6 +17,7 @@ import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { IntelProfile, type IntelTarget } from '@/components/persons/IntelProfile'
+import { useToolNav } from '@/components/tools/useToolNav'
 import { GangCard, GangDetail, type GangCardStats } from './gangCards'
 import { GangModal } from './gangModals'
 import { GANG_CLASSIFICATIONS, GANG_STATUSES, humanize, isGangStale, normalizeName, rankTier } from './gangIntel'
@@ -27,6 +28,7 @@ interface CaseLite { id: string; case_number: string; title: string | null; stat
 export function GangsView() {
   const { state, canEdit, canDelete } = useAuth()
   const router = useRouter()
+  const nav = useToolNav()
   const sp = useSearchParams()
   const now = useNow()
   const [caseOptions, setCaseOptions] = useState<CaseOption[]>([])
@@ -144,6 +146,12 @@ export function GangsView() {
   const detail = detailId ? gangs.find((g) => g.id === detailId) ?? null : null
 
   const openGang = (id: string) => {
+    // Inside the workspace a dossier opens as a NEW record tab (this list tab
+    // never swaps itself out); standalone keeps the `?gang=` drill-down.
+    if (nav.inWorkspace) {
+      nav.openRecord('gangs', id, gangs.find((g) => g.id === id)?.name)
+      return
+    }
     setDetailId(id)
     const params = new URLSearchParams(sp.toString())
     params.set('gang', id); params.delete('q')
@@ -174,7 +182,7 @@ export function GangsView() {
 
   const resetFilters = () => { setThreat('any'); setStatus('any'); setClassification('any'); setHasTurf(false); setOpenCases(false); setStaleOnly(false); setNoLeader(false); setNoSummary(false) }
 
-  if (detail) {
+  if (detail && !nav.inWorkspace) {
     return (
       <GangDetail
         gang={detail}

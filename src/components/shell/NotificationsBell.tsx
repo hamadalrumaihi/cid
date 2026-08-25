@@ -7,7 +7,6 @@
  *  mark-all-read. RLS scopes rows to the signed-in user; realtime bumps the
  *  `notifications` table version so new arrivals appear without a reload. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { list, update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { notifDetail, notifHref, notifSub, notifTitle, type NotificationRow } from '@/lib/notifText'
@@ -29,11 +28,14 @@ import { timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { useToolNav } from '@/components/tools/useToolNav'
 import { BellIcon } from './icons'
 
 export function NotificationsBell() {
   const { state, isCommand } = useAuth()
-  const router = useRouter()
+  // Workspace-aware push: tool hrefs land as Investigative Tools tabs, every
+  // other href behaves exactly like router.push.
+  const { openHref } = useToolNav()
   const [notifs, setNotifs] = useState<NotificationRow[]>([])
   const [open, setOpen] = useState(false)
   const version = useTableVersion('notifications')
@@ -65,7 +67,7 @@ export function NotificationsBell() {
     const href = notifHref(n, { command: isCommand })
     if (href) {
       setOpen(false)
-      router.push(href)
+      openHref(href)
     }
   }
 

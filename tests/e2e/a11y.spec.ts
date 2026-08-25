@@ -70,8 +70,12 @@ const routes: Array<{ key: string; path: string; account: LiveAccount }> = [
   // Director sees the fullest Action Center (command decisions + personal work).
   { key: '/action', path: '/action', account: LIVE.director },
   { key: '/cases', path: '/cases', account: LIVE.lsb },
-  { key: '/gangs', path: '/gangs', account: LIVE.lsb },
-  { key: '/persons', path: '/persons', account: LIVE.lsb },
+  // Gangs/Persons now render inside the Investigative Tools workspace
+  // (/tools?tool=…). Baseline keys keep the legacy names so the accepted-debt
+  // history stays attached to the same screens; note the scan surface now
+  // includes the workspace tab bar, so a re-baseline may be needed.
+  { key: '/gangs', path: '/tools?tool=gangs', account: LIVE.lsb },
+  { key: '/persons', path: '/tools?tool=persons', account: LIVE.lsb },
   { key: '/sops', path: '/sops', account: LIVE.lsb },
   { key: '/command-center', path: '/command-center', account: LIVE.director },
 ]
@@ -91,7 +95,7 @@ test.describe(enabled ? 'a11y (axe ratchet)' : 'a11y (skipped — no live creden
   test('gang dossier (detail screen) has no new serious/critical axe violations', async ({ page }) => {
     test.skip(!pwOf(LIVE.lsb), `${LIVE.lsb.pwEnv} not set`)
     await signIn(page, LIVE.lsb)
-    await settle(page, '/gangs')
+    await settle(page, '/tools?tool=gangs')
     await page.getByRole('article').first().getByRole('button', { name: /Open dossier/i }).click()
     await expect(page.getByRole('tablist', { name: 'Gang sections' })).toBeVisible({ timeout: 20_000 })
     await page.waitForTimeout(2_000)

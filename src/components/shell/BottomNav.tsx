@@ -8,7 +8,7 @@ import { useNav } from './useNav'
 import { useNavBadges } from './useNavBadges'
 
 const SHORT_LABEL: Record<string, string> = {
-  command: 'Command', cases: 'Cases', intel: 'Intel', reference: 'Ref', oversight: 'Oversight',
+  command: 'Command', cases: 'Cases', intel: 'Tools', reference: 'Ref', oversight: 'Oversight',
 }
 
 export function BottomNav() {

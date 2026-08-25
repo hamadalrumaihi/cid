@@ -25,6 +25,7 @@ import { Field, Input, Select } from '@/components/ui/Field'
 import { ConfidenceBadge, ProvenanceBadge } from '@/components/ui/IntelBadges'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/Notice'
+import { useToolNav } from '@/components/tools/useToolNav'
 import { PROVENANCE_KINDS, humanize } from '@/components/gangs/gangIntel'
 import { CONFIDENCE_LEVELS, LINK_STATUSES, RELATIONSHIP_TYPES, linkStatusLabel, relationshipLabel } from './personIntel'
 import type { GangRow, PersonRow } from './PersonModal'
@@ -42,7 +43,7 @@ export function RelationshipsSection({ personId, gang, data, canEdit, onLink, on
   onLink: () => void
   onRefresh: () => void
 }) {
-  const router = useRouter()
+  const nav = useToolNav()
   const { profile, isCommand } = useAuth()
   const [type, setType] = useState('any')
   const [conf, setConf] = useState('any')
@@ -120,7 +121,7 @@ export function RelationshipsSection({ personId, gang, data, canEdit, onLink, on
                   {r.note && <p className="mt-0.5 text-xs text-slate-400">{r.note}</p>}
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-2">
-                  <button onClick={() => router.push(`/network?focus=p:${encodeURIComponent(otherId)}`)} className="text-[11px] font-semibold text-blue-300 hover:text-blue-200" title="Open in the relationship network">Graph</button>
+                  <button onClick={() => nav.openHref(`/network?focus=p:${encodeURIComponent(otherId)}`)} className="text-[11px] font-semibold text-blue-300 hover:text-blue-200" title="Open in the relationship network">Graph</button>
                   {(isCommand || (r.created_by && r.created_by === profile?.id)) && (
                     <button onClick={() => void unlink(r)} className="text-[11px] text-rose-300 hover:text-rose-200">Unlink</button>
                   )}

@@ -45,6 +45,7 @@ import { Notice, ErrorNotice } from '@/components/ui/Notice'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
 import type { TimelineEntry } from '@/components/ui/WorkflowTimeline'
 import { uiConfirm } from '@/components/ui/dialog'
+import { useToolNav } from '@/components/tools/useToolNav'
 import { humanize } from '@/components/gangs/gangIntel'
 import { GangPhotoLightbox } from '@/components/gangs/gangModals'
 import {
@@ -157,13 +158,22 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
     + useTableVersion('media')
     + useTableVersion('legal_requests')
 
-  const section = (SECTION_IDS.includes(sp.get('section') as SectionId) ? sp.get('section') : 'overview') as SectionId
+  // Inside the workspace the section is LOCAL state (a URL write would route
+  // back through the redirect shim and remount every open tab); the query
+  // string still seeds the initial section so old `?section=` links land
+  // right. Standalone keeps the URL-addressed section unchanged.
+  const nav = useToolNav()
+  const [localSection, setLocalSection] = useState<SectionId | null>(null)
+  const urlSection = (SECTION_IDS.includes(sp.get('section') as SectionId) ? sp.get('section') : 'overview') as SectionId
+  const section = nav.inWorkspace ? (localSection ?? urlSection) : urlSection
+  const inWorkspace = nav.inWorkspace
   const setSection = useCallback((next: SectionId) => {
+    if (inWorkspace) { setLocalSection(next); return }
     const params = new URLSearchParams(sp.toString())
     params.set('person', id)
     params.set('section', next)
     router.replace(`/persons?${params.toString()}`)
-  }, [sp, id, router])
+  }, [inWorkspace, sp, id, router])
 
   // ── Core (header) load — seq-guarded; `?person=` can switch in place ───────
   const seqRef = useRef(0)
@@ -363,7 +373,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
 
   const menuItems: ActionItem[] = [
     { label: watching ? 'Unfollow' : 'Follow for updates', icon: <StarIcon size={14} className={watching ? 'text-amber-300' : undefined} />, onClick: () => { void toggleWatch('person', id, p?.name) } },
-    { label: 'Open in network graph', icon: <NetworkIcon size={14} />, onClick: () => router.push(`/network?focus=p:${encodeURIComponent(id)}`) },
+    { label: 'Open in network graph', icon: <NetworkIcon size={14} />, onClick: () => nav.openHref(`/network?focus=p:${encodeURIComponent(id)}`) },
     ...(mayEdit ? [
       { label: 'Manage BOLO…', icon: <AlertIcon size={14} />, onClick: () => setBoloOpen(true), separatorBefore: true },
       { label: 'Link associate…', icon: <PersonIcon size={14} />, onClick: () => { setSection('relationships'); setLinkAssociate(true) } },
@@ -545,7 +555,13 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
           onClose={() => setDupOpen(false)}
           onMerged={(survivorId) => {
             setDupOpen(false)
-            router.replace(`/persons?person=${encodeURIComponent(survivorId)}&section=overview`)
+            if (nav.inWorkspace) {
+              // Focus the survivor's record tab, then close this (merged) one.
+              nav.openRecord('persons', survivorId)
+              onBack()
+            } else {
+              router.replace(`/persons?person=${encodeURIComponent(survivorId)}&section=overview`)
+            }
           }}
         />
       )}

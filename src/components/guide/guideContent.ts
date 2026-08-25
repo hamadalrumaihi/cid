@@ -70,15 +70,27 @@ Five categories (a bottom bar on your phone). Click a category to jump to its fi
 |---|---|
 | **Command** | My Desk, Action Center, Dashboard, Analytics, Announcements, Heatmap, Roster & Commendations |
 | **Cases** | Case Files, Operations, Legal Requests, Attachments, RICO |
-| **Intelligence** | Registries: Persons, BOLO Board, Gangs, Places, Vehicles, Accounts, Indicators, Intelligence · Analysis: Network, Narcotics, Ballistics, M.O. Detector · Archive: Media Vault, Records |
+| **Investigative Tools** | One workspace holding all fourteen intelligence tools — see below |
 | **Reference** | Penal Code, SOPs & Library, User Guide |
 | **Oversight** | Calendar, Shift Reports, Audit Log |
 
 The Developer Handbook (Reference) and the Audit Log's full history are owner-level surfaces — most members will not see them.
 
+### The Investigative Tools workspace
+
+All fourteen intelligence tools live behind the single **Investigative Tools** item. It opens on a **directory** of the tools in three groups — Intelligence Records (Persons, Gangs, Places, Vehicles, Accounts, Indicators), Operational Tools (BOLO Board, Intelligence, Media Vault, Records) and Analysis (Network, Narcotics, Ballistics, M.O. Detector). Each card names the tool, says what it holds, and shows a live count of what your access can see.
+
+- **Open several at once.** Click a tool and it opens as a **tab** in a strip under the header. Open as many as you need — Persons beside Vehicles beside the BOLO Board — and click between them instantly. Persons and Vehicles also open **individual records as their own tabs**, so two profiles can sit side by side.
+- **Nothing resets when you switch.** Every open tab stays loaded — your search, filters and scroll position are exactly where you left them when you come back. The **Directory** chip returns you to the tool list without closing anything.
+- **Close what you're done with.** Every tab has an ✕; right-click a tab for **Close others** / **Close all**; drag tabs to reorder them. A tab with unsaved work asks before it closes.
+- **On your phone** the strip collapses to the current tool plus an **Open tabs** menu — switch between or close your tabs from there.
+- **Old links still work.** Bookmarks, notifications and cross-links to the old addresses (a saved \`/persons\` link, a person or vehicle deep link) open the right tool — or the right record — inside the workspace automatically.
+
+Your open tabs are remembered for your sign-in session and restored when you return to Investigative Tools; a record your access can no longer see simply does not reopen.
+
 ### The SIB sidebar
 
-SIB is a **separate workspace and authority**, not a CID category. An SIB account's sidebar leads with the **Unit** category (the SIB Workspace) and then carries CID's entire navigation, tab for tab — the same screens, scoped to what SIB standing may see and touch. Shared registries (Persons, Vehicles, Gangs, Places, Accounts, Indicators, Media…) are **one master dataset for the whole platform**; only the department context and labels differ.
+SIB is a **separate workspace and authority**, not a CID category. An SIB account's sidebar leads with the **Unit** category (the SIB Workspace) and then carries CID's entire navigation, tab for tab — the same screens, including the same Investigative Tools workspace, scoped to what SIB standing may see and touch. Shared registries (Persons, Vehicles, Gangs, Places, Accounts, Indicators, Media…) are **one master dataset for the whole platform**; only the department context and labels differ.
 
 ### The header, everywhere
 
@@ -203,7 +215,7 @@ Closing an investigation records a closure reason — arrest/prosecution, referr
 
 ## F. Intelligence intake
 
-All incoming information — from patrol, detectives, surveillance or outside agencies — lands in one place: **Intelligence** (Intelligence → Intelligence). A submission is information: it never becomes a case, a registry record or a verified fact by itself. A reviewer decides what it means.
+All incoming information — from patrol, detectives, surveillance or outside agencies — lands in one place: **Intelligence** (Investigative Tools → Intelligence). A submission is information: it never becomes a case, a registry record or a verified fact by itself. A reviewer decides what it means.
 
 ### Submitting
 
@@ -267,7 +279,7 @@ A sealed request is visible only to the people directly involved. It cannot be c
 
 ## H. Records and intelligence
 
-The registries are one shared, deconflicted dataset:
+The registries — every tool in the **Investigative Tools** workspace (section C) — are one shared, deconflicted dataset:
 
 - **Persons** — suspects and persons of interest. A profile carries identity, warrants, vehicles, properties, linked cases, media and notes, with a dossier export.
 - **BOLO Board** — at-large subjects, fed by approved arrest warrants and BOLO flags.

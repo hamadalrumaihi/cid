@@ -21,6 +21,11 @@
  *  rls_test_cleanup() predates the table, so the one suggestion this suite
  *  files stays tombstoned server-side (its narcotic_id nulls out when the
  *  parent fixture is deleted) — exactly the v133 contract.
+ *
+ *  Routing: the Narcotics view now lives inside the Investigative Tools
+ *  workspace (/tools?tool=narcotics). Dossiers are workspace RECORD TABS —
+ *  canonical deep link `&record=<id>` (the legacy /narcotics?drug=<id> route
+ *  redirects to it); `?q=`/`?section=` params are carried over unchanged.
  *  Self-skips without RLS_TEST_PASSWORD_LEAD / _LSB / _OWNER. */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -194,7 +199,7 @@ test.describe(run ? 'narcotics intelligence workspace' : 'narcotics intelligence
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     await signIn(page)
-    await page.goto('/narcotics')
+    await page.goto('/tools?tool=narcotics')
 
     await expect(page.getByRole('heading', { name: 'Narcotics Intelligence', level: 1 })).toBeVisible({ timeout: 30_000 })
     expect(await page.getByRole('heading', { level: 1 }).count()).toBe(1)
@@ -217,7 +222,7 @@ test.describe(run ? 'narcotics intelligence workspace' : 'narcotics intelligence
     test.setTimeout(120_000)
     await signIn(page)
     // ?q= is honored on first paint → the debounced search RPC runs.
-    await page.goto('/narcotics?q=Fentanyl')
+    await page.goto('/tools?tool=narcotics&q=Fentanyl')
     await expect(page.getByText(/Fentanyl/i).first()).toBeVisible({ timeout: 30_000 })
     // The unrelated fixture drops out of the results.
     await expect(page.getByText(N_PRIMARY, { exact: true })).toHaveCount(0, { timeout: 20_000 })
@@ -226,7 +231,7 @@ test.describe(run ? 'narcotics intelligence workspace' : 'narcotics intelligence
   test('search by alias surfaces the parent card', async ({ page }) => {
     test.setTimeout(120_000)
     await signIn(page)
-    await page.goto('/narcotics')
+    await page.goto('/tools?tool=narcotics')
     await expect(page.getByText(N_PRIMARY, { exact: true })).toBeVisible({ timeout: 30_000 })
 
     await page.getByLabel('Search narcotics').fill(ALIAS_TOKEN)
@@ -242,7 +247,7 @@ test.describe(run ? 'narcotics intelligence workspace' : 'narcotics intelligence
   test('category pill filter shows opioids, hides the stimulant fixture', async ({ page }) => {
     test.setTimeout(120_000)
     await signIn(page)
-    await page.goto('/narcotics')
+    await page.goto('/tools?tool=narcotics')
     await expect(page.getByText(N_PRIMARY, { exact: true })).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText(N_SECONDARY, { exact: true })).toBeVisible()
 
@@ -262,10 +267,10 @@ test.describe(run ? 'narcotics intelligence workspace' : 'narcotics intelligence
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     await signIn(page)
-    await page.goto('/narcotics')
+    await page.goto('/tools?tool=narcotics')
     await page.getByText(N_PRIMARY, { exact: true }).click()
 
-    await expect(page).toHaveURL(new RegExp(`[?&]drug=${primaryId}`))
+    await expect(page).toHaveURL(new RegExp(`[?&]record=${primaryId}`))
     await expect(page.getByRole('heading', { name: N_PRIMARY, level: 1 })).toBeVisible({ timeout: 30_000 })
   })
 
@@ -273,7 +278,7 @@ test.describe(run ? 'narcotics intelligence workspace' : 'narcotics intelligence
     test.setTimeout(360_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     await signIn(page)
-    await page.goto(`/narcotics?drug=${primaryId}`)
+    await page.goto(`/tools?tool=narcotics&record=${primaryId}`)
     await expect(page.getByRole('heading', { name: N_PRIMARY, level: 1 })).toBeVisible({ timeout: 30_000 })
     const tabs = sectionTabs(page)
     await expect(tabs).toBeVisible()
@@ -288,7 +293,7 @@ test.describe(run ? 'narcotics intelligence workspace' : 'narcotics intelligence
 
     // Pass 2 — direct deep links restore the tab state and the panel.
     for (const s of SECTIONS) {
-      await page.goto(`/narcotics?drug=${primaryId}&section=${s.id}`)
+      await page.goto(`/tools?tool=narcotics&record=${primaryId}&section=${s.id}`)
       await expect(page).toHaveURL(new RegExp(`[?&]section=${s.id}`))
       await expect(sectionTabs(page).getByRole('tab', { name: new RegExp(`^${esc(s.tab)}`) }))
         .toHaveAttribute('aria-selected', 'true', { timeout: 30_000 })
@@ -300,13 +305,13 @@ test.describe(run ? 'narcotics intelligence workspace' : 'narcotics intelligence
     test.setTimeout(120_000)
     await signIn(page)
     // Identification: the appearance-alone caveat renders.
-    await page.goto(`/narcotics?drug=${primaryId}&section=identification`)
+    await page.goto(`/tools?tool=narcotics&record=${primaryId}&section=identification`)
     await expect(page.getByText('Visual appearance alone does not confirm substance identity.'))
       .toBeVisible({ timeout: 30_000 })
 
     // Intelligence: only broad category + generalized stage names + the explicit
     // "no ingredients/ratios/temps/steps" caveat — never a recipe.
-    await page.goto(`/narcotics?drug=${primaryId}&section=intelligence`)
+    await page.goto(`/tools?tool=narcotics&record=${primaryId}&section=intelligence`)
     await expect(page.getByRole('heading', { name: 'Category & production stages' })).toBeVisible({ timeout: 30_000 })
     for (const stage of ['Cultivation', 'Distribution']) {
       await expect(page.getByText(stage, { exact: true }).first()).toBeVisible()
@@ -317,20 +322,21 @@ test.describe(run ? 'narcotics intelligence workspace' : 'narcotics intelligence
   test('Places section: the linked place deep-links out to the place record', async ({ page }) => {
     test.setTimeout(120_000)
     await signIn(page)
-    await page.goto(`/narcotics?drug=${primaryId}&section=places`)
+    await page.goto(`/tools?tool=narcotics&record=${primaryId}&section=places`)
     await expect(page.getByRole('heading', { name: 'Places', exact: true })).toBeVisible({ timeout: 30_000 })
 
     const link = page.getByRole('button', { name: new RegExp(esc(PLACE_NAME)) })
     await expect(link).toBeVisible({ timeout: 30_000 })
     await link.click()
-    // EntityLink(place) navigates via ?q= on the places tab.
-    await expect(page).toHaveURL(/\/places\?q=/)
+    // EntityLink(place) deep-links to the places tool (now inside the
+    // Investigative Tools workspace) via its ?q= param.
+    await expect(page).toHaveURL(/tool=places/)
   })
 
   test('submit a correction suggestion via the dossier form (submit_narcotic_suggestion)', async ({ page }) => {
     test.setTimeout(120_000)
     await signIn(page)
-    await page.goto(`/narcotics?drug=${primaryId}`)
+    await page.goto(`/tools?tool=narcotics&record=${primaryId}`)
     await expect(page.getByRole('heading', { name: N_PRIMARY, level: 1 })).toBeVisible({ timeout: 30_000 })
 
     await page.getByRole('button', { name: 'Suggest correction', exact: true }).click()
@@ -381,7 +387,7 @@ test.describe(run ? 'narcotics intelligence workspace' : 'narcotics intelligence
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     await signIn(page)
-    await page.goto(`/narcotics?drug=${primaryId}&section=overview`)
+    await page.goto(`/tools?tool=narcotics&record=${primaryId}&section=overview`)
     const tabs = sectionTabs(page)
     await expect(tabs).toBeVisible({ timeout: 30_000 })
 
@@ -407,11 +413,11 @@ test.describe(run ? 'narcotics intelligence workspace' : 'narcotics intelligence
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 390, height: 844 })
     await signIn(page)
-    await page.goto('/narcotics')
+    await page.goto('/tools?tool=narcotics')
     await expect(page.getByText(N_PRIMARY, { exact: true })).toBeVisible({ timeout: 30_000 })
     expect(await pageOverflow(page), 'registry must not scroll horizontally at 390px').toBeLessThanOrEqual(1)
 
-    await page.goto(`/narcotics?drug=${primaryId}`)
+    await page.goto(`/tools?tool=narcotics&record=${primaryId}`)
     await expect(page.getByRole('heading', { name: N_PRIMARY, level: 1 })).toBeVisible({ timeout: 30_000 })
     const tabs = sectionTabs(page)
     await tabs.getByRole('tab', { name: /^Intelligence/ }).click()
@@ -429,7 +435,7 @@ test.describe(run ? 'narcotics intelligence workspace' : 'narcotics intelligence
     const surfaces: Array<{ name: string; url: string; ready: () => Promise<void> }> = [
       {
         name: 'registry',
-        url: '/narcotics',
+        url: '/tools?tool=narcotics',
         ready: async () => {
           await expect(page.getByRole('heading', { level: 1, name: 'Narcotics Intelligence' }))
             .toBeVisible({ timeout: 30_000 })
@@ -437,7 +443,7 @@ test.describe(run ? 'narcotics intelligence workspace' : 'narcotics intelligence
       },
       {
         name: 'dossier',
-        url: `/narcotics?drug=${shotDrugId}`,
+        url: `/tools?tool=narcotics&record=${shotDrugId}`,
         ready: async () => {
           await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible({ timeout: 30_000 })
         },
