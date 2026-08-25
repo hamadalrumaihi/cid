@@ -45,6 +45,12 @@ viewer's own policies already allow.
   header is a compact two-line jacket; a phone-width section switcher
   replaces the overflowing strip; the "since your last visit" recap is no
   longer consumed by tab switches (seen-stamp written on case exit).
+- Advisory case-health chips (`src/lib/caseHealth.ts`, pure/clock-injected;
+  rendered by `cases/CaseHealthRow.tsx`): no lead / no summary / quiet 14d+
+  / overdue tasks / draft reports / returned legal / undescribed evidence —
+  each chip explains itself and deep-links its section; nothing blocks any
+  workflow. Command gets a "Needs attention" case filter and per-row
+  attention counts built on the same flags.
 - Bulk actions on the case list: set status (open/active/cold), assign lead
   (command-only), archive/restore — preview confirms, read-only-row skips,
   chunked progress. Closing stays per-case through sign-off; no bulk

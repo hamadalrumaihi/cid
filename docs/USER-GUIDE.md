@@ -136,6 +136,8 @@ A case carries four separate dials — don't conflate them:
 
 The case header is two compact lines — identity, state and **one recommended next action** on the first; stage, unit, lead, last update, sign-off and overdue markers on the second. Blockers show in the metric strip below, legal-hold and archived states as banners. Rarely-used and administrative actions live in the header's **Actions** menu.
 
+Under the header, a **Health** row lists advisory chips when the case looks neglected — no lead detective, no summary, quiet 14+ days, overdue tasks, draft reports, returned legal work, undescribed evidence. Each chip's tooltip says why it raised and how to clear it, and clicking one jumps to the relevant section. Health chips are **advisory only** — they never block sign-off or closure — and a healthy case shows no row at all.
+
 ### Work the tabs
 
 The case detail groups its tabs into three areas. Each section pill carries a **live count** of what's inside (reports, media, tasks, charges, legal, intel…) and an amber **attention dot** when something in it needs someone — a report awaiting sign-off, an actionable legal request, an overdue task, a draft report. **Switching sections never loses your place**: every section you've visited keeps its filters, drafts, scroll position and half-finished forms until you leave the case, and the Brief's "since your last visit" recap is only reset when you actually leave the case — not by hopping between tabs. On a phone, a compact section switcher replaces the tab strip.
@@ -167,6 +169,7 @@ Closure runs through **Sign-off** (section I). Cases are never deleted from the 
 ### Manage the list — saved views and bulk actions
 
 - **Saved views.** On Case Files (and the Persons, Legal Requests and BOLO lists), set up your filters, scope and search, then **Save** them as a named view. Views are saved to your account — they follow you across devices — and one view per list can be marked **default**, applying automatically when you open the list clean. Rename or delete views from the same menu. Case views you had saved on this device before are migrated to your account automatically the first time you open Case Files.
+- **Needs attention** (command). The case-age filter includes a **Needs attention** option for command: open cases carrying at least one health flag the list can see (no lead, no summary, quiet 14+ days, follow-up date passed). List rows carry a small attention count whose tooltip names the flags.
 - **Bulk actions.** Select several cases (checkboxes; shift-click for a range) and **set status** (open / active / cold), **assign a lead** (command only), or **archive / restore**. Every bulk action shows a preview confirm first, skips rows you can't edit (the result says how many), and reports progress as it works through the selection. Closing a case still runs through Sign-off, one case at a time — and there is **no bulk delete**, ever.
 
 ---

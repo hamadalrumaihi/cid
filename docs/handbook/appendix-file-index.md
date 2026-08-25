@@ -30,6 +30,7 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | `db.ts` | ⚠ THE data layer: list/insert/update/remove/rpc/deleteWithUndo/withRetry |
 | `docx.ts` | Dependency-free OOXML writer (byte-fragile ZIP) |
 | `deadlines.ts` | Shared deadline engine (v1.14) — feeds `ui/DeadlineChip`; `justice.ts` delegates to it |
+| `caseHealth.ts` | Pure, clock-injected advisory health flags (hygiene + due/returned signals) — never fetches, skips flags whose inputs weren't passed; renders via `cases/CaseHealthRow` + the CasesView attention marker/"Needs attention" filter |
 | `drafts.ts` | localStorage draft primitive (`cid-draft:` keys) — now mostly `userDrafts`' local mirror; the legal wizard's stash keeps the legacy shared keys |
 | `userDrafts.ts` | DB-backed never-lose-work drafts (`user_drafts`, owner-only RLS, cross-device): debounced upsert, per-user local mirror, 60KB guard, offline degradation; feeds `ui/SaveState` |
 | `entityPreview.ts` | Lite RLS-scoped record projections + linked-record counts for `ui/RecordPeek` |
