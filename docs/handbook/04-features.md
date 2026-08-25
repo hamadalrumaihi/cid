@@ -23,7 +23,11 @@ Owner-only.
    tables. Visited tabs stay mounted (`display:none` keep-alive) with
    per-tab scroll restore, section pills carry counts + attention markers,
    and the `caseSeen` recap stamp is written on case *exit*, not on tab
-   switches. Custody transfers append to the immutable `custody_chain`.
+   switches. An advisory Health row (`lib/caseHealth` — pure,
+   clock-injected, never fetches; flags skip when their inputs weren't
+   passed) renders clickable hygiene chips under the header; the same
+   list-safe flags power the command-only "Needs attention" filter.
+   Custody transfers append to the immutable `custody_chain`.
 3. **Move it** — drag on the board → `update('cases', {status})`; triggers
    stamp `closed_at`/`updated_at`.
 4. **Stale escalation (automatic)** — once per session, `CasesView` finds

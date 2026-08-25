@@ -532,6 +532,7 @@ leaf nodes, safe to study, intricate to edit.`,
 | \`db.ts\` | ⚠ THE data layer: list/insert/update/remove/rpc/deleteWithUndo/withRetry |
 | \`docx.ts\` | Dependency-free OOXML writer (byte-fragile ZIP) |
 | \`deadlines.ts\` | Shared deadline engine (v1.14) — feeds \`ui/DeadlineChip\`; \`justice.ts\` delegates to it |
+| \`caseHealth.ts\` | Pure, clock-injected advisory health flags (hygiene + due/returned signals) — never fetches, skips flags whose inputs weren't passed; renders via \`cases/CaseHealthRow\` + the CasesView attention marker/"Needs attention" filter |
 | \`drafts.ts\` | localStorage draft primitive (\`cid-draft:\` keys) — now mostly \`userDrafts\`' local mirror; the legal wizard's stash keeps the legacy shared keys |
 | \`userDrafts.ts\` | DB-backed never-lose-work drafts (\`user_drafts\`, owner-only RLS, cross-device): debounced upsert, per-user local mirror, 60KB guard, offline degradation; feeds \`ui/SaveState\` |
 | \`entityPreview.ts\` | Lite RLS-scoped record projections + linked-record counts for \`ui/RecordPeek\` |
@@ -649,7 +650,11 @@ Owner-only.
    tables. Visited tabs stay mounted (\`display:none\` keep-alive) with
    per-tab scroll restore, section pills carry counts + attention markers,
    and the \`caseSeen\` recap stamp is written on case *exit*, not on tab
-   switches. Custody transfers append to the immutable \`custody_chain\`.
+   switches. An advisory Health row (\`lib/caseHealth\` — pure,
+   clock-injected, never fetches; flags skip when their inputs weren't
+   passed) renders clickable hygiene chips under the header; the same
+   list-safe flags power the command-only "Needs attention" filter.
+   Custody transfers append to the immutable \`custody_chain\`.
 3. **Move it** — drag on the board → \`update('cases', {status})\`; triggers
    stamp \`closed_at\`/\`updated_at\`.
 4. **Stale escalation (automatic)** — once per session, \`CasesView\` finds
