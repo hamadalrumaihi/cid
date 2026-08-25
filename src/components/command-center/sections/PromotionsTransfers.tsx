@@ -111,7 +111,7 @@ export function PromotionsTransfers() {
   const describe = (e: RoleEvent) => {
     const parts: string[] = []
     if (e.old_role !== e.new_role) parts.push(`${ROLE_LABEL[e.old_role ?? ''] || e.old_role || '—'} → ${ROLE_LABEL[e.new_role ?? ''] || e.new_role || '—'}`)
-    if (e.old_division !== e.new_division) parts.push(`${e.old_division || '—'} → ${e.new_division || '—'}`)
+    if (e.old_division !== e.new_division) parts.push(`${bureauShort(e.old_division)} → ${bureauShort(e.new_division)}`)
     if (e.old_active !== e.new_active) parts.push(e.new_active ? 'activated' : 'deactivated')
     return parts.join(' · ') || 'no change'
   }

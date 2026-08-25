@@ -8,6 +8,7 @@
  *  the same FORM_SCHEMAS/fields ReportView renders (and the packet exporters
  *  flatten) and never mutates the report. */
 import { useEffect, useState } from 'react'
+import { bureauLabel } from '@/lib/roles'
 import { createPortal } from 'react-dom'
 import type { FormSchema, FormValues } from '@/lib/forms'
 import { FORM_SCHEMAS, reportTitle, warrantStatusOf } from '@/lib/forms'
@@ -119,7 +120,7 @@ function WarrantSheet({ r, c, schema, preparedAt }: { r: ReportRow; c: CaseRow; 
       <table className="wp-kv wp-meta"><tbody>
         <tr><td>Case number</td><td>{c.case_number}</td></tr>
         <tr><td>Case title</td><td>{c.title || Empty}</td></tr>
-        <tr><td>Bureau</td><td>{c.bureau}</td></tr>
+        <tr><td>Bureau</td><td>{bureauLabel(c.bureau)}</td></tr>
         <tr><td>Document</td><td>{reportTitle(r)} · {r.finalized ? 'finalized' : 'draft'}</td></tr>
         <tr><td>Warrant status</td><td style={{ textTransform: 'uppercase' }}>{status}</td></tr>
         <tr><td>Filed</td><td>{fmtDateTime(r.created_at)}</td></tr>

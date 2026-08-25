@@ -6,6 +6,7 @@
  *  access decision, mark-read). Everything else navigates to the owning
  *  surface via the deep link. */
 import Link from 'next/link'
+import { bureauShort } from '@/lib/roles'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
@@ -90,7 +91,7 @@ export function ActionItemRow({ item, now, muted, onOpen, onAction }: {
             {item.caseNumber && (
               <span className="rounded-full bg-white/5 px-2 py-0.5 font-mono text-[10px] text-slate-300">{item.caseNumber}</span>
             )}
-            {item.bureau && <Badge>{item.bureau}</Badge>}
+            {item.bureau && <Badge>{bureauShort(item.bureau)}</Badge>}
             {item.dueAt && <DeadlineChip at={item.dueAt} now={now} />}
             {(item.priority === 'critical' || item.priority === 'high') && (
               <Badge tint={priorityTint(item.priority)}>{item.priority === 'critical' ? 'Critical' : 'High'}</Badge>

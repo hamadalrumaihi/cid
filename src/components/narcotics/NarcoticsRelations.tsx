@@ -6,6 +6,7 @@
  *  caller can't see resolve to restricted stubs, never leaks). Seizure amounts
  *  are rendered VERBATIM — never normalized. */
 import { Badge } from '@/components/ui/Badge'
+import { bureauShort } from '@/lib/roles'
 import { Card } from '@/components/ui/Card'
 import { EntityLink } from '@/components/ui/EntityLink'
 import { EmptyState } from '@/components/ui/Notice'
@@ -47,7 +48,7 @@ export function CasesSection({ data }: { data: CasesData }) {
                   <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
                     <Badge tone={rel === 'linked' ? 'good' : rel === 'seizure' ? 'accent' : 'neutral'}>{CASE_RELATION_LABEL[rel]}</Badge>
                     {c?.status && <Badge tint={statusTint(c.status)}>{humanize(c.status)}</Badge>}
-                    {c?.bureau && <span>{c.bureau}</span>}
+                    {c?.bureau && <span>{bureauShort(c.bureau)}</span>}
                     {c?.updated_at && <span>· Updated {fmtDate(c.updated_at)}</span>}
                   </p>
                 </div>

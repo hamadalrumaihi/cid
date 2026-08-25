@@ -54,7 +54,7 @@ import {
 import { SiuPersonDossierModal } from './SiuPersonDossier'
 import { SiuCommandSection } from './SiuCommand'
 import { SiuOversightSection, SiuTradecraftSection } from './SiuTradecraft'
-import { roleLabel } from '@/lib/roles'
+import {roleLabel, bureauShort} from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -1352,7 +1352,7 @@ function AgentsSection() {
                         </td>
                         {/* History, never authority — no SIB rule reads it. */}
                         <td className="px-2 py-2 text-slate-400">
-                          {roleLabel(r.former_cid_role)}{r.former_cid_bureau ? ` · ${r.former_cid_bureau}` : ''}
+                          {roleLabel(r.former_cid_role)}{r.former_cid_bureau ? ` · ${bureauShort(r.former_cid_bureau)}` : ''}
                         </td>
                         <td className="px-2 py-2 text-slate-400">{fmtWhen(r.last_activity)}</td>
                         <td className="px-2 py-2 text-right">
@@ -1463,7 +1463,7 @@ function InviteAgentModal({ onClose, onDone }: { onClose: () => void; onDone: ()
               }`}
             >
               <span className="flex-1 truncate text-white">{c.display_name || 'Member'}</span>
-              <span className="text-slate-400">{roleLabel(c.cid_role)}{c.cid_bureau ? ` · ${c.cid_bureau}` : ''}</span>
+              <span className="text-slate-400">{roleLabel(c.cid_role)}{c.cid_bureau ? ` · ${bureauShort(c.cid_bureau)}` : ''}</span>
             </button>
           ))}
         </div>
