@@ -133,7 +133,7 @@ export function CaseFilesView() {
           list="cf-case-list"
           value={caseNo}
           onChange={(e) => setCaseNo(e.target.value)}
-          placeholder="Case number (e.g. SAB-9000026)"
+          placeholder="Case number (e.g. MCB-4000026)"
           aria-label="Case number"
           className="w-72 rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
         />
