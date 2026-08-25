@@ -9,6 +9,10 @@ entry, the slug in a category's `tabs`, a `TAB_LABEL`; (3) the switch in
 `src/app/(app)/[tab]/page.tsx`; (4) `docs/USER-GUIDE.md` + regenerate
 `guideContent.ts`. Miss (2) or (3) and the tab redirects or renders a
 placeholder. Full recipe: [Ch. 14](14-development-workflow.md).
+An *intelligence tool* is the one exception: keep its slug in
+`PAGE_META`/`TAB_LABEL`, then register it in `src/lib/toolsModel.ts` and
+`src/components/tools/toolRegistry.tsx` instead of the `[tab]` switch —
+the route only redirects tool slugs into the `/tools` workspace.
 
 **How do permissions work?**
 Three layers: `useAuth()`'s booleans hide buttons (cosmetic), RLS policies

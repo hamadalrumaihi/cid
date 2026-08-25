@@ -3,6 +3,9 @@
  *  the registry → dossier flow: search/filter chrome, semantic cards, the
  *  sticky section nav, the roster hierarchy/table toggle, and deep-link section
  *  state. Screenshots land in the scratchpad for the implementation report.
+ *  The Gangs view now lives inside the Investigative Tools workspace
+ *  (/tools?tool=gangs); its own `?gang=`/`?section=` deep-link params are
+ *  unchanged (gangs has no standalone record tab — the list view handles them).
  *  Self-skips when the fixture password is absent. */
 import { test, expect, type Page } from '@playwright/test'
 import fs from 'node:fs'
@@ -27,7 +30,7 @@ test.describe(run ? 'gangs redesign' : 'gangs redesign (skipped — no fixture p
 
   test('registry renders across breakpoints', async ({ page }) => {
     await signIn(page)
-    await page.goto('/gangs')
+    await page.goto('/tools?tool=gangs')
     await expect(page.getByRole('heading', { name: 'Gangs & Turf', level: 1 })).toBeVisible()
     // Search + at least one filter control + at least one gang card.
     await expect(page.getByPlaceholder(/Search gang, alias/i)).toBeVisible()
@@ -41,7 +44,7 @@ test.describe(run ? 'gangs redesign' : 'gangs redesign (skipped — no fixture p
 
   test('dossier: header, section nav, roster toggle, deep-link', async ({ page }) => {
     await signIn(page)
-    await page.goto('/gangs')
+    await page.goto('/tools?tool=gangs')
     await page.getByRole('article').first().getByRole('button', { name: /Open dossier/i }).click()
 
     // Exactly one h1 on the page (the gang name); sticky section tablist.
@@ -73,12 +76,12 @@ test.describe(run ? 'gangs redesign' : 'gangs redesign (skipped — no fixture p
   test('deep-link straight to a section restores tab state', async ({ page }) => {
     await signIn(page)
     // Grab a gang id from the registry, then load its territory section directly.
-    await page.goto('/gangs')
+    await page.goto('/tools?tool=gangs')
     await page.getByRole('article').first().getByRole('button', { name: /Open dossier/i }).click()
     await page.getByRole('tablist', { name: 'Gang sections' }).getByRole('tab', { name: /Territory/ }).click()
     await expect(page).toHaveURL(/section=territory/)
     const url = page.url()
-    await page.goto('/gangs') // leave
+    await page.goto('/tools?tool=gangs') // leave
     await page.goto(url) // re-enter via the deep link
     await expect(page.getByRole('tablist', { name: 'Gang sections' }).getByRole('tab', { name: /Territory/ })).toHaveAttribute('aria-selected', 'true')
   })

@@ -9,9 +9,10 @@ widest:
 |---|---|---|
 | Component state (`useState`) | Screen-local rows, filters, modal state, form fields (modals mount fresh per open) | every view |
 | Derived state (`useMemo`) | Filtering, grouping, chart buckets, graph building | big views |
-| React Context | Exactly one: `AuthProvider` (session/profile/capabilities) | `lib/auth.tsx` |
+| React Context | Two: `AuthProvider` (session/profile/capabilities) and `ToolsWorkspaceContext` (the Investigative Tools workspace — open tabs, active key, open/close/dirty ops; `useToolsWorkspace()` returns null outside `/tools` so hosted views no-op) | `lib/auth.tsx`, `components/tools/ToolsWorkspaceContext.tsx` |
 | zustand stores | Toasts, dialogs, realtime versions, profiles cache, operations cache, watchlist — singletons that non-React code must reach | `lib/*`, `ui/dialog` |
 | localStorage (`Store`) | Device preferences + legacy-app continuity, ONE JSON blob (`cid-portal-v3`) | `lib/store.ts` |
+| sessionStorage | Investigative Tools open tabs, per signed-in user, **ids only** (`cid-tools-workspace:<uid>`) — titles are re-fetched RLS-scoped on restore, invisible rows close silently | `components/tools/ToolsView.tsx` |
 | The database | ALL shared data — every screen refetches on mount and on realtime bumps | Supabase |
 
 ## The refresh idiom (memorize — it's in ~30 files)

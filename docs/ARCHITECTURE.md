@@ -72,6 +72,20 @@ The whole app is one dynamic route:
 - `nav.ts` is a three-way contract (PAGE_META keys = URL slugs = TAB_LABEL
   keys) plus the `[tab]` switch — see
   [Handbook Ch. 3, Block 2](handbook/03-architecture.md).
+- **Investigative Tools**: the former Intelligence category's 14 tool slugs
+  (`/persons`, `/bolo`, … — the list is `TOOL_TABS` in
+  [`src/lib/toolsModel.ts`](../src/lib/toolsModel.ts)) stay prerendered but
+  render `ToolTabRedirect`, a client shim that forwards into the workspace at
+  `/tools?tool=…&record=…` with every other query param preserved — old deep
+  links, bookmarks and notification links keep resolving. `/tools` renders
+  `ToolsView` ([`src/components/tools/`](../src/components/tools)): a grouped
+  tool directory plus a keep-alive multi-tab strip — open tabs stay mounted
+  (inactive ones `display:none`), the active tab mirrors into the query
+  string, and open tabs persist per user in sessionStorage as **ids only**,
+  restored with titles re-fetched through the RLS-scoped client (a row the
+  viewer cannot see closes its tab silently). The tool views are code-split
+  in `tools/toolRegistry.tsx` rather than imported by the `[tab]` page;
+  permissions and RLS are untouched — this layer is navigation only.
 
 There are **no custom API routes** — no `route.ts` files exist under
 `src/app`. The app's "API" is Supabase's auto-generated REST layer plus
@@ -82,6 +96,7 @@ database RPCs; see [Handbook Ch. 7](handbook/07-api.md).
 | Location | Contents |
 | --- | --- |
 | `src/components/<feature>/` | One folder per domain (cases, legal, justice, operations, owner, devdocs, command-center, …). Feature views share a uniform shape: fetch on mount + realtime version bump → `refresh()`; permission-gated buttons; fresh-mounted modals; toasts + Undo for deletes. |
+| `src/components/tools/` | The Investigative Tools workspace (`/tools`): tool directory, keep-alive tab strip, the legacy-route redirect shim, and the lazy per-tool component registry. |
 | `src/components/ui/` | Shared primitives (Modal, Toaster, dialog host, headers, …) everything is assembled from. |
 | `src/components/shell/` | The constant chrome (`AppShell`, sidebar, nav badges). |
 | `src/components/auth/` | The `Gate` screens (login, pending approval, retry, setup). |

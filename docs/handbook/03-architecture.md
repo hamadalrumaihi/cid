@@ -16,14 +16,27 @@ not hypotheticals.
   realtime; forgetting `vercel.json` and `ci.yml` duplicate the env values.
 
 ## Block 2 — Routing & App Shell
-`src/app/*`, `src/components/shell/*`, `src/lib/nav.ts`
+`src/app/*`, `src/components/shell/*`, `src/lib/nav.ts`,
+`src/lib/toolsModel.ts`, `src/components/tools/*`
 - **Responsibility**: URL ↔ screen; the constant chrome; nav metadata.
 - **Data flow**: URL → `[tab]/page.tsx` switch → feature view inside
   `AppShell`; `useNavBadges` computes the Command-button badges.
 - **Risk: MEDIUM-HIGH.** `nav.ts` is a three-way contract (PAGE_META keys
   = URL slugs = TAB_LABEL keys) plus the `[tab]` switch.
+- **Investigative Tools**: the former Intelligence category's 14 tabs are
+  one nav item (`/tools`) in both CID and SIB sidebars. `toolsModel.ts` is
+  the data-only model (`TOOL_TABS`, `TOOL_GROUPS`, record deep-link params,
+  `RECORD_TAB_TOOLS`, RLS title sources); `components/tools/` renders it —
+  directory + keep-alive tab strip (`ToolsView`: open tabs stay mounted,
+  inactive `display:none`), the lazy per-tool registry (`toolRegistry`),
+  and the `ToolTabRedirect` shim the legacy `/{tool}` routes render (query
+  params carried over, so old deep links survive). Open tabs persist in
+  sessionStorage per user as **ids only** and restore with titles
+  re-fetched through the RLS-scoped client (invisible rows close silently).
 - **Common mistakes**: adding a screen to PAGE_META but not the switch
-  (renders a placeholder) or not a category (unreachable from the sidebar).
+  (renders a placeholder) or not a category (unreachable from the sidebar);
+  importing a tool view from the `[tab]` page instead of `toolRegistry`
+  (double-ships the chunk and bypasses the workspace).
 
 ## Block 3 — Auth & Identity
 `src/lib/auth.tsx`, `src/lib/roles.ts`, `src/lib/profiles.ts`,

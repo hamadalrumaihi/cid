@@ -7,8 +7,13 @@
  *  flow (LIVE person_merge RPC on disposable fixtures), mobile layout, and
  *  the SectionTabs roving-tabindex keyboard contract.
  *
+ *  Routing: the Persons view now lives inside the Investigative Tools
+ *  workspace — the canonical URL is /tools?tool=persons (record deep links:
+ *  &record=<id>); the legacy /persons?person=<id> route redirects there
+ *  (ToolTabRedirect), which one spec below pins explicitly.
+ *
  *  Seeding: direct PostgREST inserts through the granted lead context (the
- *  v114.spec pattern) — fast, deterministic ids for `?person=` deep links.
+ *  v114.spec pattern) — fast, deterministic ids for record deep links.
  *  Teardown: rls_test_cleanup() does NOT sweep registry rows, so every person
  *  and vehicle this suite creates is deleted explicitly in afterAll (link
  *  tables first, then the persons — merged tombstones get merged_into nulled
@@ -157,7 +162,7 @@ test.describe(run ? 'persons workspace redesign' : 'persons workspace redesign (
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     await signIn(page)
-    await page.goto('/persons')
+    await page.goto('/tools?tool=persons')
 
     await expect(page.getByRole('heading', { name: 'Persons of Interest', level: 1 })).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText('Identity, affiliations, legal status, relationships, and investigative history.')).toBeVisible()
@@ -187,10 +192,27 @@ test.describe(run ? 'persons workspace redesign' : 'persons workspace redesign (
     await expect(page.getByRole('columnheader', { name: 'Person', exact: true })).toBeVisible({ timeout: 30_000 })
   })
 
+  test('legacy routes redirect into the workspace: /persons and /persons?person=<id> keep resolving', async ({ page }) => {
+    test.setTimeout(120_000)
+    await signIn(page)
+
+    // Old list bookmark → the persons tool tab.
+    await page.goto('/persons')
+    await expect(page).toHaveURL(/\/tools\?.*tool=persons/, { timeout: 30_000 })
+    await expect(page.getByRole('heading', { name: 'Persons of Interest', level: 1 })).toBeVisible({ timeout: 30_000 })
+
+    // Old record deep link → the workspace record tab (?person= → &record=),
+    // extra params (here: section) carried over untouched.
+    await page.goto(`/persons?person=${p1Id}&section=identity`)
+    await expect(page).toHaveURL(new RegExp(`/tools\\?.*tool=persons.*record=${p1Id}`), { timeout: 30_000 })
+    await expect(page).toHaveURL(/section=identity/)
+    await expect(page.getByRole('heading', { name: P1_NAME, level: 1 })).toBeVisible({ timeout: 30_000 })
+  })
+
   test('search by alias fragment narrows to the fixture; clearing restores browse', async ({ page }) => {
     test.setTimeout(120_000)
     await signIn(page)
-    await page.goto('/persons')
+    await page.goto('/tools?tool=persons')
     await expect(page.getByText(P2_NAME, { exact: true })).toBeVisible({ timeout: 30_000 })
 
     // The alias fragment goes through the debounced (300ms) search_persons
@@ -208,7 +230,7 @@ test.describe(run ? 'persons workspace redesign' : 'persons workspace redesign (
   test('BOLO quick chip filters to the BOLO fixture; Clear all restores', async ({ page }) => {
     test.setTimeout(120_000)
     await signIn(page)
-    await page.goto('/persons')
+    await page.goto('/tools?tool=persons')
     await expect(page.getByText(P1_NAME, { exact: true })).toBeVisible({ timeout: 30_000 })
 
     const boloChip = page.getByRole('button', { name: 'BOLO', exact: true })
@@ -228,7 +250,7 @@ test.describe(run ? 'persons workspace redesign' : 'persons workspace redesign (
   test('Stale quick chip matches the never-reviewed fixture', async ({ page }) => {
     test.setTimeout(120_000)
     await signIn(page)
-    await page.goto('/persons')
+    await page.goto('/tools?tool=persons')
     await expect(page.getByText(P1_NAME, { exact: true })).toBeVisible({ timeout: 30_000 })
 
     await page.getByRole('button', { name: 'Stale', exact: true }).click()
@@ -244,7 +266,7 @@ test.describe(run ? 'persons workspace redesign' : 'persons workspace redesign (
     test.setTimeout(360_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     await signIn(page)
-    await page.goto(`/persons?person=${p1Id}`)
+    await page.goto(`/tools?tool=persons&record=${p1Id}`)
     await expect(page.getByRole('heading', { name: P1_NAME, level: 1 })).toBeVisible({ timeout: 30_000 })
     const tablist = profileTabs(page)
     await expect(tablist).toBeVisible()
@@ -259,7 +281,7 @@ test.describe(run ? 'persons workspace redesign' : 'persons workspace redesign (
 
     // Pass 2 — direct deep links restore the tab state and the panel.
     for (const s of SECTIONS) {
-      await page.goto(`/persons?person=${p1Id}&section=${s.id}`)
+      await page.goto(`/tools?tool=persons&record=${p1Id}&section=${s.id}`)
       await expect(page).toHaveURL(new RegExp(`[?&]section=${s.id}`))
       await expect(profileTabs(page).getByRole('tab', { name: new RegExp(`^${s.tab}`) }))
         .toHaveAttribute('aria-selected', 'true', { timeout: 30_000 })
@@ -270,7 +292,7 @@ test.describe(run ? 'persons workspace redesign' : 'persons workspace redesign (
   test('link associate: row renders with the relationship label; re-link surfaces the friendly duplicate message', async ({ page }) => {
     test.setTimeout(180_000)
     await signIn(page)
-    await page.goto(`/persons?person=${p1Id}&section=relationships`)
+    await page.goto(`/tools?tool=persons&record=${p1Id}&section=relationships`)
     await expect(page.getByRole('heading', { name: 'Known associates' })).toBeVisible({ timeout: 30_000 })
 
     const linkOnce = async () => {
@@ -301,13 +323,13 @@ test.describe(run ? 'persons workspace redesign' : 'persons workspace redesign (
     await linkOnce()
     await expect(page.getByText('These two already have that relationship on file.')).toBeVisible({ timeout: 20_000 })
     // Leave the dirty modal via navigation (its close path would prompt).
-    await page.goto('/persons')
+    await page.goto('/tools?tool=persons')
   })
 
   test('link vehicle with role seen_using: row renders plate + role label', async ({ page }) => {
     test.setTimeout(180_000)
     await signIn(page)
-    await page.goto(`/persons?person=${p1Id}&section=vehicles`)
+    await page.goto(`/tools?tool=persons&record=${p1Id}&section=vehicles`)
     await expect(page.getByRole('heading', { name: 'Vehicles', exact: true })).toBeVisible({ timeout: 30_000 })
 
     await page.getByRole('button', { name: 'Link vehicle', exact: true }).click()
@@ -329,7 +351,7 @@ test.describe(run ? 'persons workspace redesign' : 'persons workspace redesign (
   test('mark reviewed with a note clears the stale badge and resets the review metric', async ({ page }) => {
     test.setTimeout(180_000)
     await signIn(page)
-    await page.goto(`/persons?person=${p1Id}&section=overview`)
+    await page.goto(`/tools?tool=persons&record=${p1Id}&section=overview`)
     await expect(page.getByRole('heading', { name: P1_NAME, level: 1 })).toBeVisible({ timeout: 30_000 })
     // Never reviewed → the UNREVIEWED readout shows (header + status card).
     await expect(page.getByText('UNREVIEWED', { exact: true }).first()).toBeVisible({ timeout: 30_000 })
@@ -360,7 +382,7 @@ test.describe(run ? 'persons workspace redesign' : 'persons workspace redesign (
     personIds.push(m2.id)
 
     await signIn(page)
-    await page.goto(`/persons?person=${m1.id}`)
+    await page.goto(`/tools?tool=persons&record=${m1.id}`)
     await expect(page.getByRole('heading', { name: MERGE_NAME, level: 1 })).toBeVisible({ timeout: 30_000 })
 
     await page.getByRole('button', { name: 'More actions' }).click()
@@ -379,13 +401,13 @@ test.describe(run ? 'persons workspace redesign' : 'persons workspace redesign (
     await dlg.getByRole('button', { name: /Review merge of 1 record/ }).click()
     await dlg.getByRole('button', { name: /^Merge 1 record$/ }).click()
 
-    // Redirect lands on the survivor's overview.
+    // Redirect lands on the survivor's overview (workspace record-tab URL).
     await expect(page.getByText(`Merged 1 record into ${MERGE_NAME}`)).toBeVisible({ timeout: 30_000 })
-    await expect(page).toHaveURL(new RegExp(`person=${m1.id}`))
+    await expect(page).toHaveURL(new RegExp(`record=${m1.id}`))
     await expect(page).toHaveURL(/section=overview/)
 
     // The victim is now a read-only tombstone pointing at the survivor.
-    await page.goto(`/persons?person=${m2.id}`)
+    await page.goto(`/tools?tool=persons&record=${m2.id}`)
     await expect(page.getByText('This record was merged and is read-only.')).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText('Open the surviving record')).toBeVisible()
   })
@@ -394,13 +416,13 @@ test.describe(run ? 'persons workspace redesign' : 'persons workspace redesign (
     test.setTimeout(180_000)
     await page.setViewportSize({ width: 390, height: 844 })
     await signIn(page)
-    await page.goto('/persons')
+    await page.goto('/tools?tool=persons')
     await expect(page.getByText(P1_NAME, { exact: true })).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText(P2_NAME, { exact: true })).toBeVisible()
     expect(await fitsViewport(page), 'registry must not scroll horizontally at 390px').toBe(true)
 
     // Profile: the sticky section switcher stays tappable on mobile.
-    await page.goto(`/persons?person=${p1Id}`)
+    await page.goto(`/tools?tool=persons&record=${p1Id}`)
     await expect(page.getByRole('heading', { name: P1_NAME, level: 1 })).toBeVisible({ timeout: 30_000 })
     const tablist = profileTabs(page)
     await expect(tablist).toBeVisible()
@@ -414,7 +436,7 @@ test.describe(run ? 'persons workspace redesign' : 'persons workspace redesign (
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     await signIn(page)
-    await page.goto(`/persons?person=${p1Id}&section=overview`)
+    await page.goto(`/tools?tool=persons&record=${p1Id}&section=overview`)
     const tablist = profileTabs(page)
     await expect(tablist).toBeVisible({ timeout: 30_000 })
 

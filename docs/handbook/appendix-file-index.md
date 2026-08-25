@@ -15,6 +15,7 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | `src/app/` | Routes, HTML skeleton, error pages, global CSS |
 | `src/components/<feature>/` | One folder per screen (27) |
 | `src/components/shell/` | Navigation chrome |
+| `src/components/tools/` | Investigative Tools workspace (`/tools`): directory, tab strip, redirect shim, lazy tool registry |
 | `src/components/shared/` | Cross-feature record widgets (v1.14 extractions) |
 | `src/components/ui/` | Generic widgets |
 | `src/lib/` | ⚠ All shared logic |
@@ -49,6 +50,7 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | `store.ts` | The shared localStorage blob (legacy-compatible keys) |
 | `supabase.ts` | ⚠ Lazy client singleton + `isConfigured` |
 | `toast.ts` | Toast store + `humanizeError` |
+| `toolsModel.ts` | ⚠ Investigative Tools model (data only) — TOOL_TABS/groups, record deep-link params, RLS title sources |
 | `watchlist.ts` | Follow-store + seen stamps |
 
 ## `src/app/` & `src/components/shell|ui/`
@@ -58,7 +60,7 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | `app/layout.tsx` | Root HTML, fonts, pre-hydration theme applier (the one sanctioned innerHTML) |
 | `app/page.tsx` | ⚠ `/` redirect shim + OAuth-callback wait |
 | `app/(app)/layout.tsx` | AuthProvider → Gate/AppShell boundary |
-| `app/(app)/[tab]/page.tsx` | ⚠ The per-tab switch |
+| `app/(app)/[tab]/page.tsx` | ⚠ The per-tab switch (intelligence tool slugs → `ToolTabRedirect` → `/tools`) |
 | `app/globals.css` | ⚠ Theme tokens, accent remap, collapse contract, editor styles |
 | `app/error/global-error/not-found.tsx` | Crash and 404 screens |
 | `shell/AppShell.tsx` | Chrome composition + tab persistence |
@@ -97,7 +99,10 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 `persons/`: PersonsView, PersonModal, ⚠IntelProfile, dossier ·
 `places/PlacesView` · `records/RecordsView` (zero-rows check) ·
 `rico/RicoView` (imports CaseDetail's RicoTab) · `shifts/ShiftsView` ·
-`sops/SopsView` (version snapshots) · `vehicles/VehiclesView` (scanner) ·
+`sops/SopsView` (version snapshots) ·
+`tools/`: ⚠`ToolsView` (the Investigative Tools workspace), `ToolTabBar`,
+`ToolDirectory`, `ToolTabRedirect`, `toolRegistry`, `useToolCounts` ·
+`vehicles/VehiclesView` (scanner) ·
 `ViewPlaceholder`.
 
 ## Root config

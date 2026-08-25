@@ -288,7 +288,7 @@ test.describe('Legal workflow — E2E', () => {
   /* ── 8 · entity cross-cuts ─────────────────────────────────────────────── */
   test('vehicle profile: the Legal panel lists requests naming the vehicle as a structured target', async ({ page }) => {
     await as(page, fx().actors.lsb)
-    await page.goto(`/vehicles?vehicle=${fx().vehicleId}`)
+    await page.goto(`/tools?tool=vehicles&record=${fx().vehicleId}`)
     await expect(page.getByText(fx().vehiclePlate).first()).toBeVisible({ timeout: 30_000 })
     await expect(page.getByRole('heading', { name: 'Legal', exact: true })).toBeVisible()
     await expect(page.getByText(fx().entityDraft.number)).toBeVisible({ timeout: 15_000 })

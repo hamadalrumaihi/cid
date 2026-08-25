@@ -193,7 +193,11 @@ from the DOJ build (\`RelatedRecordPicker\`, \`VersionViewer\`,
 ### \`src/components/<feature>/\` — the feature folders
 One folder per screen (\`cases/\`, \`gangs/\`, \`heatmap/\`, …). Each is
 self-contained: fetches its own data, owns its modals. Only the \`[tab]\`
-router imports them. \`cases/\` and \`command/\` are the
+router imports them — except the 14 intelligence tool views, which are
+imported (code-split) by \`tools/toolRegistry.tsx\` instead: \`tools/\` is the
+Investigative Tools workspace (\`/tools\`) that hosts them as keep-alive
+tabs, and the legacy tool routes redirect into it (\`ToolTabRedirect\`).
+\`cases/\` and \`command/\` are the
 big ones. Details: [Ch. 4](04-features.md).
 
 ### \`src/lib/\` — the shared foundation ⭐
@@ -247,14 +251,27 @@ not hypotheticals.
   realtime; forgetting \`vercel.json\` and \`ci.yml\` duplicate the env values.
 
 ## Block 2 — Routing & App Shell
-\`src/app/*\`, \`src/components/shell/*\`, \`src/lib/nav.ts\`
+\`src/app/*\`, \`src/components/shell/*\`, \`src/lib/nav.ts\`,
+\`src/lib/toolsModel.ts\`, \`src/components/tools/*\`
 - **Responsibility**: URL ↔ screen; the constant chrome; nav metadata.
 - **Data flow**: URL → \`[tab]/page.tsx\` switch → feature view inside
   \`AppShell\`; \`useNavBadges\` computes the Command-button badges.
 - **Risk: MEDIUM-HIGH.** \`nav.ts\` is a three-way contract (PAGE_META keys
   = URL slugs = TAB_LABEL keys) plus the \`[tab]\` switch.
+- **Investigative Tools**: the former Intelligence category's 14 tabs are
+  one nav item (\`/tools\`) in both CID and SIB sidebars. \`toolsModel.ts\` is
+  the data-only model (\`TOOL_TABS\`, \`TOOL_GROUPS\`, record deep-link params,
+  \`RECORD_TAB_TOOLS\`, RLS title sources); \`components/tools/\` renders it —
+  directory + keep-alive tab strip (\`ToolsView\`: open tabs stay mounted,
+  inactive \`display:none\`), the lazy per-tool registry (\`toolRegistry\`),
+  and the \`ToolTabRedirect\` shim the legacy \`/{tool}\` routes render (query
+  params carried over, so old deep links survive). Open tabs persist in
+  sessionStorage per user as **ids only** and restore with titles
+  re-fetched through the RLS-scoped client (invisible rows close silently).
 - **Common mistakes**: adding a screen to PAGE_META but not the switch
-  (renders a placeholder) or not a category (unreachable from the sidebar).
+  (renders a placeholder) or not a category (unreachable from the sidebar);
+  importing a tool view from the \`[tab]\` page instead of \`toolRegistry\`
+  (double-ships the chunk and bypasses the workspace).
 
 ## Block 3 — Auth & Identity
 \`src/lib/auth.tsx\`, \`src/lib/roles.ts\`, \`src/lib/profiles.ts\`,
@@ -436,6 +453,7 @@ leaf nodes, safe to study, intricate to edit.`,
 | \`src/app/\` | Routes, HTML skeleton, error pages, global CSS |
 | \`src/components/<feature>/\` | One folder per screen (27) |
 | \`src/components/shell/\` | Navigation chrome |
+| \`src/components/tools/\` | Investigative Tools workspace (\`/tools\`): directory, tab strip, redirect shim, lazy tool registry |
 | \`src/components/shared/\` | Cross-feature record widgets (v1.14 extractions) |
 | \`src/components/ui/\` | Generic widgets |
 | \`src/lib/\` | ⚠ All shared logic |
@@ -470,6 +488,7 @@ leaf nodes, safe to study, intricate to edit.`,
 | \`store.ts\` | The shared localStorage blob (legacy-compatible keys) |
 | \`supabase.ts\` | ⚠ Lazy client singleton + \`isConfigured\` |
 | \`toast.ts\` | Toast store + \`humanizeError\` |
+| \`toolsModel.ts\` | ⚠ Investigative Tools model (data only) — TOOL_TABS/groups, record deep-link params, RLS title sources |
 | \`watchlist.ts\` | Follow-store + seen stamps |
 
 ## \`src/app/\` & \`src/components/shell|ui/\`
@@ -479,7 +498,7 @@ leaf nodes, safe to study, intricate to edit.`,
 | \`app/layout.tsx\` | Root HTML, fonts, pre-hydration theme applier (the one sanctioned innerHTML) |
 | \`app/page.tsx\` | ⚠ \`/\` redirect shim + OAuth-callback wait |
 | \`app/(app)/layout.tsx\` | AuthProvider → Gate/AppShell boundary |
-| \`app/(app)/[tab]/page.tsx\` | ⚠ The per-tab switch |
+| \`app/(app)/[tab]/page.tsx\` | ⚠ The per-tab switch (intelligence tool slugs → \`ToolTabRedirect\` → \`/tools\`) |
 | \`app/globals.css\` | ⚠ Theme tokens, accent remap, collapse contract, editor styles |
 | \`app/error/global-error/not-found.tsx\` | Crash and 404 screens |
 | \`shell/AppShell.tsx\` | Chrome composition + tab persistence |
@@ -518,7 +537,10 @@ leaf nodes, safe to study, intricate to edit.`,
 \`persons/\`: PersonsView, PersonModal, ⚠IntelProfile, dossier ·
 \`places/PlacesView\` · \`records/RecordsView\` (zero-rows check) ·
 \`rico/RicoView\` (imports CaseDetail's RicoTab) · \`shifts/ShiftsView\` ·
-\`sops/SopsView\` (version snapshots) · \`vehicles/VehiclesView\` (scanner) ·
+\`sops/SopsView\` (version snapshots) ·
+\`tools/\`: ⚠\`ToolsView\` (the Investigative Tools workspace), \`ToolTabBar\`,
+\`ToolDirectory\`, \`ToolTabRedirect\`, \`toolRegistry\`, \`useToolCounts\` ·
+\`vehicles/VehiclesView\` (scanner) ·
 \`ViewPlaceholder\`.
 
 ## Root config
@@ -584,7 +606,9 @@ ballistics, media vault, records, BOLO board — all one uniform pattern
 canEdit/canDelete gates, \`deleteWithUndo\`). Shared RLS: any active member
 reads/writes, command deletes. The \`IntelProfile\` slide-over
 (persons/gangs) rolls up everything linked to a subject and exports
-dossiers.
+dossiers. All of these open as tabs inside the **Investigative Tools**
+workspace (\`/tools\`, \`src/components/tools/\`); the old per-tool routes
+redirect there with their params intact ([Ch. 5](05-pages.md)).
 
 ## 4.3 Deconfliction (three systems)
 
@@ -663,7 +687,7 @@ user-facing routes:
 | URL | File | Renders |
 |---|---|---|
 | \`/\` | \`app/page.tsx\` | Redirect shim: legacy \`#deep-links\`, else last-visited tab, else \`/command\`. Also the OAuth landing spot — it **waits** for the auth event before redirecting. |
-| \`/<tab>\` | \`app/(app)/[tab]/page.tsx\` | One of the screens in \`PAGE_META\`. Invalid slugs → \`/command\`; legacy \`reports\` → \`/cases\`. |
+| \`/<tab>\` | \`app/(app)/[tab]/page.tsx\` | One of the screens in \`PAGE_META\`. Invalid slugs → \`/command\`; legacy \`reports\` → \`/cases\`; the 14 intelligence tool slugs render \`ToolTabRedirect\`, which forwards into \`/tools\` (below). |
 | anything else | \`app/not-found.tsx\` | Styled 404. |
 
 \`(app)/layout.tsx\` wraps every tab in \`AuthProvider\` → \`Gate\` (sign-in
@@ -673,7 +697,8 @@ fetches after mount behind RLS.
 
 **Deep-link parameters**: \`?case=<id>\` (open case detail), \`?q=\` (seed a
 registry filter), \`?new=1\` (open New Case), \`?op=\` (operation),
-\`?focus=g:<id>|p:<id>\` (network), \`?tab=\` (case detail tab).
+\`?focus=g:<id>|p:<id>\` (network), \`?tab=\` (case detail tab),
+\`?tool=<id>&record=<id>\` (Investigative Tools — active tab / record tab).
 
 **Shared states**: every screen renders "Loading…" while fetching,
 "Could not load: reason" on failure (reads throw), an ALL-CAPS themed
@@ -696,18 +721,21 @@ One row per leaf tab in \`PAGE_META\` (\`src/lib/nav.ts\` — the routing truth)
 | \`rico\` | RICO tracker | rico_cases, predicate_acts | — |
 | \`legal\` | Legal Requests (\`LegalView\`) | legal_requests + versions/exhibits/actions/participants | creator + participants; all workflow writes via definer RPCs |
 | \`justice\` | Justice Portal (\`JusticePortalView\`) — **RETIRED 2026-07-22**: route/tab removed, memberships deactivated; legal approval is now Bureau Lead+ in the CID \`legal\` surface (see [DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md) Phase-1 banner) | legal review queues, judge docket, coverage, applications | justice roles + Owner (justice-only members get it as their whole app) |
-| \`persons\` | Persons → IntelProfile | persons, gang_members, vehicles | — |
-| \`bolo\` | BOLO Board | persons(bolo), warrant reports | — |
-| \`gangs\` | Gangs | gangs, ranks, members, turf | — |
-| \`places\` | Places | places, process steps | — |
-| \`vehicles\` | Vehicle Registry | vehicles + cross-ref scan | — |
-| \`indicators\` | Indicators | indicators + deconfliction | — |
-| \`network\` | Network graph | gangs, persons, members | — |
-| \`narcotics\` | Narcotics | narcotics + precursors + hotspots | — |
-| \`ballistics\` | Ballistics | benches + footprints | — |
-| \`modus\` | M.O. Detector | mo_profiles + \`mo_crossref\` RPC | — |
-| \`media\` | Media Vault | media + FiveManage | — |
-| \`records\` | Records | cid_records | edit = creator/command |
+| \`tools\` | Investigative Tools workspace (\`tools/ToolsView\`) — grouped directory + keep-alive tab strip over the 14 tool views below; open tabs persist per user (ids only) and restore RLS-verified | opens the tools below as tabs; Persons & Vehicles records as own tabs | — |
+| \`persons\` ¹ | Persons → IntelProfile | persons, gang_members, vehicles | — |
+| \`bolo\` ¹ | BOLO Board | persons(bolo), warrant reports | — |
+| \`gangs\` ¹ | Gangs | gangs, ranks, members, turf | — |
+| \`places\` ¹ | Places | places, process steps | — |
+| \`vehicles\` ¹ | Vehicle Registry | vehicles + cross-ref scan | — |
+| \`accounts\` ¹ | Account Registry | accounts, handle history | — |
+| \`indicators\` ¹ | Indicators | indicators + deconfliction | — |
+| \`field-review\` ¹ | Intelligence (field review) | field_submissions + claims | — |
+| \`network\` ¹ | Network graph | gangs, persons, members | — |
+| \`narcotics\` ¹ | Narcotics | narcotics + precursors + hotspots | — |
+| \`ballistics\` ¹ | Ballistics | benches + footprints | — |
+| \`modus\` ¹ | M.O. Detector | mo_profiles + \`mo_crossref\` RPC | — |
+| \`media\` ¹ | Media Vault | media + FiveManage | — |
+| \`records\` ¹ | Records | cid_records | edit = creator/command |
 | \`penal\` | Penal Code | static (no DB) | — |
 | \`sops\` | SOPs & Library | documents + versions | writes = command |
 | \`guide\` | User Guide | static visual guide (generated from docs/USER-GUIDE.md) | — |
@@ -720,7 +748,18 @@ One row per leaf tab in \`PAGE_META\` (\`src/lib/nav.ts\` — the routing truth)
 | \`feedback\` | Feedback (sidebar leaf) | feedback | triage = owner flag (\`profiles.is_owner\`) |
 | \`profile\` | My Profile (\`ProfileView\`) | own profile, appearance, notification settings | self |
 | \`command-center\` | Command Center (\`CommandCenterView\`) | personnel admin, approvals, promotions, transfers | command + Owner |
-| \`owner\` | Owner Portal (\`OwnerView\`) | project health, feedback triage, security testing | **owner-only** |`,
+| \`owner\` | Owner Portal (\`OwnerView\`) | project health, feedback triage, security testing | **owner-only** |
+
+¹ **Investigative Tools slugs.** These 14 routes stay registered (deep-link
+contracts) but no longer render their view directly: the \`[tab]\` page returns
+\`ToolTabRedirect\`, which \`router.replace\`s into
+\`/tools?tool=<slug>\` — translating the record param for tools with workspace
+record tabs (\`RECORD_TAB_TOOLS\` in \`src/lib/toolsModel.ts\`: currently
+persons → \`?person=\` and vehicles → \`?vehicle=\` become \`&record=\`) and
+carrying every other query param (\`?q=\`, \`?gang=\`, \`?focus=\` …) through
+untouched. The views themselves are code-split in
+\`src/components/tools/toolRegistry.tsx\` and render inside the workspace,
+unchanged and still RLS-scoped.`,
   },
   {
     slug: "api",
@@ -1084,9 +1123,10 @@ widest:
 |---|---|---|
 | Component state (\`useState\`) | Screen-local rows, filters, modal state, form fields (modals mount fresh per open) | every view |
 | Derived state (\`useMemo\`) | Filtering, grouping, chart buckets, graph building | big views |
-| React Context | Exactly one: \`AuthProvider\` (session/profile/capabilities) | \`lib/auth.tsx\` |
+| React Context | Two: \`AuthProvider\` (session/profile/capabilities) and \`ToolsWorkspaceContext\` (the Investigative Tools workspace — open tabs, active key, open/close/dirty ops; \`useToolsWorkspace()\` returns null outside \`/tools\` so hosted views no-op) | \`lib/auth.tsx\`, \`components/tools/ToolsWorkspaceContext.tsx\` |
 | zustand stores | Toasts, dialogs, realtime versions, profiles cache, operations cache, watchlist — singletons that non-React code must reach | \`lib/*\`, \`ui/dialog\` |
 | localStorage (\`Store\`) | Device preferences + legacy-app continuity, ONE JSON blob (\`cid-portal-v3\`) | \`lib/store.ts\` |
+| sessionStorage | Investigative Tools open tabs, per signed-in user, **ids only** (\`cid-tools-workspace:<uid>\`) — titles are re-fetched RLS-scoped on restore, invisible rows close silently | \`components/tools/ToolsView.tsx\` |
 | The database | ALL shared data — every screen refetches on mount and on realtime bumps | Supabase |
 
 ## The refresh idiom (memorize — it's in ~30 files)
@@ -1437,7 +1477,10 @@ instant rollback available in the Vercel dashboard).
    start by copying a registry view (VehiclesView is the cleanest
    template) and keep its idioms.
 2. **Route**: add the tab to \`lib/nav.ts\` (PAGE_META + a category's tabs +
-   TAB_LABEL) and the switch in \`app/(app)/[tab]/page.tsx\`.
+   TAB_LABEL) and the switch in \`app/(app)/[tab]/page.tsx\`. (A new
+   *intelligence tool* registers in \`lib/toolsModel.ts\` +
+   \`components/tools/toolRegistry.tsx\` instead of the switch — tool slugs
+   redirect into the \`/tools\` workspace.)
 3. **Data**: if a new table is needed — additive migration on the live
    project, RLS policies (copy the closest pattern in [Ch. 8](08-database.md)),
    realtime publication, FK indexes, then hand-add to
@@ -1638,6 +1681,7 @@ export function FeatureView() {
 |---|---|---|
 | A table's schema (live migration) | \`database.types.ts\` (hand-add), \`select\` projection strings (grep the column), RLS policies, realtime publication, FK index | Types don't auto-regen; projections fail at runtime; new tables are invisible without policies, stale without publication |
 | \`PAGE_META\` / adding a screen | Category tabs + \`TAB_LABEL\` + the \`[tab]\` switch; guide screen-count + regeneration | The three-way nav contract + docs ([FAQ](appendix-faq.md) has the recipe) |
+| An Investigative Tools tool (\`src/lib/toolsModel.ts\`) | \`TOOL_TABS\`/\`TOOL_GROUPS\`/\`RECORD_PARAM\`/\`RECORD_TAB_TOOLS\`/\`RECORD_TITLE_SOURCE\` + the component maps in \`components/tools/toolRegistry.tsx\`; keep the slug in \`nav.ts\` (redirect contract) | The workspace, the directory, the redirect shim and the RLS-verified restore all read the model; a \`ToolId\` missing from \`TOOL_LIST_COMPONENT\` breaks the workspace render |
 | \`lib/db.ts\` contract | Every view's read try/catch and write \`res.error\` check | Throw-vs-return is assumed app-wide |
 | \`useAuth\` shape / capability booleans | ~40 consumers, Gate branches | canEdit/canDelete gate every button |
 | An RLS policy or \`private.*\` helper | The matching UI gates, \`useNavBadges.canReviewCase\`, zero-rows checks | UI mirrors must match or users see phantom buttons/badges |
@@ -1678,7 +1722,7 @@ export function FeatureView() {
 | Screen never updates until reload | Table missing from the realtime publication, or the view lacks \`useTableVersion\` in its effect deps | [Ch. 8.6](08-database.md); grep the view for \`useTableVersion\` |
 | A screen shows nothing but no error | RLS scope — you're signed in as the wrong bureau/role, or the profile is inactive | Try a command account; check \`profiles.active\` |
 | "Could not load: …" notice | The read threw (network, or RLS on a *joined* table) | Network tab; reads are allowed to fail loudly by design |
-| New tab/screen 404s or redirects to /command | The nav three-way contract is incomplete | PAGE_META + category tabs + TAB_LABEL + the \`[tab]\` switch |
+| New tab/screen 404s or redirects to /command | The nav three-way contract is incomplete | PAGE_META + category tabs + TAB_LABEL + the \`[tab]\` switch (an intelligence tool instead registers in \`toolsModel.ts\` + \`tools/toolRegistry\` — the \`[tab]\` route only redirects tool slugs to \`/tools\`) |
 | Modal loses focus / re-mounts mid-edit | Someone changed Modal's effect deps or removed the ref-routing | \`ui/Modal.tsx\` header comment — deps must stay \`[open]\` |
 | Types say a column exists but runtime is \`undefined\` | \`database.types.ts\` drifted from the live schema, or a \`select\` projection omits the column | Compare with the live table; grep the projection strings |
 | PDF export dies with a WASM/CSP error | CSP \`script-src\` lost \`wasm-unsafe-eval\` | \`next.config.ts\` |
@@ -1947,6 +1991,10 @@ entry, the slug in a category's \`tabs\`, a \`TAB_LABEL\`; (3) the switch in
 \`src/app/(app)/[tab]/page.tsx\`; (4) \`docs/USER-GUIDE.md\` + regenerate
 \`guideContent.ts\`. Miss (2) or (3) and the tab redirects or renders a
 placeholder. Full recipe: [Ch. 14](14-development-workflow.md).
+An *intelligence tool* is the one exception: keep its slug in
+\`PAGE_META\`/\`TAB_LABEL\`, then register it in \`src/lib/toolsModel.ts\` and
+\`src/components/tools/toolRegistry.tsx\` instead of the \`[tab]\` switch —
+the route only redirects tool slugs into the \`/tools\` workspace.
 
 **How do permissions work?**
 Three layers: \`useAuth()\`'s booleans hide buttons (cosmetic), RLS policies

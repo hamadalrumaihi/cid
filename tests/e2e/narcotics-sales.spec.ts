@@ -68,7 +68,7 @@ test.describe(run ? 'narcotics street-value observations (restricted)' : 'narcot
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     await inject(page, mgr)
-    await page.goto(`/narcotics?drug=${DRUG}`)
+    await page.goto(`/tools?tool=narcotics&drug=${DRUG}`)
 
     await expect(page.getByRole('heading', { name: CANNABIS_NAME, level: 1 })).toBeVisible({ timeout: 30_000 })
     await expect(sectionTabs(page)).toBeVisible({ timeout: 30_000 })
@@ -82,7 +82,7 @@ test.describe(run ? 'narcotics street-value observations (restricted)' : 'narcot
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     await inject(page, mgr)
-    await page.goto(`/narcotics?drug=${DRUG}&section=sales`)
+    await page.goto(`/tools?tool=narcotics&drug=${DRUG}&section=sales`)
 
     await expect(page.getByRole('heading', { name: SERIES_NAME, level: 2 })).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText(/Restricted intelligence/)).toBeVisible()
@@ -98,7 +98,7 @@ test.describe(run ? 'narcotics street-value observations (restricted)' : 'narcot
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     await inject(page, mgr)
-    await page.goto(`/narcotics?drug=${DRUG}&section=sales`)
+    await page.goto(`/tools?tool=narcotics&drug=${DRUG}&section=sales`)
     await expect(page.getByRole('heading', { name: SERIES_NAME, level: 2 })).toBeVisible({ timeout: 30_000 })
 
     const mids = obsCard(page, 'Mids')
@@ -117,7 +117,7 @@ test.describe(run ? 'narcotics street-value observations (restricted)' : 'narcot
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     await inject(page, mgr)
-    await page.goto(`/narcotics?drug=${DRUG}&section=sales`)
+    await page.goto(`/tools?tool=narcotics&drug=${DRUG}&section=sales`)
     await expect(page.getByRole('heading', { name: SERIES_NAME, level: 2 })).toBeVisible({ timeout: 30_000 })
 
     // The SVG carries role="img" + an aria-label built from the chart title.
@@ -130,7 +130,7 @@ test.describe(run ? 'narcotics street-value observations (restricted)' : 'narcot
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     await inject(page, mgr)
-    await page.goto(`/narcotics?drug=${DRUG}&section=sales&sale=${MIDS_SALE}`)
+    await page.goto(`/tools?tool=narcotics&drug=${DRUG}&section=sales&sale=${MIDS_SALE}`)
     await expect(page.getByRole('heading', { name: SERIES_NAME, level: 2 })).toBeVisible({ timeout: 30_000 })
 
     // Stack breakdown rows.
@@ -154,7 +154,7 @@ test.describe(run ? 'narcotics street-value observations (restricted)' : 'narcot
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     await inject(page, mgr)
-    await page.goto(`/narcotics?drug=${DRUG}&section=sales&sale=${MIDS_SALE}`)
+    await page.goto(`/tools?tool=narcotics&drug=${DRUG}&section=sales&sale=${MIDS_SALE}`)
     await expect(page.getByRole('heading', { name: 'Attached screenshots' })).toBeVisible({ timeout: 30_000 })
 
     const shotGrid = page.locator('h4', { hasText: 'Attached screenshots' }).locator('xpath=following-sibling::div[1]')
@@ -167,7 +167,7 @@ test.describe(run ? 'narcotics street-value observations (restricted)' : 'narcot
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     await inject(page, det)
-    await page.goto(`/narcotics?drug=${DRUG}&section=sales`)
+    await page.goto(`/tools?tool=narcotics&drug=${DRUG}&section=sales`)
 
     // The public canonical substance still loads for the detective…
     await expect(page.getByRole('heading', { name: CANNABIS_NAME, level: 1 })).toBeVisible({ timeout: 30_000 })
@@ -188,7 +188,7 @@ test.describe(run ? 'narcotics street-value observations (restricted)' : 'narcot
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     await inject(page, mgr)
-    await page.goto(`/narcotics?drug=${DRUG}&section=sales`)
+    await page.goto(`/tools?tool=narcotics&drug=${DRUG}&section=sales`)
     const tab = salesTab(page)
     await expect(tab).toBeVisible({ timeout: 30_000 })
 
@@ -212,7 +212,7 @@ test.describe(run ? 'narcotics street-value observations (restricted)' : 'narcot
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 390, height: 844 })
     await inject(page, mgr)
-    await page.goto(`/narcotics?drug=${DRUG}&section=sales`)
+    await page.goto(`/tools?tool=narcotics&drug=${DRUG}&section=sales`)
     await expect(page.getByRole('heading', { name: SERIES_NAME, level: 2 })).toBeVisible({ timeout: 30_000 })
     await page.waitForTimeout(250)
     expect(await pageOverflow(page), 'sales section must not scroll horizontally at 390px').toBeLessThanOrEqual(1)
@@ -229,12 +229,12 @@ test.describe(run ? 'narcotics street-value observations (restricted)' : 'narcot
     const surfaces: Array<{ name: string; url: string; ready: () => Promise<void> }> = [
       {
         name: 'section',
-        url: `/narcotics?drug=${DRUG}&section=sales`,
+        url: `/tools?tool=narcotics&drug=${DRUG}&section=sales`,
         ready: async () => { await expect(page.getByRole('heading', { name: SERIES_NAME, level: 2 })).toBeVisible({ timeout: 30_000 }) },
       },
       {
         name: 'detail',
-        url: `/narcotics?drug=${DRUG}&section=sales&sale=${MIDS_SALE}`,
+        url: `/tools?tool=narcotics&drug=${DRUG}&section=sales&sale=${MIDS_SALE}`,
         ready: async () => { await expect(page.getByRole('heading', { name: 'Stack breakdown' })).toBeVisible({ timeout: 30_000 }) },
       },
     ]
@@ -264,7 +264,7 @@ test.describe(run ? 'narcotics street-value observations (restricted)' : 'narcot
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 1280, height: 800 })
     await inject(page, mgr)
-    await page.goto(`/narcotics?drug=${DRUG}&section=sales`)
+    await page.goto(`/tools?tool=narcotics&drug=${DRUG}&section=sales`)
     await expect(page.getByRole('heading', { name: SERIES_NAME, level: 2 })).toBeVisible({ timeout: 30_000 })
     await page.waitForTimeout(1_000)
 

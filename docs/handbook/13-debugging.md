@@ -24,7 +24,7 @@
 | Screen never updates until reload | Table missing from the realtime publication, or the view lacks `useTableVersion` in its effect deps | [Ch. 8.6](08-database.md); grep the view for `useTableVersion` |
 | A screen shows nothing but no error | RLS scope — you're signed in as the wrong bureau/role, or the profile is inactive | Try a command account; check `profiles.active` |
 | "Could not load: …" notice | The read threw (network, or RLS on a *joined* table) | Network tab; reads are allowed to fail loudly by design |
-| New tab/screen 404s or redirects to /command | The nav three-way contract is incomplete | PAGE_META + category tabs + TAB_LABEL + the `[tab]` switch |
+| New tab/screen 404s or redirects to /command | The nav three-way contract is incomplete | PAGE_META + category tabs + TAB_LABEL + the `[tab]` switch (an intelligence tool instead registers in `toolsModel.ts` + `tools/toolRegistry` — the `[tab]` route only redirects tool slugs to `/tools`) |
 | Modal loses focus / re-mounts mid-edit | Someone changed Modal's effect deps or removed the ref-routing | `ui/Modal.tsx` header comment — deps must stay `[open]` |
 | Types say a column exists but runtime is `undefined` | `database.types.ts` drifted from the live schema, or a `select` projection omits the column | Compare with the live table; grep the projection strings |
 | PDF export dies with a WASM/CSP error | CSP `script-src` lost `wasm-unsafe-eval` | `next.config.ts` |

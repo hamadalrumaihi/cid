@@ -49,7 +49,11 @@ from the DOJ build (`RelatedRecordPicker`, `VersionViewer`,
 ### `src/components/<feature>/` — the feature folders
 One folder per screen (`cases/`, `gangs/`, `heatmap/`, …). Each is
 self-contained: fetches its own data, owns its modals. Only the `[tab]`
-router imports them. `cases/` and `command/` are the
+router imports them — except the 14 intelligence tool views, which are
+imported (code-split) by `tools/toolRegistry.tsx` instead: `tools/` is the
+Investigative Tools workspace (`/tools`) that hosts them as keep-alive
+tabs, and the legacy tool routes redirect into it (`ToolTabRedirect`).
+`cases/` and `command/` are the
 big ones. Details: [Ch. 4](04-features.md).
 
 ### `src/lib/` — the shared foundation ⭐
