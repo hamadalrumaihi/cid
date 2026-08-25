@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { rpc } from '@/lib/db'
 import { CID_ROUTING_BUREAUS, isRoutingBureau } from '@/lib/legalWorkflow'
-import { bureauLabel, bureauShort } from '@/lib/roles'
+import { bureauLabel } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import type { CaseRow } from './tabs/shared'
 

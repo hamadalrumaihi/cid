@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { rpc } from '@/lib/db'
-import { bureauLabel, bureauShort, PERMANENT_BUREAUS } from '@/lib/roles'
+import { bureauLabel, PERMANENT_BUREAUS } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import type { CaseRow } from './tabs/shared'
 
