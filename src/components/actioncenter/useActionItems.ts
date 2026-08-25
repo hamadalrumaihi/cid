@@ -371,7 +371,7 @@ export function useActionItems(): ActionItemsResult {
   }, [state, profile, isCommand, isOwner, justiceRole, canEdit, fetchProfiles, auth, prosecutorBureaus, siu.isCommand])
 
   useEffect(() => {
-    // A version-driven refetch fans out ~13 queries — pointless while the tab
+    // A version-driven refetch fans out ~21 queries — pointless while the tab
     // is hidden. Skip it and run ONE catch-up refetch when the tab returns to
     // visible (the effect re-arms per bump, so `missed` covers this cycle).
     let missed = false
