@@ -208,10 +208,15 @@ export const RadioIcon = (p: IconProps) => (
 const KIND_ICONS: Record<string, (p: IconProps) => React.ReactElement> = {
   case: CaseIcon,
   report: ReportIcon,
+  task: CheckIcon,
   evidence: ReceiptIcon,
   operation: OperationIcon,
   legal: ScaleIcon,
   person: PersonIcon,
+  // A BOLO is a flag on a person record — same glyph, different section.
+  bolo: PersonIcon,
+  tip: RadioIcon,
+  member: PersonIcon,
   gang: GangIcon,
   place: PlaceIcon,
   vehicle: VehicleIcon,

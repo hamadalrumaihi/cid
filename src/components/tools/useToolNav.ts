@@ -11,8 +11,18 @@
  *  every deep link through it without special-casing. */
 import { useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import { pushRecent, type RecentType } from '@/lib/recents'
 import { RECORD_PARAM, hasRecordTabs, isToolTab, type ToolId } from '@/lib/toolsModel'
 import { useToolsWorkspace } from './ToolsWorkspaceContext'
+
+/** Tool id → recents vocabulary, for the tools whose openRecord lands on a
+ *  real record tab. Only these — a tool absent here leaves no trail. */
+const RECENT_TYPE: Partial<Record<ToolId, RecentType>> = {
+  persons: 'person',
+  vehicles: 'vehicle',
+  gangs: 'gang',
+  narcotics: 'narcotic',
+}
 
 export interface ToolNav {
   /** Open/focus a record tab (or the tool's list when it has no record tab). */
@@ -30,6 +40,10 @@ export function useToolNav(): ToolNav {
   const router = useRouter()
 
   const openRecord = useCallback((toolId: ToolId, recordId: string, title?: string) => {
+    // Deliberate open — every openRecord call is a click landing on the
+    // record, so this is exactly the recents contract (ids only, never data).
+    const rt = RECENT_TYPE[toolId]
+    if (rt) pushRecent(rt, recordId)
     if (ws) { ws.openRecord(toolId, recordId, title); return }
     const next = new URLSearchParams({ tool: toolId })
     if (hasRecordTabs(toolId)) next.set('record', recordId)

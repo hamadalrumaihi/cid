@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -8,7 +8,7 @@ import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Button } from '@/components/ui/Button'
 import { DetailSkeleton } from '@/components/ui/Skeleton'
 import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
-import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
+import { SectionTabs, panelDomId, type SectionTab } from '@/components/ui/SectionTabs'
 import { CASE_TABS, CASE_TAB_GROUPS, CASE_TAB_LABELS, type CaseTabId } from './caseTabs'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
@@ -33,11 +33,16 @@ import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { useNow } from '@/lib/useNow'
 import { LEGAL_LIST_COLS, buildLegalViewer, useMyProsecutorBureaus } from '@/components/justice/legalShared'
-import { confirmCaseClose, enableRicoSession, isPinnedCase, pushRecentCase, ricoSessionEnabled, togglePinCase } from './caseUtils'
+import { usePinsStore } from '@/lib/pins'
+import { pushRecent } from '@/lib/recents'
+import { Store } from '@/lib/store'
+import { useNarrow } from '@/lib/useNarrow'
+import { confirmCaseClose, enableRicoSession, pushRecentCase, ricoSessionEnabled } from './caseUtils'
 import { CaseModal } from './CaseModal'
 import { CaseCommandHeader } from './CaseCommandHeader'
 import { ReassignBureauModal } from './ReassignBureauModal'
 import { ResponsibleBureauModal } from './ResponsibleBureauModal'
+import { CaseSectionSwitcher } from './CaseSectionSwitcher'
 import { OverviewTab } from './tabs/OverviewTab'
 import { MediaTab } from './tabs/MediaTab'
 import type { BlockerRow } from './tabs/CaseBlockersPanel'
@@ -94,6 +99,11 @@ export interface WorkflowRows {
   /** Live (non-removed) case_assignments — HEAD count only; feeds the case
    *  jacket header's Supporting field via assessCase's supportCount. */
   assignments: number
+  /** Cheap HEAD counts for the tab pills only (the tabs fetch their own full
+   *  rows): case_intel_links / surveillance_targets / record_extractions. */
+  intelLinks: number
+  surveillanceTargets: number
+  extractions: number
 }
 
 export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () => void; onChanged: () => void }) {
@@ -101,7 +111,16 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const auth = useAuth()
   const { profile, canEdit: authCanEdit, canDelete: authCanDelete, isCommand, isOwner } = auth
   const siu = useSiu()
+  const narrow = useNarrow()
   const operations = useOperationsStore((s) => s.operations)
+  // DB-backed pins (user_pins) — replaces the localStorage pinnedCases toggle
+  // so a pin follows the member across devices. The Store-key readers stay in
+  // caseUtils for the Command Jump-back strip until its consumer migrates.
+  const pinsLoaded = usePinsStore((s) => s.loaded)
+  const fetchPins = usePinsStore((s) => s.fetch)
+  const togglePin = usePinsStore((s) => s.toggle)
+  const pinned = usePinsStore((s) => s.rows.some((p) => p.target_type === 'case' && p.target_id === id))
+  useEffect(() => { if (!pinsLoaded) void fetchPins() }, [pinsLoaded, fetchPins])
   const [c, setCase] = useState<CaseRow | null>(null)
   // The id this view successfully loaded at least once — distinguishes a case
   // that vanished on refetch (access ended: joint expiry, RLS change) from one
@@ -139,12 +158,20 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   // back-to-back refetches in one tick see it flip.
   const loadedIdRef = useRef<string | null>(null)
   const fetchCase = useCallback(async () => {
-    if (loadedIdRef.current !== id) setLoading(true)
+    const firstLoadOfId = loadedIdRef.current !== id
+    if (firstLoadOfId) setLoading(true)
     try {
       const rows = await withRetry(() => list('cases', { eq: { id } }))
       setCase(rows[0] ?? null)
       loadedIdRef.current = id
-      if (rows[0]) { setEverLoadedId(id); pushRecentCase(rows[0].id) }
+      if (rows[0]) {
+        setEverLoadedId(id)
+        // Recents record deliberate opens only — the FIRST successful load of
+        // this id, never the realtime-bump refetches that follow. Both trails:
+        // the legacy per-case Store key (Command Jump-back) and the unified
+        // recents blob (lib/recents).
+        if (firstLoadOfId) { pushRecentCase(rows[0].id); pushRecent('case', rows[0].id) }
+      }
     } catch (e) {
       toast(e instanceof Error ? e.message : e, 'danger')
     } finally {
@@ -154,13 +181,48 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
 
   useEffect(() => { queueMicrotask(() => { void fetchCase() }) }, [fetchCase, casesV])
 
+  // "Seen" marker for the Overview recap — stamped when LEAVING the CASE
+  // (unmount or navigating to another case). It used to live on OverviewTab's
+  // unmount, so merely switching to another tab consumed the "since your last
+  // visit" recap; the case shell is the only component whose lifetime matches
+  // the visit.
+  useEffect(() => {
+    const cid = id
+    return () => { Store.set(`caseSeen:${cid}`, new Date().toISOString()) }
+  }, [id])
+
+  // ── Keep-alive tab panes (the ToolsView pattern) ─────────────────────────
+  // Every tab visited during this case visit stays MOUNTED and is hidden with
+  // display:none when inactive, so filters, drafts, pagination and in-tab
+  // fetches survive switching. Mounting is lazy — only visited tabs exist —
+  // and everything resets when the case id changes. Per-tab window scroll is
+  // captured on switch and restored on return (rAF, ToolsView idiom).
+  const [visited, setVisited] = useState<ReadonlySet<TabId>>(() => new Set([tab]))
+  const tabScroll = useRef(new Map<TabId, number>())
+  const [visitedForId, setVisitedForId] = useState(id)
+  if (visitedForId !== id) {
+    // Render-phase adjustment (same idiom as adoptedKey): a new case drops the
+    // previous case's panes and scroll memory.
+    setVisitedForId(id)
+    setVisited(new Set([urlTab]))
+    tabScroll.current.clear()
+  }
+  if (!visited.has(tab)) setVisited(new Set(visited).add(tab))
+
   const setTab = (next: TabId) => {
+    tabScroll.current.set(tab, window.scrollY)
     setTabOverride(next)
     const params = new URLSearchParams(sp.toString())
     params.set('case', id)
     params.set('tab', next)
     window.history.replaceState(window.history.state, '', `/cases?${params.toString()}`)
   }
+
+  useLayoutEffect(() => {
+    const target = tabScroll.current.get(tab) ?? 0
+    const raf = requestAnimationFrame(() => window.scrollTo(0, target))
+    return () => cancelAnimationFrame(raf)
+  }, [tab, id])
 
   // ── Workflow snapshot — the ONE case-scoped fetch behind the command
   //    header, metric strip and OverviewTab (passed down as props; Overview
@@ -190,9 +252,12 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const vB = useTableVersion('case_blockers')
   const vRi = useTableVersion('rico_cases')
   const vAsg = useTableVersion('case_assignments')
+  const vIn = useTableVersion('case_intel_links')
+  const vSv = useTableVersion('surveillance_targets')
+  const vEx = useTableVersion('record_extractions')
   const fetchWorkflow = useCallback(async () => {
     try {
-      const [tasks, reports, legal, media, blockers, rico, assignments, chargeTotals] = await Promise.all([
+      const [tasks, reports, legal, media, blockers, rico, assignments, chargeTotals, intelLinks, surveillanceTargets, extractions] = await Promise.all([
         list('case_tasks', { eq: { case_id: id } }),
         list('reports', { eq: { case_id: id } }),
         // Legal is read-scoped by RLS; a failure must not sink the header.
@@ -208,12 +273,17 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         // Charge totals are computed by the database because it is the only
         // place that knows which charge rows this viewer may see.
         loadCaseChargeTotals(id).catch(() => null),
+        // Tab-pill counts only — cheap HEAD counts; the tabs themselves fetch
+        // (and RLS-scope) the full rows on first visit.
+        countRows('case_intel_links', { eq: { case_id: id } }).catch(() => 0),
+        countRows('surveillance_targets', { eq: { case_id: id } }).catch(() => 0),
+        countRows('record_extractions', { eq: { case_id: id } }).catch(() => 0),
       ])
       setWf({ tasks, reports, legal: legal as LegalRequest[], media, blockers, rico, assignments,
-              chargeCounts: chargeTotals?.counts ?? 0 })
+              chargeCounts: chargeTotals?.counts ?? 0, intelLinks, surveillanceTargets, extractions })
     } catch { /* header/metrics render with em-dashes until a fetch lands */ }
   }, [id])
-  useEffect(() => { queueMicrotask(() => { void fetchWorkflow() }) }, [fetchWorkflow, casesV, vM, vR, vT, vL, vB, vRi, vAsg])
+  useEffect(() => { queueMicrotask(() => { void fetchWorkflow() }) }, [fetchWorkflow, casesV, vM, vR, vT, vL, vB, vRi, vAsg, vIn, vSv, vEx])
 
   // Legal hold — its own tiny fetch (independent of the workflow snapshot).
   // RLS lets command + anyone who can access the case read it; a denied read
@@ -283,7 +353,6 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
 
   const op = operations.find((x) => x.id === c.operation_id)
   const joint = caseJointInfo(c, opLinks, new Map(operations.map((o) => [o.id, o])))
-  const pinned = isPinnedCase(c.id)
   // The current lead (or command) may hand the case to another officer.
   const canHandover = !!profile && (c.lead_detective_id === profile.id || isCommand)
   // Bureau reassignment is Deputy Director+/Owner (never bureau_lead) — the
@@ -359,13 +428,12 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const openBlockers = wf ? wf.blockers.filter((b) => b.status === 'open').length : null
   const counts = assessment?.counts ?? null
 
+  // One place per signal: OVERDUE tasks alarm in the command header only (the
+  // strip keeps the plain open-task count); open BLOCKERS live here only (the
+  // header no longer repeats them).
   const metrics: Metric[] = [
     { label: 'Photos', value: mediaCount ?? '—', onClick: () => setTab('media') },
-    {
-      label: 'Open tasks', value: openTasks ?? '—', onClick: () => setTab('tasks'),
-      hint: counts && counts.overdueTasks > 0 ? `${counts.overdueTasks} overdue` : undefined,
-      tint: counts && counts.overdueTasks > 0 ? 'bg-rose-500/15 text-rose-300' : undefined,
-    },
+    { label: 'Open tasks', value: openTasks ?? '—', onClick: () => setTab('tasks') },
     {
       label: 'Reports', value: wf ? wf.reports.length : '—', onClick: () => setTab('reports'),
       hint: counts && counts.draftReports > 0 ? `${counts.draftReports} draft` : undefined,
@@ -394,6 +462,9 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const caseDept = caseDepartment(c)
   const caseTerms = termsFor(caseDept)
 
+  // Counts stay cheap: every number below is already in the workflow snapshot
+  // (shared rows or the added HEAD counts) — no tab pill triggers a new heavy
+  // query. Timeline/chat/graph deliberately carry none.
   const tabDefs: Array<SectionTab<TabId>> = TABS.filter((t) => t !== 'rico' || ricoOn).map((t) => ({
     id: t,
     label: TAB_LABELS[t],
@@ -403,11 +474,21 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       : t === 'tasks' ? openTasks ?? undefined
       : t === 'charges' ? chargesCount
       : t === 'legal' ? wf?.legal.length
+      : t === 'intel' ? wf?.intelLinks
+      : t === 'surveillance' ? wf?.surveillanceTargets
+      : t === 'extractions' ? wf?.extractions
+      : t === 'rico' ? wf?.rico
       : undefined,
-    marker: t === 'signoff' ? awaitingSignoff : t === 'legal' && legalNeedsAction > 0,
+    marker:
+      t === 'signoff' ? awaitingSignoff
+      : t === 'legal' ? legalNeedsAction > 0
+      : t === 'tasks' ? (counts?.overdueTasks ?? 0) > 0
+      : t === 'reports' && (counts?.draftReports ?? 0) > 0,
     markerLabel:
       t === 'signoff' ? 'Sign-off requires attention'
       : t === 'legal' ? 'Legal requests need your action'
+      : t === 'tasks' ? 'Overdue tasks'
+      : t === 'reports' ? 'Draft reports awaiting finalization'
       : undefined,
   }))
 
@@ -480,7 +561,6 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         op={op ? { id: op.id, name: op.name } : null}
         joint={joint}
         assessment={assessment}
-        openBlockers={openBlockers}
         pinned={pinned}
         canEdit={canEdit}
         canArchive={isCommand}
@@ -493,7 +573,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         responsibleBureauAction={responsibleBureauAction}
         onResponsibleBureau={() => setRespBureau(true)}
         onStatusChange={(s) => void quickStatus(s)}
-        onPinToggle={() => { togglePinCase(c.id); setCase({ ...c }) }}
+        onPinToggle={() => void togglePin('case', c.id, c.case_number)}
         onEdit={() => setEdit(true)}
         onArchive={() => void archiveCase()}
         onHandover={() => setHandover(true)}
@@ -509,41 +589,73 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
           top-0). Header ≈ 4.5rem mobile / 4.75rem sm+; z-10 stays below the
           header's z-20 so the header owns the seam (no gap, no overlap). */}
       <div className="sticky top-[4.5rem] z-10 -mx-4 border-b border-white/10 bg-ink-950/90 px-4 backdrop-blur sm:top-[4.75rem] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-        <SectionTabs<TabId>
-          tabs={tabDefs}
-          groups={TAB_GROUPS}
-          active={tab}
-          onChange={setTab}
-          idBase="case"
-          ariaLabel="Case sections"
-          className="py-1"
-        />
-      </div>
-      <section role="tabpanel" id={panelDomId('case', tab)} aria-labelledby={tabDomId('case', tab)} tabIndex={0} className="rounded-2xl border border-white/10 bg-ink-900/45 p-4">
-        {tab === 'overview' && (
-          <OverviewTab
-            c={c} canEdit={canEdit} canDelete={canDelete} wf={wf} assessment={assessment}
-            onWorkflowChanged={() => void fetchWorkflow()}
-            /* !!wf: only offer the enable once the rico count is known, so the
-               action never flashes on a case that already has tracker data. */
-            showEnableRico={canEdit && !!wf && !ricoOn}
-            onEnableRico={() => { enableRicoSession(c.id); setTab('rico') }}
+        {narrow ? (
+          /* Phones: the 14-tab strip was 4-5 screen widths of horizontal
+             scrolling — a select-style switcher (current section + count,
+             full menu in a sheet) replaces it below `sm` only. */
+          <CaseSectionSwitcher<TabId>
+            tabs={tabDefs}
+            groups={TAB_GROUPS}
+            active={tab}
+            onChange={setTab}
+            ariaLabel="Case sections"
+            className="py-1.5"
+          />
+        ) : (
+          <SectionTabs<TabId>
+            tabs={tabDefs}
+            groups={TAB_GROUPS}
+            active={tab}
+            onChange={setTab}
+            idBase="case"
+            ariaLabel="Case sections"
+            className="py-1"
           />
         )}
-        {tab === 'graph' && <CaseGraphTab c={c} />}
-        {tab === 'media' && <MediaTab c={c} canEdit={canEdit} canDelete={canDelete} holdActive={!!hold} />}
-        {tab === 'intel' && <IntelTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
-        {tab === 'surveillance' && <SurveillanceTab c={c} />}
-        {tab === 'extractions' && <ExtractionsTab c={c} canEdit={canEdit} />}
-        {tab === 'charges' && <ChargesTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
-        {tab === 'rico' && <RicoTab c={c} canEdit={canEdit} canDelete={canDelete} />}
-        {tab === 'reports' && <ReportsTab c={c} canEdit={canEdit} canDelete={canDelete} holdActive={!!hold} />}
-        {tab === 'tasks' && <TasksTab c={c} canEdit={canEdit} canDelete={canDelete} holdActive={!!hold} />}
-        {tab === 'legal' && <LegalTab rows={wf?.legal ?? null} />}
-        {tab === 'signoff' && <SignoffTab c={c} />}
-        {tab === 'chat' && <ChatTab c={c} />}
-        {tab === 'timeline' && <TimelineTab c={c} />}
-      </section>
+      </div>
+      {/* Keep-alive panes: every VISITED tab stays mounted (hidden via
+          display:none when inactive — the ToolsView pattern) so tab-local
+          filters, drafts and pagination survive switching. aria-label instead
+          of aria-labelledby: on phones the tablist buttons don't exist. */}
+      {TABS.filter((t) => visited.has(t)).map((t) => {
+        const active = t === tab
+        return (
+          <section
+            key={t}
+            role="tabpanel"
+            id={panelDomId('case', t)}
+            aria-label={TAB_LABELS[t]}
+            tabIndex={0}
+            style={active ? undefined : { display: 'none' }}
+            aria-hidden={active ? undefined : true}
+            className="rounded-2xl border border-white/10 bg-ink-900/45 p-4"
+          >
+            {t === 'overview' && (
+              <OverviewTab
+                c={c} canEdit={canEdit} canDelete={canDelete} wf={wf} assessment={assessment}
+                onWorkflowChanged={() => void fetchWorkflow()}
+                /* !!wf: only offer the enable once the rico count is known, so the
+                   action never flashes on a case that already has tracker data. */
+                showEnableRico={canEdit && !!wf && !ricoOn}
+                onEnableRico={() => { enableRicoSession(c.id); setTab('rico') }}
+              />
+            )}
+            {t === 'graph' && <CaseGraphTab c={c} />}
+            {t === 'media' && <MediaTab c={c} canEdit={canEdit} canDelete={canDelete} holdActive={!!hold} />}
+            {t === 'intel' && <IntelTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
+            {t === 'surveillance' && <SurveillanceTab c={c} />}
+            {t === 'extractions' && <ExtractionsTab c={c} canEdit={canEdit} />}
+            {t === 'charges' && <ChargesTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
+            {t === 'rico' && <RicoTab c={c} canEdit={canEdit} canDelete={canDelete} />}
+            {t === 'reports' && <ReportsTab c={c} canEdit={canEdit} canDelete={canDelete} holdActive={!!hold} />}
+            {t === 'tasks' && <TasksTab c={c} canEdit={canEdit} canDelete={canDelete} holdActive={!!hold} />}
+            {t === 'legal' && <LegalTab rows={wf?.legal ?? null} />}
+            {t === 'signoff' && <SignoffTab c={c} />}
+            {t === 'chat' && <ChatTab c={c} />}
+            {t === 'timeline' && <TimelineTab c={c} />}
+          </section>
+        )
+      })}
       <CaseModal open={edit} record={c} onClose={() => setEdit(false)} onSaved={() => { setEdit(false); onChanged(); void fetchCase() }} />
       <HandoverModal open={handover} c={c} onClose={() => setHandover(false)} onDone={() => { setHandover(false); onChanged(); void fetchCase() }} />
       <ReassignBureauModal open={reassign} c={c} onClose={() => setReassign(false)} onDone={() => { setReassign(false); onChanged(); void fetchCase() }} />
