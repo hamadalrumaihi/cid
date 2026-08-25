@@ -125,10 +125,14 @@ export function SiuView() {
 
   // ?s= deep-links land on their section (the CommandCenterView precedent) —
   // the Action Center's SIB items point here. In-view tab clicks keep the
-  // existing local state; an invalid or absent param changes nothing.
+  // existing local state; an invalid or absent param changes nothing. The
+  // deferred hop keeps the setState out of the synchronous effect body (the
+  // ShiftsView pattern used throughout this file).
   useEffect(() => {
     const s = sp.get('s')
-    if (s && SECTIONS.some((t) => t.id === s)) setSection(s as Section)
+    if (!s || !SECTIONS.some((t) => t.id === s)) return
+    const t = window.setTimeout(() => setSection(s as Section), 0)
+    return () => window.clearTimeout(t)
   }, [sp])
 
   if (state !== 'in') return <Notice text="Sign in to continue." />
@@ -208,64 +212,310 @@ export function SiuView() {
 
 /* ---------------------------------------------------------------- overview */
 
+/** Referrals still needing an intake decision — SiuIntake's OPEN_STATUSES. */
+const REFERRAL_OPEN = ['submitted', 'under_review', 'info_requested']
+
+type TaskLite = Pick<Tables<'case_tasks'>, 'id' | 'case_id' | 'title' | 'due'>
+
+/** The field agent's own work — loaded only for field standing (oversight has
+ *  no read on intake and no tasks of its own; loading nothing is the honest
+ *  state, never a locked panel). Everything is bounded and RLS-scoped. */
+interface AgentWork {
+  /** Open SIB investigations the agent is cleared for, newest movement first. */
+  openCases: CaseRow[]
+  /** The agent's open tasks (intersected client-side with `openCases`). */
+  tasks: TaskLite[]
+  referrals: SiuReferral[]
+  disclosures: SiuDisclosure[]
+}
+
+/** X-1's queues — reuses the existing §35/§36 payloads (siu_command_dashboard,
+ *  siu_intel_quality) and the access-request list; no new queries. */
+interface CommandWork {
+  access: SiuAccessRequest[]
+  dash: SiuCommandDashboard
+  intel: SiuIntelQuality
+}
+
 function OverviewSection({ onGoto }: { onGoto: (s: Section) => void }) {
+  const { profile } = useAuth()
+  const router = useRouter()
   const siu = useSiu()
   const [data, setData] = useState<SiuOverview | null>(null)
   const [recent, setRecent] = useState<CaseRow[]>([])
+  const [agent, setAgent] = useState<AgentWork | null>(null)
+  const [command, setCommand] = useState<CommandWork | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const me = profile?.id ?? null
+
   useEffect(() => {
+    // Wait for the resolved SIB context: the standing gates below decide
+    // which queues load at all, and a false-while-loading flag would skip
+    // the agent/command fetches on first mount.
+    if (siu.loading) return
     let live = true
     void (async () => {
       try {
-        const [o, r] = await Promise.all([
+        const [o, r, aw, cw] = await Promise.all([
           withRetry(fetchSiuOverview),
           withRetry(() => list('cases', {
             order: 'updated_at', ascending: false, limit: 6,
             eq: { case_authority: 'siu' },
             select: 'id,case_number,title,status,siu_classification,updated_at,lead_detective_id',
           })),
+          siu.isAgent && me
+            ? Promise.all([
+                withRetry(() => list('cases', {
+                  order: 'updated_at', ascending: false, limit: 100,
+                  eq: { case_authority: 'siu' }, is: { closed_at: null },
+                  select: 'id,case_number,title,status,siu_classification,updated_at,lead_detective_id',
+                })),
+                withRetry(() => list('case_tasks', {
+                  select: 'id,case_id,title,due', eq: { assignee: me, done: false }, limit: 100,
+                })),
+                withRetry(() => fetchSiuReferrals()).catch((): SiuReferral[] => []),
+                withRetry(() => fetchSiuDisclosures()).catch((): SiuDisclosure[] => []),
+              ]).then(([openCases, tasks, referrals, disclosures]): AgentWork => ({
+                openCases: openCases as CaseRow[],
+                tasks: tasks as unknown as TaskLite[],
+                referrals, disclosures,
+              }))
+            : Promise.resolve(null),
+          siu.isCommand
+            ? Promise.all([
+                // Command-only by RLS; fail-open to empty/no-access so a miss
+                // can never sink the landing.
+                withRetry(() => fetchSiuAccessRequests()).catch((): SiuAccessRequest[] => []),
+                withRetry(() => fetchSiuCommandDashboard()).catch((): SiuCommandDashboard => ({ access: false })),
+                withRetry(() => fetchSiuIntelQuality()).catch((): SiuIntelQuality => ({ access: false })),
+              ]).then(([access, dash, intel]): CommandWork => ({ access, dash, intel }))
+            : Promise.resolve(null),
         ])
-        if (live) { setData(o); setRecent(r as CaseRow[]) }
+        if (live) { setData(o); setRecent(r as CaseRow[]); setAgent(aw); setCommand(cw) }
       } catch (e) {
         if (live) toast(e instanceof Error ? e.message : String(e), 'danger')
       } finally { if (live) setLoading(false) }
     })()
     return () => { live = false }
-  }, [])
+  }, [siu.loading, siu.isAgent, siu.isCommand, me])
+
+  const openCaseById = useMemo(
+    () => new Map((agent?.openCases ?? []).map((c) => [c.id, c])),
+    [agent],
+  )
+  const myCases = useMemo(
+    () => (agent?.openCases ?? []).filter((c) => c.lead_detective_id === me),
+    [agent, me],
+  )
+  const myTasks = useMemo(
+    () => (agent?.tasks ?? []).filter((t) => openCaseById.has(t.case_id)),
+    [agent, openCaseById],
+  )
+  const openReferrals = useMemo(
+    () => (agent?.referrals ?? []).filter((r) => REFERRAL_OPEN.includes(r.status)),
+    [agent],
+  )
+  const unacked = useMemo(
+    () => (agent?.disclosures ?? []).filter((d) => !d.acknowledged_at && !d.revoked_at),
+    [agent],
+  )
+  const pendingAccess = useMemo(
+    () => (command?.access ?? []).filter((r) => r.status === 'pending'),
+    [command],
+  )
 
   if (loading) return <CardGridSkeleton cols="" />
   if (!data?.access) return <Notice text="Nothing to show here." />
+
+  const q = command?.dash.queues
+  const intel = command?.intel
 
   return (
     <div className="space-y-4">
       <MetricStrip
         metrics={[
           { label: 'Investigations', value: data.investigations ?? 0, hint: 'You can access', onClick: () => onGoto('investigations') },
-          { label: 'Open', value: data.open_investigations ?? 0 },
+          { label: 'Open', value: data.open_investigations ?? 0, onClick: () => onGoto('investigations') },
           { label: 'Assigned to you', value: data.assigned ?? 0, onClick: () => onGoto('investigations') },
-          { label: 'Compartmented', value: data.compartmented ?? 0, tint: 'bg-rose-500/15 text-rose-300' },
-          { label: 'Legal pending', value: data.legal_pending ?? 0, hint: 'Warrants & subpoenas' },
+          { label: 'Compartmented', value: data.compartmented ?? 0, tint: 'bg-rose-500/15 text-rose-300', onClick: () => onGoto('compartments') },
+          // SIB legal requests route via the Attorney General — the SIB-side
+          // list is the workspace's own Legal Requests tab, never the CID
+          // prosecutor path.
+          { label: 'Legal pending', value: data.legal_pending ?? 0, hint: 'Warrants & subpoenas', onClick: () => router.push('/legal') },
           { label: 'Agents', value: data.agents ?? 0, onClick: () => onGoto('agents') },
         ]}
       />
 
       {/* Operational picture — the §14 sections, each counting only what this
-          agent may actually see. */}
+          agent may actually see. Surveillance lives on each case's own tab,
+          so that tile stays a plain count. */}
       <MetricStrip
         metrics={[
           { label: 'Priority targets', value: data.priority_targets ?? 0,
             hint: 'Target · Priority · Fugitive',
-            tint: (data.priority_targets ?? 0) > 0 ? 'bg-rose-500/15 text-rose-300' : undefined },
-          { label: 'Active targets', value: data.active_targets ?? 0 },
-          { label: 'Active operations', value: data.active_operations ?? 0 },
+            tint: (data.priority_targets ?? 0) > 0 ? 'bg-rose-500/15 text-rose-300' : undefined,
+            onClick: () => onGoto('targets') },
+          { label: 'Active targets', value: data.active_targets ?? 0, onClick: () => onGoto('targets') },
+          { label: 'Active operations', value: data.active_operations ?? 0, onClick: () => onGoto('operations') },
           { label: 'Surveillance', value: data.surveillance_active ?? 0, hint: 'Running' },
-          { label: 'Intelligence', value: data.open_intel ?? 0, hint: 'Unresolved' },
+          { label: 'Intelligence', value: data.open_intel ?? 0, hint: 'Unresolved', onClick: () => onGoto('intelligence') },
           { label: 'Integrity flags', value: data.cid_integrity_flags ?? 0,
             hint: 'Raised on CID cases',
-            tint: (data.cid_integrity_flags ?? 0) > 0 ? 'bg-amber-500/15 text-amber-300' : undefined },
+            tint: (data.cid_integrity_flags ?? 0) > 0 ? 'bg-amber-500/15 text-amber-300' : undefined,
+            onClick: () => onGoto('intelligence') },
         ]}
       />
+
+      {/* ── Command landing — X-1's decision queues (reused payloads) ─────── */}
+      {command && (
+        <>
+          <DashPanel
+            title="Access requests to decide"
+            count={pendingAccess.length}
+            hint="The Director of CID asking to read one investigation — X-1 decides. Approval opens that one case file for a fixed period."
+            action={{ label: 'Intake →', onClick: () => onGoto('intake') }}
+            empty={pendingAccess.length === 0}
+          >
+            {pendingAccess.map((r) => (
+              <DashRow
+                key={r.id}
+                title={r.case_number_requested}
+                why={r.reason || 'Pending access decision'}
+                meta={fmtWhen(r.requested_at)}
+                onClick={() => onGoto('intake')}
+              />
+            ))}
+          </DashPanel>
+
+          {command.dash.access && (
+            <Card>
+              <SectionHeader
+                title="Command queues"
+                subtitle="What is waiting on somebody — counts reflect only what you can see. Each number opens its owning section."
+              />
+              <div className="mt-3">
+                <MetricStrip
+                  metrics={[
+                    { label: 'Referrals awaiting review', value: q?.referrals_awaiting ?? 0, onClick: () => onGoto('intake') },
+                    { label: 'Open inquiries', value: q?.inquiries_open ?? 0, onClick: () => onGoto('investigations') },
+                    { label: 'Standing conflicts', value: q?.conflicts_standing ?? 0, onClick: () => onGoto('intake') },
+                    { label: 'Watches expiring (14d)', value: q?.watch_expiring_14d ?? 0, onClick: () => onGoto('watchlist') },
+                    { label: 'Aging investigations', value: command.dash.aging?.length ?? 0, hint: 'Open 60+ days', onClick: () => onGoto('command') },
+                    { label: 'Release gate', value: siu.releaseOpen ? 'Open' : 'Pre-release',
+                      hint: siu.releaseOpen ? 'SIB is live for appointed agents' : 'Owner-only until launch',
+                      onClick: () => onGoto('command') },
+                  ]}
+                />
+              </div>
+              {intel?.access && (
+                <div className="mt-3">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    Intelligence quality
+                  </p>
+                  <MetricStrip
+                    metrics={[
+                      { label: 'Ungraded', value: intel.ungraded ?? 0,
+                        tint: (intel.ungraded ?? 0) > 0 ? 'bg-amber-500/15 text-amber-300' : undefined,
+                        onClick: () => onGoto('intelligence') },
+                      { label: 'Reviews overdue', value: intel.review_overdue ?? 0,
+                        tint: (intel.review_overdue ?? 0) > 0 ? 'bg-rose-500/15 text-rose-300' : undefined,
+                        onClick: () => onGoto('intelligence') },
+                      { label: 'Review due (30d)', value: intel.review_due_30d ?? 0, onClick: () => onGoto('intelligence') },
+                      { label: 'Untested sources', value: intel.untested_source ?? 0, onClick: () => onGoto('intelligence') },
+                    ]}
+                  />
+                </div>
+              )}
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* ── Agent landing — the viewer's own SIB work, with why-lines ─────── */}
+      {agent && (
+        <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
+          <DashPanel
+            title="Your investigations"
+            count={myCases.length}
+            action={{ label: 'All investigations →', onClick: () => onGoto('investigations') }}
+            empty={myCases.length === 0}
+          >
+            {myCases.slice(0, 8).map((c) => (
+              <DashRow
+                key={c.id}
+                title={`${c.case_number} · ${c.title || 'Untitled investigation'}`}
+                badge={
+                  <Badge tint={siuClassificationTint(c.siu_classification)}>
+                    {siuClassificationLabel(c.siu_classification)}
+                  </Badge>
+                }
+                why="You are the lead agent"
+                meta={fmtDate(c.updated_at)}
+                onClick={() => router.push(`/cases?case=${c.id}`)}
+              />
+            ))}
+          </DashPanel>
+
+          <DashPanel
+            title="Your tasks"
+            count={myTasks.length}
+            hint="Open tasks assigned to you on SIB investigations."
+            empty={myTasks.length === 0}
+          >
+            {myTasks.slice(0, 8).map((t) => {
+              const c = openCaseById.get(t.case_id)
+              return (
+                <DashRow
+                  key={t.id}
+                  title={t.title}
+                  why={t.due ? `Assigned to you — due ${fmtDate(t.due)}` : 'Assigned to you'}
+                  meta={c?.case_number ?? undefined}
+                  overdue={!!t.due && new Date(t.due) < new Date()}
+                  onClick={() => router.push(caseLink(t.case_id, 'tasks', { task: t.id }))}
+                />
+              )
+            })}
+          </DashPanel>
+
+          <DashPanel
+            title="Intake awaiting review"
+            count={openReferrals.length}
+            action={{ label: 'Intake →', onClick: () => onGoto('intake') }}
+            empty={openReferrals.length === 0}
+          >
+            {openReferrals.slice(0, 8).map((r) => (
+              <DashRow
+                key={r.id}
+                title={r.summary}
+                why={`${siuReferralCategoryLabel(r.category)} — ${r.status === 'info_requested'
+                  ? 'more information was requested'
+                  : 'awaiting an intake decision'}`}
+                meta={fmtWhen(r.submitted_at)}
+                onClick={() => onGoto('intake')}
+              />
+            ))}
+          </DashPanel>
+
+          <DashPanel
+            title="Releases awaiting acknowledgement"
+            count={unacked.length}
+            hint="What SIB told CID that CID has not yet acknowledged."
+            action={{ label: 'Released to CID →', onClick: () => onGoto('disclosure') }}
+            empty={unacked.length === 0}
+          >
+            {unacked.slice(0, 8).map((d) => (
+              <DashRow
+                key={d.id}
+                title={d.title}
+                why={`${siuAudienceLabel(d.audience)} — not yet acknowledged by CID`}
+                meta={fmtWhen(d.released_at)}
+                onClick={() => onGoto('disclosure')}
+              />
+            ))}
+          </DashPanel>
+        </div>
+      )}
 
       <Card>
         <SectionHeader
@@ -293,8 +543,8 @@ function OverviewSection({ onGoto }: { onGoto: (s: Section) => void }) {
           <div className="mt-3">
             <MetricStrip
               metrics={[
-                { label: 'Open CID cases', value: data.cid_open_cases ?? '—' },
-                { label: 'Opened this week', value: data.cid_recent_cases ?? '—' },
+                { label: 'Open CID cases', value: data.cid_open_cases ?? '—', onClick: () => router.push('/cases') },
+                { label: 'Opened this week', value: data.cid_recent_cases ?? '—', onClick: () => router.push('/cases') },
               ]}
             />
           </div>
