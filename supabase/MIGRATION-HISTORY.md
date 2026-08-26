@@ -275,11 +275,13 @@ timestamp.
 | — | ux_personalization_c6a_task_trgm_index | `20260826010000_ux_personalization.sql` |
 | — | ux_personalization_c6b_search_all_bolo_task | `20260826010000_ux_personalization.sql` |
 
-## FiveM integration preparation (2026-10-02, authored — NOT yet applied)
+## FiveM integration preparation (2026-10-02, applied)
 
-`20261002120000_fivem_integration_prep.sql` is authored in-repo and mirrored
-into `schema-snapshot.sql` / `database.types.ts`, but has **not yet been
-applied to the live project** — the orchestrator applies it via MCP. Entirely
+`20261002120000_fivem_integration_prep.sql` is authored in-repo, mirrored
+into `schema-snapshot.sql` / `database.types.ts`, and **applied to the live
+project via MCP as `fivem_integration_prep`** (advisors re-run: zero ERROR
+findings; the four fully-dormant tables show the expected INFO-level
+"RLS enabled, no policy" notices, the deliberate posture). Entirely
 DORMANT: six new tables (no seeds, no RPCs, no realtime, no workers, no new
 browser access), plus the D1 fix widening
 `mdt_wanted_projections_sync_status_check` to admit `'retryable'` (the value
