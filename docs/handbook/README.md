@@ -38,6 +38,7 @@ chapter stands alone and cross-links the rest.
 | 18 | [Security Notes](18-security.md) | The security model and residual risks |
 | 19 | [Improvement Ideas](19-improvements.md) | Ranked suggestions (shipped rows marked done) |
 | 20 | [Learning Path](20-learning-path.md) | The order to learn all of this |
+| 21 | [City Integration & Bridges](21-integration.md) | The dormant FiveM/MDT bridges, integration tables, shared case services |
 
 ## Appendices
 

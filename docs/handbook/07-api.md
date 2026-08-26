@@ -141,6 +141,30 @@ normal UI.
 | `import_legal_warrant(p_case, p_subtype, p_title, p_priority, p_form, p_narrative, p_person, p_classification, p_source_submitted_at, p_source_submitter, p_import_key, p_exhibits)` | owner-only, **idempotent** on `import_key` (a repeat key returns the existing row, zero duplicates); lands the request at `submitted_to_doj` intake (never approved / signed / issued / executed / MDT-projected); preserves the historical `source_submitter`/`source_submitted_at` **separate from** the real import actor (never falsifies `auth.uid()`); freezes an immutable submitted version; attaches reused canonical exhibits plus external links (external-link URLs must be http(s)); writes a `LEGAL_IMPORTED` audit row |
 | `import_rollback_by_key(p_import_key)` | owner-only deliberate reversal — deletes the imported request and its children in dependency order but **never** deletes `audit_log`; appends a `LEGAL_IMPORT_ROLLBACK` audit row before removal; returns the number of requests rolled back |
 
+### Shared case services (`20261002130000`)
+
+Six definer RPCs that moved the case workspace's worst component-embedded
+operations server-side. The portal calls them through
+`src/lib/services/{cases,reports}.ts`; the future FiveM CID lane will call
+the **same** functions — one implementation per operation, never two (see
+[Ch. 21](21-integration.md)). Each gates on the exact `private.*` predicate
+its old client path passed through.
+
+| RPC | Request | Called from | Why it exists |
+|---|---|---|---|
+| `case_create(p_bureau, p_title, p_summary?, p_priority?, p_area?, p_lead?, p_template?, p_case_number?)` | bureau + fields | CaseModal | atomic create: `can_create_case` gate, collision-safe number minting under a per-bureau advisory lock (explicit-number collision errors — never a timestamp fallback), command-only lead choice (everyone else IS the lead), template-checklist expansion, `CASE_CREATED` audit |
+| `case_set_status(p_case, p_status, p_reason?)` | case + status | CaseBoard drag, CaseDetail quick actions, CasesView bulk | validated vocabulary + `CASE_STATUS_CHANGED` audit; `closed_at` stays owned by the `trg_case_closed_at` trigger; transitions deliberately unconstrained (mirrors the old freedom) |
+| `case_set_lead(p_case, p_to, p_note?)` | case + new lead | HandoverModal | the modal's lead-or-command rule promoted to a server gate; server-sent `case_handover` notifications to both sides; `CASE_LEAD_CHANGED` audit |
+| `case_access_decide(p_request, p_approve, p_note?)` | request id + decision | AccessDecisionModal | atomic grant-insert + request-stamp under `can_grant_case` (the old client did two writes and could grant without stamping); closes the unaudited-grant gap (`CASE_ACCESS_DECIDED`); an already-decided request errors, changes nothing |
+| `case_timeline(p_case)` | case id | TimelineTab | ONE definer read replacing 11 parallel client reads — gated on `can_read_case` with the narrower arms (legal holds, restricted trail, surveillance, media clauses) re-checked per-arm, so it exposes exactly what the client reads exposed |
+| `report_create(p_case, p_template, p_kind?, p_fields?)` | case + template | ReportsTab (create path) | server-computed per-(case, template, kind) seq under an advisory lock; author pinned to `auth.uid()` (never a parameter); `REPORT_CREATED` audit |
+
+The **machine-only bridge functions** — `mdt_patrol_feed`,
+`bridge_ingest_event`, `mdt_bridge_ack` — are deliberately absent from the
+client list above: EXECUTE is service_role-only and no consumer is deployed.
+See [Ch. 21](21-integration.md) and
+[`docs/MDT-BRIDGE-CONTRACT.md`](../MDT-BRIDGE-CONTRACT.md).
+
 **Error handling**: RPCs come back through `rpc()` as `{error}` — callers
 toast it. RPC-internal permission failures raise exceptions that surface
 the same way.

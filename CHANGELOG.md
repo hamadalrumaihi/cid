@@ -8,6 +8,59 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### FiveM integration preparation — 2026-08-26
+
+Groundwork for a future in-city (FiveM) CID lane. **Nothing integration-side
+is live**: no consumer is deployed, no external caller is registered, no new
+table holds a row, and the portal behaves exactly as if none of it existed.
+Map: [ARCHITECTURE.md §12](docs/ARCHITECTURE.md) /
+[Handbook Ch. 21](docs/handbook/21-integration.md).
+
+**Dormant integration schema** (`20261002120000_fivem_integration_prep`)
+- Six tables, zero behavior: `external_links`, `external_storage_refs`,
+  `external_media_refs`, `external_officer_identities` are **fully sealed**
+  (RLS on, zero policies, all client privileges revoked);
+  `integration_sources` (empty registry, `enabled` defaults false,
+  `secret_ref` is a pointer — secrets never in the DB) and
+  `integration_events` (idempotency/audit envelope, safe metadata only) are
+  command/owner **read-only**. No seeds, no RPCs, no realtime. Pinned by the
+  new `tests/rls/v178` suite.
+- Bridge fixes: the `mdt_wanted_projections.sync_status` CHECK now admits
+  `'retryable'` (acking the wanted branch with it was a guaranteed
+  violation), and the schema snapshot drift is corrected.
+
+**Shared case services — LIVE** (`20261002130000_shared_case_services`)
+- Six SECURITY DEFINER RPCs replace the worst component-embedded case
+  operations, each gated on the exact `private.*` predicate its old client
+  path passed through: `case_create` (atomic, collision-safe numbering —
+  an explicit-number collision now errors instead of minting a timestamp
+  number), `case_set_status`, `case_set_lead` (server-sent handover
+  notifications), `case_access_decide` (atomic + closes the
+  unaudited-grant gap), `case_timeline` (one definer read replacing 11
+  parallel client reads), `report_create` (server-computed seq, author
+  pinned to `auth.uid()`); plus `private.case_service_notify`.
+- Portal rewired behavior-identically onto them via
+  `src/lib/services/{cases,reports}.ts`: CaseModal, CaseBoard, CaseDetail,
+  CasesView, AccessDecisionModal, TimelineTab, ReportsTab. The future city
+  lane calls the *same* functions — one implementation per operation.
+
+**Contracts & boundary (all forward-looking)**
+- `src/lib/integration/` — provider-neutral TypeScript contracts
+  (`External*` shapes, provider interfaces, idempotency helpers, mock
+  adapter + unit tests); imported by nothing in app code, by design.
+- `docs/integration/CID-INTEGRATION-API.md` — the CID-lane contract:
+  per-officer identity exchange, the service-role raw-write prohibition,
+  error vocabulary, operations catalog, idempotency and ownership rules.
+- `supabase/functions/cid-integration/` — **undeployed** edge-function
+  skeleton (every handler returns `not_activated`; deploying it is the
+  review-gated activation step).
+- `integration-package/` — the standalone city-developer handoff (contract,
+  self-contained types, examples, adapter guides, zero-dependency mock,
+  server-side FiveM resource skeleton; no credentials or hostnames).
+- `docs/MDT-BRIDGE-CONTRACT.md` staleness fixes; new docs coverage:
+  ARCHITECTURE §12, Handbook Ch. 21, AUTHORIZATION §4 postures,
+  OPERATIONS §9.
+
 ### Smart entity search & linking — 2026-08-25
 
 One coordinated pass over every "pick a record" surface: search-first,

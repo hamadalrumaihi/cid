@@ -205,3 +205,15 @@ and the schema snapshot is the complete table list:
   editable; the legal-hold trigger still vetoes), the `create_notification`
   1-hour dedupe guard, and `search_all` `bolo` + `task` arms (+ a
   `case_tasks` title trgm index).
+- **FiveM integration prep — dormant data layer** (`20261002120000`) — six
+  tables for the future city integration: `integration_sources` and
+  `integration_events` are command/owner **SELECT-only** audit surfaces (no
+  write policies); `external_links`, `external_storage_refs`,
+  `external_media_refs` and `external_officer_identities` are **fully
+  sealed** (RLS on, zero policies, all privileges revoked). No seeds, no
+  RPCs, no realtime. Also fixes the `mdt_wanted_projections.sync_status`
+  CHECK to admit `'retryable'`. See [Ch. 21](21-integration.md).
+- **Shared case services** (`20261002130000`) — no tables; six definer RPCs
+  (`case_create`, `case_set_status`, `case_set_lead`, `case_access_decide`,
+  `case_timeline`, `report_create`) that both the portal and the future city
+  lane call. See [Ch. 7](07-api.md).

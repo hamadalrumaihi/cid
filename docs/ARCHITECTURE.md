@@ -276,7 +276,109 @@ Both Discord functions use the service-role key **inside the function only**
 and require `DISCORD_BOT_TOKEN`; without it they no-op. The client
 publishable key is never involved in service-role writes.
 
-## 12. Owner-only surfaces
+## 12. Integration architecture — the city bridges (dormant)
+
+The portal is prepared for — but not connected to — the city (a GTA V FiveM
+server). **Nothing in this section is live**; it documents the current
+dormant surface and the future shape it was built for. Contracts:
+[MDT-BRIDGE-CONTRACT.md](MDT-BRIDGE-CONTRACT.md) (patrol lane) and
+[integration/CID-INTEGRATION-API.md](integration/CID-INTEGRATION-API.md)
+(CID lane); developer handoff:
+[`integration-package/`](../integration-package/README.md); handbook depth:
+[Handbook Ch. 21](handbook/21-integration.md).
+
+### Current state
+
+The only integration surface that exists today is the **patrol bridge** —
+three SECURITY DEFINER functions whose EXECUTE is granted to `service_role`
+only (revoked from `authenticated`/`anon`, asserted by the RLS suite), so
+they are unreachable from the app runtime and from any browser:
+
+- `mdt_patrol_feed()` — outbound: a nine-column structural allowlist
+  (snapshot text only — no case ids, no entity FKs; sensitive CID/SIB data
+  cannot cross by construction).
+- `bridge_ingest_event(...)` — inbound: automated surveillance observations,
+  idempotent on `(source, source_event_id)`, quarantine-not-discard,
+  always unverified until detective review.
+- `mdt_bridge_ack(...)` — sync bookkeeping on the export/projection rows.
+
+No consumer is deployed; the feed has never been read by a city system.
+Alongside it sits the **dormant integration data layer**
+(`20261002120000_fivem_integration_prep`): `integration_sources` (caller
+registry, ships empty, `enabled` defaults false), `external_links` (generic
+CID record → city record reference), `external_storage_refs` and
+`external_media_refs` (typed references to city-held storage items and
+city-hosted media), `integration_events` (idempotency/audit envelope), and
+`external_officer_identities` (city officer → portal profile mapping,
+`active` defaults false). Four of the six are fully sealed (RLS on, zero
+policies, all privileges revoked); `integration_sources` and
+`integration_events` are command/owner **read-only** audit surfaces. No
+RPC writes them; no rows exist; no realtime publication.
+
+### Future state
+
+```
+FiveM CID app (NUI)              — no secrets, no Supabase access, ever
+        │  in-city RPC/HTTP
+        ▼
+CID Integration Service          — city-hosted, server-side; sole holder of
+        │                          the integration secret; rate limits;
+        │                          city-side provider adapters
+        ▼
+Supabase CID backend  ◄────────► OOC portal (this app)
+```
+
+**One shared backend** — the in-city app and the OOC portal read and write
+the *same* cases, reports and RLS. There is no second copy of CID, no sync
+between a "city CID" and a "portal CID", and no city-side cache of portal
+data.
+
+**The two-lane rule.** The patrol lane (above) is machine-to-machine,
+minimal and sanitized; the CID lane is authenticated, per-officer casework.
+The lanes never mix: a patrol MDT never gains CID reach, and the CID lane
+never widens the patrol feed's allowlist.
+
+**Per-officer identity.** The CID lane has no shared "game server" actor.
+The integration service resolves the city officer through
+`external_officer_identities` and mints a short-lived Supabase session for
+the mapped profile — every operation runs as `auth.uid()` = that officer,
+so SIB compartmentalization, sealed records, bureau scope and audit
+attribution hold automatically. Temporary joint-agency officers get
+per-case access through the reserved
+`case_assignments.assignment_source = 'manual_access'` lane, never a role
+change. Raw service-role table writes are **forbidden** — the guard
+triggers are `current_user`-based and transparent to service_role; the
+machine identity may only call explicitly granted RPCs.
+
+**City-data connection map.** City records stay city-authoritative; CID
+stores references, never mirrors:
+
+| City data | CID reference |
+| --- | --- |
+| Citizens, vehicles, properties, officers, penal code, legal actors | read live via provider interfaces ([`src/lib/integration/providers.ts`](../src/lib/integration/providers.ts)); linked via `external_links` `(source, external_type, external_id)` |
+| Physical storage / evidence items | `external_storage_refs` (case pointer + frozen custody facts) |
+| City-hosted media | `external_media_refs` (durable URL pointer, never a copy) |
+
+The ownership principles: **one canonical CID backend** (this Supabase
+project), **one canonical city backend** (the FiveM server's own systems),
+both UIs sit on their authoritative service, external references connect
+them, and snapshots are deliberate — explicit, labeled, point-in-time
+copies (`snapshot`/`*_snapshot`), never implicitly refreshed and never
+written back.
+
+**Shared case services.** The operations both interfaces will share are
+already server-side: `case_create`, `case_set_status`, `case_set_lead`,
+`case_access_decide`, `case_timeline`, `report_create`
+(`20261002130000_shared_case_services`; wrappers in
+[`src/lib/services/`](../src/lib/services)). The portal calls them today;
+a future city lane calls the *same* functions — one implementation per
+operation, never two.
+
+Activation — deploying `supabase/functions/cid-integration/`, adding the
+activation RPCs, enabling a source — is a separately-reviewed pass; until
+then the portal behaves exactly as if none of this existed.
+
+## 13. Owner-only surfaces
 
 Gated by `profiles.is_owner` in the UI and `private.is_owner()` in RLS:
 
@@ -299,10 +401,11 @@ Gated by `profiles.is_owner` in the UI and `private.is_owner()` in RLS:
 - **Owner-only RPCs** — e.g. the v1.15 warrant import
   (`import_legal_warrant` / `import_rollback_by_key`).
 
-## 13. Where to go deeper
+## 14. Where to go deeper
 
 | Topic | Reference |
 | --- | --- |
+| The dormant city bridges and their contracts | [Handbook Ch. 21](handbook/21-integration.md), [MDT-BRIDGE-CONTRACT.md](MDT-BRIDGE-CONTRACT.md), [integration/CID-INTEGRATION-API.md](integration/CID-INTEGRATION-API.md) |
 | The nine architecture blocks, risks, common mistakes | [Handbook Ch. 3](handbook/03-architecture.md) |
 | Every feature's end-to-end data flow | [Handbook Ch. 4](handbook/04-features.md) |
 | Every RPC and its caller checks | [Handbook Ch. 7](handbook/07-api.md), [`supabase/README.md`](../supabase/README.md) |
