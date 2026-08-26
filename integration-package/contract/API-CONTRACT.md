@@ -99,7 +99,7 @@ officer session is still required, and calls count against the rate budget.
 | op | idempotency | notes |
 |---|---|---|
 | `case.create` | **required** | |
-| `case.setStatus` | required | `conflict` on an illegal transition |
+| `case.setStatus` | required | `validation_failed` on an unknown status. The backend enforces NO transition graph today — any of open/active/cold/closed is accepted from any state; do not rely on server-side transition rejection |
 | `case.setLead` | required | |
 | `case.accessDecide` | required | |
 | `case.get` | none | `not_found` includes invisible-to-officer |

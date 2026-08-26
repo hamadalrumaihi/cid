@@ -7,8 +7,9 @@
 -- generic CID-record → city-record reference, typed references for city
 -- physical storage and city-hosted media, an integration event/audit
 -- envelope, and an officer-identity mapping for future in-city / joint-agency
--- access. Plus two audited bug fixes on the existing MDT sync surface (D1/D2
--- below).
+-- access. Plus the audited D1 bug fix on the existing MDT sync surface
+-- (below); the companion D2 fix was snapshot-documentation only and lives in
+-- schema-snapshot.sql, not in this file.
 --
 -- WHAT THIS IS NOT — the dormancy guarantee
 -- NOTHING in this migration changes live behavior:

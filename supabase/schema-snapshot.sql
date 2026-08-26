@@ -13683,8 +13683,8 @@ begin
   insert into public.notifications (user_id, type, payload)
   values (p_recipient, p_type, v_payload);
 end $$;
-revoke all on function private.case_service_notify(uuid, text, jsonb) from public, anon;
-grant execute on function private.case_service_notify(uuid, text, jsonb) to authenticated, service_role;
+revoke all on function private.case_service_notify(uuid, text, jsonb) from public, anon, authenticated;
+grant execute on function private.case_service_notify(uuid, text, jsonb) to service_role;
 
 -- ── 1. case_create — atomic case creation with server-side numbering ─────────
 -- Purpose:        open a case in one transaction: gate, mint (or honor) the

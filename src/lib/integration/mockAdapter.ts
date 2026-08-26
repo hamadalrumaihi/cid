@@ -10,7 +10,16 @@
  *  exact-plate hits ranked first — mirroring entitySearch's vehicle arm.
  *  Blank query ⇒ the whole (bounded) pool, unknown id ⇒ null. */
 
-import { normPlate } from '@/lib/entitySearch'
+/** Local copy of entitySearch's normPlate (mirrors private.norm_plate:
+ *  uppercase, strip non-alphanumerics, '' → null). Inlined instead of
+ *  imported: entitySearch transitively pulls in the db/supabase client
+ *  (module-scope env reads), and this module's dormancy contract is
+ *  pure-types-plus-mock with zero db/env reach (security review N5). Keep in
+ *  lockstep with lib/entitySearch normPlate — both are pinned by tests. */
+const normPlate = (raw: string | null | undefined): string | null => {
+  const s = (raw ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+  return s === '' ? null : s
+}
 import { normalizeExternalId } from './idempotency'
 import type { IntegrationProviderSet, SearchOptions } from './providers'
 import type {

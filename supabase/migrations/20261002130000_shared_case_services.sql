@@ -108,8 +108,12 @@ begin
   insert into public.notifications (user_id, type, payload)
   values (p_recipient, p_type, v_payload);
 end $$;
-revoke all on function private.case_service_notify(uuid, text, jsonb) from public, anon;
-grant execute on function private.case_service_notify(uuid, text, jsonb) to authenticated, service_role;
+-- Definer callers execute as the function owner, so no role beyond
+-- service_role needs EXECUTE — an authenticated grant would only matter if
+-- the private schema were ever exposed, and then it would let members mint
+-- arbitrary-type notifications (security review N3: keep it revoked).
+revoke all on function private.case_service_notify(uuid, text, jsonb) from public, anon, authenticated;
+grant execute on function private.case_service_notify(uuid, text, jsonb) to service_role;
 
 -- ── 1. case_create — atomic case creation with server-side numbering ─────────
 -- Purpose:        open a case in one transaction: gate, mint (or honor) the

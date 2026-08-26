@@ -126,6 +126,18 @@ Per-officer sessions are the reason this rule costs nothing: the CID lane
 does not need service_role for casework, because casework runs as the
 officer.
 
+### Known residual (pre-activation follow-up)
+
+The shared-service RPCs are the *preferred* path, but the underlying RLS
+policies they sit on are unchanged: a per-officer session can still write
+`cases.status` / `cases.lead_detective_id` directly through PostgREST (the
+`cases_upd` wall), bypassing the RPCs' audit rows and the handover gate —
+exactly as the web portal's own legacy paths could before this pass. The
+promised lockdown (splitting `cases_upd` or freezing those columns behind
+the RPCs) is a deliberate, separately-reviewed follow-up migration that must
+land **before CID-lane activation**; until then the RPC-path audit trail is
+best-effort, not exhaustive. Tracked in the integration preparation report.
+
 ### Source identity, secrets, rotation, rate limits, auditing
 
 - The FiveM deployment is one registered caller: `integration_sources` row
@@ -217,7 +229,7 @@ backend is not involved.
 | operation | identity | backing | idempotency | notable errors |
 |---|---|---|---|---|
 | create case | officer | shared-service RPC `case_create` | **required** — `external_request_id` | `forbidden`, `validation_failed`, `duplicate` |
-| update case (status) | officer | shared-service RPC `case_set_status` | required | `forbidden`, `conflict` (illegal transition), `not_found` |
+| update case (status) | officer | shared-service RPC `case_set_status` | required | `forbidden`, `validation_failed` (unknown status), `not_found`. NOTE: the backend deliberately enforces NO transition graph today — any of open/active/cold/closed is accepted from any state; `conflict` is never returned for a status move. Do not rely on server-side transition rejection. |
 | update case (lead) | officer | shared-service RPC `case_set_lead` | required | `forbidden`, `not_found` |
 | decide case access | officer | shared-service RPC `case_access_decide` | required | `forbidden`, `conflict` |
 | get case | officer | RLS read (same portal read path) | none | `not_found` (includes invisible-by-RLS) |
