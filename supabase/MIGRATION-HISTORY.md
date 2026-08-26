@@ -290,9 +290,9 @@ previously omitted inline CHECKs.
 
 | Version (live) | Name | Repo file |
 |---|---|---|
-| — (pending apply) | fivem_integration_prep | `20261002120000_fivem_integration_prep.sql` |
+| applied via MCP (`fivem_integration_prep`) | fivem_integration_prep | `20261002120000_fivem_integration_prep.sql` |
 
-## Shared case services (2026-10-02, authored — pending apply)
+## Shared case services (2026-10-02, applied)
 
 `20261002130000_shared_case_services.sql` is authored in-repo and mirrored
 into `schema-snapshot.sql` / `database.types.ts`; the orchestrator applies it
@@ -315,4 +315,4 @@ keeps working until the client rewire deploys.
 
 | Version (live) | Name | Repo file |
 |---|---|---|
-| — (pending apply) | shared_case_services | `20261002130000_shared_case_services.sql` |
+| applied via MCP (`shared_case_services`) | shared_case_services | `20261002130000_shared_case_services.sql` |

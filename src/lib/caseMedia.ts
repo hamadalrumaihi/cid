@@ -46,7 +46,13 @@ export function filterCaseMedia<T extends { category: string | null; archived_at
  * Media has no event table — added/archived/featured events are derived from
  * the row's own columns. Bulk uploads (same uploader, same hour) collapse to
  * one expandable "added N case photos" event so a 20-photo dump doesn't bury
- * the rest of the timeline. */
+ * the rest of the timeline.
+ *
+ * NOTE: the case Timeline tab now renders from the shared case_timeline RPC,
+ * whose media arms REPLICATE this exact mapping in SQL
+ * (20261002130000_shared_case_services.sql). This function and its unit
+ * tests remain the executable specification of that mapping — change the
+ * two together. */
 
 export interface MediaEventInput {
   id: string

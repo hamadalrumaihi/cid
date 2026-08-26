@@ -370,7 +370,9 @@ function CasesViewInner() {
   /** Command-only bulk lead assignment. Same skip rule as status. NOTE: no
    *  per-case notification — notify types here are personal handover messages
    *  (case_handover) and would spam N stale payloads; one summary toast for
-   *  the operator instead. */
+   *  the operator instead. Deliberately NOT the case_set_lead RPC (which
+   *  notifies both sides per case): this stays the silent, command-only
+   *  direct update. */
   const bulkAssignLead = async (leadId: string | null) => {
     setAssignOpen(false)
     const editable = selectedRows.filter((c) => !siu.caseReadOnly(c) && c.lead_detective_id !== leadId)
