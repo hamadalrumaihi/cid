@@ -874,6 +874,112 @@ alter table public.evidence enable row level security;
 -- DELETE/TRUNCATE revoked from anon+authenticated (evidence_ins/upd/del
 -- policies remain but are unreachable). Case media lives in public.media.
 
+create table public.external_links (
+  id uuid not null default gen_random_uuid(),
+  entity_type text not null,
+  entity_id uuid not null,
+  source text not null,
+  external_type text not null,
+  external_id text not null,
+  external_updated_at timestamp with time zone,
+  snapshot jsonb not null default '{}'::jsonb,
+  created_by uuid,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.external_links add constraint external_links_pkey PRIMARY KEY (id);
+alter table public.external_links add constraint external_links_ref_key UNIQUE (entity_type, entity_id, source, external_type, external_id);
+alter table public.external_links add constraint external_links_source_fkey FOREIGN KEY (source) REFERENCES public.integration_sources(id);
+alter table public.external_links add constraint external_links_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.external_links add constraint external_links_entity_type_check CHECK ((entity_type = ANY (ARRAY['case'::text, 'person'::text, 'vehicle'::text, 'gang'::text, 'place'::text, 'account'::text, 'report'::text, 'operation'::text, 'legal_request'::text, 'evidence'::text, 'media'::text])));
+alter table public.external_links add constraint external_links_external_type_check CHECK ((external_type = ANY (ARRAY['citizen'::text, 'vehicle'::text, 'property'::text, 'officer'::text, 'evidence'::text, 'storage_item'::text, 'media'::text, 'charge'::text, 'legal_actor'::text, 'record'::text])));
+alter table public.external_links enable row level security;
+-- DORMANT (20261002120000, field_submission_sources posture): RLS on, ZERO
+-- policies, every privilege revoked from authenticated + anon. Absence of a
+-- row means "no external link". snapshot = historical fields only, never a
+-- live mirror. A future activation pass adds entity-scoped policies.
+
+create table public.external_media_refs (
+  id uuid not null default gen_random_uuid(),
+  source text not null,
+  external_id text not null,
+  url text,
+  media_type text,
+  title text,
+  description text,
+  captured_by_snapshot text,
+  captured_at timestamp with time zone,
+  case_id uuid,
+  evidence_ref text,
+  access_classification text not null default 'standard'::text,
+  checksum text,
+  created_by uuid,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.external_media_refs add constraint external_media_refs_pkey PRIMARY KEY (id);
+alter table public.external_media_refs add constraint external_media_refs_source_external_id_key UNIQUE (source, external_id);
+alter table public.external_media_refs add constraint external_media_refs_source_fkey FOREIGN KEY (source) REFERENCES public.integration_sources(id);
+alter table public.external_media_refs add constraint external_media_refs_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.external_media_refs add constraint external_media_refs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.external_media_refs add constraint external_media_refs_media_type_check CHECK ((media_type = ANY (ARRAY['bodycam'::text, 'screenshot'::text, 'photo'::text, 'video'::text, 'audio'::text, 'scene'::text, 'evidence'::text, 'other'::text])));
+alter table public.external_media_refs add constraint external_media_refs_access_classification_check CHECK ((access_classification = ANY (ARRAY['standard'::text, 'restricted'::text])));
+alter table public.external_media_refs enable row level security;
+-- DORMANT (20261002120000, field_submission_sources posture — see
+-- external_links). City-hosted media is NOT duplicated into CID storage;
+-- display renders the reference (url is a durable pointer).
+
+create table public.external_officer_identities (
+  id uuid not null default gen_random_uuid(),
+  source text not null,
+  external_officer_id text not null,
+  profile_id uuid,
+  display_name_snapshot text,
+  agency text,
+  active boolean not null default false,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  note text
+);
+alter table public.external_officer_identities add constraint external_officer_identities_pkey PRIMARY KEY (id);
+alter table public.external_officer_identities add constraint external_officer_identities_source_officer_key UNIQUE (source, external_officer_id);
+alter table public.external_officer_identities add constraint external_officer_identities_source_fkey FOREIGN KEY (source) REFERENCES public.integration_sources(id);
+alter table public.external_officer_identities add constraint external_officer_identities_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.external_officer_identities enable row level security;
+-- DORMANT (20261002120000, field_submission_sources posture — see
+-- external_links). Future in-city/joint-agency officer mapping; pairs with the
+-- reserved case_assignments.assignment_source='manual_access' lane (declared
+-- in its CHECK since 20260713040000, never yet written) for scoped access
+-- without changing permanent roles.
+
+create table public.external_storage_refs (
+  id uuid not null default gen_random_uuid(),
+  source text not null,
+  external_id text not null,
+  case_id uuid,
+  evidence_ref text,
+  locker_location text,
+  item_type text,
+  item_label text,
+  quantity numeric,
+  collector_snapshot text,
+  collected_at timestamp with time zone,
+  chain_of_custody jsonb not null default '[]'::jsonb,
+  context_note text,
+  created_by uuid,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.external_storage_refs add constraint external_storage_refs_pkey PRIMARY KEY (id);
+alter table public.external_storage_refs add constraint external_storage_refs_source_item_case_key UNIQUE (source, external_id, case_id);
+alter table public.external_storage_refs add constraint external_storage_refs_source_fkey FOREIGN KEY (source) REFERENCES public.integration_sources(id);
+alter table public.external_storage_refs add constraint external_storage_refs_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.external_storage_refs add constraint external_storage_refs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.external_storage_refs enable row level security;
+-- DORMANT (20261002120000, field_submission_sources posture — see
+-- external_links). CID REFERENCES, never owns, the physical item — the city
+-- storage system remains the system of record for the object itself.
+
 create table public.feedback (
   id uuid not null default gen_random_uuid(),
   kind text not null default 'feature'::text,
@@ -1528,6 +1634,54 @@ alter table public.indicators add constraint indicators_kind_check CHECK ((kind 
 alter table public.indicators add constraint indicators_value_check CHECK ((length(btrim(value)) > 0));
 alter table public.indicators enable row level security;
 
+create table public.integration_events (
+  id uuid not null default gen_random_uuid(),
+  source text not null,
+  direction text not null,
+  event_type text not null,
+  external_event_id text not null,
+  entity_type text,
+  entity_id uuid,
+  status text not null default 'pending'::text,
+  received_at timestamp with time zone not null default now(),
+  processed_at timestamp with time zone,
+  error text,
+  retry_count integer not null default 0,
+  payload_meta jsonb not null default '{}'::jsonb
+);
+alter table public.integration_events add constraint integration_events_pkey PRIMARY KEY (id);
+alter table public.integration_events add constraint integration_events_source_event_key UNIQUE (source, external_event_id);
+alter table public.integration_events add constraint integration_events_source_fkey FOREIGN KEY (source) REFERENCES public.integration_sources(id);
+alter table public.integration_events add constraint integration_events_direction_check CHECK ((direction = ANY (ARRAY['inbound'::text, 'outbound'::text])));
+alter table public.integration_events add constraint integration_events_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'processed'::text, 'duplicate'::text, 'quarantined'::text, 'failed'::text, 'retryable'::text])));
+alter table public.integration_events enable row level security;
+-- DORMANT integration event/audit envelope (20261002120000,
+-- bridge_ingestion_events posture): command/owner SELECT only; no write
+-- policies — future service_role-only definer RPCs are the only writers.
+-- (source, external_event_id) is the idempotency key. payload_meta carries
+-- SAFE metadata only, never raw city payloads. No live queue/worker exists.
+
+create table public.integration_sources (
+  id text not null,
+  display_name text not null,
+  kind text not null,
+  enabled boolean not null default false,
+  secret_ref text,
+  secret_rotated_at timestamp with time zone,
+  rate_limit_per_min integer,
+  notes text,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.integration_sources add constraint integration_sources_pkey PRIMARY KEY (id);
+alter table public.integration_sources add constraint integration_sources_kind_check CHECK ((kind = ANY (ARRAY['fivem_server'::text, 'mdt'::text, 'media_host'::text, 'other'::text])));
+alter table public.integration_sources enable row level security;
+-- DORMANT registry of trusted external callers (20261002120000,
+-- bridge_ingestion_events posture): command/owner SELECT only; no write
+-- policies (definer-managed in a future activation pass). UNSEEDED — an empty
+-- registry means no trusted callers. secret_ref is a NAME/pointer to a secret
+-- held outside the DB, never the secret itself.
+
 create table public.justice_membership_request_history (
   id uuid not null default gen_random_uuid(),
   request_id uuid not null,
@@ -1879,6 +2033,11 @@ alter table public.mdt_wanted_projections add constraint mdt_wanted_projections_
 alter table public.mdt_wanted_projections add constraint mdt_wanted_projections_legal_request_id_key UNIQUE (legal_request_id);
 alter table public.mdt_wanted_projections add constraint mdt_wanted_projections_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id);
 alter table public.mdt_wanted_projections add constraint mdt_wanted_projections_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id);
+alter table public.mdt_wanted_projections add constraint mdt_wanted_projections_wanted_status_check CHECK ((wanted_status = ANY (ARRAY['wanted'::text, 'executed'::text, 'expired'::text, 'revoked'::text, 'cleared'::text])));
+-- sync_status CHECK as widened by 20261002120000 (D1 fix): 'retryable' added
+-- because mdt_bridge_ack accepts and writes it — the original 20260714030000
+-- CHECK made the wanted-branch ack a guaranteed violation.
+alter table public.mdt_wanted_projections add constraint mdt_wanted_projections_sync_status_check CHECK ((sync_status = ANY (ARRAY['pending'::text, 'synced'::text, 'failed'::text, 'retryable'::text, 'disabled'::text])));
 alter table public.mdt_wanted_projections enable row level security;
 
 create table public.mdt_exports (
@@ -4396,6 +4555,13 @@ CREATE INDEX evidence_description_trgm ON public.evidence USING gin (description
 CREATE INDEX evidence_type_trgm ON public.evidence USING gin (type extensions.gin_trgm_ops);
 CREATE INDEX evidence_location_trgm ON public.evidence USING gin (location extensions.gin_trgm_ops);
 CREATE INDEX evidence_notes_trgm ON public.evidence USING gin (notes extensions.gin_trgm_ops);
+CREATE INDEX external_links_reverse_idx ON public.external_links USING btree (source, external_type, external_id);
+CREATE INDEX external_links_created_by_idx ON public.external_links USING btree (created_by);
+CREATE INDEX external_media_refs_case_idx ON public.external_media_refs USING btree (case_id);
+CREATE INDEX external_media_refs_created_by_idx ON public.external_media_refs USING btree (created_by);
+CREATE INDEX external_officer_identities_profile_idx ON public.external_officer_identities USING btree (profile_id);
+CREATE INDEX external_storage_refs_case_idx ON public.external_storage_refs USING btree (case_id);
+CREATE INDEX external_storage_refs_created_by_idx ON public.external_storage_refs USING btree (created_by);
 CREATE INDEX feedback_created_by_fkey_idx ON public.feedback USING btree (created_by);
 CREATE INDEX feedback_meta_updated_by_idx ON public.feedback_meta USING btree (updated_by);
 CREATE INDEX field_officers_agency_idx ON public.field_officers USING btree (agency) WHERE active;
@@ -4441,6 +4607,8 @@ CREATE INDEX gangs_colors_trgm ON public.gangs USING gin (colors extensions.gin_
 CREATE INDEX gangs_notes_trgm ON public.gangs USING gin (notes extensions.gin_trgm_ops);
 CREATE INDEX indicators_case_idx ON public.indicators USING btree (case_id);
 CREATE INDEX indicators_created_by_fkey_idx ON public.indicators USING btree (created_by);
+CREATE INDEX integration_events_status_idx ON public.integration_events USING btree (status, received_at DESC);
+CREATE INDEX integration_events_entity_idx ON public.integration_events USING btree (entity_type, entity_id);
 CREATE INDEX indicators_value_idx ON public.indicators USING btree (lower(btrim(value)));
 CREATE INDEX justice_membership_request_history_actor_id_idx ON public.justice_membership_request_history USING btree (actor_id);
 CREATE INDEX justice_membership_request_history_request_id_idx ON public.justice_membership_request_history USING btree (request_id);
@@ -8213,6 +8381,10 @@ CREATE TRIGGER documents_touch BEFORE UPDATE ON public.documents FOR EACH ROW EX
 CREATE TRIGGER trg_guard_document BEFORE INSERT OR UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION private.guard_document();
 CREATE TRIGGER evidence_audit AFTER INSERT OR DELETE OR UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER evidence_touch BEFORE UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER external_links_touch BEFORE UPDATE ON public.external_links FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER external_media_refs_touch BEFORE UPDATE ON public.external_media_refs FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER external_officer_identities_touch BEFORE UPDATE ON public.external_officer_identities FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER external_storage_refs_touch BEFORE UPDATE ON public.external_storage_refs FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER feedback_meta_audit AFTER INSERT OR DELETE OR UPDATE ON public.feedback_meta FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER feedback_meta_touch BEFORE UPDATE ON public.feedback_meta FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER field_officers_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_officers FOR EACH ROW EXECUTE FUNCTION private.audit();
@@ -8240,6 +8412,7 @@ CREATE TRIGGER gang_turf_audit AFTER INSERT OR DELETE OR UPDATE ON public.gang_t
 CREATE TRIGGER gang_turf_touch BEFORE UPDATE ON public.gang_turf FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER gangs_audit AFTER INSERT OR DELETE OR UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER gangs_touch BEFORE UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER integration_sources_touch BEFORE UPDATE ON public.integration_sources FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_touch_legal_requests BEFORE UPDATE ON public.legal_requests FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER media_audit AFTER INSERT OR DELETE OR UPDATE ON public.media FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER media_touch BEFORE UPDATE ON public.media FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -9086,6 +9259,14 @@ create policy indicators_upd on public.indicators
   as permissive for update to authenticated
   using ((private.is_active()) AND (NOT private.siu_blocked('indicator'::text, id, NULL::text)))
   with check ((private.is_active()) AND (NOT private.siu_blocked('indicator'::text, id, NULL::text)));
+
+create policy integration_events_sel on public.integration_events
+  as permissive for select to authenticated
+  using ((( SELECT private.is_command() AS is_command) OR ( SELECT COALESCE(profiles.is_owner, false) FROM public.profiles WHERE (profiles.id = ( SELECT auth.uid() AS uid)))));
+
+create policy integration_sources_sel on public.integration_sources
+  as permissive for select to authenticated
+  using ((( SELECT private.is_command() AS is_command) OR ( SELECT COALESCE(profiles.is_owner, false) FROM public.profiles WHERE (profiles.id = ( SELECT auth.uid() AS uid)))));
 
 
 
@@ -10610,6 +10791,25 @@ create policy wl_sel on public.watchlist
 -- directly, and the shared registries never did (they gate on is_active(),
 -- which SIB members always passed). The SIB -> CID direction is untouched, and
 -- Owner-only administration still gates on profiles.is_owner.
+-- 20261002120000_fivem_integration_prep: DORMANT FiveM-integration groundwork
+-- (mirrored above). Six new tables, NO seeds, NO RPCs, NO grants beyond the
+-- postures, NO realtime, NO workers: integration_sources + integration_events
+-- (bridge_ingestion_events posture — command/owner SELECT only, no write
+-- policies; (source, external_event_id) idempotency key on the envelope) and
+-- external_links / external_storage_refs / external_media_refs /
+-- external_officer_identities (field_submission_sources posture — RLS on,
+-- ZERO policies, all privileges revoked from authenticated + anon; required
+-- because the 20260908130000 default privileges grant authenticated DML on
+-- new tables). Five private.touch() triggers; deliberately NO audit triggers
+-- (future definer RPCs are the writers and audit themselves, like
+-- bridge_ingest_event). D1 FIX: mdt_wanted_projections_sync_status_check
+-- re-added WITH 'retryable' — mdt_bridge_ack accepts and writes
+-- ('synced','failed','retryable','pending') and the 20260714030000 CHECK
+-- omitted 'retryable', so the wanted-branch ack was a guaranteed violation.
+-- D2 FIX (snapshot-only): the two inline CHECKs on mdt_wanted_projections
+-- (wanted_status + sync_status) were never emitted here; now mirrored above.
+-- Definitive SQL in
+-- supabase/migrations/20261002120000_fivem_integration_prep.sql.
 -- 20260928120300_siu_visibility_forget: private.siu_visibility_forget()
 -- [trigger fn] with AFTER DELETE triggers persons_visibility_forget,
 -- vehicles_visibility_forget, gangs_visibility_forget and

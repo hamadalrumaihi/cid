@@ -274,3 +274,18 @@ timestamp.
 | — | ux_personalization_c5_notification_dedupe | `20260826010000_ux_personalization.sql` |
 | — | ux_personalization_c6a_task_trgm_index | `20260826010000_ux_personalization.sql` |
 | — | ux_personalization_c6b_search_all_bolo_task | `20260826010000_ux_personalization.sql` |
+
+## FiveM integration preparation (2026-10-02, authored — NOT yet applied)
+
+`20261002120000_fivem_integration_prep.sql` is authored in-repo and mirrored
+into `schema-snapshot.sql` / `database.types.ts`, but has **not yet been
+applied to the live project** — the orchestrator applies it via MCP. Entirely
+DORMANT: six new tables (no seeds, no RPCs, no realtime, no workers, no new
+browser access), plus the D1 fix widening
+`mdt_wanted_projections_sync_status_check` to admit `'retryable'` (the value
+`mdt_bridge_ack` writes) and the D2 snapshot fix emitting that table's two
+previously omitted inline CHECKs.
+
+| Version (live) | Name | Repo file |
+|---|---|---|
+| — (pending apply) | fivem_integration_prep | `20261002120000_fivem_integration_prep.sql` |
