@@ -1,0 +1,30 @@
+{
+  "description": "Referencing city-hosted media. The URL is a durable pointer, never a copy; hosts that mint expiring links implement resolveUrl instead of supplying url (see adapters/media-adapter.md). All data fictional.",
+  "request": {
+    "op": "media.attach",
+    "source": "fivem-main",
+    "officerId": "officer-4821",
+    "externalRequestId": "media:CID-2026-0412:m-100",
+    "payload": {
+      "caseId": "9d1c0000-0000-4000-8000-00000000fict",
+      "evidenceRef": "s-100",
+      "media": {
+        "source": "fivem-main",
+        "externalType": "media",
+        "externalId": "m-100",
+        "snapshot": {
+          "mediaType": "bodycam",
+          "title": "Bodycam — Alta St scene walk",
+          "capturedBy": "o-100",
+          "capturedAt": "2026-08-01T12:00:00Z",
+          "accessClassification": "standard",
+          "checksum": "sha256:fictional"
+        }
+      }
+    }
+  },
+  "response": {
+    "ok": true,
+    "result": { "id": "2b5d0000-0000-4000-8000-00000000fict" }
+  }
+}

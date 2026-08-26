@@ -9,6 +9,14 @@ unreachable from the app runtime (see [Authentication](#authentication)), and
 the new export kinds are inert until a user invokes the existing
 propose/approve RPCs.
 
+> **This document is the patrol lane only** — the minimal, sanitized,
+> machine-to-machine feed (plus its ack path and the surveillance ingest).
+> The separate, also-dormant **CID lane** — authenticated per-officer
+> investigative operations from an in-city CID app — is specified in
+> [docs/integration/CID-INTEGRATION-API.md](integration/CID-INTEGRATION-API.md).
+> The two lanes never mix: sensitive CID/SIB data never crosses the patrol
+> lane, and nothing in the CID lane widens this feed.
+
 ## The read surface
 
 ```sql
@@ -154,13 +162,20 @@ discipline.)
   feed over HTTPS via PostgREST (`POST /rest/v1/rpc/mdt_patrol_feed`) or a
   server-side Supabase client.
 - Inbound patrol-action feedback (11.4 — e.g. "BOLO acted on") remains a
-  documented follow-up; there is no inbound surface in this contract yet.
+  documented follow-up; the inbound surface that does exist
+  (`bridge_ingest_event`, below) carries surveillance observations only.
 
 ## Not implemented yet (explicitly)
 
 - No bridge worker / FiveM resource exists; nothing polls the feed.
-- No sync acknowledgement path (`sync_status` advancement) exists.
-- No inbound (in-city → portal) surface exists.
+- The sync acknowledgement path (`sync_status` advancement) exists
+  server-side but is dormant: `public.mdt_bridge_ack` (service_role-only) —
+  see "Sync acknowledgement (outbound)" below. Nothing calls it.
+- An inbound (in-city → portal) surface exists server-side but is dormant:
+  `public.bridge_ingest_event` (service_role-only, surveillance observations
+  only) — see "Inbound contract (FiveM → CID Portal)" below. Nothing calls
+  it, and no inbound surface exists for anything beyond surveillance
+  observations (patrol-action feedback per 11.4 remains a follow-up).
 - No portal UI exposes the new kinds/lanes yet — the backend accepts them,
   the site does not offer them.
 

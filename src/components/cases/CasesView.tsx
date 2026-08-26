@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { listCaseHealth } from '@/lib/caseHealth'
 import { useCapabilities } from '@/lib/capabilities'
 import { list, rpc, update, updateWhere, withRetry } from '@/lib/db'
+import { setCaseStatus } from '@/lib/services/cases'
 import { timeAgo, todayISO } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useSiu } from '@/lib/useSiu'
@@ -336,11 +337,13 @@ function CasesViewInner() {
     setSelected([]); void fetchCases()
   }
 
-  /** Bulk status (open/active/cold). Mirrors the per-row write path (direct
-   *  `cases.status` update, audited by the table trigger) and the per-row
-   *  gate: SIU-read-only rows are skipped, exactly as their row controls are
-   *  disabled. CLOSED is excluded on purpose — confirmCaseClose runs an
-   *  interactive per-case blocker checklist, so closing stays per-case. */
+  /** Bulk status (open/active/cold). Mirrors the per-row write path (the
+   *  shared case_set_status RPC — one call per case, each audited as
+   *  CASE_STATUS_CHANGED) and the per-row gate: SIU-read-only rows are
+   *  skipped, exactly as their row controls are disabled; a row the server
+   *  refuses counts into the partial-failure toast. CLOSED is excluded on
+   *  purpose — confirmCaseClose runs an interactive per-case blocker
+   *  checklist, so closing stays per-case. */
   const bulkStatus = async (status: 'open' | 'active' | 'cold') => {
     const editable = selectedRows.filter((c) => !siu.caseReadOnly(c) && c.status !== status)
     const skipped = selectedRows.filter((c) => siu.caseReadOnly(c)).length
@@ -356,7 +359,7 @@ function CasesViewInner() {
     setBulk({ label: 'Updating status', done: 0, total: editable.length })
     const { ok: done, failed } = await runChunked(
       editable.map((c) => c.id),
-      (id) => update('cases', id, { status }),
+      (id) => setCaseStatus(id, status),
       (d, t) => setBulk({ label: 'Updating status', done: d, total: t }),
     )
     setBulk(null)

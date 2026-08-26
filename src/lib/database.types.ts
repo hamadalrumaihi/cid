@@ -13493,6 +13493,51 @@ export type Database = {
           reason: string | null
         }[]
       }
+      case_create: {
+        Args: {
+          p_area?: string
+          p_bureau: string
+          p_case_number?: string
+          p_lead?: string
+          p_priority?: string
+          p_summary?: string
+          p_template?: string
+          p_title: string
+        }
+        Returns: Database["public"]["Tables"]["cases"]["Row"]
+      }
+      case_set_status: {
+        Args: { p_case: string; p_reason?: string; p_status: string }
+        Returns: undefined
+      }
+      case_set_lead: {
+        Args: { p_case: string; p_note?: string; p_to: string }
+        Returns: undefined
+      }
+      case_access_decide: {
+        Args: { p_approve: boolean; p_note?: string; p_request: string }
+        Returns: undefined
+      }
+      case_timeline: {
+        Args: { p_case: string }
+        Returns: {
+          kind: string
+          at: string
+          title: string | null
+          actor: string | null
+          ref_id: string | null
+          meta: Json
+        }[]
+      }
+      report_create: {
+        Args: {
+          p_case: string
+          p_fields?: Json
+          p_kind?: string
+          p_template: string
+        }
+        Returns: Database["public"]["Tables"]["reports"]["Row"]
+      }
       justice_end_coverage: {
         Args: { p_coverage: string; p_reason?: string }
         Returns: Database["public"]["Tables"]["prosecutor_coverage"]["Row"]

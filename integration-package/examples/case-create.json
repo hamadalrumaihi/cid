@@ -1,0 +1,27 @@
+{
+  "description": "Mutation: externalRequestId is REQUIRED. The second response shows an idempotent replay of the same request — the stored outcome returns with duplicate:true and nothing writes twice. All data fictional.",
+  "request": {
+    "op": "case.create",
+    "source": "fivem-main",
+    "officerId": "officer-4821",
+    "externalRequestId": "case-create:incident-77413",
+    "payload": {
+      "title": "Vehicle theft ring — Alta St",
+      "summary": "Pattern of thefts around Alta St; opened from in-city incident 77413.",
+      "originatingReference": {
+        "source": "fivem-main",
+        "externalType": "record",
+        "externalId": "incident-77413"
+      }
+    }
+  },
+  "response": {
+    "ok": true,
+    "result": { "id": "9d1c0000-0000-4000-8000-00000000fict", "displayNumber": "CID-2026-0412" }
+  },
+  "replayResponse": {
+    "ok": true,
+    "duplicate": true,
+    "result": { "id": "9d1c0000-0000-4000-8000-00000000fict", "displayNumber": "CID-2026-0412" }
+  }
+}

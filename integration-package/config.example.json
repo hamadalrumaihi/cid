@@ -1,0 +1,21 @@
+{
+  "//": "Example configuration for the city-hosted CID Integration Service.",
+  "//2": "Copy to config.json, fill in real values, and KEEP IT OUT OF VERSION CONTROL.",
+  "//3": "Nothing here ever ships to a FiveM client resource.",
+  "SOURCE_ID": "fivem-main",
+  "INTEGRATION_SERVICE_URL": "https://cid-integration.example.invalid",
+  "INTEGRATION_SECRET": "SET_ME",
+  "RATE_LIMIT_PER_MIN": 60,
+  "OFFICER_SESSION_TTL_SECONDS": 900,
+  "ADAPTERS": {
+    "citizens": "SET_ME (module implementing CitizenProvider)",
+    "vehicles": "SET_ME (module implementing VehicleProvider)",
+    "properties": "SET_ME (module implementing PropertyProvider)",
+    "officers": "SET_ME (module implementing OfficerProvider)",
+    "penalCode": "SET_ME (module implementing PenalCodeProvider)",
+    "evidence": "SET_ME (module implementing EvidenceProvider)",
+    "storage": "SET_ME (module implementing StorageProvider)",
+    "media": "SET_ME (module implementing MediaProvider)",
+    "legalActors": "SET_ME (module implementing LegalActorProvider)"
+  }
+}

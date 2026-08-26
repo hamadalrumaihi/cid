@@ -1,0 +1,28 @@
+{
+  "description": "Linking a city citizen to a CID case. The snapshot is a deliberate point-in-time copy (EXTERNAL-IDS.md); the city record stays authoritative. Re-linking the same citizen returns conflict. All data fictional.",
+  "request": {
+    "op": "case.addPerson",
+    "source": "fivem-main",
+    "officerId": "officer-4821",
+    "externalRequestId": "add-person:CID-2026-0412:c-100",
+    "payload": {
+      "caseId": "9d1c0000-0000-4000-8000-00000000fict",
+      "role": "suspect",
+      "citizen": {
+        "source": "fivem-main",
+        "externalType": "citizen",
+        "externalId": "c-100",
+        "externalUpdatedAt": "2026-08-01T12:00:00Z",
+        "snapshot": { "fullName": "John Doe", "dob": "1990-04-12", "address": "12 Alta St" }
+      }
+    }
+  },
+  "response": {
+    "ok": true,
+    "result": { "id": "5e2a0000-0000-4000-8000-00000000fict" }
+  },
+  "conflictResponse": {
+    "error": "conflict",
+    "message": "citizen c-100 is already linked to this case"
+  }
+}

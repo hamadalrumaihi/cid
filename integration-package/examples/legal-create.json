@@ -1,0 +1,32 @@
+{
+  "description": "Creating a legal request from the city as the officer. Note legal.addComment is a documented-FUTURE operation (commentary rides transition notes today) — shown here returning validation_failed. All data fictional.",
+  "request": {
+    "op": "legal.create",
+    "source": "fivem-main",
+    "officerId": "officer-4821",
+    "externalRequestId": "legal:CID-2026-0412:sw-garage",
+    "payload": {
+      "caseId": "9d1c0000-0000-4000-8000-00000000fict",
+      "requestType": "search_warrant",
+      "title": "Search warrant — Grove St garage",
+      "body": "Probable cause narrative (fictional)."
+    }
+  },
+  "response": {
+    "ok": true,
+    "result": { "id": "8c7e0000-0000-4000-8000-00000000fict" }
+  },
+  "futureOperationExample": {
+    "request": {
+      "op": "legal.addComment",
+      "source": "fivem-main",
+      "officerId": "officer-4821",
+      "externalRequestId": "legal-comment:0001",
+      "payload": { "legalRequestId": "8c7e0000-0000-4000-8000-00000000fict", "note": "…" }
+    },
+    "response": {
+      "error": "validation_failed",
+      "message": "legal comments ride transition notes today (documented gap)"
+    }
+  }
+}

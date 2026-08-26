@@ -1,0 +1,23 @@
+{
+  "description": "Officer-authored report on a case. Executes as the mapped officer; the portal attributes authorship to the real person. All data fictional.",
+  "request": {
+    "op": "report.create",
+    "source": "fivem-main",
+    "officerId": "officer-4821",
+    "externalRequestId": "report:incident-77413:initial",
+    "payload": {
+      "caseId": "9d1c0000-0000-4000-8000-00000000fict",
+      "title": "Initial scene report — Alta St",
+      "reportType": "incident",
+      "body": "On scene at 12 Alta St. Two vehicles with defeated locks; recovered one pry bar (see storage.attach s-100)."
+    }
+  },
+  "response": {
+    "ok": true,
+    "result": { "id": "7f3b0000-0000-4000-8000-00000000fict" }
+  },
+  "forbiddenResponse": {
+    "error": "forbidden",
+    "message": "officer has no active mapping for source fivem-main"
+  }
+}

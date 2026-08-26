@@ -291,3 +291,28 @@ previously omitted inline CHECKs.
 | Version (live) | Name | Repo file |
 |---|---|---|
 | — (pending apply) | fivem_integration_prep | `20261002120000_fivem_integration_prep.sql` |
+
+## Shared case services (2026-10-02, authored — pending apply)
+
+`20261002130000_shared_case_services.sql` is authored in-repo and mirrored
+into `schema-snapshot.sql` / `database.types.ts`; the orchestrator applies it
+to the live project via MCP **before** the rewired client deploys. It moves
+the worst component-embedded operations behind SECURITY DEFINER RPCs shared
+by the web portal and the future FiveM lane: `case_create` (atomic creation +
+collision-safe numbering + server-side template checklist expansion, gate
+`private.can_create_case`), `case_set_status` (validated vocabulary, audit
+`CASE_STATUS_CHANGED`; `closed_at` stays with `trg_case_closed_at`),
+`case_set_lead` (lead-or-command gate, server-sent `case_handover`
+notifications, audit `CASE_LEAD_CHANGED`), `case_access_decide` (atomic
+grant+stamp, closes the unaudited-grant gap with `CASE_ACCESS_DECIDED`),
+`case_timeline` (the shared definer read model replacing TimelineTab's 11
+client reads, gate `private.can_read_case` with per-arm narrowing), and
+`report_create` (server-computed seq, author pinned to `auth.uid()`, audit
+`REPORT_CREATED`), plus `private.case_service_notify` (create_notification's
+payload stamping/dedupe for definer-internal fan-out). Purely additive: no
+table, policy or trigger is touched, and every superseded direct-write path
+keeps working until the client rewire deploys.
+
+| Version (live) | Name | Repo file |
+|---|---|---|
+| — (pending apply) | shared_case_services | `20261002130000_shared_case_services.sql` |

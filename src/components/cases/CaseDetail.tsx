@@ -12,7 +12,7 @@ import { SectionTabs, panelDomId, type SectionTab } from '@/components/ui/Sectio
 import { CASE_TABS, CASE_TAB_GROUPS, CASE_TAB_LABELS, type CaseTabId } from './caseTabs'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
-import { countRows, list, rpc, update, withRetry } from '@/lib/db'
+import { countRows, list, rpc, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useSiu } from '@/lib/useSiu'
 import { caseDepartment, siuClassificationLabel, siuClassificationTint, termsFor } from '@/lib/siu'
@@ -28,7 +28,7 @@ import type { Tables } from '@/lib/database.types'
 import type { LegalRequest } from '@/lib/justice'
 import { canChangeResponsibleBureau, canSetResponsibleBureau, countViewerActionable, isJtfAssigned, isRoutingBureau } from '@/lib/legalWorkflow'
 import { officerName, activeProfiles } from '@/lib/profiles'
-import { notify } from '@/lib/notify'
+import { setCaseLead, setCaseStatus } from '@/lib/services/cases'
 import { loadCaseChargeTotals } from '@/lib/caseCharges'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
@@ -390,11 +390,13 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     // Closing stamps closed_at and takes the case off the active board — worth
     // a beat of confirmation. It stays reversible (set it back to reopen).
     // The pre-close checklist confirm is shared with the board (caseUtils).
+    // The write is the shared case_set_status RPC — closed_at is stamped and
+    // cleared by the server-side trigger, never computed here.
     if (status === 'closed' && c.status !== 'closed') {
       const ok = await confirmCaseClose(c, profile?.id ?? null)
       if (!ok) { void fetchCase(); return }
     }
-    const res = await update('cases', c.id, { status, closed_at: status === 'closed' && !c.closed_at ? new Date().toISOString() : c.closed_at })
+    const res = await setCaseStatus(c.id, status)
     if (res.error) toast(res.error.message, 'danger')
     else { toast('Status updated.', 'success'); onChanged(); void fetchCase() }
   }
@@ -808,12 +810,13 @@ function DeleteCaseModal({ open, c, onClose, onDeleted }: { open: boolean; c: Ca
 }
 
 /* ── Case handover ──────────────────────────────────────────────────────────
- * The current lead (or command) reassigns the case to another officer. The
- * lead field is a plain, RLS-guarded case update; both the outgoing and
- * incoming lead are notified (case_handover — a case-access-gated type on the
- * guarded create_notification path) so a handover is never silent. */
+ * The current lead (or command) reassigns the case to another officer via the
+ * shared case_set_lead RPC — the server enforces the lead-or-command gate,
+ * notifies BOTH the outgoing and incoming lead (case_handover rows with the
+ * exact payload this modal used to send), and audits the change. No client
+ * notify() calls here anymore: the server sends them, so a handover is never
+ * silent and never double-notified. */
 function HandoverModal({ open, c, onClose, onDone }: { open: boolean; c: CaseRow; onClose: () => void; onDone: () => void }) {
-  const { profile } = useAuth()
   const [to, setTo] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -822,14 +825,8 @@ function HandoverModal({ open, c, onClose, onDone }: { open: boolean; c: CaseRow
   const run = async () => {
     if (!to || busy) return
     setBusy(true)
-    const res = await update('cases', c.id, { lead_detective_id: to })
+    const res = await setCaseLead(c.id, to, note.trim() || null)
     if (res.error) { setBusy(false); toast(res.error.message, 'danger'); return }
-    const actor = profile?.display_name || 'An officer'
-    const payload = { case_id: c.id, case_number: c.case_number, detective: actor, title: c.title || c.case_number, ...(note.trim() ? { reason: note.trim() } : {}) }
-    void notify(to, 'case_handover', { ...payload, reason: note.trim() || `${actor} handed you the lead on ${c.case_number}.` })
-    if (c.lead_detective_id && c.lead_detective_id !== profile?.id) {
-      void notify(c.lead_detective_id, 'case_handover', { ...payload, reason: `${officerName(to) || 'Another officer'} is now the lead on ${c.case_number}.` })
-    }
     setBusy(false)
     toast(`Case handed to ${officerName(to) || 'the officer'}.`, 'success')
     onDone()

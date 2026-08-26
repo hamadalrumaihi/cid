@@ -1,0 +1,12 @@
+{
+  "description": "One sample per error code (contract/ERROR-CODES.md). Codes are stable; messages are illustrative and may change. All data fictional.",
+  "unauthorized": { "error": "unauthorized", "message": "unknown or disabled source 'fivem-main'" },
+  "forbidden": { "error": "forbidden", "message": "officer-4821 has no active identity mapping" },
+  "not_found": { "error": "not_found", "message": "case not found" },
+  "conflict": { "error": "conflict", "message": "status transition closed -> open is not allowed" },
+  "duplicate_note": "duplicate is returned as HTTP 200 inside a success wrapper — see case-create.json replayResponse",
+  "validation_failed": { "error": "validation_failed", "message": "externalRequestId is required on case.create" },
+  "rate_limited": { "error": "rate_limited", "message": "source fivem-main over its per-minute budget; retry with the same externalRequestId" },
+  "internal": { "error": "internal", "message": "unexpected failure; safe to retry with the same externalRequestId" },
+  "not_activated_note": "while the CID lane is dormant every operation returns 501 {\"error\":\"not_activated\"} — outside the stable vocabulary on purpose"
+}

@@ -1,0 +1,25 @@
+{
+  "description": "Normalized-plate semantics: the query 'ab-123' must find the stored plate 'AB123'. Exact-plate hits rank first. All data fictional.",
+  "request": {
+    "op": "vehicles.search",
+    "source": "fivem-main",
+    "officerId": "officer-4821",
+    "payload": { "q": "ab-123" }
+  },
+  "response": {
+    "ok": true,
+    "result": [
+      {
+        "source": "fivem-main",
+        "externalId": "v-100",
+        "plate": "AB123",
+        "plateNormalized": "AB123",
+        "model": "Sultan",
+        "color": "black",
+        "ownerExternalId": "c-100",
+        "ownerName": "John Doe",
+        "updatedAt": "2026-08-01T12:00:00Z"
+      }
+    ]
+  }
+}
