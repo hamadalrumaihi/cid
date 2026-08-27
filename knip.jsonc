@@ -25,7 +25,11 @@
     // completeness, not for use.
     "src/lib/database.types.ts",
     // Deno edge functions: deployed to Supabase, never imported by the app.
-    "supabase/functions/**"
+    "supabase/functions/**",
+    // Standalone city-developer handoff (docs/integration/CID-INTEGRATION-API.md):
+    // self-contained contract types + Node mock, deliberately never imported
+    // by the app — same "not app code" rationale as supabase/functions/**.
+    "integration-package/**"
   ],
   "ignoreBinaries": [
     "semgrep", // installed ad hoc in code-quality.yml (pip), not an npm bin

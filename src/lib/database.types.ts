@@ -2457,6 +2457,275 @@ export type Database = {
           },
         ]
       }
+      external_links: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          entity_id: string
+          entity_type: string
+          external_id: string
+          external_type: string
+          external_updated_at: string | null
+          id: string
+          snapshot: Json
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          entity_id: string
+          entity_type: string
+          external_id: string
+          external_type: string
+          external_updated_at?: string | null
+          id?: string
+          snapshot?: Json
+          source: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          entity_id?: string
+          entity_type?: string
+          external_id?: string
+          external_type?: string
+          external_updated_at?: string | null
+          id?: string
+          snapshot?: Json
+          source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_links_source_fkey"
+            columns: ["source"]
+            isOneToOne: false
+            referencedRelation: "integration_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      external_media_refs: {
+        Row: {
+          access_classification: string
+          captured_at: string | null
+          captured_by_snapshot: string | null
+          case_id: string | null
+          checksum: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          evidence_ref: string | null
+          external_id: string
+          id: string
+          media_type: string | null
+          source: string
+          title: string | null
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          access_classification?: string
+          captured_at?: string | null
+          captured_by_snapshot?: string | null
+          case_id?: string | null
+          checksum?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          evidence_ref?: string | null
+          external_id: string
+          id?: string
+          media_type?: string | null
+          source: string
+          title?: string | null
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          access_classification?: string
+          captured_at?: string | null
+          captured_by_snapshot?: string | null
+          case_id?: string | null
+          checksum?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          evidence_ref?: string | null
+          external_id?: string
+          id?: string
+          media_type?: string | null
+          source?: string
+          title?: string | null
+          updated_at?: string
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_media_refs_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_media_refs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_media_refs_source_fkey"
+            columns: ["source"]
+            isOneToOne: false
+            referencedRelation: "integration_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      external_officer_identities: {
+        Row: {
+          active: boolean
+          agency: string | null
+          created_at: string
+          display_name_snapshot: string | null
+          external_officer_id: string
+          id: string
+          note: string | null
+          profile_id: string | null
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          agency?: string | null
+          created_at?: string
+          display_name_snapshot?: string | null
+          external_officer_id: string
+          id?: string
+          note?: string | null
+          profile_id?: string | null
+          source: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          agency?: string | null
+          created_at?: string
+          display_name_snapshot?: string | null
+          external_officer_id?: string
+          id?: string
+          note?: string | null
+          profile_id?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_officer_identities_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_officer_identities_source_fkey"
+            columns: ["source"]
+            isOneToOne: false
+            referencedRelation: "integration_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      external_storage_refs: {
+        Row: {
+          case_id: string | null
+          chain_of_custody: Json
+          collected_at: string | null
+          collector_snapshot: string | null
+          context_note: string | null
+          created_at: string
+          created_by: string | null
+          evidence_ref: string | null
+          external_id: string
+          id: string
+          item_label: string | null
+          item_type: string | null
+          locker_location: string | null
+          quantity: number | null
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          case_id?: string | null
+          chain_of_custody?: Json
+          collected_at?: string | null
+          collector_snapshot?: string | null
+          context_note?: string | null
+          created_at?: string
+          created_by?: string | null
+          evidence_ref?: string | null
+          external_id: string
+          id?: string
+          item_label?: string | null
+          item_type?: string | null
+          locker_location?: string | null
+          quantity?: number | null
+          source: string
+          updated_at?: string
+        }
+        Update: {
+          case_id?: string | null
+          chain_of_custody?: Json
+          collected_at?: string | null
+          collector_snapshot?: string | null
+          context_note?: string | null
+          created_at?: string
+          created_by?: string | null
+          evidence_ref?: string | null
+          external_id?: string
+          id?: string
+          item_label?: string | null
+          item_type?: string | null
+          locker_location?: string | null
+          quantity?: number | null
+          source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_storage_refs_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_storage_refs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_storage_refs_source_fkey"
+            columns: ["source"]
+            isOneToOne: false
+            referencedRelation: "integration_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       feedback: {
         Row: {
           created_at: string
@@ -4048,6 +4317,101 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      integration_events: {
+        Row: {
+          direction: string
+          entity_id: string | null
+          entity_type: string | null
+          error: string | null
+          event_type: string
+          external_event_id: string
+          id: string
+          payload_meta: Json
+          processed_at: string | null
+          received_at: string
+          retry_count: number
+          source: string
+          status: string
+        }
+        Insert: {
+          direction: string
+          entity_id?: string | null
+          entity_type?: string | null
+          error?: string | null
+          event_type: string
+          external_event_id: string
+          id?: string
+          payload_meta?: Json
+          processed_at?: string | null
+          received_at?: string
+          retry_count?: number
+          source: string
+          status?: string
+        }
+        Update: {
+          direction?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          error?: string | null
+          event_type?: string
+          external_event_id?: string
+          id?: string
+          payload_meta?: Json
+          processed_at?: string | null
+          received_at?: string
+          retry_count?: number
+          source?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integration_events_source_fkey"
+            columns: ["source"]
+            isOneToOne: false
+            referencedRelation: "integration_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      integration_sources: {
+        Row: {
+          created_at: string
+          display_name: string
+          enabled: boolean
+          id: string
+          kind: string
+          notes: string | null
+          rate_limit_per_min: number | null
+          secret_ref: string | null
+          secret_rotated_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          enabled?: boolean
+          id: string
+          kind: string
+          notes?: string | null
+          rate_limit_per_min?: number | null
+          secret_ref?: string | null
+          secret_rotated_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          enabled?: boolean
+          id?: string
+          kind?: string
+          notes?: string | null
+          rate_limit_per_min?: number | null
+          secret_ref?: string | null
+          secret_rotated_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       justice_membership_request_history: {
         Row: {
@@ -13128,6 +13492,51 @@ export type Database = {
           to_stage: string | null
           reason: string | null
         }[]
+      }
+      case_create: {
+        Args: {
+          p_area?: string
+          p_bureau: string
+          p_case_number?: string
+          p_lead?: string
+          p_priority?: string
+          p_summary?: string
+          p_template?: string
+          p_title: string
+        }
+        Returns: Database["public"]["Tables"]["cases"]["Row"]
+      }
+      case_set_status: {
+        Args: { p_case: string; p_reason?: string; p_status: string }
+        Returns: undefined
+      }
+      case_set_lead: {
+        Args: { p_case: string; p_note?: string; p_to: string }
+        Returns: undefined
+      }
+      case_access_decide: {
+        Args: { p_approve: boolean; p_note?: string; p_request: string }
+        Returns: undefined
+      }
+      case_timeline: {
+        Args: { p_case: string }
+        Returns: {
+          kind: string
+          at: string
+          title: string | null
+          actor: string | null
+          ref_id: string | null
+          meta: Json
+        }[]
+      }
+      report_create: {
+        Args: {
+          p_case: string
+          p_fields?: Json
+          p_kind?: string
+          p_template: string
+        }
+        Returns: Database["public"]["Tables"]["reports"]["Row"]
       }
       justice_end_coverage: {
         Args: { p_coverage: string; p_reason?: string }

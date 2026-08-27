@@ -248,6 +248,34 @@ service account syncs).
   `.github/workflows/ci.yml`. Move it to a Vercel environment variable and
   a GitHub Actions secret, then rotate the key. This needs FiveManage +
   Vercel/GitHub dashboard access.
+## 9. Integration (dormant)
+
+The FiveM/city integration surface exists but **nothing is live** — treat it
+as inventory, not operations:
+
+- **What exists**: the service_role-only patrol bridge (`mdt_patrol_feed` /
+  `bridge_ingest_event` / `mdt_bridge_ack` — no consumer deployed), the six
+  dormant integration tables (`20261002120000`: empty `integration_sources`
+  registry, sealed reference tables, command/owner read-only audit
+  surfaces), the undeployed `supabase/functions/cid-integration/` skeleton,
+  and the `integration-package/` city-developer handoff. Contracts:
+  [MDT-BRIDGE-CONTRACT.md](MDT-BRIDGE-CONTRACT.md),
+  [integration/CID-INTEGRATION-API.md](integration/CID-INTEGRATION-API.md).
+- **Activation requires** (each step review-gated — see the cid-integration
+  README's checklist): a separately-reviewed activation migration (definer
+  RPCs + entity-scoped read policies) and session-minting mechanism;
+  provisioning the shared secret **outside the database** on the
+  service/function host (`integration_sources.secret_ref` stores only its
+  *name*); then registering and enabling a source row — a deliberate,
+  audited command act (`enabled=false` is the kill switch). Only after all
+  of that: `supabase functions deploy cid-integration`.
+- **What must never happen**: the service-role key in a FiveM client
+  resource, a browser, or the portal runtime; raw service-role table writes
+  (guard triggers are `current_user`-based and transparent to
+  service_role — machine callers use only the granted RPCs); secrets stored
+  in portal tables; deploying the function with `--no-verify-jwt` while the
+  shared-secret check is stubbed.
+
 # CID General one-time import
 
 The Gang Fact Sheet importer is dry-run-first and resumable. It matches gangs

@@ -1,0 +1,34 @@
+{
+  "description": "Machine lane — NOT an officer operation. Idempotent on (source, sourceEventId). Observations enter unverified pending detective review; malformed or unknown-target events are quarantined, not errored. All data fictional.",
+  "request": {
+    "op": "surveillance.ingest",
+    "source": "fivem-main",
+    "externalRequestId": "alpr-2026-08-01-000042",
+    "payload": {
+      "eventType": "alpr",
+      "sourceEventId": "alpr-2026-08-01-000042",
+      "eventTime": "2026-08-01T12:03:07Z",
+      "payload": {
+        "activity": "plate hit northbound",
+        "targetId": "3c6e0000-0000-4000-8000-00000000fict",
+        "plate": "AB123",
+        "location": "Alta St / Vinewood Blvd",
+        "lat": 0.0,
+        "lng": 0.0
+      }
+    }
+  },
+  "response": {
+    "ok": true,
+    "result": { "status": "processed" }
+  },
+  "replayResponse": {
+    "ok": true,
+    "duplicate": true,
+    "result": { "status": "duplicate" }
+  },
+  "quarantineResponse": {
+    "ok": true,
+    "result": { "status": "quarantined" }
+  }
+}

@@ -1,16 +1,16 @@
 'use client'
 
-/** Grant/deny a pending case access request — the same canonical writes the
- *  owning surfaces make: a case_access_grants row (grant only) + the request
- *  decision stamp + a best-effort notification to the requester (notify() is
- *  already best-effort, so a failed notification never blocks the decision).
- *  Denial persists no note (the table has no column), so the modal stays a
- *  minimal confirm. */
+/** Grant/deny a pending case access request through the shared
+ *  case_access_decide RPC (20261002130000): ONE atomic server-side decision —
+ *  on grant it inserts the standing case_access_grants row AND stamps the
+ *  request, on deny it stamps only; the requester is notified server-side and
+ *  the decision is audited (CASE_ACCESS_DECIDED — grants used to be
+ *  unaudited). An already-decided request comes back as a clear error instead
+ *  of a double grant. Denial persists no note (the table has no column), so
+ *  the modal stays a minimal confirm. */
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
-import { insert, update } from '@/lib/db'
-import { notify } from '@/lib/notify'
-import { useAuth } from '@/lib/auth'
+import { decideCaseAccess } from '@/lib/services/cases'
 import { officerName } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
 import type { ActionItem } from '@/lib/actionItems'
@@ -31,10 +31,8 @@ export function AccessDecisionModal({ item, onClose, onDecided }: {
   /** Fired after a successful grant/deny so the queue refreshes. */
   onDecided: () => void
 }) {
-  const { profile } = useAuth()
   const meta = (item?.sourceMetadata ?? {}) as AccessMeta
   const requesterId = str(meta.requester_id)
-  const caseId = str(meta.case_id) ?? item?.caseId ?? null
   // The model routes the requester's own words into item.reason (with a
   // generic fallback we don't echo back as a quote).
   const reason = str(meta.reason)
@@ -42,32 +40,11 @@ export function AccessDecisionModal({ item, onClose, onDecided }: {
   const requesterName = str(meta.requester_name) ?? officerName(requesterId) ?? 'An officer'
 
   const decide = async (grant: boolean) => {
-    if (!item || !profile) return
-    if (!caseId) {
-      toast('Request details are incomplete — decide it from the case page instead.', 'warn')
-      return
-    }
-    if (grant) {
-      if (!requesterId) {
-        toast('Request details are incomplete — decide it from the case page instead.', 'warn')
-        return
-      }
-      const gr = await insert('case_access_grants', { case_id: caseId, officer_id: requesterId })
-      if (gr.error) { toast(gr.error.message, 'danger'); return }
-    }
-    const up = await update('case_access_requests', item.sourceId, {
-      status: grant ? 'approved' : 'denied',
-      decided_by: profile.id,
-      decided_at: new Date().toISOString(),
-    })
-    if (up.error) { toast(up.error.message, 'danger'); return }
-    if (requesterId) {
-      await notify(requesterId, grant ? 'access_granted' : 'access_denied', {
-        case_id: caseId,
-        case_number: item.caseNumber ?? undefined,
-        title: item.title,
-      }).catch(() => { /* best-effort — the decision already landed */ })
-    }
+    if (!item) return
+    // The server resolves the case and requester from the request row itself
+    // — no client-assembled metadata is trusted for the decision anymore.
+    const res = await decideCaseAccess(item.sourceId, grant)
+    if (res.error) { toast(res.error.message, 'danger'); return }
     toast(grant ? 'Access granted.' : 'Request denied.', 'success')
     onDecided()
     onClose()

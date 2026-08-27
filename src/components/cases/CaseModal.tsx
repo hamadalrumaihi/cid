@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import { insert, list, rpc, update, deleteWithUndo } from '@/lib/db'
-import type { Tables } from '@/lib/database.types'
+import { createCase } from '@/lib/services/cases'
+import type { Tables, TablesUpdate } from '@/lib/database.types'
 import { searchMemberHits, searchOperationHits, type EntityHit } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
 import { useProfilesStore } from '@/lib/profiles'
@@ -54,9 +55,13 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
     summary: record?.summary ?? '',
   }), [record, profile])
   const [form, setForm] = useState(initial)
-  // Checklist carried by the selected template — auto-created as case_tasks
-  // on save (flowintel-style template task lists). New cases only.
+  // Checklist carried by the selected template — expanded into case_tasks
+  // SERVER-SIDE by the case_create RPC (flowintel-style template task lists);
+  // the local copy only powers the preview strip. New cases only.
   const [checklist, setChecklist] = useState<string[]>([])
+  // The selected template's id rides to case_create so the server expands its
+  // checklist inside the same transaction as the case row.
+  const [templateId, setTemplateId] = useState<string | null>(null)
   // Default review cadence carried by the selected template → cases.follow_up_at
   // on creation (new cases only).
   const [followupDays, setFollowupDays] = useState<number | null>(null)
@@ -66,7 +71,7 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
       setTemplates((await list('case_templates', { order: 'sort_order' })).filter((t) => t.active !== false))
     } catch { setTemplates([]) }
   }
-  useEffect(() => { if (open) queueMicrotask(() => { setForm(initial); setChecklist([]); setFollowupDays(null); void fetchTemplates() }) }, [open, initial, templatesVersion])
+  useEffect(() => { if (open) queueMicrotask(() => { setForm(initial); setChecklist([]); setTemplateId(null); setFollowupDays(null); void fetchTemplates() }) }, [open, initial, templatesVersion])
 
   // ── Bounded picker plumbing ───────────────────────────────────────────────
   // Lead labels come from the shared roster cache (warm it once); the current
@@ -129,6 +134,7 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
   const applyTemplate = (tpl: CaseTemplateRow | null) => {
     setChecklist(tplTasks(tpl))
+    setTemplateId(tpl?.id ?? null)
     setFollowupDays(tpl?.followup_days ?? null)
     if (!tpl) { setForm(initial); return }
     setForm((f) => ({
@@ -144,39 +150,68 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
   const save = async () => {
     if (!form.title.trim()) { toast('Case title is required.', 'warn'); return }
     setSaving(true)
-    // Established per-bureau series: use the typed number, else ask the server
-    // for the next in this bureau's block. Timestamp is only a last-ditch guard
-    // if that call fails — never the normal path (that was the SAB-69179 bug).
-    const typed = form.digits.replace(/\D/g, '')
-    let caseNumber = `${numberPrefix}-${typed}`
-    if (!typed) {
-      const gen = await rpc('next_case_number', { p_bureau: form.bureau })
-      caseNumber = typeof gen.data === 'string' && gen.data
-        ? gen.data
-        : `${numberPrefix}-${Date.now().toString().slice(-5)}`
-    }
     // A template's default review cadence lands on new cases only, and never
     // overwrites a follow-up an editor already set.
     const followUpAt = !record && followupDays && followupDays > 0
       ? new Date(Date.now() + followupDays * 86_400_000).toISOString().slice(0, 10)
       : undefined
-    const patch = {
-      bureau: form.bureau as CaseRow['bureau'],
-      case_number: caseNumber,
-      title: form.title.trim(),
-      status: form.status as CaseRow['status'],
-      area: form.area.trim() || null,
-      lead_detective_id: form.lead_detective_id || null,
-      operation_id: form.operation_id || null,
-      summary: form.summary.trim() || null,
-      ...(followUpAt ? { follow_up_at: followUpAt } : {}),
-    }
-    const res = record ? await update('cases', record.id, patch) : await insert('cases', patch)
-    if (res.error) { setSaving(false); toast(res.error.message, 'danger'); return }
-    const caseId = res.data?.[0]?.id ?? record?.id
-    if (!record && caseId && checklist.length) {
-      const t = await insert('case_tasks', checklist.map((title) => ({ case_id: caseId, title })))
-      if (t.error) toast(`Case created, but checklist tasks failed: ${t.error.message}`, 'warn')
+    let caseId: string | undefined
+    if (record) {
+      // Edits stay a plain RLS-scoped update — creation is the shared RPC.
+      // A cleared number field falls back to the server's next-in-series,
+      // exactly as before.
+      const typed = form.digits.replace(/\D/g, '')
+      let caseNumber = `${numberPrefix}-${typed}`
+      if (!typed) {
+        const gen = await rpc('next_case_number', { p_bureau: form.bureau })
+        if (typeof gen.data === 'string' && gen.data) caseNumber = gen.data
+        else { setSaving(false); toast('Could not allocate a case number — try again.', 'danger'); return }
+      }
+      const patch = {
+        bureau: form.bureau as CaseRow['bureau'],
+        case_number: caseNumber,
+        title: form.title.trim(),
+        status: form.status as CaseRow['status'],
+        area: form.area.trim() || null,
+        lead_detective_id: form.lead_detective_id || null,
+        operation_id: form.operation_id || null,
+        summary: form.summary.trim() || null,
+      }
+      const res = await update('cases', record.id, patch)
+      if (res.error) { setSaving(false); toast(res.error.message, 'danger'); return }
+      caseId = res.data?.[0]?.id ?? record.id
+    } else {
+      // Creation goes through the shared case_create RPC (the same operation
+      // the FiveM lane calls): the server gates the bureau, mints the number
+      // collision-safely when the field is blank (an explicitly typed number
+      // that collides comes back as a clear error — never a timestamp
+      // fallback; that was the SAB-69179 bug), applies the lead rule (only
+      // command's pick is honored; everyone else becomes the lead) and
+      // expands the template checklist in the SAME transaction.
+      const typed = form.digits.replace(/\D/g, '')
+      const res = await createCase({
+        bureau: form.bureau,
+        title: form.title.trim(),
+        summary: form.summary.trim() || null,
+        area: form.area.trim() || null,
+        lead: form.lead_detective_id || null,
+        template: templateId,
+        caseNumber: typed ? `${numberPrefix}-${typed}` : null,
+      })
+      if (res.error || !res.data) { setSaving(false); toast(res.error?.message || 'Could not create the case.', 'danger'); return }
+      caseId = res.data.id
+      // Fields the RPC deliberately doesn't take stay a follow-up update on
+      // the fresh row (the creator always passes cases_upd): a non-default
+      // starting status, the operation link, and the template's follow-up.
+      const extras: TablesUpdate<'cases'> = {
+        ...(form.status !== 'open' ? { status: form.status as CaseRow['status'] } : {}),
+        ...(form.operation_id ? { operation_id: form.operation_id } : {}),
+        ...(followUpAt ? { follow_up_at: followUpAt } : {}),
+      }
+      if (Object.keys(extras).length) {
+        const up = await update('cases', caseId, extras)
+        if (up.error) toast(`Case created, but some settings failed to apply: ${up.error.message}`, 'warn')
+      }
     }
     setSaving(false)
     toast(record ? 'Case updated.' : `Case created.${checklist.length ? ` ${checklist.length} checklist task${checklist.length === 1 ? '' : 's'} added.` : ''}`, 'success')

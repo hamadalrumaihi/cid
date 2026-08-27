@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/Badge'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Button } from '@/components/ui/Button'
 import { ListSkeleton } from '@/components/ui/Skeleton'
-import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
+import { deleteWithUndo, list, rpc, update } from '@/lib/db'
+import { createReport } from '@/lib/services/reports'
 import { searchPersonHits, type EntityHit } from '@/lib/entitySearch'
 import type { Json, Tables } from '@/lib/database.types'
 import { copyText, downloadTextFile, fmtDateTime, timeAgo } from '@/lib/format'
@@ -127,12 +128,15 @@ export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: C
       const res = await update('reports', editing.report.id, { fields: editing.values as Json })
       if (res.error) { toast(res.error.message, 'danger'); return }
     } else {
+      // Creation goes through the shared report_create RPC: seq is computed
+      // server-side (max+1 per case/template/kind under a lock — the old
+      // client count raced concurrent authors) and author_id is pinned to
+      // the caller, never sent from here.
       const rt = String(editing.values.report_type ?? '').toLowerCase()
       const kind = rt.startsWith('supplemental') ? ('supplemental' as const) : rt.startsWith('follow') ? ('followup' as const) : ('initial' as const)
-      const seq = reports.filter((r) => r.template === editing.template && r.kind === kind).length + 1
-      const res = await insert('reports', { case_id: c.id, template: editing.template, kind, seq, fields: editing.values as Json, author_id: profile?.id ?? null })
+      const res = await createReport({ caseId: c.id, template: editing.template, kind, fields: editing.values as Json })
       if (res.error) { toast(res.error.message, 'danger'); return }
-      reportId = res.data?.[0]?.id ?? null
+      reportId = res.data?.id ?? null
     }
     if (hasMediaRefs && reportId) await syncReportMediaLinks(reportId, prevRefs, String(editing.values.media_refs ?? ''))
     void clearDraft(draftKey(editing.template, editing.report)); setEditing(null); toast('Report saved.', 'success'); void refresh()

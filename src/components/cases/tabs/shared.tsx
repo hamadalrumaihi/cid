@@ -15,7 +15,6 @@ export type RicoRow = Tables<'rico_cases'>
 export type PredicateRow = Tables<'predicate_acts'>
 export type GangRow = Tables<'gangs'>
 export type IntelRow = Tables<'case_intel_links'>
-export type HoldRow = Tables<'legal_holds'>
 export type ExtractionRow = Tables<'record_extractions'>
 export type ExtractionFactRow = Tables<'record_extraction_facts'>
 

@@ -1,0 +1,29 @@
+{
+  "description": "Referencing a city evidence-locker item from a CID case. CID references, never owns: the locker system remains the system of record; custody facts in the snapshot are frozen as captured at link time. All data fictional.",
+  "request": {
+    "op": "storage.attach",
+    "source": "fivem-main",
+    "officerId": "officer-4821",
+    "externalRequestId": "storage:CID-2026-0412:s-100",
+    "payload": {
+      "caseId": "9d1c0000-0000-4000-8000-00000000fict",
+      "contextNote": "Pry bar recovered at scene; matches tool marks on both vehicles.",
+      "storageItem": {
+        "source": "fivem-main",
+        "externalType": "storage_item",
+        "externalId": "s-100",
+        "snapshot": {
+          "label": "Pry bar (tagged)",
+          "lockerLocation": "Locker A-3",
+          "collector": "o-100",
+          "collectedAt": "2026-08-01T12:00:00Z",
+          "chainOfCustody": [{ "at": "2026-08-01T12:00:00Z", "actor": "o-100", "action": "checked_in" }]
+        }
+      }
+    }
+  },
+  "response": {
+    "ok": true,
+    "result": { "id": "1a4c0000-0000-4000-8000-00000000fict" }
+  }
+}

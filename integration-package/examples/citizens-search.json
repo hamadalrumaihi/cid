@@ -1,0 +1,27 @@
+{
+  "description": "City-owned read: served by YOUR CitizenProvider adapter; the portal backend is not involved. Reads carry no externalRequestId. All data fictional.",
+  "request": {
+    "op": "citizens.search",
+    "source": "fivem-main",
+    "officerId": "officer-4821",
+    "payload": { "q": "john doe", "limit": 20 }
+  },
+  "response": {
+    "ok": true,
+    "result": [
+      {
+        "source": "fivem-main",
+        "externalId": "c-100",
+        "characterId": "char-100",
+        "firstName": "John",
+        "lastName": "Doe",
+        "fullName": "John Doe",
+        "dob": "1990-04-12",
+        "phone": "555-0100",
+        "address": "12 Alta St",
+        "licenses": [{ "kind": "drivers", "status": "valid" }],
+        "updatedAt": "2026-08-01T12:00:00Z"
+      }
+    ]
+  }
+}

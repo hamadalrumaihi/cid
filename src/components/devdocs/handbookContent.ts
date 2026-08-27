@@ -9,7 +9,7 @@ export interface HandbookPage {
   body: string
 }
 
-export const HANDBOOK_UPDATED = '2026-08-25'
+export const HANDBOOK_UPDATED = '2026-08-26'
 
 export const HANDBOOK_PAGES: HandbookPage[] = [
   {
@@ -1094,6 +1094,30 @@ normal UI.
 | \`import_legal_warrant(p_case, p_subtype, p_title, p_priority, p_form, p_narrative, p_person, p_classification, p_source_submitted_at, p_source_submitter, p_import_key, p_exhibits)\` | owner-only, **idempotent** on \`import_key\` (a repeat key returns the existing row, zero duplicates); lands the request at \`submitted_to_doj\` intake (never approved / signed / issued / executed / MDT-projected); preserves the historical \`source_submitter\`/\`source_submitted_at\` **separate from** the real import actor (never falsifies \`auth.uid()\`); freezes an immutable submitted version; attaches reused canonical exhibits plus external links (external-link URLs must be http(s)); writes a \`LEGAL_IMPORTED\` audit row |
 | \`import_rollback_by_key(p_import_key)\` | owner-only deliberate reversal — deletes the imported request and its children in dependency order but **never** deletes \`audit_log\`; appends a \`LEGAL_IMPORT_ROLLBACK\` audit row before removal; returns the number of requests rolled back |
 
+### Shared case services (\`20261002130000\`)
+
+Six definer RPCs that moved the case workspace's worst component-embedded
+operations server-side. The portal calls them through
+\`src/lib/services/{cases,reports}.ts\`; the future FiveM CID lane will call
+the **same** functions — one implementation per operation, never two (see
+[Ch. 21](21-integration.md)). Each gates on the exact \`private.*\` predicate
+its old client path passed through.
+
+| RPC | Request | Called from | Why it exists |
+|---|---|---|---|
+| \`case_create(p_bureau, p_title, p_summary?, p_priority?, p_area?, p_lead?, p_template?, p_case_number?)\` | bureau + fields | CaseModal | atomic create: \`can_create_case\` gate, collision-safe number minting under a per-bureau advisory lock (explicit-number collision errors — never a timestamp fallback), command-only lead choice (everyone else IS the lead), template-checklist expansion, \`CASE_CREATED\` audit |
+| \`case_set_status(p_case, p_status, p_reason?)\` | case + status | CaseBoard drag, CaseDetail quick actions, CasesView bulk | validated vocabulary + \`CASE_STATUS_CHANGED\` audit; \`closed_at\` stays owned by the \`trg_case_closed_at\` trigger; transitions deliberately unconstrained (mirrors the old freedom) |
+| \`case_set_lead(p_case, p_to, p_note?)\` | case + new lead | HandoverModal | the modal's lead-or-command rule promoted to a server gate; server-sent \`case_handover\` notifications to both sides; \`CASE_LEAD_CHANGED\` audit |
+| \`case_access_decide(p_request, p_approve, p_note?)\` | request id + decision | AccessDecisionModal | atomic grant-insert + request-stamp under \`can_grant_case\` (the old client did two writes and could grant without stamping); closes the unaudited-grant gap (\`CASE_ACCESS_DECIDED\`); an already-decided request errors, changes nothing |
+| \`case_timeline(p_case)\` | case id | TimelineTab | ONE definer read replacing 11 parallel client reads — gated on \`can_read_case\` with the narrower arms (legal holds, restricted trail, surveillance, media clauses) re-checked per-arm, so it exposes exactly what the client reads exposed |
+| \`report_create(p_case, p_template, p_kind?, p_fields?)\` | case + template | ReportsTab (create path) | server-computed per-(case, template, kind) seq under an advisory lock; author pinned to \`auth.uid()\` (never a parameter); \`REPORT_CREATED\` audit |
+
+The **machine-only bridge functions** — \`mdt_patrol_feed\`,
+\`bridge_ingest_event\`, \`mdt_bridge_ack\` — are deliberately absent from the
+client list above: EXECUTE is service_role-only and no consumer is deployed.
+See [Ch. 21](21-integration.md) and
+[\`docs/MDT-BRIDGE-CONTRACT.md\`](../MDT-BRIDGE-CONTRACT.md).
+
 **Error handling**: RPCs come back through \`rpc()\` as \`{error}\` — callers
 toast it. RPC-internal permission failures raise exceptions that surface
 the same way.
@@ -1318,7 +1342,19 @@ and the schema snapshot is the complete table list:
   (see 8.5), the missing \`case_intel_links\` UPDATE policy (role/note
   editable; the legal-hold trigger still vetoes), the \`create_notification\`
   1-hour dedupe guard, and \`search_all\` \`bolo\` + \`task\` arms (+ a
-  \`case_tasks\` title trgm index).`,
+  \`case_tasks\` title trgm index).
+- **FiveM integration prep — dormant data layer** (\`20261002120000\`) — six
+  tables for the future city integration: \`integration_sources\` and
+  \`integration_events\` are command/owner **SELECT-only** audit surfaces (no
+  write policies); \`external_links\`, \`external_storage_refs\`,
+  \`external_media_refs\` and \`external_officer_identities\` are **fully
+  sealed** (RLS on, zero policies, all privileges revoked). No seeds, no
+  RPCs, no realtime. Also fixes the \`mdt_wanted_projections.sync_status\`
+  CHECK to admit \`'retryable'\`. See [Ch. 21](21-integration.md).
+- **Shared case services** (\`20261002130000\`) — no tables; six definer RPCs
+  (\`case_create\`, \`case_set_status\`, \`case_set_lead\`, \`case_access_decide\`,
+  \`case_timeline\`, \`report_create\`) that both the portal and the future city
+  lane call. See [Ch. 7](07-api.md).`,
   },
   {
     slug: "state",
@@ -1432,6 +1468,115 @@ User clicks "Save" in a modal
 - \`shared/RecordSearchPicker\` ← ~23 files (the one "attach a record"
   contract) · \`lib/entitySearch\` ← ~14 components (its loaders)
 - \`guideContent.ts\` ← **generated from** \`docs/USER-GUIDE.md\``,
+  },
+  {
+    slug: "integration",
+    title: "City Integration & Bridges",
+    section: "Data & API",
+    body: `Everything that connects (or is prepared to connect) the portal to the city
+— the FiveM server, its patrol MDT, its evidence storage and media hosts.
+**Status: dormant.** Every surface in this chapter ships in code and schema
+but nothing is live: no consumer is deployed, no external caller is
+registered, and the portal behaves exactly as if none of it existed. This
+chapter is the map; the contracts themselves live in
+[\`docs/MDT-BRIDGE-CONTRACT.md\`](../MDT-BRIDGE-CONTRACT.md) and
+[\`docs/integration/CID-INTEGRATION-API.md\`](../integration/CID-INTEGRATION-API.md)
+— read those, don't duplicate them.
+
+## 21.1 The two lanes
+
+1. **Patrol lane** — machine-to-machine, minimal, sanitized (wanted/BOLO
+   data out, automated surveillance observations in). Never carries case
+   data.
+2. **CID lane** — authenticated, per-officer casework from a future in-city
+   CID app. Every operation runs as the officer's own portal identity, so
+   all existing RLS/RPC authority applies unchanged.
+
+The lanes never mix: a patrol MDT never gains CID reach, and the CID lane
+never widens the patrol feed's allowlist.
+
+## 21.2 The patrol bridge (the three machine functions)
+
+| Function | Direction | What it does |
+|---|---|---|
+| \`mdt_patrol_feed()\` | outbound | The nine-column read surface: snapshot text only — no case ids, no entity FKs. The allowlist is structural (the feed *selects* only those columns), so sensitive CID/SIB data cannot cross by construction. |
+| \`bridge_ingest_event(...)\` | inbound | Surveillance observations: idempotent on \`(source, source_event_id)\`, malformed payloads quarantined (never discarded), everything unverified until detective review in the Action Center. |
+| \`mdt_bridge_ack(...)\` | bookkeeping | Stamps sync outcomes onto \`mdt_exports\` / \`mdt_wanted_projections\` (\`20261002120000\` fixed the wanted-branch CHECK to admit \`'retryable'\`). |
+
+**Dormancy mechanism**: all three are SECURITY DEFINER with EXECUTE granted
+to \`service_role\` **only** — revoked from \`authenticated\`/\`anon\`, so they
+are unreachable from the browser and the app runtime; the RLS suite asserts
+this. No sync service is deployed. Full field semantics, expiry rules and
+consumer expectations: [MDT-BRIDGE-CONTRACT.md](../MDT-BRIDGE-CONTRACT.md).
+
+## 21.3 The integration data layer (six tables, \`20261002120000\`)
+
+The dormant schema the CID lane will write. Two postures:
+
+| Table | Purpose | Posture |
+|---|---|---|
+| \`integration_sources\` | registry of trusted external callers; \`enabled\` defaults false; \`secret_ref\` is a *pointer* to a secret held outside the DB, never the secret | **read-only** (command/owner SELECT; no write policies) |
+| \`integration_events\` | idempotency + audit envelope, \`UNIQUE (source, external_event_id)\`; \`payload_meta\` carries safe metadata only, never raw city payloads | **read-only** (command/owner SELECT; no write policies) |
+| \`external_links\` | generic CID record → city record reference \`(entity, source, external_type, external_id)\` + deliberate \`snapshot\` | **sealed** |
+| \`external_storage_refs\` | case → city physical-storage item (CID references, never owns; frozen custody facts) | **sealed** |
+| \`external_media_refs\` | city-hosted media reference (durable URL pointer, never a copy) | **sealed** |
+| \`external_officer_identities\` | city officer → portal profile mapping; \`active\` defaults false; pairs with the reserved \`case_assignments.assignment_source='manual_access'\` lane | **sealed** |
+
+**Sealed** = RLS enabled, zero policies, every privilege revoked from
+\`authenticated\`/\`anon\` (the \`app_secrets\` /\`field_submission_sources\`
+posture) — unreachable through PostgREST at any rank. No table is seeded,
+none is in the realtime publication, and no RPC writes any of them; the
+absence of rows means the absence of integration. A future activation pass
+(separate migration, separately reviewed) adds the definer RPCs and
+entity-scoped read policies.
+
+## 21.4 Shared case services (\`20261002130000\`)
+
+Six SECURITY DEFINER RPCs that moved the worst component-embedded case
+operations server-side, so the portal and the future city lane run **one
+implementation per operation, never two**. The portal is rewired onto them
+via [\`src/lib/services/cases.ts\`](../../src/lib/services/cases.ts) /
+[\`reports.ts\`](../../src/lib/services/reports.ts); each gates on the same
+\`private.*\` predicate its old client path passed through:
+
+| RPC | Replaces | Gained |
+|---|---|---|
+| \`case_create\` | CaseModal's non-atomic insert + checklist | one transaction, collision-safe number minting (an explicit-number collision now errors — never a timestamp fallback), server-held lead rule |
+| \`case_set_status\` | three direct \`cases.status\` update sites | validated vocabulary, explicit \`CASE_STATUS_CHANGED\` audit; \`closed_at\` stays trigger-owned |
+| \`case_set_lead\` | HandoverModal's raw update + client notifies | lead-or-command gate server-side, server-sent handover notifications, audit |
+| \`case_access_decide\` | AccessDecisionModal's two non-atomic writes | atomic grant + stamp, closes the unaudited-grant gap |
+| \`case_timeline\` | TimelineTab's 11 parallel client reads | one definer read model exposing exactly what the client reads exposed |
+| \`report_create\` | ReportsTab's insert with client seq/author | server-computed seq under an advisory lock, author pinned to \`auth.uid()\` |
+
+Details per function (parameters, gates, audit actions): the migration
+header of
+[\`20261002130000_shared_case_services.sql\`](../../supabase/migrations/20261002130000_shared_case_services.sql)
+and the [Ch. 7](07-api.md) table.
+
+## 21.5 The CID lane contract and the developer package
+
+- **Contract**: [docs/integration/CID-INTEGRATION-API.md](../integration/CID-INTEGRATION-API.md)
+  — identity exchange, the service-role raw-write prohibition, the error
+  vocabulary, the operations catalog, idempotency and external-ID/ownership
+  rules. \`supabase/functions/cid-integration/\` is its **undeployed**
+  code-shaped counterpart (every handler returns \`not_activated\`; deploying
+  it *is* the activation step — see that function's README).
+- **TypeScript contracts**: [\`src/lib/integration/\`](../../src/lib/integration/index.ts)
+  — \`External*\` record shapes, provider interfaces, idempotency helpers and
+  a mock adapter. Nothing in app code imports this directory **by design**;
+  only the unit tests and mock consume it.
+- **Developer package**: [\`integration-package/\`](../../integration-package/README.md)
+  — the standalone handoff a city developer receives *without* this repo:
+  the public half of the contract, self-contained types, examples, adapter
+  guides, a zero-dependency mock, and a server-side FiveM resource skeleton.
+  No credentials, hostnames or project references anywhere in it.
+
+**The hard rules**, wherever activation lands: secrets live outside the
+database; the service-role key never ships in a FiveM client resource, a
+browser, or the portal runtime; raw service-role table writes are forbidden
+(guard triggers are \`current_user\`-based and transparent to service_role);
+and city data is referenced, never mirrored — snapshots are explicit and
+deliberate.`,
   },
   {
     slug: "auth",

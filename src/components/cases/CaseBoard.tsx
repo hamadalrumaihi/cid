@@ -1,6 +1,6 @@
 'use client'
 
-import { update } from '@/lib/db'
+import { setCaseStatus } from '@/lib/services/cases'
 import { bureauShort } from '@/lib/roles'
 import type { Tables } from '@/lib/database.types'
 import { useOperationsStore } from '@/lib/operations'
@@ -30,14 +30,16 @@ export function CaseBoard({ items, canEdit, onOpen, onMoved }: { items: CaseRow[
   const { run: move } = useAction(async (id: string, status: CaseRow['status']) => {
     const row = items.find((c) => c.id === id)
     if (!row || row.status === status) return
-    // Dropping a card on Closed stamps closed_at — the same pre-close
-    // checklist confirm as the detail screen (caseUtils.confirmCaseClose).
-    // Reversible: drag it back out to reopen.
+    // Dropping a card on Closed goes through the same pre-close checklist
+    // confirm as the detail screen (caseUtils.confirmCaseClose). Reversible:
+    // drag it back out to reopen. The move itself is the shared
+    // case_set_status RPC — closed_at is stamped/cleared by the server-side
+    // trigger, never computed here.
     if (status === 'closed') {
       const ok = await confirmCaseClose(row)
       if (!ok) { onMoved(); return }
     }
-    const res = await update('cases', id, { status, closed_at: status === 'closed' ? new Date().toISOString() : row.closed_at })
+    const res = await setCaseStatus(id, status)
     if (res.error) toast(res.error.message, 'danger')
     else {
       // Only reflect the move locally once the write landed — a rejected

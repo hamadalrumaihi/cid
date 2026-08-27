@@ -274,3 +274,45 @@ timestamp.
 | — | ux_personalization_c5_notification_dedupe | `20260826010000_ux_personalization.sql` |
 | — | ux_personalization_c6a_task_trgm_index | `20260826010000_ux_personalization.sql` |
 | — | ux_personalization_c6b_search_all_bolo_task | `20260826010000_ux_personalization.sql` |
+
+## FiveM integration preparation (2026-10-02, applied)
+
+`20261002120000_fivem_integration_prep.sql` is authored in-repo, mirrored
+into `schema-snapshot.sql` / `database.types.ts`, and **applied to the live
+project via MCP as `fivem_integration_prep`** (advisors re-run: zero ERROR
+findings; the four fully-dormant tables show the expected INFO-level
+"RLS enabled, no policy" notices, the deliberate posture). Entirely
+DORMANT: six new tables (no seeds, no RPCs, no realtime, no workers, no new
+browser access), plus the D1 fix widening
+`mdt_wanted_projections_sync_status_check` to admit `'retryable'` (the value
+`mdt_bridge_ack` writes) and the D2 snapshot fix emitting that table's two
+previously omitted inline CHECKs.
+
+| Version (live) | Name | Repo file |
+|---|---|---|
+| applied via MCP (`fivem_integration_prep`) | fivem_integration_prep | `20261002120000_fivem_integration_prep.sql` |
+
+## Shared case services (2026-10-02, applied)
+
+`20261002130000_shared_case_services.sql` is authored in-repo and mirrored
+into `schema-snapshot.sql` / `database.types.ts`; the orchestrator applies it
+to the live project via MCP **before** the rewired client deploys. It moves
+the worst component-embedded operations behind SECURITY DEFINER RPCs shared
+by the web portal and the future FiveM lane: `case_create` (atomic creation +
+collision-safe numbering + server-side template checklist expansion, gate
+`private.can_create_case`), `case_set_status` (validated vocabulary, audit
+`CASE_STATUS_CHANGED`; `closed_at` stays with `trg_case_closed_at`),
+`case_set_lead` (lead-or-command gate, server-sent `case_handover`
+notifications, audit `CASE_LEAD_CHANGED`), `case_access_decide` (atomic
+grant+stamp, closes the unaudited-grant gap with `CASE_ACCESS_DECIDED`),
+`case_timeline` (the shared definer read model replacing TimelineTab's 11
+client reads, gate `private.can_read_case` with per-arm narrowing), and
+`report_create` (server-computed seq, author pinned to `auth.uid()`, audit
+`REPORT_CREATED`), plus `private.case_service_notify` (create_notification's
+payload stamping/dedupe for definer-internal fan-out). Purely additive: no
+table, policy or trigger is touched, and every superseded direct-write path
+keeps working until the client rewire deploys.
+
+| Version (live) | Name | Repo file |
+|---|---|---|
+| applied via MCP (`shared_case_services`) | shared_case_services | `20261002130000_shared_case_services.sql` |
