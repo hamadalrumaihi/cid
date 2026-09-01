@@ -179,7 +179,7 @@ export function ChargesTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boo
         {rows.map((ch) => {
           const moves = caseChargeNext(ch.status)
           return (
-            <div key={ch.id} className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+            <div key={ch.id} className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
               <div className="flex flex-wrap items-start gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="font-bold text-white">

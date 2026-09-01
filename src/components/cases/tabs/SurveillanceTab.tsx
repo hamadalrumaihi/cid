@@ -33,6 +33,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
+import { AlertIcon, LockIcon, PersonIcon, PlaceIcon, VehicleIcon } from '@/components/shell/icons'
 import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import { type CaseRow } from './shared'
 
@@ -52,7 +53,7 @@ interface DeconflictRow {
   visible_case_ids: string[]
 }
 
-const SECTION_TITLE = 'text-xs font-bold uppercase tracking-[0.14em] text-slate-400'
+const SECTION_TITLE = 'text-[13px] font-semibold text-white'
 const humanize = (s: string | null | undefined): string =>
   (s ?? '').replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
 
@@ -208,10 +209,10 @@ function AlertsStrip({ alerts, onChanged }: { alerts: AlertRow[]; onChanged: () 
   return (
     <div className="space-y-2">
       {alerts.map((a) => (
-        <div key={a.id} className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3">
+        <div key={a.id} className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-amber-200">⚠ {a.title}</p>
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-amber-200"><AlertIcon size={14} className="shrink-0" /> {a.title}</p>
               <p className="mt-1 text-xs text-amber-100/80">{a.explanation}</p>
             </div>
             <div className="flex flex-shrink-0 gap-2">
@@ -358,7 +359,7 @@ function TargetRowCard({ t, now, nameOf, canManage, mayDecide, isCommand, onChan
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+    <div className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tint={targetStatusTint(status)}>{TARGET_STATUS_LABEL[status] ?? humanize(status)}</Badge>
         <span className="font-semibold text-white">{t.label}</span>
@@ -539,7 +540,7 @@ function LogObservationForm({ caseId, targets, onSaved }: {
   }
 
   return (
-    <div className="space-y-3 rounded-xl border border-white/10 bg-ink-950/50 p-3">
+    <div className="space-y-3 rounded-lg border border-white/10 bg-ink-950/50 p-3">
       <div className="grid gap-3 md:grid-cols-3">
         <Field label="Observed at" required>
           {(id) => <Input id={id} type="datetime-local" value={observedAt} onChange={(e) => setObservedAt(e.target.value)} />}
@@ -658,10 +659,10 @@ function ObservationRowCard({ o, entities, canEdit, nameOf, onChanged }: {
     onChanged()
   }
 
-  const chips: Array<{ key: string; label: string; href: string | null }> = []
-  if (o.person_id) chips.push({ key: `p:${o.person_id}`, label: `👤 ${nameOf(o.person_id)}`, href: `/persons?person=${encodeURIComponent(o.person_id)}` })
-  if (o.vehicle_id) chips.push({ key: `v:${o.vehicle_id}`, label: `🚗 ${nameOf(o.vehicle_id)}`, href: `/vehicles?vehicle=${encodeURIComponent(o.vehicle_id)}` })
-  if (o.place_id) chips.push({ key: `pl:${o.place_id}`, label: `📍 ${nameOf(o.place_id)}`, href: `/places?place=${encodeURIComponent(o.place_id)}` })
+  const chips: Array<{ key: string; icon?: React.ReactNode; label: string; href: string | null }> = []
+  if (o.person_id) chips.push({ key: `p:${o.person_id}`, icon: <PersonIcon size={12} className="shrink-0" />, label: nameOf(o.person_id), href: `/persons?person=${encodeURIComponent(o.person_id)}` })
+  if (o.vehicle_id) chips.push({ key: `v:${o.vehicle_id}`, icon: <VehicleIcon size={12} className="shrink-0" />, label: nameOf(o.vehicle_id), href: `/vehicles?vehicle=${encodeURIComponent(o.vehicle_id)}` })
+  if (o.place_id) chips.push({ key: `pl:${o.place_id}`, icon: <PlaceIcon size={12} className="shrink-0" />, label: nameOf(o.place_id), href: `/places?place=${encodeURIComponent(o.place_id)}` })
   for (const e of entities) {
     const href = e.kind === 'person' ? `/persons?person=${encodeURIComponent(e.ref_id)}`
       : e.kind === 'vehicle' ? `/vehicles?vehicle=${encodeURIComponent(e.ref_id)}`
@@ -671,14 +672,14 @@ function ObservationRowCard({ o, entities, canEdit, nameOf, onChanged }: {
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+    <div className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tint={VERIFICATION_TINT[o.verification_status] ?? 'bg-white/5 text-slate-400'}>
           {VERIFICATION_LABEL[o.verification_status] ?? humanize(o.verification_status)}
         </Badge>
         <Badge>{SOURCE_TYPE_LABEL[o.source_type] ?? humanize(o.source_type)}</Badge>
         <Badge tint={confidenceTint(o.confidence)}>{humanize(o.confidence)}</Badge>
-        {o.restricted && <Badge tone="warn">🔒 Restricted</Badge>}
+        {o.restricted && <Badge tone="warn"><LockIcon size={12} className="shrink-0" /> Restricted</Badge>}
         {o.promoted_at && <Badge tone="good">Promoted</Badge>}
         <span className="ml-auto text-xs text-slate-400">{fmtDateTime(o.observed_at)}</span>
       </div>
@@ -686,12 +687,12 @@ function ObservationRowCard({ o, entities, canEdit, nameOf, onChanged }: {
       {(chips.length > 0 || o.plate_snapshot || o.location_text) && (
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
           {chips.map((ch) => ch.href ? (
-            <Link key={ch.key} href={ch.href} className="rounded-full bg-white/5 px-2 py-0.5 text-badge-300 hover:underline">{ch.label}</Link>
+            <Link key={ch.key} href={ch.href} className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-badge-300 hover:underline">{ch.icon}{ch.label}</Link>
           ) : (
-            <span key={ch.key} className="rounded-full bg-white/5 px-2 py-0.5 text-slate-300">{ch.label}</span>
+            <span key={ch.key} className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-slate-300">{ch.icon}{ch.label}</span>
           ))}
           {o.plate_snapshot && <span className="rounded-md bg-white/5 px-2 py-0.5 font-mono text-slate-300">{o.plate_snapshot}</span>}
-          {o.location_text && <span className="text-slate-400">📍 {o.location_text}</span>}
+          {o.location_text && <span className="inline-flex items-center gap-1 text-slate-400"><PlaceIcon size={12} className="shrink-0" /> {o.location_text}</span>}
         </div>
       )}
       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -795,7 +796,7 @@ function EventRowCard({ e, participants, canEdit, nameOf, onChanged }: {
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+    <div className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tint={VERIFICATION_TINT[e.verification_status] ?? 'bg-white/5 text-slate-400'}>
           {VERIFICATION_LABEL[e.verification_status] ?? humanize(e.verification_status)}
@@ -806,7 +807,7 @@ function EventRowCard({ e, participants, canEdit, nameOf, onChanged }: {
       </div>
       <p className="mt-1.5 text-sm text-slate-200">{e.summary}</p>
       {(e.place_id || e.location_text) && (
-        <p className="mt-0.5 text-xs text-slate-400">📍 {e.place_id ? nameOf(e.place_id) : e.location_text}</p>
+        <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-400"><PlaceIcon size={12} className="shrink-0" /> {e.place_id ? nameOf(e.place_id) : e.location_text}</p>
       )}
       {participants.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
@@ -893,22 +894,22 @@ function PatternsPanel({ patterns, nameOf }: {
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {patterns.repeatedPersons.length > 0 && (
-            <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Repeated persons</p>
+            <div className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
+              <p className="mb-1.5 text-xs font-medium text-slate-500">Repeated persons</p>
               <ul className="space-y-1 text-sm text-slate-200">
                 {patterns.repeatedPersons.map((p) => (
-                  <li key={p.personId}>👤 {nameOf(p.personId)} <span className="text-xs text-slate-400">— seen {p.count}×</span></li>
+                  <li key={p.personId}>{nameOf(p.personId)} <span className="text-xs text-slate-400">— seen {p.count}×</span></li>
                 ))}
               </ul>
             </div>
           )}
           {patterns.repeatedVehicles.length > 0 && (
-            <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Repeated vehicles</p>
+            <div className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
+              <p className="mb-1.5 text-xs font-medium text-slate-500">Repeated vehicles</p>
               <ul className="space-y-1 text-sm text-slate-200">
                 {patterns.repeatedVehicles.map((v) => (
                   <li key={v.vehicleId ?? v.plate ?? ''}>
-                    🚗 {v.vehicleId ? nameOf(v.vehicleId) : <span className="font-mono">{v.plate}</span>}
+                    {v.vehicleId ? nameOf(v.vehicleId) : <span className="font-mono">{v.plate}</span>}
                     {' '}<span className="text-xs text-slate-400">— seen {v.count}×</span>
                   </li>
                 ))}
@@ -916,12 +917,12 @@ function PatternsPanel({ patterns, nameOf }: {
             </div>
           )}
           {patterns.repeatedLocations.length > 0 && (
-            <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Repeated locations</p>
+            <div className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
+              <p className="mb-1.5 text-xs font-medium text-slate-500">Repeated locations</p>
               <ul className="space-y-1 text-sm text-slate-200">
                 {patterns.repeatedLocations.map((l) => (
                   <li key={l.placeId ?? l.locationText ?? ''}>
-                    📍 {l.placeId ? nameOf(l.placeId) : l.locationText}
+                    {l.placeId ? nameOf(l.placeId) : l.locationText}
                     {' '}<span className="text-xs text-slate-400">— {l.count}× · {fmtDateTime(l.firstSeen)} → {fmtDateTime(l.lastSeen)}</span>
                   </li>
                 ))}
@@ -929,8 +930,8 @@ function PatternsPanel({ patterns, nameOf }: {
             </div>
           )}
           {patterns.coOccurrence.length > 0 && (
-            <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Seen together (≥2 observations)</p>
+            <div className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
+              <p className="mb-1.5 text-xs font-medium text-slate-500">Seen together (≥2 observations)</p>
               <ul className="space-y-1 text-sm text-slate-200">
                 {patterns.coOccurrence.map((p) => (
                   <li key={`${p.aKind}:${p.aRefId}|${p.bKind}:${p.bRefId}`}>
@@ -944,7 +945,7 @@ function PatternsPanel({ patterns, nameOf }: {
       )}
       {patterns.consideredCount > 0 && (
         <div>
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Activity by hour (UTC)</p>
+          <p className="mb-1.5 text-xs font-medium text-slate-500">Activity by hour (UTC)</p>
           <div className="flex h-12 items-end gap-0.5" role="img" aria-label="Verified observations by hour of day">
             {patterns.hourHistogram.map((n, h) => (
               <div
@@ -991,7 +992,7 @@ function DeconflictionPanel({ rows, nameOf }: {
         const visible = r.visible_case_ids ?? []
         const hidden = Number(r.other_case_count) - visible.length
         return (
-          <div key={`${r.kind}:${r.ref_id}`} className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-ink-950/50 px-3 py-2 text-sm">
+          <div key={`${r.kind}:${r.ref_id}`} className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-ink-950/50 px-3 py-2 text-sm">
             <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-slate-300">{humanize(r.kind)}</span>
             <span className="text-slate-200">{nameOf(r.ref_id)}</span>
             <span className="text-xs text-slate-400">
@@ -1004,8 +1005,8 @@ function DeconflictionPanel({ rows, nameOf }: {
                 </Link>
               ))}
               {hidden > 0 && (
-                <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-slate-400" title="Cases outside your access — contact command to deconflict">
-                  🔒 {hidden} restricted
+                <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-slate-400" title="Cases outside your access — contact command to deconflict">
+                  <LockIcon size={12} className="shrink-0" /> {hidden} restricted
                 </span>
               )}
             </span>

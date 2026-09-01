@@ -261,7 +261,7 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
           >
             Archived
           </button>
-          {canEdit && <Button variant="primary" onClick={() => setAddOpen(true)}>＋ Add photos</Button>}
+          {canEdit && <Button variant="primary" onClick={() => setAddOpen(true)}>Add photos</Button>}
         </div>
       </div>
 
@@ -269,7 +269,7 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
           A live grant makes the hidden items visible (hiddenRestricted drops
           to 0), so its countdown banner renders on its own branch. */}
       {myLive ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-400/25 bg-emerald-500/[0.06] px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-emerald-400/25 bg-emerald-500/[0.06] px-4 py-3">
           <LockIcon size={20} className="flex-shrink-0 text-emerald-300" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-emerald-100">Temporary restricted access active</p>
@@ -280,7 +280,7 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
           <DeadlineChip at={myLive.expires_at} kind="expires" />
         </div>
       ) : hiddenRestricted > 0 ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-rose-400/30 bg-rose-500/[0.07] px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-rose-400/30 bg-rose-500/[0.07] px-4 py-3">
           <LockIcon size={20} className="flex-shrink-0 text-rose-300" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-rose-100">
@@ -311,8 +311,8 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
       {/* Command decision panel — pending requests + live grants (rag_sel
           gives command every row; the isCommand gate mirrors the server's). */}
       {isCommand && (pendingRequests.length > 0 || liveGrants.length > 0) && (
-        <section aria-label="Restricted access — command decisions" className="space-y-2 rounded-xl border border-white/10 bg-ink-950/50 p-4">
-          <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Restricted access — command</h3>
+        <section aria-label="Restricted access — command decisions" className="space-y-2 rounded-lg border border-white/10 bg-ink-950/50 p-4">
+          <h3 className="text-[13px] font-semibold text-white">Restricted access — command</h3>
           {pendingRequests.map((g) => (
             <div key={g.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-400/20 bg-amber-500/[0.05] px-3 py-2">
               <div className="min-w-0 flex-1">
@@ -356,7 +356,7 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
         <>
           {evidenceRows.length > 0 && (
             <section aria-label="Evidence" className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+              <h3 className="text-[13px] font-semibold text-white">
                 Evidence <span className="tabular-nums">({evidenceRows.length})</span>
               </h3>
               <MediaGroup items={evidenceRows} names={names} vehicles={vehicles} reportLabel={reportLabel} onOpen={setDetailId} />
@@ -365,7 +365,7 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
           {visibleGeneral.length > 0 && (
             <section aria-label="General uploads" className="space-y-2">
               {evidenceRows.length > 0 && (
-                <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                <h3 className="text-[13px] font-semibold text-white">
                   General uploads <span className="tabular-nums">({generalRows.length})</span>
                 </h3>
               )}
@@ -387,14 +387,14 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
           icon={<PhotoIcon size={28} />}
           title="No case photos yet"
           hint={canEdit ? 'Add scene shots, documents, surveillance stills — anything visual the case relies on.' : 'No photos or media have been added to this case yet.'}
-          action={canEdit ? { label: '＋ Add photos', onClick: () => setAddOpen(true) } : undefined}
+          action={canEdit ? { label: 'Add photos', onClick: () => setAddOpen(true) } : undefined}
         />
       )}
 
       {/* Legacy evidence — frozen table, read-only list (server revokes writes). */}
       {evidence.length > 0 && (
-        <details open={!!evParam} className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
-          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 hover:text-slate-300">
+        <details open={!!evParam} className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
+          <summary className="cursor-pointer text-xs font-semibold text-slate-400 hover:text-slate-300">
             Legacy evidence records ({evidence.length})
           </summary>
           <p className="mt-2 text-xs text-slate-400">Historical entries from the retired evidence log — read-only.</p>
@@ -699,7 +699,7 @@ function TypePlaceholder({ m }: { m: MediaRow }) {
   return (
     <div className="flex h-24 flex-col items-center justify-center gap-1.5 rounded-lg bg-ink-800 text-slate-400">
       <FileTypeIcon type={kind} size={40} />
-      <span className="text-[11px] font-semibold uppercase tracking-wider">{FILE_KIND_LABEL[kind]}</span>
+      <span className="text-xs font-medium">{FILE_KIND_LABEL[kind]}</span>
     </div>
   )
 }
@@ -913,7 +913,7 @@ function MediaDetailModal({ m, c, canEdit, canDelete, holdActive, names, vehicle
 function MetaRow({ k, v, muted }: { k: string; v: string; muted?: boolean }) {
   return (
     <div className="flex items-start justify-between gap-4">
-      <dt className="flex-shrink-0 text-xs font-semibold uppercase tracking-wider text-slate-500">{k}</dt>
+      <dt className="flex-shrink-0 text-xs font-medium text-slate-500">{k}</dt>
       <dd className={`min-w-0 text-right ${muted ? 'text-xs text-slate-400' : 'text-slate-200'}`}>{v}</dd>
     </div>
   )
@@ -934,7 +934,7 @@ function MetaRow({ k, v, muted }: { k: string; v: string; muted?: boolean }) {
 const MediaUploadPanel = dynamic(() => import('./MediaUploadPanel').then((m) => m.MediaUploadPanel), {
   ssr: false,
   loading: () => (
-    <div aria-hidden className="rounded-xl border border-dashed border-white/15 bg-white/[0.03] p-6">
+    <div aria-hidden className="rounded-lg border border-dashed border-white/15 bg-white/[0.03] p-6">
       <Skeleton className="mx-auto h-9 w-56 rounded-lg" />
       <Skeleton className="mx-auto mt-3 h-3 w-72" />
     </div>
@@ -1038,7 +1038,7 @@ function AddPhotosModal({ c, uploaderId, reports, vehicles, onClose }: {
 
         {items.length > 0 && (
           <div className="mt-4 space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Added to the case ({items.length})</h4>
+            <h4 className="text-[13px] font-semibold text-white">Added to the case ({items.length})</h4>
             {items.map((item) => {
               const thumb = safeUrl(mediaSrc(item.row))
               return (

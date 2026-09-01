@@ -102,7 +102,7 @@ export function IntelTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boole
       <WorkingNotes c={c} canEdit={canEdit} onChanged={onChanged} />
       {canEdit && <LinkForm caseId={c.id} links={links} onLinked={refresh} />}
       {KINDS.map(({ id, section }) => (
-        <div key={id} className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+        <div key={id} className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
           <h3 className="mb-2 font-bold text-white">{section}</h3>
           {links.some((l) => l.kind === id) ? (
             <div className="flex flex-wrap gap-2">
@@ -194,7 +194,7 @@ function WorkingNotes({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boolean;
           </div>
         </div>
       ) : (
-        <div className="prose prose-invert max-w-none rounded-xl border border-white/10 bg-ink-950/50 p-4 text-sm text-slate-200">
+        <div className="prose prose-invert max-w-none rounded-lg border border-white/10 bg-ink-950/50 p-4 text-sm text-slate-200">
           {c.notes ? renderMarkdown(c.notes) : <p className="text-slate-500">No case notes yet.</p>}
         </div>
       )}
@@ -271,7 +271,7 @@ function LinkForm({ caseId, links, onLinked }: { caseId: string; links: IntelRow
 
   return (
     <Card pad="sm" className="space-y-3">
-      <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Link intel to case</h3>
+      <h3 className="text-[13px] font-semibold text-white">Link intel to case</h3>
       <div className="grid gap-3 md:grid-cols-[10rem_minmax(0,1fr)]">
         <Field label="Type">
           {(id) => (

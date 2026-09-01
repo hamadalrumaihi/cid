@@ -136,9 +136,9 @@ export function TimelineBand({ events }: { events: BandEvent[] }) {
   if (events.length < 2) return null
 
   return (
-    <div data-band className="relative mb-4 overflow-hidden rounded-2xl border border-white/10 bg-ink-950/50">
+    <div data-band className="relative mb-4 overflow-hidden rounded-lg border border-white/10 bg-ink-950/50">
       <div className="flex items-center justify-between px-3 pt-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Chronology — scroll to zoom, drag to pan</p>
+        <p className="text-xs font-medium text-slate-500">Chronology — scroll to zoom, drag to pan</p>
         <div className="flex gap-1">
           <BandBtn label="Zoom in" onClick={() => zoom(0.8)}>+</BandBtn>
           <BandBtn label="Zoom out" onClick={() => zoom(1.25)}>−</BandBtn>

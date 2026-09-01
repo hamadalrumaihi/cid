@@ -36,7 +36,19 @@ import { useTableVersion } from '@/lib/realtime'
 import { caseStatusTint } from '@/lib/signoff'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
+import { Badge } from '@/components/ui/Badge'
 import { Skeleton } from '@/components/ui/Skeleton'
+import {
+  CaseIcon,
+  DocumentIcon,
+  GangIcon,
+  PersonIcon,
+  PhotoIcon,
+  PlaceIcon,
+  ReceiptIcon,
+  ScaleIcon,
+  VehicleIcon,
+} from '@/components/shell/icons'
 
 type CaseRow = Tables<'cases'>
 type LinkRow = Tables<'case_intel_links'>
@@ -52,7 +64,6 @@ type Kind = 'case' | 'person' | 'gang' | 'place' | 'vehicle' | 'evidence' | 'med
 
 interface NodeData extends Record<string, unknown> {
   kind: Kind
-  icon: string
   label: string
   sub: string
   /** Detail rows for the side panel. */
@@ -61,6 +72,19 @@ interface NodeData extends Record<string, unknown> {
   hrefLabel?: string
   /** Source entity id (person/gang/place) — enables Expand for persons. */
   refId?: string
+}
+
+/** One stroke icon per node kind — same set the command palette uses. */
+const KIND_ICON: Record<Kind, (p: { size?: number; className?: string }) => React.ReactElement> = {
+  case: CaseIcon,
+  person: PersonIcon,
+  gang: GangIcon,
+  place: PlaceIcon,
+  vehicle: VehicleIcon,
+  evidence: ReceiptIcon,
+  media: PhotoIcon,
+  report: DocumentIcon,
+  warrant: ScaleIcon,
 }
 
 const KIND_TINT: Record<Kind, string> = {
@@ -79,11 +103,12 @@ const KIND_TINT: Record<Kind, string> = {
  *  reads like a link chart, not a flowchart. */
 function GraphNode({ data, selected }: NodeProps<Node<NodeData>>) {
   const centered = { left: '50%', top: '50%', transform: 'translate(-50%,-50%)', opacity: 0, pointerEvents: 'none' as const }
+  const Icon = KIND_ICON[data.kind]
   return (
-    <div className={`max-w-44 rounded-xl border px-3 py-2 shadow-lg transition ${KIND_TINT[data.kind]} ${selected ? 'ring-2 ring-white/60' : ''}`}>
+    <div className={`max-w-44 rounded-lg border px-3 py-2 shadow-lg transition ${KIND_TINT[data.kind]} ${selected ? 'ring-2 ring-white/60' : ''}`}>
       <Handle type="target" position={Position.Top} style={centered} isConnectable={false} />
       <Handle type="source" position={Position.Bottom} style={centered} isConnectable={false} />
-      <p className="truncate text-xs font-black"><span aria-hidden>{data.icon}</span> {data.label}</p>
+      <p className="flex items-center gap-1.5 text-xs font-semibold"><Icon size={13} className="shrink-0" /> <span className="truncate">{data.label}</span></p>
       {data.sub && <p className="truncate text-[10px] opacity-70">{data.sub}</p>}
     </div>
   )
@@ -228,7 +253,6 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
         edgeTone: isWarrant ? '#eab308' : undefined,
         data: {
           kind: isWarrant ? 'warrant' : 'report',
-          icon: isWarrant ? '⚖️' : '📄',
           label: reportTitle(rl),
           sub: isWarrant ? `status: ${warrantStatusOf(rl)}` : (r.finalized ? 'finalized' : 'draft'),
           fields: [
@@ -255,7 +279,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
           edgeLabel: l.role || 'linked to',
           edgeTone: norm(l.role).includes('suspect') ? '#f43f5e' : undefined,
           data: {
-            kind: 'person', icon: '👤', label: p.name || 'Person',
+            kind: 'person', label: p.name || 'Person',
             refId: p.id,
             sub: [l.role, p.alias ? `“${p.alias}”` : ''].filter(Boolean).join(' · '),
             fields: [
@@ -278,7 +302,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
           edgeLabel: l.role || 'associated with',
           edgeTone: '#f43f5e',
           data: {
-            kind: 'gang', icon: '🏴', label: g.name,
+            kind: 'gang', label: g.name,
             refId: g.id,
             sub: g.threat_level ? `threat: ${g.threat_level}` : 'organization',
             fields: [
@@ -296,7 +320,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
           id: `place:${p.id}`,
           edgeLabel: l.role || 'linked to',
           data: {
-            kind: 'place', icon: '📍', label: p.name,
+            kind: 'place', label: p.name,
             refId: p.id,
             sub: [p.type, p.area].filter(Boolean).join(' · '),
             fields: [
@@ -317,7 +341,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
         id: `evidence:${e.id}`,
         edgeLabel: 'logged',
         data: {
-          kind: 'evidence', icon: '🧾', label: e.item_code || 'Evidence',
+          kind: 'evidence', label: e.item_code || 'Evidence',
           sub: [e.type, e.location].filter(Boolean).join(' · '),
           fields: [
             ['Type', e.type || '—'],
@@ -340,7 +364,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
         edgeLabel: 'photos & media',
         edgeTone: '#e879f9',
         data: {
-          kind: 'media', icon: '🖼️', label: `Case media (${liveMedia.length})`,
+          kind: 'media', label: `Case media (${liveMedia.length})`,
           sub: 'photos, clips & documents',
           fields: [
             ['Items', String(liveMedia.length)],
@@ -355,7 +379,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
     nodes.push({
       id: 'case', type: 'intel', position: { x: 0, y: 0 },
       data: {
-        kind: 'case', icon: '📂', label: c.case_number, sub: c.title || 'Untitled',
+        kind: 'case', label: c.case_number, sub: c.title || 'Untitled',
         fields: [
           ['Status', c.status], ['Bureau', c.bureau], ['Area', c.area || '—'],
           ['Lead', officerName(c.lead_detective_id) || 'Unassigned'],
@@ -388,7 +412,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
           id: nodeId, type: 'intel',
           position: { x: Math.round(560 * Math.cos(a)), y: Math.round(560 * Math.sin(a)) },
           data: {
-            kind: 'vehicle', icon: '🚗', label: v.plate,
+            kind: 'vehicle', label: v.plate,
             sub: [v.model, v.color].filter(Boolean).join(' · '),
             fields: [
               ['Model', v.model || '—'], ['Color', v.color || '—'],
@@ -451,7 +475,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
             id: nodeId, type: 'intel',
             position: { x: Math.round(620 * Math.cos(a)), y: Math.round(620 * Math.sin(a)) },
             data: {
-              kind: 'case', icon: '📂', label: oc.case_number, sub: oc.title || 'Untitled',
+              kind: 'case', label: oc.case_number, sub: oc.title || 'Untitled',
               fields: [['Status', oc.status], ['Title', oc.title || '—']],
               href: caseLink(oc.id), hrefLabel: 'Open case',
             },
@@ -475,7 +499,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
 
   if (!data) {
     return (
-      <div role="status" aria-busy="true" className="h-[70vh] overflow-hidden rounded-xl border border-white/10 bg-ink-950/60">
+      <div role="status" aria-busy="true" className="h-[70vh] overflow-hidden rounded-lg border border-white/10 bg-ink-950/60">
         <span className="sr-only">Building the link chart…</span>
         <Skeleton className="h-full w-full rounded-none" />
       </div>
@@ -483,14 +507,14 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
   }
   if (graph.nodes.length <= 1) {
     return (
-      <div className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-400">
+      <div className="rounded-lg border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-400">
         Nothing to chart yet — link persons, gangs or places on the <b>Intel &amp; Notes</b> tab, or add case photos and reports, and they appear here automatically.
       </div>
     )
   }
 
   return (
-    <div className="relative h-[70vh] overflow-hidden rounded-xl border border-white/10 bg-ink-950/60">
+    <div className="relative h-[70vh] overflow-hidden rounded-lg border border-white/10 bg-ink-950/60">
       <ReactFlow
         nodes={graph.nodes}
         edges={graph.edges}
@@ -519,31 +543,33 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
         </Link>
         {Object.keys(savedPos).length > 0 && (
           <button onClick={resetLayout} title="Forget the dragged layout and rebuild the radial chart" className="rounded-lg border border-white/10 bg-ink-900/90 px-2.5 py-1.5 text-xs font-semibold text-slate-200 shadow-lg backdrop-blur transition hover:bg-white/10">
-            ↺ Reset layout
+            Reset layout
           </button>
         )}
       </div>
 
       {selData && (
-        <aside className="absolute right-2 top-2 bottom-2 w-72 overflow-y-auto rounded-xl border border-white/10 bg-ink-900/95 p-4 shadow-2xl backdrop-blur">
+        <aside className="absolute right-2 top-2 bottom-2 w-72 overflow-y-auto rounded-lg border border-white/10 bg-ink-900/95 p-4 shadow-2xl backdrop-blur">
           <div className="mb-2 flex items-start justify-between gap-2">
             <div className={`rounded-lg border px-2.5 py-1.5 ${KIND_TINT[selData.kind]}`}>
-              <p className="text-sm font-black"><span aria-hidden>{selData.icon}</span> {selData.label}</p>
+              {(() => { const Icon = KIND_ICON[selData.kind]; return (
+                <p className="flex items-center gap-1.5 text-sm font-semibold"><Icon size={14} className="shrink-0" /> {selData.label}</p>
+              ) })()}
               {selData.sub && <p className="text-[11px] opacity-70">{selData.sub}</p>}
             </div>
             <button onClick={() => setSel(null)} aria-label="Close details" className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-white/10">✕</button>
           </div>
-          {selData.kind === 'case' && <span className={`mb-2 inline-block rounded px-2 py-0.5 text-[10px] font-black uppercase ${caseStatusTint(c.status)}`}>{c.status}</span>}
+          {selData.kind === 'case' && <Badge tint={caseStatusTint(c.status)} className="mb-2">{c.status}</Badge>}
           <dl className="space-y-2">
             {selData.fields.map(([k, v]) => (
               <div key={k}>
-                <dt className="text-[10px] font-black uppercase tracking-wider text-slate-500">{k}</dt>
+                <dt className="text-xs font-medium text-slate-500">{k}</dt>
                 <dd className="text-sm text-slate-200">{v}</dd>
               </div>
             ))}
           </dl>
           {selData.href && (
-            <Link href={selData.href} className="mt-4 block rounded-lg bg-badge-500 px-3 py-2 text-center text-sm font-bold text-white transition hover:brightness-110">
+            <Link href={selData.href} className="mt-4 block rounded-lg bg-badge-500 px-3 py-2 text-center text-sm font-semibold text-white transition hover:brightness-110">
               {selData.hrefLabel ?? 'Open'} →
             </Link>
           )}
@@ -553,7 +579,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
               disabled={expandBusy === selData.refId}
               className="mt-2 block w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-center text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-60"
             >
-              {expandBusy === selData.refId ? 'Looking them up…' : '🕸 Show their other cases'}
+              {expandBusy === selData.refId ? 'Looking them up…' : 'Show their other cases'}
             </button>
           )}
           {selData.kind === 'person' && selData.refId && (expanded[selData.refId]?.length === 0) && (

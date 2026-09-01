@@ -97,9 +97,9 @@ function StageHistoryCard({ caseId, currentStage }: { caseId: string; currentSta
   }, [caseId])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, currentStage])
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+    <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300">Investigative stage history</h3>
+        <h3 className="text-[13px] font-semibold text-white">Investigative stage history</h3>
         <Badge>{investigativeStageLabel(currentStage)}</Badge>
       </div>
       <p className="mt-1 text-sm text-slate-400">
@@ -165,12 +165,12 @@ export function SignoffTab({ c }: { c: CaseRow }) {
   })
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+      <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
         <p className="text-sm text-slate-400">Current state</p>
-        <p className={`mt-2 inline-flex rounded-full px-3 py-1 text-sm font-bold ${signoffTint(c.signoff_status)}`}>{signoffLabel(c.signoff_status)}</p>
+        <p className={`mt-2 inline-flex rounded px-3 py-1 text-sm font-semibold ${signoffTint(c.signoff_status)}`}>{signoffLabel(c.signoff_status)}</p>
         <p className="mt-2 text-sm text-slate-400">Assignee: {officerName(c.signoff_assignee_id) || 'None'}</p>
         <div className="mt-4 flex flex-wrap gap-2">
-          {owner && <button onClick={() => void callRpc('submit')} disabled={busy} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-60">Submit / Resubmit</button>}
+          {owner && <button onClick={() => void callRpc('submit')} disabled={busy} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Submit / Resubmit</button>}
           {owner && c.signoff_status === 'approved_deputy' && <><Button variant="success" disabled={busy} onClick={() => void callRpc('complete')}>Complete at Deputy</Button><Button variant="warn" disabled={busy} onClick={() => void callRpc('escalate')}>Escalate</Button></>}
           {reviewer && <><Button variant="success" disabled={busy} onClick={() => void callRpc('approve')}>Approve</Button><Button variant="warn" disabled={busy} onClick={() => void callRpc('changes')}>Changes</Button><Button variant="danger" disabled={busy} onClick={() => void callRpc('deny')}>Deny</Button></>}
         </div>
@@ -181,7 +181,7 @@ export function SignoffTab({ c }: { c: CaseRow }) {
           // its own bordered subsection and audit warning.
           <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-xs font-bold uppercase tracking-wide text-amber-300">Command override</h3>
+              <h3 className="text-[13px] font-semibold text-amber-300">Command override</h3>
               <Badge tone="warn">Audited</Badge>
             </div>
             <p className="mt-1 text-sm text-slate-400">

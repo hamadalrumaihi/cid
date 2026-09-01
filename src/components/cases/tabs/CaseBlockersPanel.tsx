@@ -117,17 +117,17 @@ export function CaseBlockersPanel({ caseId, blockers, tasks, reports, canEdit, n
   const openTasks = tasks.filter((t) => !t.done)
 
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+    <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="font-bold text-white">Blockers {open.length > 0 && <span className="text-slate-400">({open.length})</span>}</h3>
-        {canEdit && <Button className="min-h-[44px] sm:min-h-0" onClick={() => setAddOpen(true)}>＋ Add blocker</Button>}
+        {canEdit && <Button className="min-h-[44px] sm:min-h-0" onClick={() => setAddOpen(true)}>Add blocker</Button>}
       </div>
       <div className="space-y-2">
         {open.map((b) => {
           const linkedTask = b.task_id ? tasks.find((t) => t.id === b.task_id) : null
           const linkedReport = b.report_id ? reports.find((r) => r.id === b.report_id) : null
           return (
-            <div key={b.id} className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-white/10 bg-ink-900/40 p-3">
+            <div key={b.id} className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-white/10 bg-ink-900/40 p-3">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-white">{b.title}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -168,7 +168,7 @@ export function CaseBlockersPanel({ caseId, blockers, tasks, reports, canEdit, n
       </div>
       {resolved.length > 0 && (
         <details className="mt-3">
-          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 hover:text-slate-300">
+          <summary className="cursor-pointer text-xs font-semibold text-slate-400 hover:text-slate-300">
             Resolved ({resolved.length})
           </summary>
           <ul className="mt-2 space-y-1">

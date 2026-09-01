@@ -44,7 +44,7 @@ const mList = (m: Record<string, unknown>, k: string): string[] =>
 function restrictedEventLabel(action: string, mediaTitle: string | null): string {
   const item = mediaTitle ?? 'restricted item'
   switch (action) {
-    case 'request': return '🔓 Restricted access requested'
+    case 'request': return 'Restricted access requested'
     case 'grant': return 'Restricted access granted (24h)'
     case 'deny': return 'Restricted access denied'
     case 'revoke': return 'Restricted access revoked'
@@ -195,7 +195,7 @@ export function TimelineTab({ c }: { c: CaseRow }) {
             </>
           )
           return (
-            <div key={`${r.at}-${i}`} className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+            <div key={`${r.at}-${i}`} className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
               {r.href ? (
                 <Link href={r.href} className="block rounded-lg transition hover:bg-white/[0.03]">{body}</Link>
               ) : body}

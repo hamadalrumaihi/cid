@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
@@ -111,15 +112,15 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
           {/* Why this investigation exists. Renders nothing when the case was
               not built on intelligence, which is most of them. */}
           <CaseProvenance caseId={c.id} />
-          <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+          <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-bold text-white">Assigned Officers</h3>
+              <h3 className="font-semibold text-white">Assigned Officers</h3>
               {canEdit && <Button onClick={() => setAddSupportOpen(true)}>Add support</Button>}
             </div>
             <div className="flex flex-wrap gap-2">
               {standardRows.map((a) => (
                 <span key={a.id} className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-sm text-slate-200">
-                  {officerName(a.officer_id) || 'Officer'} <span className="text-xs uppercase text-slate-500">{a.role}</span>
+                  {officerName(a.officer_id) || 'Officer'} <span className="text-xs text-slate-500">{a.role}</span>
                   {canDelete && <button aria-label={`Remove ${officerName(a.officer_id) || 'officer'} from case`} onClick={() => void deleteWithUndo('case_assignments', a, { confirmTitle: 'Remove officer', confirmMessage: `Remove ${officerName(a.officer_id) || 'this officer'} from the case? You can undo this for a few seconds.`, confirmText: 'Remove', label: 'assignment', after: refresh })} className="text-rose-300 hover:text-rose-200">×</button>}
                 </span>
               ))}
@@ -139,18 +140,18 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
               rows the tab renders — never a wider query). */}
           <Link
             href={caseLink(c.id, 'legal')}
-            className="flex min-h-[44px] items-center justify-between gap-2 rounded-xl border border-white/10 bg-ink-950/50 px-4 py-3 transition hover:bg-white/5"
+            className="flex min-h-[44px] items-center justify-between gap-2 rounded-lg border border-white/10 bg-ink-950/50 px-4 py-3 transition hover:bg-white/5"
           >
-            <span className="text-sm font-bold text-white">
+            <span className="text-sm font-semibold text-white">
               Legal requests <span className="font-normal text-slate-400">({wf ? wf.legal.length : '—'})</span>
             </span>
             <span aria-hidden className="text-xs font-semibold text-blue-300">→</span>
           </Link>
           {showEnableRico && (
-            <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+            <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h3 className="font-bold text-white">RICO tracking</h3>
+                  <h3 className="font-semibold text-white">RICO tracking</h3>
                   <p className="text-xs text-slate-400">Not enabled — no enterprise or predicate acts recorded.</p>
                 </div>
                 <Button className="min-h-[44px] sm:min-h-0" onClick={onEnableRico}>Enable RICO tracking</Button>
@@ -249,12 +250,12 @@ function ClosureReadinessPanel({ caseId, checklist, ready, closed }: {
   // The "not already closed" gate always passes here — skip the noise.
   const items = checklist.filter((i) => i.key !== 'case_open')
   return (
-    <section aria-label="Closure readiness" className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+    <section aria-label="Closure readiness" className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="font-bold text-white">Closure readiness</h3>
-        <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${ready ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
+        <h3 className="font-semibold text-white">Closure readiness</h3>
+        <Badge tone={ready ? 'good' : 'warn'}>
           {ready ? 'Ready' : `${items.filter((i) => !i.ok).length} remaining`}
-        </span>
+        </Badge>
       </div>
       <ul className="space-y-1.5">
         {items.map((i) => (
@@ -271,7 +272,7 @@ function ClosureReadinessPanel({ caseId, checklist, ready, closed }: {
       {ready && (
         <div className="mt-3 rounded-lg border border-emerald-400/25 bg-emerald-500/10 px-3 py-2.5">
           <p className="text-sm text-emerald-100">
-            <span className="font-bold">Ready for sign-off.</span> Every closure gate is clear.{' '}
+            <span className="font-semibold">Ready for sign-off.</span> Every closure gate is clear.{' '}
             <Link href={caseLink(caseId, 'signoff')} className="font-semibold underline underline-offset-2 hover:text-white">
               Go to sign-off →
             </Link>
@@ -295,9 +296,9 @@ function CaseRecap({ recap }: { recap: { photos: number; reports: number; tasks:
   if (recap.legal) parts.push(`${recap.legal} legal update${recap.legal === 1 ? '' : 's'}`)
   if (!parts.length) return null
   return (
-    <section aria-label="Changes since your last visit" className="rounded-xl border border-sky-400/25 bg-sky-500/10 px-4 py-3">
+    <section aria-label="Changes since your last visit" className="rounded-lg border border-sky-400/25 bg-sky-500/10 px-4 py-3">
       <p className="text-sm text-sky-100">
-        <span className="font-bold">Since your last visit:</span> {parts.join(' · ')}.
+        <span className="font-semibold">Since your last visit:</span> {parts.join(' · ')}.
       </p>
     </section>
   )
@@ -328,16 +329,16 @@ function GuidedNextAction({ caseId, stageLabel, actions }: { caseId: string; sta
     <>
       <span className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${ACTION_DOT[a.severity]}`} aria-hidden />
       <span className="min-w-0">
-        <span className="block text-sm font-bold">{a.label}</span>
+        <span className="block text-sm font-semibold">{a.label}</span>
         {a.detail && <span className="block text-xs opacity-80">{a.detail}</span>}
       </span>
     </>
   )
   return (
-    <section aria-label="Recommended next action" className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+    <section aria-label="Recommended next action" className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
       <div className="mb-2 flex items-center gap-2">
-        <span className="t-readout text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Next action</span>
-        <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-400">{stageLabel}</span>
+        <span className="text-[13px] font-semibold text-white">Next action</span>
+        <Badge>{stageLabel}</Badge>
       </div>
       {lead.tab ? (
         <Link href={caseLink(caseId, lead.tab)} className={`flex items-start gap-2.5 rounded-lg border p-3 transition hover:brightness-110 ${ACTION_TINT[lead.severity]}`}>
@@ -407,15 +408,15 @@ function JointMembersPanel({ c, assignments, activeJoint, removedJoint, manages,
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+    <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="font-bold text-white">
+        <h3 className="font-semibold text-white">
           Joint-case members{' '}
-          <span className="ml-1 align-middle rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-violet-300">JTF</span>
+          <Badge tint="bg-violet-500/15 text-violet-300" className="ml-1 align-middle">JTF</Badge>
         </h3>
         {manages && (
           <Button className="min-h-[44px] sm:min-h-0" onClick={() => setAddOpen(true)}>
-            ＋ Add members
+            Add members
           </Button>
         )}
       </div>
@@ -423,7 +424,7 @@ function JointMembersPanel({ c, assignments, activeJoint, removedJoint, manages,
         {activeJoint.map((a) => {
           const p = profiles.find((x) => x.id === a.officer_id)
           return (
-            <div key={a.id} className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-white/10 bg-ink-900/40 p-3">
+            <div key={a.id} className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-white/10 bg-ink-900/40 p-3">
               <div>
                 <p className="text-sm font-semibold text-white">{officerName(a.officer_id) || 'Officer'}</p>
                 <p className="text-xs text-slate-400">Permanent: {bureauLabel(p?.division)} {roleLabel(p?.role)}</p>
@@ -445,7 +446,7 @@ function JointMembersPanel({ c, assignments, activeJoint, removedJoint, manages,
       </div>
       {removedJoint.length > 0 && (
         <details className="mt-3">
-          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.16em] text-slate-400 hover:text-slate-300">
+          <summary className="cursor-pointer text-xs font-semibold text-slate-400 hover:text-slate-300">
             Removal history ({removedJoint.length})
           </summary>
           <ul className="mt-2 space-y-1">
@@ -504,7 +505,7 @@ function ExpiryLine({ expiresAt, now }: { expiresAt: string; now: number }) {
     return (
       <p className="text-xs text-slate-400">
         <span className="line-through">Temporary access expires {label}</span>{' '}
-        <span className="font-semibold uppercase text-rose-300">expired</span>{' '}
+        <span className="font-semibold text-rose-300">expired</span>{' '}
         <DeadlineChip at={expiresAt} kind="expires" now={now} />
       </p>
     )

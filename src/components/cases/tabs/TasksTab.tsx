@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Field, Input } from '@/components/ui/Field'
 import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { CalendarIcon } from '@/components/shell/icons'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
 import { insert, list, update, deleteWithUndo } from '@/lib/db'
 import { deadlineInfo } from '@/lib/deadlines'
@@ -43,7 +44,7 @@ function TaskItem({ t, c, canEdit, canDelete, holdActive, highlight, refCb, onTo
   refCb: (el: HTMLDivElement | null) => void; onToggle: (t: TaskRow) => void; refresh: () => void
 }) {
   return (
-    <div ref={refCb} className={`flex items-center gap-3 rounded-xl border bg-ink-950/50 p-3 ${highlight ? 'border-badge-400/60 ring-1 ring-badge-400/40' : 'border-white/10'}`}>
+    <div ref={refCb} className={`flex items-center gap-3 rounded-lg border bg-ink-950/50 p-3 ${highlight ? 'border-badge-400/60 ring-1 ring-badge-400/40' : 'border-white/10'}`}>
       <input type="checkbox" checked={t.done} disabled={!canEdit} aria-label={`Mark task ${t.done ? 'open' : 'done'}: ${t.title}`} onChange={() => onToggle(t)} />
       <div className="min-w-0 flex-1"><p className={`font-semibold ${t.done ? 'text-slate-500 line-through' : 'text-white'}`}>{t.title}</p><p className="text-xs text-slate-500">{officerName(t.assignee) || 'Unassigned'}{t.done && t.due ? ` - due ${t.due}` : ''}{!t.done && t.due && <DeadlineChip at={t.due} kind="due" className="ml-2" />}</p></div>
       <Button size="sm" variant="ghost" className="min-h-[44px] sm:min-h-0" aria-label={`Copy link to task: ${t.title}`} onClick={() => copyText(`${window.location.origin}${caseLink(c.id, 'tasks', { task: t.id })}`, 'Task link')}>Link</Button>
@@ -58,8 +59,8 @@ function TaskItem({ t, c, canEdit, canDelete, holdActive, highlight, refCb, onTo
  *  bucket — it is edited from the case header, not here. */
 function FollowUpItem({ at }: { at: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-      <span aria-hidden>📌</span>
+    <div className="flex items-center gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+      <CalendarIcon size={16} className="shrink-0 text-amber-200" />
       <div className="min-w-0 flex-1"><p className="font-semibold text-amber-200">Case follow-up</p><p className="text-xs text-slate-500">Set from the case header <DeadlineChip at={at} kind="due" className="ml-2" /></p></div>
     </div>
   )
@@ -159,7 +160,7 @@ export function TasksTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
   )
   return (
     <div className="space-y-3">
-      {canEdit && <div className="grid items-start gap-2 rounded-xl border border-white/10 bg-ink-950/50 p-3 md:grid-cols-[minmax(0,1fr)_14rem_10rem_auto]">
+      {canEdit && <div className="grid items-start gap-2 rounded-lg border border-white/10 bg-ink-950/50 p-3 md:grid-cols-[minmax(0,1fr)_14rem_10rem_auto]">
         <Field label="New task">
           {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void add() }} placeholder="What needs doing?" />}
         </Field>
@@ -175,7 +176,7 @@ export function TasksTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
         if (!items.length && !withFollow) return null
         return (
           <section key={id} aria-label={`${label} tasks`} className="space-y-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">{label} <span className="font-normal text-slate-500">({items.length + (withFollow ? 1 : 0)})</span></h3>
+            <h3 className="text-[13px] font-semibold text-white">{label} <span className="font-normal text-slate-500">({items.length + (withFollow ? 1 : 0)})</span></h3>
             {withFollow && c.follow_up_at && <FollowUpItem at={c.follow_up_at} />}
             {items.map(item)}
           </section>
@@ -183,7 +184,7 @@ export function TasksTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
       })}
       {done.length > 0 && (
         <section className="space-y-2">
-          <button onClick={() => setShowDone(!doneVisible)} aria-expanded={doneVisible} className="flex min-h-[40px] items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-slate-200">
+          <button onClick={() => setShowDone(!doneVisible)} aria-expanded={doneVisible} className="flex min-h-[40px] items-center gap-1.5 text-[13px] font-semibold text-slate-400 hover:text-slate-200">
             Completed <span className="font-normal text-slate-500">({done.length})</span> <span aria-hidden>{doneVisible ? '▴' : '▾'}</span>
           </button>
           {doneVisible && done.map(item)}

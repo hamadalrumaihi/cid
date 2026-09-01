@@ -58,8 +58,8 @@ export function SiuControlBar({ caseRow, onChanged }: { caseRow: CaseRow; onChan
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-violet-500/20 bg-violet-500/[0.03] px-4 py-2.5">
-      <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-300">SIB Command</span>
+    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-violet-500/20 bg-violet-500/[0.03] px-4 py-2.5">
+      <span className="text-xs font-semibold text-violet-300">SIB Command</span>
 
       {!isSiu && (
         <>
@@ -159,7 +159,7 @@ export function SiuCaseLifecycle({ caseRow, onChanged }: { caseRow: CaseRow; onC
   }
 
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-2.5">
+    <div className="mt-2 flex flex-wrap items-center gap-3 rounded-lg border border-white/10 bg-white/[0.02] px-4 py-2.5">
       <Badge tint={siuStageTint(caseRow.siu_stage)} title={SIU_STAGE_HINT[caseRow.siu_stage ?? 'investigation']}>
         {siuStageLabel(caseRow.siu_stage)}
       </Badge>
@@ -319,9 +319,9 @@ function SiuSupportingAccess({ caseRow }: { caseRow: CaseRow }) {
   if (loading) return null
 
   return (
-    <div className="mt-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5">
+    <div className="mt-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+        <span className="text-[13px] font-semibold text-white">
           Supporting officers
         </span>
         {live.length > 0 && (

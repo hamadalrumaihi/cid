@@ -356,7 +356,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   if (loading) return <DetailSkeleton />
   if (!c) {
     return (
-      <p className="rounded-2xl border border-white/10 bg-ink-900/50 p-6 text-slate-300">
+      <p className="rounded-lg border border-white/10 bg-ink-900/50 p-6 text-slate-300">
         {everLoadedId === id
           ? 'This case is no longer available to you — your access may have ended.'
           : 'Case not found.'}
@@ -516,8 +516,8 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
           looking at an external investigation under SIU read authority, not
           as a case member (§12). */}
       {caseDept === 'siu' ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-violet-500/25 bg-violet-500/5 px-4 py-2.5">
-          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-300">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-violet-500/25 bg-violet-500/5 px-4 py-2.5">
+          <span className="text-xs font-semibold text-violet-300">
             Special Investigations Bureau
           </span>
           <span className="text-violet-500/40" aria-hidden>·</span>
@@ -537,8 +537,8 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
           )}
         </div>
       ) : siu.inSiu ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5">
-          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-300">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5">
+          <span className="text-xs font-semibold text-blue-300">
             CID Investigation
           </span>
           <span className="text-white/20" aria-hidden>·</span>
@@ -554,12 +554,12 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       <SiuCaseLifecycle caseRow={c} onChanged={() => { void fetchCase(); onChanged() }} />
       {caseDept === 'cid' && <ReleasedIntelligence caseId={c.id} />}
       {c.archived_at && (
-        <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">
+        <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">
           This case is archived — it is hidden from the working views. Command can restore it from the header menu.
         </p>
       )}
       {hold && (
-        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2.5 text-sm">
+        <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2.5 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="font-semibold text-rose-200">
               Legal hold — this case is preserved. It can&apos;t be archived, permanently deleted, or have its media, reports, tasks, or linked-entity merges removed until a command member lifts the hold.
@@ -645,7 +645,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
             tabIndex={0}
             style={active ? undefined : { display: 'none' }}
             aria-hidden={active ? undefined : true}
-            className="rounded-2xl border border-white/10 bg-ink-900/45 p-4"
+            className="rounded-lg border border-white/10 bg-ink-900/45 p-4"
           >
             {t === 'overview' && (
               <OverviewTab
@@ -751,7 +751,7 @@ function DeleteCaseModal({ open, c, onClose, onDeleted }: { open: boolean; c: Ca
             <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">{blocked}</p>
           ) : (
             <div className="rounded-lg border border-white/10 bg-ink-950/60 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Will be destroyed</p>
+              <p className="text-[13px] font-semibold text-white">Will be destroyed</p>
               {preview.items.length ? (
                 <ul className="mt-1.5 space-y-1 text-sm text-slate-200">
                   {preview.items.map((i) => (

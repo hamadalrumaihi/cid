@@ -16,8 +16,10 @@ import { useAuth } from '@/lib/auth'
 import type { LegalRequest } from '@/lib/justice'
 import { dispositionFor, OP_GROUP_LABEL, type OpGroup } from '@/lib/legalWorkflow'
 import { useNow } from '@/lib/useNow'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/Notice'
+import { ScaleIcon } from '@/components/shell/icons'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { LegalRequestCard } from '@/components/justice/LegalRequestCard'
 import { buildLegalViewer, useMyProsecutorBureaus } from '@/components/justice/legalShared'
@@ -55,7 +57,7 @@ export function LegalTab({ rows }: { rows: LegalRequest[] | null }) {
   if (rows.length === 0) {
     return (
       <EmptyState
-        icon="⚖️"
+        icon={<ScaleIcon className="h-5 w-5" />}
         title="No legal requests for this case"
         hint="Warrants and subpoenas filed against this case appear here. The wizard picks the case as its first step."
         action={{ label: 'File legal request', onClick: () => router.push('/legal') }}
@@ -73,9 +75,9 @@ export function LegalTab({ rows }: { rows: LegalRequest[] | null }) {
       </div>
       {grouped.map(({ group, items }) => (
         <section key={group} className="space-y-2">
-          <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+          <h3 className="flex items-center gap-2 text-[13px] font-semibold text-white">
             {OP_GROUP_LABEL[group]}
-            <span className="rounded-full bg-white/10 px-1.5 text-[10px] font-bold text-slate-300">{items.length}</span>
+            <Badge>{items.length}</Badge>
           </h3>
           <div className="grid gap-2">
             {items.map((r) => (
