@@ -82,8 +82,8 @@ export function ChatTab({ c }: { c: CaseRow }) {
       {err ? (
         <ErrorNotice message={err} onRetry={() => void refresh()} />
       ) : (
-        <div className="max-h-[48vh] space-y-3 overflow-y-auto rounded-xl border border-white/10 bg-ink-950/50 p-3">
-          {msgs.map((m) => <div key={m.id} className={`rounded-xl p-3 ${m.author_id === profile?.id ? 'ml-auto max-w-[85%] bg-badge-600/20' : 'max-w-[85%] bg-white/5'}`}><p className="text-xs font-bold text-slate-400">{m.author_name || officerName(m.author_id) || 'Officer'} - {timeAgo(m.created_at)}</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-100">{chatBody(m.body)}</p>{rowMentions(m).length > 0 && <span className="mt-1 flex flex-wrap gap-1">{rowMentions(m).map((id) => <span key={id} className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[11px] text-blue-300">@{officerName(id) || 'Officer'}</span>)}</span>}{(m.author_id === profile?.id || isCommand) && <button aria-label="Delete this message" onClick={() => void deleteWithUndo('case_messages', m, { confirmTitle: 'Delete message', confirmMessage: 'Delete this message from the case room? You can undo this for a few seconds.', confirmText: 'Delete message', label: 'message', after: refresh })} className="mt-2 text-xs font-bold text-rose-300 hover:text-rose-200">Delete</button>}</div>)}
+        <div className="max-h-[48vh] space-y-3 overflow-y-auto rounded-lg border border-white/10 bg-ink-950/50 p-3">
+          {msgs.map((m) => <div key={m.id} className={`rounded-lg p-3 ${m.author_id === profile?.id ? 'ml-auto max-w-[85%] bg-badge-600/20' : 'max-w-[85%] bg-white/5'}`}><p className="text-xs font-bold text-slate-400">{m.author_name || officerName(m.author_id) || 'Officer'} - {timeAgo(m.created_at)}</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-100">{chatBody(m.body)}</p>{rowMentions(m).length > 0 && <span className="mt-1 flex flex-wrap gap-1">{rowMentions(m).map((id) => <span key={id} className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[11px] text-blue-300">@{officerName(id) || 'Officer'}</span>)}</span>}{(m.author_id === profile?.id || isCommand) && <button aria-label="Delete this message" onClick={() => void deleteWithUndo('case_messages', m, { confirmTitle: 'Delete message', confirmMessage: 'Delete this message from the case room? You can undo this for a few seconds.', confirmText: 'Delete message', label: 'message', after: refresh })} className="mt-2 text-xs font-bold text-rose-300 hover:text-rose-200">Delete</button>}</div>)}
           {!msgs.length && (
             <EmptyState
               title="No messages yet"
@@ -102,7 +102,7 @@ export function ChatTab({ c }: { c: CaseRow }) {
           ))}
         </div>
       )}
-      <textarea value={body} onChange={(e) => { setBody(e.target.value); if (e.target.value.trim()) void saveDraft(`chat:${c.id}`, e.target.value); else void clearDraft(`chat:${c.id}`) }} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }} rows={3} className="w-full rounded-xl border border-white/10 bg-ink-950 p-3 text-sm text-white" placeholder="Message the case room..." />
+      <textarea value={body} onChange={(e) => { setBody(e.target.value); if (e.target.value.trim()) void saveDraft(`chat:${c.id}`, e.target.value); else void clearDraft(`chat:${c.id}`) }} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }} rows={3} className="w-full rounded-lg border border-white/10 bg-ink-950 p-3 text-sm text-white" placeholder="Message the case room..." />
       {/* Draft only — sending stays an explicit action. */}
       <div className="-mt-1 flex min-h-4 items-center justify-between gap-2">
         <SaveState status={composerDraft.status} lastSavedAt={composerDraft.lastSavedAt} />

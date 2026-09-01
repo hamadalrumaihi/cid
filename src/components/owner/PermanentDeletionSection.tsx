@@ -46,7 +46,7 @@ function PreviewBucket({ title, sub, counts, tone }: {
 }) {
   return (
     <div className={`rounded-lg border p-3 ${tone === 'blocker' ? 'border-rose-500/25 bg-rose-500/5' : 'border-white/10 bg-ink-950/50'}`}>
-      <p className={`text-xs font-black uppercase tracking-wider ${tone === 'blocker' ? 'text-rose-300' : 'text-slate-400'}`}>{title}</p>
+      <p className={`text-[13px] font-semibold ${tone === 'blocker' ? 'text-rose-300' : 'text-white'}`}>{title}</p>
       <p className="mb-2 mt-0.5 text-xs text-slate-400">{sub}</p>
       <CountList counts={counts} tone={tone} />
     </div>

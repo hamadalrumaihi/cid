@@ -55,7 +55,7 @@ export function GangCard({ gang, stats, canDelete, selected, onSelect, onOpen, o
   now: number
 }) {
   return (
-    <article className="rounded-2xl border border-white/5 bg-ink-900/60 p-5 transition hover:border-blue-500/30">
+    <article className="rounded-lg border border-white/5 bg-ink-900/60 p-5 transition hover:border-blue-500/30">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

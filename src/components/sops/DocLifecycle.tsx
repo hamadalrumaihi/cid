@@ -281,7 +281,7 @@ export function ReadingCampaignModal({ doc, campaign, onClose, onDone }: {
           </section>
         ) : (
           <section className="space-y-3">
-            <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">New campaign</h4>
+            <h4 className="text-[13px] font-semibold text-white">New campaign</h4>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Audience" required>
                 {(id) => (
@@ -326,7 +326,7 @@ export function ReadingCampaignModal({ doc, campaign, onClose, onDone }: {
         )}
 
         <section>
-          <h4 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Completion — v{doc.current_version_number}</h4>
+          <h4 className="mb-2 text-[13px] font-semibold text-white">Completion — v{doc.current_version_number}</h4>
           {!summary ? (
             <ListSkeleton count={3} />
           ) : !summary.length ? (
@@ -402,11 +402,11 @@ export function ResolveSyncModal({ doc, onClose, onDone }: {
       <div className="space-y-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Portal edited</p>
+            <p className="text-xs font-medium text-slate-500">Portal edited</p>
             <p className="mt-1 text-sm text-slate-200">{fmtDateTime(doc.updated_at)}</p>
           </div>
           <div className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Google Drive modified</p>
+            <p className="text-xs font-medium text-slate-500">Google Drive modified</p>
             <p className="mt-1 text-sm text-slate-200">{fmtDateTime(doc.source_modified_at ?? candidate?.saved_at ?? null)}</p>
           </div>
         </div>

@@ -118,7 +118,7 @@ export function FieldShell() {
         <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <div className="min-w-0">
             <h1 className="text-base font-bold sm:text-lg">Field Intelligence</h1>
-            <p className="truncate text-[11px] font-medium uppercase tracking-[0.18em] text-blue-300/70">
+            <p className="truncate text-xs font-medium text-slate-500">
               {agencyName || 'Partner agency'}
             </p>
           </div>
@@ -166,7 +166,7 @@ export function FieldShell() {
 
             <Card>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                <h2 className="text-[13px] font-semibold text-white">
                   My reports
                 </h2>
                 <span className="text-xs text-slate-400">Tap a count to see those reports</span>
@@ -220,7 +220,7 @@ export function FieldShell() {
             )}
 
             <Card>
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+              <h2 className="text-[13px] font-semibold text-white">
                 How this works
               </h2>
               <ul className="mt-2 space-y-2 text-sm text-slate-300">
@@ -243,7 +243,7 @@ export function FieldShell() {
             </Card>
 
             <Card>
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+              <h2 className="text-[13px] font-semibold text-white">
                 Reporting officer
               </h2>
               <p className="mt-1 text-base font-semibold text-white">
@@ -346,7 +346,7 @@ function OfficerThread({ submissionId }: { submissionId: string }) {
       <ul className="space-y-2">
         {messages.map((m) => (
           <li key={m.id} className="text-sm">
-            <p className="text-[11px] uppercase tracking-wider text-slate-500">
+            <p className="text-xs font-medium text-slate-500">
               {m.from_reviewer ? 'Investigator' : 'You'} · {fmtDateTime(m.created_at)}
             </p>
             <p className="mt-0.5 whitespace-pre-wrap text-slate-200">{m.body}</p>
@@ -372,7 +372,7 @@ function SubmissionList({ rows, title, empty, onResume, footer }: {
   return (
     <Card pad="none" className="overflow-hidden">
       <div className="border-b border-white/5 px-5 py-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">{title}</h2>
+        <h2 className="text-[13px] font-semibold text-white">{title}</h2>
       </div>
       {!rows.length ? (
         <EmptyState title="Nothing here" hint={empty} className="m-4" />

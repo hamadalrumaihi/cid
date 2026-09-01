@@ -216,7 +216,7 @@ function MediaCard({ m, canEdit, caseNum, gangName, onOpen, onCase, onForward, o
       ) : m.type === 'video' ? (
         <button onClick={onOpen} className="flex h-40 w-full items-center justify-center bg-ink-800 text-slate-400" aria-label={`Preview ${m.title}`}><FileTypeIcon type="video" size={36} /></button>
       ) : (
-        <button onClick={onOpen} className="flex h-40 w-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-ink-800 to-ink-700" aria-label={`Preview ${m.title}`}>
+        <button onClick={onOpen} className="flex h-40 w-full flex-col items-center justify-center gap-1 bg-ink-800" aria-label={`Preview ${m.title}`}>
           <span className="text-slate-400" aria-hidden><RadioIcon size={30} /></span>
           <span className="max-w-full truncate px-3 font-mono text-[10px] text-slate-400">{src || 'fivemanage'}</span>
         </button>
@@ -406,7 +406,7 @@ function IngestModal({ cases, gangs, onClose, onSaved }: { cases: CaseOption[]; 
             <p className="mt-1 text-[10px] text-slate-500">File upload not configured (NEXT_PUBLIC_FIVEMANAGE_API_KEY) — paste a URL.</p>
           )}
         </div>
-        <p className="pt-1 text-[10px] font-semibold uppercase tracking-wider text-blue-300/70">Evidence Tags</p>
+        <p className="pt-1 text-[13px] font-semibold text-white">Evidence tags</p>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="mv-case" className={labelCls}>Case</label>

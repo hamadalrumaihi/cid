@@ -22,6 +22,7 @@
  *  captures the change summary on resubmission. */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/lib/auth'
+import { ScaleIcon } from '@/components/shell/icons'
 import type { Tables } from '@/lib/database.types'
 import { ilikeAny, list, rpc } from '@/lib/db'
 import { Drafts, type Draft } from '@/lib/drafts'
@@ -654,7 +655,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
   if (isEdit && (!row || row.created_by !== me || !isEditableDraft(row))) {
     return (
       <EmptyState
-        icon="⚖️"
+        icon={<ScaleIcon className="h-5 w-5" />}
         title="Request not editable"
         hint="This request does not exist, is outside your access, or is no longer in an editable state."
         action={{ label: 'Back to legal requests', onClick: onCancel }}
@@ -751,7 +752,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
         {step.id === 'type' && (
           <div className="space-y-5">
             <section className="space-y-2">
-              <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+              <h3 className="text-[13px] font-semibold text-white">
                 Warrants — decided by a Judge
               </h3>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -765,12 +766,12 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
               </div>
             </section>
             <section className="space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+              <h3 className="text-[13px] font-semibold text-white">
                 Subpoenas — reviewed on the DOJ route (DA / AG)
               </h3>
               {SUBPOENA_GROUPS.map((g) => (
                 <div key={g.label} className="space-y-1.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">{g.label}</p>
+                  <p className="text-xs font-medium text-slate-500">{g.label}</p>
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {g.types.map((t) => (
                       <TypeCard
@@ -893,7 +894,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
             </Card>
             {supportsTargets && (
               <Card pad="sm" className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Structured search targets</h3>
+                <h3 className="text-[13px] font-semibold text-white">Structured search targets</h3>
                 <p className="text-xs text-slate-400">
                   Attach registry records as typed targets, each with its own rationale.
                   {isEdit ? ' Targets attach immediately to this request.' : ' Targets are attached when the draft is created.'}
@@ -902,7 +903,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
                   <ul className="space-y-1.5">
                     {targetItems.map((t) => (
                       <li key={t.key} className="flex items-start gap-2 rounded-lg border border-white/10 bg-ink-950/50 px-3 py-2 text-sm">
-                        <span className="mt-0.5 flex-shrink-0 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        <span className="mt-0.5 flex-shrink-0 text-xs font-medium text-slate-500">
                           {STRUCTURED_TARGET_KIND_LABEL[t.kind]}
                         </span>
                         <span className="min-w-0 flex-1">

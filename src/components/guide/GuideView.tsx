@@ -30,7 +30,7 @@ function Kbd({ children }: { children: React.ReactNode }) {
 function Section({ id, title, blurb, children }: { id: string; title: string; blurb?: string; children: React.ReactNode }) {
   return (
     <section aria-labelledby={`g-${id}`} className="rounded-lg border border-white/5 bg-ink-900/60 p-5 sm:p-6">
-      <h3 id={`g-${id}`} className="text-lg font-black text-white">{title}</h3>
+      <h3 id={`g-${id}`} className="text-lg font-semibold text-white">{title}</h3>
       {blurb && <p className="mt-0.5 text-xs text-slate-400">{blurb}</p>}
       <div className="mt-4">{children}</div>
     </section>
@@ -159,7 +159,7 @@ function MiniPalette() {
         <SearchIcon className="h-3 w-3 text-slate-500" />
         <span className="text-[10px] text-slate-500">new case…</span>
       </div>
-      <div className="rounded-md bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-300">＋ New case</div>
+      <div className="rounded-md bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-300">+ New case</div>
       <div className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] text-slate-300"><DocumentIcon size={10} /> SCB-5000041 — Vespucci ring</div>
       <div className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] text-slate-300"><PersonIcon size={10} /> D. Moretti “Silver”</div>
     </div>
@@ -187,7 +187,7 @@ function MiniDesk() {
       {[
         [<CheckIcon key="i" size={11} />, 'Sign-off waiting on you', 'text-amber-300'],
         [<ClockIcon key="i" size={11} />, 'Follow-up due today', 'text-rose-300'],
-        [<span key="i" className="text-[10px] font-black">@</span>, 'Mentioned in case chat', 'text-blue-300'],
+        [<span key="i" className="text-[10px] font-semibold">@</span>, 'Mentioned in case chat', 'text-blue-300'],
         [<StarIcon key="i" size={11} />, 'Followed case updated', 'text-emerald-300'],
       ].map(([i, t, c]) => (
         <div key={t as string} className="flex items-center gap-1.5 rounded-md bg-white/[0.04] px-2 py-1">
@@ -268,10 +268,8 @@ export function GuideView() {
     <div className="mx-auto max-w-4xl space-y-4">
       {/* hero */}
       <div className="rounded-lg border border-white/5 bg-ink-900/60 p-5 sm:p-6">
-        <p className="mb-3 inline-flex items-center gap-2 rounded border border-blue-400/20 bg-blue-500/10 px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-blue-200">
-          New member orientation
-        </p>
-        <h1 className="text-xl font-black text-white">Welcome to the CID Portal</h1>
+        <p className="mb-1 text-xs font-medium text-slate-500">New member orientation</p>
+        <h1 className="text-xl font-semibold text-white">Welcome to the CID Portal</h1>
         <p className="mt-1 text-sm text-slate-400">
           A live, shared investigation workspace — when a colleague updates a record, everyone sees it in seconds.
           What you can see and change follows your <b className="text-slate-200">active membership, department, rank, assignment and compartment</b> — enforced by the server, not by hidden buttons.
@@ -285,17 +283,17 @@ export function GuideView() {
           <div className="pointer-events-none rounded-lg border border-white/10 bg-white/10 px-3 py-2.5 text-center text-sm font-bold text-white">Continue with Google</div>
           <div className="pointer-events-none rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-center text-sm font-bold text-slate-300">Email link</div>
         </div>
-        <p className="mt-4 mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">Two doors — pick the one that matches your job</p>
+        <p className="mt-4 mb-2 text-[13px] font-semibold text-white">Two doors — pick the one that matches your job</p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div className="rounded-lg border border-blue-400/20 bg-blue-500/[0.06] p-3">
-            <p className="text-sm font-black text-white">Join CID</p>
+            <p className="text-sm font-semibold text-white">Join CID</p>
             <p className="mt-1 text-xs leading-relaxed text-slate-400">
               An application for investigative access: name, badge, permanent department, requested role, reason.
               <b className="text-slate-200"> Command reviews it</b> — you stay locked out until approved. Requesting a role grants nothing.
             </p>
           </div>
           <div className="rounded-lg border border-emerald-400/20 bg-emerald-500/[0.06] p-3">
-            <p className="text-sm font-black text-white">Submit Intelligence</p>
+            <p className="text-sm font-semibold text-white">Submit Intelligence</p>
             <p className="mt-1 text-xs leading-relaxed text-slate-400">
               For SAHP, BCSO and LSPD personnel — send information, evidence and patrol intelligence.
               <b className="text-slate-200"> Available straight away</b>, submission-only: no cases, no registries.
@@ -303,7 +301,7 @@ export function GuideView() {
           </div>
         </div>
         <p className="mt-3 text-[11px] text-slate-500">SIB is never applied for here — the unit selects its members from inside the division.</p>
-        <p className="mt-4 mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">Then, in your first five minutes</p>
+        <p className="mt-4 mb-2 text-[13px] font-semibold text-white">Then, in your first five minutes</p>
         <div className="flex flex-wrap items-center gap-y-2 text-xs">
           <span className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-200">1 · <b>My Profile</b> → name, badge, avatar, appearance</span>
           <Arrow />
@@ -318,7 +316,7 @@ export function GuideView() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {NAV_CATEGORIES.map((c) => (
             <div key={c.id} className={`rounded-lg border p-3 ${CAT_TINT[c.id] ?? 'border-white/10 bg-white/[0.03]'} ${c.id === 'intel' ? 'sm:col-span-2' : ''}`}>
-              <p className={`flex items-center gap-2 text-sm font-black ${CAT_TEXT[c.id] ?? 'text-slate-200'}`}>
+              <p className={`flex items-center gap-2 text-sm font-semibold ${CAT_TEXT[c.id] ?? 'text-slate-200'}`}>
                 <CategoryIcon cat={c.id} size={16} /> {c.label}
               </p>
               <div className="mt-2 flex flex-wrap gap-1">
@@ -334,7 +332,7 @@ export function GuideView() {
 
         {/* SIB workspace note */}
         <div className="mt-3 rounded-lg border border-violet-500/20 bg-violet-500/[0.04] p-3">
-          <p className="flex items-center gap-2 text-sm font-black text-violet-300"><LockIcon size={15} /> Special Investigations Bureau</p>
+          <p className="flex items-center gap-2 text-sm font-semibold text-violet-300"><LockIcon size={15} /> Special Investigations Bureau</p>
           <p className="mt-1 text-xs leading-relaxed text-slate-400">
             A <b className="text-slate-200">separate workspace and authority</b>, not a CID category. SIB members get a
             <b className="text-slate-200"> Unit</b> section first, then CID&apos;s entire navigation tab for tab — the same screens over
@@ -365,7 +363,7 @@ export function GuideView() {
       {/* case lifecycle */}
       <Section id="case" title="Life of a case" blurb="Drag the card between board columns — or open it and change Status.">
         <div className="flex flex-wrap items-center gap-y-2" aria-label="Case status flow">
-          <span className="rounded-md border border-white/10 bg-badge-500/20 px-2.5 py-1.5 text-xs font-black text-white">＋ New Case</span>
+          <span className="rounded-md border border-white/10 bg-badge-500/20 px-2.5 py-1.5 text-xs font-semibold text-white">+ New Case</span>
           <Arrow />
           {/* statusTint is the same map the board + command pills use, so this
               legend can no longer drift from what the app actually shows. */}
@@ -378,13 +376,13 @@ export function GuideView() {
           <span className={`rounded px-2.5 py-1 text-xs font-bold uppercase ${statusTint('closed')}`}>closed</span>
         </div>
 
-        <p className="mt-4 mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Inside a case — the real tab rail, in its three areas</p>
+        <p className="mt-4 mb-1.5 text-[13px] font-semibold text-white">Inside a case — the real tab rail, in its three areas</p>
         <div className="space-y-2" aria-hidden>
           {/* Rendered from caseTabs.ts — the same definition CaseDetail routes
               with, so the guide can never advertise a tab that isn't there. */}
           {CASE_TAB_GROUPS.map((g) => (
             <div key={g.label} className="flex flex-wrap items-center gap-1">
-              <span className="mr-1 w-full text-[11px] font-bold uppercase tracking-wider text-slate-500 sm:w-44">{g.label}</span>
+              <span className="mr-1 w-full text-xs font-medium text-slate-500 sm:w-44">{g.label}</span>
               {g.tabs.map((t) => (
                 <span key={t} className="rounded bg-white/5 px-2 py-1 text-[11px] font-bold text-slate-300">{CASE_TAB_LABELS[t]}</span>
               ))}
@@ -393,7 +391,7 @@ export function GuideView() {
         </div>
         <p className="mt-2 text-[11px] text-slate-500">RICO appears once enterprise tracking is enabled from the Brief. Every tab is deep-linkable.</p>
 
-        <p className="mt-4 mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Done investigating? Submit on the Sign-off tab — it routes itself, and skips anyone on LOA</p>
+        <p className="mt-4 mb-1.5 text-[13px] font-semibold text-white">Done investigating? Submit on the Sign-off tab — it routes itself, and skips anyone on LOA</p>
         <div className="flex flex-wrap items-center gap-y-2 text-xs">
           <Step>Bureau lead</Step>
           <Arrow />
@@ -408,7 +406,7 @@ export function GuideView() {
 
       {/* legal lanes */}
       <Section id="legal" title="Legal requests — two lanes" blurb="Reviewers only ever receive the packet you selected — never the rest of the case.">
-        <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">CID</p>
+        <p className="mb-1.5 text-[13px] font-semibold text-white">CID</p>
         <div className="flex flex-wrap items-center gap-y-2 text-xs">
           <Step>Investigator draft + packet</Step>
           <Arrow />
@@ -427,7 +425,7 @@ export function GuideView() {
           immediately, from any bureau (on a JTF case, any Bureau Lead). The record names who reviewed and the rank they held at the time.
           A return reopens your draft; a non-material fix after a Judge/prosecutor return goes straight back to the prosecutor queue.
         </p>
-        <p className="mt-4 mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">SIB</p>
+        <p className="mt-4 mb-1.5 text-[13px] font-semibold text-white">SIB</p>
         <div className="flex flex-wrap items-center gap-y-2 text-xs">
           <Step>Special Agent draft</Step>
           <Arrow />
@@ -485,8 +483,8 @@ export function GuideView() {
             <div key={f.title} className="overflow-hidden rounded-lg border border-white/10 bg-ink-950/50">
               <div className="border-b border-white/5 bg-white/[0.02]">{f.art}</div>
               <div className="p-3">
-                <p className="flex items-center gap-1.5 text-sm font-black text-white"><span aria-hidden className="text-slate-400">{f.icon}</span> {f.title}</p>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-badge-500">{f.where}</p>
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-white"><span aria-hidden className="text-slate-400">{f.icon}</span> {f.title}</p>
+                <p className="text-xs font-medium text-slate-500">{f.where}</p>
                 <p className="mt-1 text-xs leading-relaxed text-slate-400">{f.caption}</p>
               </div>
             </div>

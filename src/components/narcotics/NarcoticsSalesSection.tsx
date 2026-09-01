@@ -12,6 +12,7 @@
  *  renders for authorized viewers); the client just hides mutating affordances
  *  when the viewer can't edit. */
 import { useState } from 'react'
+import { FileTypeIcon, LockIcon, PhotoIcon } from '@/components/shell/icons'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -100,11 +101,11 @@ export function SalesSection({ narcotic, data, openSaleId, onOpenSale, onOpenMed
   return (
     <div className="space-y-5">
       {/* 1 · Restricted banner + series identity */}
-      <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 p-4">
+      <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-amber-300">
-              <span aria-hidden>🔒</span> Restricted intelligence
+            <p className="flex items-center gap-1.5 text-[13px] font-semibold text-amber-300">
+              <LockIcon size={14} className="flex-shrink-0" /> Restricted intelligence
             </p>
             <h2 className="mt-1 text-lg font-bold text-white">{series.name || 'Street-Value Observations'}</h2>
             <p className="mt-0.5 text-sm text-amber-100/90">
@@ -262,7 +263,7 @@ function ObservationCard({ obs, stacks, media, expanded, canEdit, onToggle, onOp
           {obs.observed_at ? fmtDate(obs.observed_at) : 'Undated'} · {datePrecisionLabel(obs.observed_date_precision)}
         </span>
         <Badge tone="neutral">{productStateLabel(obs.product_state)}</Badge>
-        {media.length > 0 && <Badge tone="neutral" title="Attached screenshots">📎 {media.length}</Badge>}
+        {media.length > 0 && <Badge tone="neutral" title="Attached screenshots"><PhotoIcon size={12} /> {media.length}</Badge>}
       </div>
 
       {/* Facts row */}
@@ -511,14 +512,14 @@ function MediaGrid({ media, onOpenMedia, showRole = false, showCaption = false }
                 // eslint-disable-next-line @next/next/no-img-element -- external media CDN
                 <img src={src} alt={m.title} className="h-28 w-full object-cover transition group-hover:opacity-90" onError={(e) => { e.currentTarget.style.display = 'none' }} />
               ) : (
-                <div className="grid h-28 w-full place-items-center text-2xl" aria-hidden>{m.type === 'video' ? '🎬' : '📄'}</div>
+                <div className="grid h-28 w-full place-items-center text-slate-400" aria-hidden><FileTypeIcon type={m.type} size={24} /></div>
               )}
               {(showRole || showCaption) && (
                 <span className="flex flex-col gap-1 px-1.5 py-1">
                   {showRole && role && (
-                    <span className={`inline-flex w-fit rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${evidenceRoleTintKey(role) ? statusTint(evidenceRoleTintKey(role)) : 'bg-white/5 text-slate-300'}`}>
+                    <Badge className="w-fit" tint={evidenceRoleTintKey(role) ? statusTint(evidenceRoleTintKey(role)) : 'bg-white/5 text-slate-300'}>
                       {role}
-                    </span>
+                    </Badge>
                   )}
                   {showCaption && <span className="truncate text-[11px] text-slate-300">{m.title}</span>}
                 </span>
@@ -576,10 +577,10 @@ function Fact({ label, value, sub, note, strong = false }: {
 }) {
   return (
     <div className="min-w-0">
-      <p className="text-[11px] uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
       <p className={`tabular-nums ${strong ? 'text-base font-bold text-white' : 'text-sm text-slate-200'}`}>{value}</p>
       {sub && <p className="text-[11px] text-slate-500">{sub}</p>}
-      {note && <p className="text-[10px] uppercase tracking-wide text-slate-500">{note}</p>}
+      {note && <p className="text-[11px] text-slate-500">{note}</p>}
     </div>
   )
 }
@@ -587,7 +588,7 @@ function Fact({ label, value, sub, note, strong = false }: {
 function Prose({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
       <p className="mt-0.5 max-w-[70ch] whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{value}</p>
     </div>
   )

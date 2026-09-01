@@ -26,5 +26,5 @@ export function mutateThen(p: Promise<{ error: { message: string } | null }>, re
 }
 
 export function Stat({ label, value }: { label: string; value: React.ReactNode }) {
-  return <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-slate-500">{label}</p><p className="mt-2 text-lg font-bold text-white">{value}</p></div>
+  return <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4"><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-2 text-lg font-semibold text-white">{value}</p></div>
 }

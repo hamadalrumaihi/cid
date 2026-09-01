@@ -12,13 +12,16 @@
  *  the modal's "Added to the case" edit list. */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Button } from '@/components/ui/Button'
+import { AudioIcon, PhotoIcon, VideoIcon } from '@/components/shell/icons'
 import { toast } from '@/lib/toast'
 import {
   ACCEPTED_FILE_TYPES, MAX_UPLOAD_BYTES, createFmUploader, fmtBytes,
   type FmUploader, type QueueItem, type QueueSnapshot, type UploadedFile,
 } from '@/lib/uppyFivemanage'
 
-const KIND_GLYPH: Record<QueueItem['kind'], string> = { image: '🖼️', video: '🎬', audio: '🎵' }
+const KIND_ICON: Record<QueueItem['kind'], (p: { size?: number; className?: string }) => React.ReactElement> = {
+  image: PhotoIcon, video: VideoIcon, audio: AudioIcon,
+}
 
 // Stable pre-mount store stubs (the uploader is created in a mount effect —
 // the React Compiler lint bars ref reads/instance creation during render).
@@ -82,7 +85,7 @@ export function MediaUploadPanel({ onUploaded, onQueueChange }: {
         onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); pick(e.dataTransfer.files) }}
-        className={`rounded-xl border border-dashed p-6 text-center transition ${dragOver ? 'border-badge-400 bg-blue-500/10' : 'border-white/15 bg-white/[0.03]'}`}
+        className={`rounded-lg border border-dashed p-6 text-center transition ${dragOver ? 'border-badge-400 bg-blue-500/10' : 'border-white/15 bg-white/[0.03]'}`}
       >
         <input
           ref={fileRef}
@@ -92,7 +95,7 @@ export function MediaUploadPanel({ onUploaded, onQueueChange }: {
           className="hidden"
           onChange={(e) => { pick(e.target.files); e.target.value = '' }}
         />
-        <Button variant="primary" onClick={() => fileRef.current?.click()}>📤 Choose photos to upload</Button>
+        <Button variant="primary" onClick={() => fileRef.current?.click()}>Choose photos to upload</Button>
         <p className="mt-2 text-xs text-slate-400">
           …or drag files here. Images, video and audio up to {fmtBytes(MAX_UPLOAD_BYTES)} each — details are editable after upload.
         </p>
@@ -101,7 +104,7 @@ export function MediaUploadPanel({ onUploaded, onQueueChange }: {
       {items.length > 0 && (
         <div className="mt-3 space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+            <h4 className="text-[13px] font-semibold text-white">
               Upload queue ({items.length})
             </h4>
             {active > 0 && (
@@ -140,7 +143,7 @@ function QueueRow({ it, onRetry, onRemove }: { it: QueueItem; onRetry: () => voi
   return (
     <li className={`rounded-lg border px-3 py-2 ${isFailed ? 'border-rose-400/30 bg-rose-500/[0.06]' : 'border-white/10 bg-ink-950/50'}`}>
       <div className="flex items-center gap-2">
-        <span aria-hidden className="flex-shrink-0">{KIND_GLYPH[it.kind]}</span>
+        {(() => { const Icon = KIND_ICON[it.kind]; return <Icon size={16} className="flex-shrink-0 text-slate-400" /> })()}
         <span className="min-w-0 flex-1 truncate text-sm text-slate-200" title={it.name}>{it.name}</span>
         <span className={`flex-shrink-0 text-xs ${it.status === 'done' ? 'font-semibold text-emerald-300' : isFailed ? 'font-semibold text-rose-300' : 'text-slate-400'}`}>
           {it.status === 'done' ? '✓ ' : ''}{statusLine(it)}

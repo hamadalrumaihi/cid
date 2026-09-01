@@ -6,6 +6,7 @@
  *  its lazily-loaded slices; they never mutate. The Intelligence section is
  *  deliberately limited to broad category + generalized stage names + scene
  *  indicators + linked entities — NO ingredients/ratios/temps/steps. */
+import { AlertIcon, ArchiveIcon } from '@/components/shell/icons'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import { EntityLink } from '@/components/ui/EntityLink'
@@ -25,7 +26,7 @@ import type { AliasRow, IntelligenceData, MediaRow, SeizureRow } from './narcoti
 export function KV({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-3 py-1.5">
-      <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+      <span className="text-xs font-medium text-slate-500">{label}</span>
       <span className="text-right text-sm text-slate-200">{children}</span>
     </div>
   )
@@ -38,7 +39,7 @@ export function DescBlock({ label, value }: { label: string; value: string | nul
   if (!v) return null
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
       <p className="mt-0.5 max-w-[70ch] whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{v}</p>
     </div>
   )
@@ -52,7 +53,7 @@ export function ChargesCard({ narcotic, canEditCharges, onEdit }: {
   return (
     <Card pad="lg">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Potential related charges</h3>
+        <h3 className="text-[13px] font-semibold text-white">Potential related charges</h3>
         {canEditCharges && (
           <button onClick={onEdit} className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-blue-200 hover:bg-white/10">Edit codes</button>
         )}
@@ -96,7 +97,7 @@ export function NarcoticOverview({ narcotic, aliases, canEditCharges, onEditChar
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="space-y-4 lg:col-span-2">
         <Card pad="lg">
-          <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-300">Intelligence summary</h3>
+          <h3 className="mb-2 text-[13px] font-semibold text-white">Intelligence summary</h3>
           {hasNarrative ? (
             <div className="space-y-3">
               <DescBlock label="Summary" value={n.summary} />
@@ -115,7 +116,7 @@ export function NarcoticOverview({ narcotic, aliases, canEditCharges, onEditChar
       </div>
 
       <Card pad="lg" className="h-fit">
-        <h3 className="mb-1 text-sm font-bold uppercase tracking-wide text-slate-300">At a glance</h3>
+        <h3 className="mb-1 text-[13px] font-semibold text-white">At a glance</h3>
         <div className="divide-y divide-white/5">
           <KV label="Category"><Badge tone="neutral">{categoryLabel(n.category)}</Badge></KV>
           <KV label="Status"><Badge tint={statusTint(statusTintKey(n.status))}>{statusLabel(n.status)}</Badge></KV>
@@ -140,14 +141,14 @@ export function IdentificationSection({ narcotic, aliases }: { narcotic: Narcoti
   const serverNames = aliases.filter((a) => a.alias_type === 'server_item' || a.server_specific)
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-4">
-        <span aria-hidden className="text-lg leading-none">⚠️</span>
+      <div className="flex items-start gap-3 rounded-lg border border-amber-500/25 bg-amber-500/10 p-4">
+        <AlertIcon size={16} className="mt-0.5 flex-shrink-0 text-amber-300" />
         <p className="text-sm text-slate-100">Visual appearance alone does not confirm substance identity.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card pad="lg" className="space-y-3">
-          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Appearance &amp; form</h3>
+          <h3 className="text-[13px] font-semibold text-white">Appearance &amp; form</h3>
           <DescBlock label="Typical form / appearance" value={n.appearance} />
           <DescBlock label="Packaging types" value={n.packaging} />
           {!(n.appearance ?? '').trim() && !(n.packaging ?? '').trim() && (
@@ -156,7 +157,7 @@ export function IdentificationSection({ narcotic, aliases }: { narcotic: Narcoti
         </Card>
 
         <Card pad="lg">
-          <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-300">Names &amp; aliases</h3>
+          <h3 className="mb-2 text-[13px] font-semibold text-white">Names &amp; aliases</h3>
           {aliases.length === 0 ? (
             <p className="text-sm text-slate-400">No aliases or server item names recorded.</p>
           ) : (
@@ -165,7 +166,7 @@ export function IdentificationSection({ narcotic, aliases }: { narcotic: Narcoti
                 <li key={a.id}>
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-xs text-slate-200" title={humanize(a.alias_type)}>
                     {a.alias}
-                    {a.server_specific && <span className="rounded bg-amber-500/15 px-1 text-[10px] font-semibold uppercase text-amber-300">server</span>}
+                    {a.server_specific && <span className="rounded bg-amber-500/15 px-1 text-[10px] font-semibold text-amber-300">server</span>}
                   </span>
                 </li>
               ))}
@@ -193,7 +194,7 @@ export function PackagingSection({ narcotic, seizures, media }: {
       )}
       <div>
         <div className="mb-2 flex items-center gap-2">
-          <h3 className="text-sm font-bold text-white">Observed packaging</h3>
+          <h3 className="text-sm font-semibold text-white">Observed packaging</h3>
           <Badge>{observed.length}</Badge>
         </div>
         {!hasAny ? (
@@ -211,7 +212,7 @@ export function PackagingSection({ narcotic, seizures, media }: {
                     // eslint-disable-next-line @next/next/no-img-element -- external media CDN
                     <img src={src} alt="" className="h-16 w-20 flex-shrink-0 rounded-md object-cover" />
                   ) : (
-                    <div className="grid h-16 w-20 flex-shrink-0 place-items-center rounded-md bg-ink-700 text-xl" aria-hidden>📦</div>
+                    <div className="grid h-16 w-20 flex-shrink-0 place-items-center rounded-md bg-ink-700 text-slate-400" aria-hidden><ArchiveIcon size={20} /></div>
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-white">{s.packaging}</p>
@@ -236,13 +237,13 @@ export function IntelligenceSection({ narcotic, data }: { narcotic: NarcoticRow;
   const gangs = data.people.gangs
   return (
     <div className="space-y-4">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300/80">
+      <p className="text-[13px] font-semibold text-amber-200">
         Investigative intelligence — non-actionable
       </p>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card pad="lg">
-          <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-300">Category &amp; production stages</h3>
+          <h3 className="mb-2 text-[13px] font-semibold text-white">Category &amp; production stages</h3>
           <div className="mb-3"><Badge tone="neutral">{categoryLabel(narcotic.category)}</Badge></div>
           <div className="flex flex-wrap gap-1.5">
             {PRODUCTION_STAGES.map((stage) => (
@@ -255,7 +256,7 @@ export function IntelligenceSection({ narcotic, data }: { narcotic: NarcoticRow;
         </Card>
 
         <Card pad="lg">
-          <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-300">Scene indicators</h3>
+          <h3 className="mb-2 text-[13px] font-semibold text-white">Scene indicators</h3>
           {(narcotic.scene_indicators ?? '').trim()
             ? <p className="max-w-[70ch] whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{narcotic.scene_indicators}</p>
             : <p className="text-sm text-slate-400">No scene indicators recorded.</p>}
@@ -263,7 +264,7 @@ export function IntelligenceSection({ narcotic, data }: { narcotic: NarcoticRow;
       </div>
 
       <Card pad="lg">
-        <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-300">Linked production places</h3>
+        <h3 className="mb-2 text-[13px] font-semibold text-white">Linked production places</h3>
         {productionPlaces.length === 0 ? (
           <p className="text-sm text-slate-400">No production-related places linked.</p>
         ) : (
@@ -284,14 +285,14 @@ export function IntelligenceSection({ narcotic, data }: { narcotic: NarcoticRow;
 
       {(persons.length > 0 || gangs.length > 0) && (
         <Card pad="lg">
-          <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-300">Linked people &amp; gangs</h3>
+          <h3 className="mb-2 text-[13px] font-semibold text-white">Linked people &amp; gangs</h3>
           <ul className="flex flex-wrap gap-1.5">
             {persons.map((p) => {
               const person = data.people.personMap.get(p.person_id)
               return (
                 <li key={`p-${p.id}`} className="flex items-center gap-1">
                   {person ? <EntityLink kind="person" id={person.id} label={person.name} /> : <span className="text-xs text-slate-500">Restricted person</span>}
-                  {p.link_status && <span className="text-[10px] uppercase tracking-wide text-slate-400">{linkStatusLabel(p.link_status)}</span>}
+                  {p.link_status && <span className="text-xs font-medium text-slate-500">{linkStatusLabel(p.link_status)}</span>}
                 </li>
               )
             })}

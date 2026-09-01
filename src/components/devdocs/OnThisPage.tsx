@@ -86,7 +86,7 @@ export function OnThisPage({ headings, activeId, onGo }: OnThisPageProps) {
     <>
       {/* below xl: collapsible block placed above the article content */}
       <details className="order-1 mb-4 rounded-lg border border-white/10 bg-ink-900/60 xl:hidden">
-        <summary className="flex min-h-[44px] cursor-pointer select-none items-center px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        <summary className="flex min-h-[44px] cursor-pointer select-none items-center px-4 text-[13px] font-semibold text-white">
           On this page
         </summary>
         <div className="px-4 pb-3">{list}</div>
@@ -94,7 +94,7 @@ export function OnThisPage({ headings, activeId, onGo }: OnThisPageProps) {
 
       {/* xl and up: sticky right-hand column */}
       <nav aria-label="On this page" className="order-3 sticky top-4 hidden w-56 flex-shrink-0 self-start xl:block">
-        <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">On this page</p>
+        <p className="mb-2 text-xs font-medium text-slate-500">On this page</p>
         {list}
       </nav>
     </>

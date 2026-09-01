@@ -158,7 +158,7 @@ export function SiuPanel({ submission, parts, onChanged }: {
   return (
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+        <h4 className="text-[13px] font-semibold text-white">
           Special Investigations Bureau
         </h4>
         <span className="flex items-center gap-2">
@@ -286,7 +286,7 @@ export function SiuPanel({ submission, parts, onChanged }: {
       {/* SIB only, enforced by the table's policy. */}
       {siu.isAgent && (
         <div className="mt-4 border-t border-white/5 pt-3">
-          <h5 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <h5 className="text-xs font-medium text-slate-500">
             Follow-up candidates
           </h5>
           <p className="mt-1 text-xs text-slate-500">

@@ -103,7 +103,7 @@ export function SuggestionForm({ context, onClose, onSubmitted }: {
 
         {context ? (
           <div className="mb-4 rounded-lg border border-white/10 bg-ink-900/60 px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Suggesting a change to</p>
+            <p className="text-xs font-medium text-slate-500">Suggesting a change to</p>
             <p className="mt-0.5 truncate text-sm font-semibold text-white">{anchorLabel}</p>
           </div>
         ) : (

@@ -85,7 +85,7 @@ export function FieldAccessRoster({ rows, onChanged }: {
       <div className="border-b border-white/5 px-5 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+            <h3 className="text-[13px] font-semibold text-white">
               Submitter access
             </h3>
             <p className="mt-1 text-xs text-slate-500">

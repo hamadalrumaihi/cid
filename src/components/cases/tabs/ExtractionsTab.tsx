@@ -37,6 +37,7 @@ import { ListSkeleton } from '@/components/ui/Skeleton'
 import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import { searchPersonHits, type EntityHit } from '@/lib/entitySearch'
 import { ACCOUNT_PLATFORMS } from '@/components/accounts/AccountsView'
+import { ArchiveIcon, SearchIcon } from '@/components/shell/icons'
 import { type CaseRow, type ExtractionRow, type ExtractionFactRow } from './shared'
 
 // record_extractions.source_kind CHECK vocabulary (nullable — unspecified is
@@ -130,7 +131,7 @@ export function ExtractionsTab({ c, canEdit }: { c: CaseRow; canEdit: boolean })
         <ListSkeleton count={4} />
       ) : rows.length === 0 ? (
         <EmptyState
-          icon="🗂"
+          icon={<ArchiveIcon className="h-5 w-5" />}
           title="No extractions yet"
           hint={canEdit
             ? 'Log a records-return (a subpoena reply, a city data import, a manual transcription) to start pulling structured facts from it.'
@@ -306,7 +307,7 @@ function ExtractionDetail({ extraction, canEdit, onBack }: { extraction: Extract
         <ListSkeleton count={3} />
       ) : facts.length === 0 ? (
         <EmptyState
-          icon="🔎"
+          icon={<SearchIcon className="h-5 w-5" />}
           title="No facts extracted yet"
           hint={canEdit
             ? 'Add a fact above. Every fact must cite where in the return it came from.'
@@ -333,7 +334,7 @@ function FactRow({ f }: { f: ExtractionFactRow }) {
         </div>
         {/* Provenance is never optional — where in the return this came from. */}
         <p className="text-xs text-slate-400">
-          <span className="font-semibold uppercase tracking-[0.12em] text-slate-500">Source</span> · {f.source_location}
+          <span className="font-medium text-slate-500">Source</span> · {f.source_location}
         </p>
         {(f.linked_indicator_id || f.linked_account_id || f.linked_link_id) && (
           <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
@@ -408,7 +409,7 @@ function AddFactForm({ extractionId, onAdded }: { extractionId: string; onAdded:
 
   return (
     <Card pad="sm" className="space-y-3">
-      <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Add fact</h3>
+      <h3 className="text-[13px] font-semibold text-white">Add fact</h3>
       <div className="grid gap-3 md:grid-cols-[10rem_minmax(0,1fr)]">
         <Field label="Fact type">
           {(id) => (

@@ -156,7 +156,7 @@ export function OwnerView() {
               {results.map((r, i) => (
                 <button key={i} onClick={() => { setQuery(''); r.go() }} className="block w-full rounded-lg px-3 py-2 text-left transition hover:bg-white/5">
                   <p className="text-sm font-bold text-white">
-                    <span className="mr-1.5 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-black uppercase text-slate-400">{r.type}</span>
+                    <span className="mr-1.5 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-400">{r.type}</span>
                     {r.label}
                   </p>
                   <p className="truncate text-xs text-slate-400">{r.sub}</p>
@@ -292,10 +292,10 @@ function DashboardSection({ onGo }: { onGo: (s: string) => void }) {
   return (
     <div className="space-y-4">
       <Card pad="lg">
-        <p className="t-readout mb-3 inline-flex items-center gap-2 rounded border border-blue-400/20 bg-blue-500/10 px-2 py-1 text-[10px] uppercase tracking-widest text-blue-200">
+        <p className="mb-1 flex items-center gap-2 text-xs font-medium text-slate-500">
           <span className="t-dot t-dot-cyan" /> Owner &amp; developer operations
         </p>
-        <h1 className="text-xl font-black text-white">Owner Console</h1>
+        <h1 className="text-xl font-semibold text-white">Owner Console</h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-400">
           The owner-only control center: what needs you now, the portal&rsquo;s global controls,
           role &amp; access oversight, and the safety surfaces. Learning and reference live in the{' '}
@@ -555,7 +555,7 @@ function SibReleasePanel() {
 function LinkCard({ title, sub, onClick }: { title: string; sub: string; onClick: () => void }) {
   return (
     <button onClick={onClick} className="rounded-lg border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
-      <p className="text-sm font-black text-white">{title}</p>
+      <p className="text-sm font-semibold text-white">{title}</p>
       <p className="mt-1 text-sm text-slate-400">{sub}</p>
     </button>
   )
@@ -1085,8 +1085,8 @@ function SystemSection() {
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
             {STAT_TABLES.map((t) => (
               <div key={t} className="rounded-lg bg-ink-950/50 p-3">
-                <p className="font-mono text-lg font-black text-white">{h?.counts[t] ?? '—'}</p>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t.replace(/_/g, ' ')}</p>
+                <p className="font-mono text-lg font-semibold text-white">{h?.counts[t] ?? '—'}</p>
+                <p className="text-xs font-medium text-slate-500">{t.replace(/_/g, ' ')}</p>
               </div>
             ))}
           </div>
@@ -1102,7 +1102,7 @@ function SystemSection() {
 function HealthCard({ label, ok, detail }: { label: string; ok: boolean | null; detail: string }) {
   return (
     <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
-      <p className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-400">
+      <p className="flex items-center gap-2 text-[13px] font-semibold text-white">
         <span className={`t-dot ${ok === true ? 't-dot-green' : ok === false ? 't-dot-rose' : 't-dot-amber'}`} /> {label}
       </p>
       <p className="mt-1.5 text-sm text-slate-300">{detail}</p>

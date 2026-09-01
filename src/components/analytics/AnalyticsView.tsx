@@ -30,9 +30,9 @@ interface Tip { x: number; y: number; lines: string[] }
 
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-900/60 px-4 py-3">
-      <p className="t-readout text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-black text-white">{value}</p>
+    <div className="rounded-lg border border-white/10 bg-ink-900/60 px-4 py-3">
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className="mt-1 text-2xl font-semibold text-white">{value}</p>
       {sub && <p className="mt-0.5 text-[11px] text-slate-500">{sub}</p>}
     </div>
   )
@@ -42,7 +42,7 @@ function Panel({ title, legend, children }: { title: string; legend?: [string, s
   return (
     <Card>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-black uppercase tracking-wide text-slate-100">{title}</h3>
+        <h3 className="text-[13px] font-semibold text-white">{title}</h3>
         {legend && (
           <div className="flex gap-3">
             {legend.map(([name, color]) => (
@@ -236,7 +236,7 @@ export function AnalyticsView() {
                 <div className="h-4 flex-1 overflow-hidden rounded-r bg-ink-950/60">
                   <div className="h-full rounded-r" style={{ width: `${(n / maxLoad) * 100}%`, background: OPENED }} />
                 </div>
-                <span className="w-8 text-xs font-black text-slate-200">{n}</span>
+                <span className="w-8 text-xs font-semibold text-slate-200">{n}</span>
               </div>
             ))}
           </div>
@@ -260,7 +260,7 @@ function ChartTip({ tip }: { tip: Tip }) {
       style={{ left: tip.x, top: tip.y }}
     >
       {tip.lines.map((l, i) => (
-        <p key={i} className={i === 0 ? 'text-[10px] font-black uppercase tracking-wider text-slate-400' : 'text-xs font-semibold text-white'}>{l}</p>
+        <p key={i} className={i === 0 ? 'text-xs font-medium text-slate-400' : 'text-xs font-semibold text-white'}>{l}</p>
       ))}
     </div>
   )

@@ -4,13 +4,14 @@
  *  Used views all have real components now, so this is a friendly "not found
  *  here" rather than a build-status note. */
 import { PAGE_META, TAB_LABEL } from '@/lib/nav'
+import { MapIcon } from '@/components/shell/icons'
 
 export function ViewPlaceholder({ tab }: { tab: string }) {
   const meta = PAGE_META[tab]
   return (
     <section className="view-in mx-auto max-w-xl pt-10 text-center">
-      <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8">
-        <div className="mb-3 text-2xl" aria-hidden>🧭</div>
+      <div className="rounded-lg border border-white/5 bg-ink-900/60 p-8">
+        <div className="mb-3 flex justify-center text-slate-500" aria-hidden><MapIcon size={24} /></div>
         <h1 className="text-lg font-bold text-white">{meta?.title ?? TAB_LABEL[tab] ?? 'Section unavailable'}</h1>
         <p className="mt-1 text-sm text-slate-400">{meta?.sub ?? 'This section isn’t available right now.'}</p>
         <p className="mt-4 text-sm text-slate-400">

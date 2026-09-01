@@ -49,7 +49,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { SectionHeader } from '@/components/ui/PageHeader'
-import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Field, Select, Textarea } from '@/components/ui/Field'
 
 const fmtWhen = (v?: string | null) =>
@@ -121,7 +121,7 @@ export function SiuIntakeSection() {
     )
   }
 
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <ListSkeleton />
 
   return (
     <div className="space-y-4">
@@ -146,7 +146,7 @@ export function SiuIntakeSection() {
         ) : (
           <ul className="mt-3 space-y-2">
             {shown.map((r) => (
-              <li key={r.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+              <li key={r.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tint={siuReferralStatusTint(r.status)}>{siuReferralStatusLabel(r.status)}</Badge>
                   <Badge tone="neutral">{siuReferralCategoryLabel(r.category)}</Badge>
@@ -203,7 +203,7 @@ export function SiuIntakeSection() {
         ) : (
           <ul className="mt-3 space-y-2">
             {conflicts.map((k) => (
-              <li key={k.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+              <li key={k.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tint={siuRecusesAccess(k.status)
                     ? 'bg-amber-500/15 text-amber-300'

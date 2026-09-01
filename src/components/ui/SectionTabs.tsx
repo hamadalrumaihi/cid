@@ -143,13 +143,15 @@ export function SectionTabs<Id extends string>({
         tabIndex={on ? 0 : -1}
         title={t.marker ? (t.markerLabel ?? 'Needs attention') : undefined}
         onClick={() => onChange(t.id)}
-        className={`relative flex min-h-[44px] flex-shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold sm:min-h-0 ${
-          on ? 'bg-badge-500 text-ink-950' : 'bg-white/5 text-slate-300 hover:bg-white/10'
+        className={`relative flex min-h-[44px] flex-shrink-0 items-center gap-1.5 px-3 py-2 text-sm sm:min-h-0 ${
+          on
+            ? 'font-semibold text-white after:absolute after:inset-x-2 after:bottom-0 after:h-[2px] after:rounded-full after:bg-badge-500'
+            : 'font-medium text-slate-400 hover:text-slate-200'
         }`}
       >
         {t.label}
         {t.count !== undefined && (
-          <span className={`rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${on ? 'bg-white/20 text-ink-950' : 'bg-white/10 text-slate-400'}`}>
+          <span className={`rounded px-1.5 text-[11px] font-semibold tabular-nums ${on ? 'bg-badge-500/15 text-blue-300' : 'bg-white/10 text-slate-400'}`}>
             {t.count}
           </span>
         )}
@@ -164,7 +166,7 @@ export function SectionTabs<Id extends string>({
   }
 
   return (
-    <div className={`relative ${className}`}>
+    <div className={`relative border-b border-white/5 ${className}`}>
       {fade.left && <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-ink-950 to-transparent" />}
       {fade.right && <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-ink-950 to-transparent" />}
       <div
@@ -173,7 +175,7 @@ export function SectionTabs<Id extends string>({
         aria-label={ariaLabel}
         onScroll={onScroll}
         onKeyDown={onKeyDown}
-        className="flex gap-2 overflow-x-auto py-1"
+        className="flex gap-1 overflow-x-auto"
       >
         {sections.map((s, i) => (
           <Fragment key={s.label ?? `section-${i}`}>
@@ -182,7 +184,7 @@ export function SectionTabs<Id extends string>({
             {s.label !== null && (
               <span aria-hidden className="flex flex-shrink-0 items-center gap-2 self-center">
                 {i > 0 && <span className="h-6 w-px bg-white/10" />}
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{s.label}</span>
+                <span className="text-[11px] font-medium text-slate-500">{s.label}</span>
               </span>
             )}
             {s.label === null && i > 0 && <span aria-hidden className="h-6 w-px flex-shrink-0 self-center bg-white/10" />}

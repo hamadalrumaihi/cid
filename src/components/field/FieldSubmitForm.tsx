@@ -300,7 +300,7 @@ export function FieldSubmitForm({ onDone, asInvestigator = false, resume }: {
       </Card>
 
       <Card>
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+        <h3 className="text-[13px] font-semibold text-white">
           What was involved?
         </h3>
         <p className="mt-1 text-xs text-slate-500">
@@ -380,7 +380,7 @@ function BasisField({ value, onChange }: { value: string; onChange: (v: string) 
   )
 }
 
-const PANEL = 'mt-3 grid gap-3 rounded-xl border border-white/10 bg-ink-950/40 p-3 sm:grid-cols-2'
+const PANEL = 'mt-3 grid gap-3 rounded-lg border border-white/10 bg-ink-950/40 p-3 sm:grid-cols-2'
 
 function PersonForm({ onAdd }: { onAdd: (r: Record<string, unknown>) => void }) {
   const [f, setF] = useState({ full_name: '', alias: '', description: '', phone: '', org_name: '', org_role: '', reason: '', basis: 'observed' })
@@ -556,7 +556,7 @@ function PartList({ parts, onRemove }: {
   ]
   if (!rows.length) return null
   return (
-    <ul className="mt-3 divide-y divide-white/5 rounded-xl border border-white/10">
+    <ul className="mt-3 divide-y divide-white/5 rounded-lg border border-white/10">
       {rows.map((r) => (
         <li key={r.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
           <span className="min-w-0 truncate text-slate-200">{r.label}</span>

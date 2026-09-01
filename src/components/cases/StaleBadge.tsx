@@ -8,10 +8,10 @@ export function StaleBadge({ c }: { c: CaseRow }) {
   const d = caseStaleDays(c)
   return (
     <span
-      className="t-readout flex-shrink-0 rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300"
+      className="t-readout inline-flex flex-shrink-0 items-center gap-1 rounded bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300"
       title={`No updates in ${d} days`}
     >
-      <span className="t-dot t-dot-amber pulse-dot" /> {d}D STALE
+      <span className="t-dot t-dot-amber" /> {d}D STALE
     </span>
   )
 }

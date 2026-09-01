@@ -41,7 +41,7 @@ export function PersonAccountsSection({ personId }: { personId: string }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Linked accounts</h3>
+        <h3 className="text-[13px] font-semibold text-white">Linked accounts</h3>
         <Link href="/accounts" className="text-xs font-semibold text-badge-300 hover:underline">Manage in registry →</Link>
       </div>
       <ul className="space-y-2">

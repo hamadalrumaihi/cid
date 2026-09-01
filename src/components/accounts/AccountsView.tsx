@@ -139,20 +139,18 @@ export function AccountsView() {
 
   return (
     <section className="view-in space-y-4">
-      <div className="rounded-lg border border-white/10 bg-ink-900/60 p-6">
-        <PageHeader
-          title="Account Registry"
-          subtitle="Social-media & online accounts, handle history and polymorphic ownership."
-          actions={
-            <>
-              {accounts.length > 0 && (
-                <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter handle, platform…" aria-label="Filter accounts" className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
-              )}
-              {canEdit && state === 'in' && <Button variant="primary" onClick={() => setCreating(true)}>New account</Button>}
-            </>
-          }
-        />
-      </div>
+      <PageHeader
+        title="Account Registry"
+        subtitle="Social-media & online accounts, handle history and polymorphic ownership."
+        actions={
+          <>
+            {accounts.length > 0 && (
+              <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter handle, platform…" aria-label="Filter accounts" className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
+            )}
+            {canEdit && state === 'in' && <Button variant="primary" onClick={() => setCreating(true)}>New account</Button>}
+          </>
+        }
+      />
 
       {state !== 'in' ? (
         <Notice text="Sign in to view the account registry." />
@@ -315,7 +313,7 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
       {expanded && (
         <div className="mt-3 space-y-3 border-t border-white/5 pt-3">
           <div>
-            <h4 className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Handle history</h4>
+            <h4 className="mb-1 text-[13px] font-semibold text-white">Handle history</h4>
             {handles === null ? <p className="text-xs text-slate-500">Loading…</p> : (
               <ul className="space-y-1">
                 {handles.map((h) => (
@@ -330,14 +328,14 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
           </div>
 
           <div>
-            <h4 className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Ownership</h4>
+            <h4 className="mb-1 text-[13px] font-semibold text-white">Ownership</h4>
             {links === null ? <p className="text-xs text-slate-500">Loading…</p> : links.length === 0 ? (
               <p className="text-xs text-slate-500">No subjects linked.</p>
             ) : (
               <ul className="space-y-1">
                 {links.map((l) => (
                   <li key={l.id} className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
-                    <Badge tone="neutral" className="uppercase">{l.subject_kind}</Badge>
+                    <Badge tone="neutral">{cap(l.subject_kind)}</Badge>
                     {l.subject_kind === 'person' ? (
                       <button onClick={() => nav.openRecord('persons', l.subject_id, names[l.subject_id])} className="font-medium text-badge-300 hover:underline">{nameOf(l.subject_id)}</button>
                     ) : <span className="font-medium text-white">{nameOf(l.subject_id)}</span>}
@@ -392,7 +390,7 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
           </div>
 
           <div>
-            <h4 className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Surveillance history</h4>
+            <h4 className="mb-1 text-[13px] font-semibold text-white">Surveillance history</h4>
             {/* Verified-observation history via the polymorphic entity links
                 (kind='account') — RLS-trimmed like every other registry. */}
             <ObservationHistory kind="account" refId={a.id} />
@@ -634,7 +632,7 @@ function AccountMergeModal({ survivor, pool, isCommand, onClose, onMerged }: {
 
         <div className="space-y-4">
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300/80">Survivor (kept)</p>
+            <p className="text-xs font-medium text-emerald-300/80">Survivor (kept)</p>
             <p className="mt-0.5 text-sm text-white">{survivor.platform} · <span className="font-semibold">@{survivor.handle}</span>{survivor.display_name ? <span className="text-slate-400"> — {survivor.display_name}</span> : null}</p>
           </div>
 
@@ -645,7 +643,7 @@ function AccountMergeModal({ survivor, pool, isCommand, onClose, onMerged }: {
           ) : (
             <>
               <div>
-                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Pick the duplicate account(s) to merge in</p>
+                <p className="mb-1.5 text-xs font-medium text-slate-400">Pick the duplicate account(s) to merge in</p>
                 <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search handle, platform, display name…" aria-label="Search accounts to merge" className={inputCls} />
                 <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto">
                   {candidates.length === 0 ? (
@@ -668,7 +666,7 @@ function AccountMergeModal({ survivor, pool, isCommand, onClose, onMerged }: {
               ) : (
                 <>
                   <div>
-                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">What will move onto @{survivor.handle}</p>
+                    <p className="mb-1 text-xs font-medium text-slate-400">What will move onto @{survivor.handle}</p>
                     {totals === null ? (
                       <p className="text-xs text-slate-400">Counting linked records…</p>
                     ) : (
@@ -683,7 +681,7 @@ function AccountMergeModal({ survivor, pool, isCommand, onClose, onMerged }: {
 
                   {scalarFolds.length > 0 && (
                     <div>
-                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Fields the survivor will adopt (only where its own value is blank)</p>
+                      <p className="mb-1 text-xs font-medium text-slate-400">Fields the survivor will adopt (only where its own value is blank)</p>
                       <div className="flex flex-wrap gap-1.5">
                         {scalarFolds.map((f) => <Badge key={f} tone="neutral">{f}</Badge>)}
                       </div>

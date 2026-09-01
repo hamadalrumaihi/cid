@@ -16,7 +16,7 @@ function TabSignals<Id extends string>({ t, on }: { t: SectionTab<Id>; on: boole
   return (
     <>
       {t.count !== undefined && (
-        <span className={`rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${on ? 'bg-white/20 text-ink-950' : 'bg-white/10 text-slate-400'}`}>
+        <span className={`rounded px-1.5 text-[11px] font-semibold tabular-nums ${on ? 'bg-white/20 text-ink-950' : 'bg-white/10 text-slate-400'}`}>
           {t.count}
         </span>
       )}
@@ -77,7 +77,7 @@ export function CaseSectionSwitcher<Id extends string>({
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen(true)}
-        className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left text-sm font-bold text-white transition hover:bg-white/10"
+        className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left text-sm font-semibold text-white transition hover:bg-white/10"
       >
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="sr-only">{ariaLabel} — current: </span>
@@ -94,7 +94,7 @@ export function CaseSectionSwitcher<Id extends string>({
             {sections.map((s, i) => (
               <div key={s.label ?? `section-${i}`}>
                 {s.label !== null && (
-                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">{s.label}</p>
+                  <p className="mb-1.5 text-xs font-medium text-slate-500">{s.label}</p>
                 )}
                 <ul className="space-y-1">
                   {s.items.map((t) => {
@@ -105,7 +105,7 @@ export function CaseSectionSwitcher<Id extends string>({
                           type="button"
                           aria-current={on ? 'true' : undefined}
                           onClick={() => { onChange(t.id); setOpen(false) }}
-                          className={`flex min-h-[44px] w-full items-center gap-1.5 rounded-lg px-3 py-2 text-left text-sm font-bold ${
+                          className={`flex min-h-[44px] w-full items-center gap-1.5 rounded-lg px-3 py-2 text-left text-sm font-semibold ${
                             on ? 'bg-badge-500 text-ink-950' : 'bg-white/5 text-slate-300 hover:bg-white/10'
                           }`}
                         >

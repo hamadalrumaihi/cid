@@ -56,7 +56,7 @@ export function DojQueueList({ rows, onOpen, ageOf, ageLabel = 'waiting', action
               className="-mx-1.5 -my-1 flex min-h-[40px] min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-1.5 py-1 text-left transition hover:bg-white/5"
             >
               <span className="font-mono text-xs tabular-nums text-blue-300">{r.request_number}</span>
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              <span className="text-xs font-medium text-slate-500">
                 {humanize(r.subtype ?? r.request_type)}
               </span>
               {!sealed && r.case_number_snapshot && (

@@ -94,7 +94,7 @@ export function MergeMembersModal({ cluster, onClose, onMerged }: {
         </p>
 
         <fieldset className="mb-4">
-          <legend className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Keep (survivor)</legend>
+          <legend className="mb-1.5 text-[13px] font-semibold text-white">Keep (survivor)</legend>
           <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
             {cluster.members.map((m) => (
               <label key={m.id} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-sm ${m.id === survivor.id ? 'border-badge-500 bg-badge-500/10 text-white' : 'border-white/10 bg-ink-900 text-slate-300 hover:bg-white/5'}`}>
@@ -110,7 +110,7 @@ export function MergeMembersModal({ cluster, onClose, onMerged }: {
 
         {conflictFields.length ? (
           <div className="mb-4">
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Field decisions</p>
+            <p className="mb-1.5 text-[13px] font-semibold text-white">Field decisions</p>
             <div className="space-y-2">
               {conflictFields.map((f) => {
                 // Distinct candidate values, survivor's first.
@@ -137,7 +137,7 @@ export function MergeMembersModal({ cluster, onClose, onMerged }: {
                             className="h-3.5 w-3.5 accent-badge-500"
                           />
                           <span className="max-w-[16rem] truncate">{fmtValue(f, o.v)}</span>
-                          <span className="text-[10px] uppercase tracking-wide text-slate-500">{o.from}</span>
+                          <span className="text-[11px] font-medium text-slate-500">{o.from}</span>
                         </label>
                       ))}
                     </div>

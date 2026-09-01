@@ -293,9 +293,9 @@ export function CardQueueSection({ title, rows, viewer, now, onOpen, empty, hint
 }) {
   return (
     <section className="space-y-2">
-      <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+      <h3 className="flex items-center gap-2 text-[13px] font-semibold text-white">
         {title}
-        <span className="rounded-full bg-white/10 px-1.5 text-[10px] font-bold text-slate-300">{rows.length}</span>
+        <span className="rounded-full bg-white/10 px-1.5 text-[10px] font-semibold text-slate-300">{rows.length}</span>
       </h3>
       {hint && <p className="text-xs text-slate-400">{hint}</p>}
       {rows.length === 0

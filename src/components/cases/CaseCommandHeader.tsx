@@ -75,7 +75,7 @@ const CONTROL = 'min-h-[44px] rounded-lg border border-white/10 bg-ink-950 px-2 
 function Meta({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <span className="flex min-w-0 items-center gap-1">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</span>
+      <span className="text-xs font-medium text-slate-500">{label}</span>
       <span className="flex min-w-0 items-center gap-1 truncate text-[11px] font-semibold text-slate-200">{children}</span>
     </span>
   )
@@ -253,9 +253,9 @@ export function CaseCommandHeader({
           className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-white/5 px-2.5 font-mono text-base font-bold tabular-nums text-badge-200 transition hover:bg-white/10 sm:min-h-9 sm:py-1"
         >
           {c.case_number}
-          <span aria-hidden className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">copy</span>
+          <span aria-hidden className="text-[10px] font-medium text-slate-500">copy</span>
         </button>
-        <h1 className="min-w-0 flex-1 basis-48 truncate text-lg font-black text-white" title={c.title || undefined}>
+        <h1 className="min-w-0 flex-1 basis-48 truncate text-lg font-semibold text-white" title={c.title || undefined}>
           {c.title || 'Untitled case'}
         </h1>
         {canEdit ? (
@@ -302,7 +302,7 @@ export function CaseCommandHeader({
             <button
               onClick={() => setStageOpen(true)}
               title="Change investigative stage (reason required, audited)"
-              className="inline-flex min-h-[40px] items-center rounded-full border border-badge-500/40 bg-badge-500/15 px-2.5 text-[11px] font-semibold text-badge-200 transition hover:bg-badge-500/30 sm:min-h-0 sm:py-0.5"
+              className="inline-flex min-h-[40px] items-center rounded border border-badge-500/40 bg-badge-500/15 px-2 text-[11px] font-semibold text-badge-200 transition hover:bg-badge-500/30 sm:min-h-0 sm:py-0.5"
             >
               {investigativeStageLabel(c.investigative_stage)}
             </button>
@@ -350,7 +350,7 @@ export function CaseCommandHeader({
           <button
             onClick={() => setFollowUpOpen(true)}
             title="Edit follow-up"
-            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${followUpDue ? 'bg-amber-500/15 text-amber-300' : 'bg-white/5 text-slate-300'} hover:bg-white/10`}
+            className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold ${followUpDue ? 'bg-amber-500/15 text-amber-300' : 'bg-white/5 text-slate-300'} hover:bg-white/10`}
           >
             Follow-up {c.follow_up_at.slice(0, 10)}
             <DeadlineChip at={c.follow_up_at} kind="due" />
@@ -388,12 +388,12 @@ export function CaseCommandHeader({
           </Badge>
         )}
         {op && (
-          <Link href={`/operations?op=${op.id}`} className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[11px] font-semibold text-slate-200 hover:bg-white/10">
+          <Link href={`/operations?op=${op.id}`} className="inline-flex items-center rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-slate-200 hover:bg-white/10">
             {joint?.activeVia?.opId === op.id ? `Joint via Operation ${op.name}` : `Operation: ${op.name}`}
           </Link>
         )}
         {!op && joint?.operations.filter((o) => !o.linked).slice(0, 1).map((o) => (
-          <Link key={o.opId} href={`/operations?op=${o.opId}`} className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[11px] font-semibold text-slate-400 hover:bg-white/10">
+          <Link key={o.opId} href={`/operations?op=${o.opId}`} className="inline-flex items-center rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-slate-400 hover:bg-white/10">
             Formerly Operation {o.opName} ({o.opStatus})
           </Link>
         ))}

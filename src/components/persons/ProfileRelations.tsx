@@ -17,6 +17,7 @@ import { officerName } from '@/lib/profiles'
 import { statusTint } from '@/lib/tint'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { CheckIcon } from '@/components/shell/icons'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -98,7 +99,7 @@ export function RelationshipsSection({ personId, gang, data, canEdit, onLink, on
       {!data.rows.length ? (
         <EmptyState title="No relationships recorded" hint={canEdit ? 'Use “Link associate” to connect this person to another record.' : undefined} />
       ) : !rows.length ? (
-        <p className="rounded-xl border border-white/5 bg-ink-900/60 p-4 text-sm text-slate-400">No relationships match these filters.</p>
+        <p className="rounded-lg border border-white/5 bg-ink-900/60 p-4 text-sm text-slate-400">No relationships match these filters.</p>
       ) : (
         <div className="space-y-2">
           {rows.map((r) => {
@@ -145,7 +146,7 @@ export function RelationshipsSection({ personId, gang, data, canEdit, onLink, on
       {/* Gang membership — persons.gang_id + gang_members rows, same section. */}
       {(gang || data.memberships.length > 0) && (
         <div>
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Gang membership</p>
+          <p className="mb-1.5 text-xs font-medium text-slate-400">Gang membership</p>
           <div className="space-y-1.5">
             {gang && (
               <Card pad="sm" className="flex flex-wrap items-center gap-1.5">
@@ -265,7 +266,7 @@ export function LinkAssociateModal({ person, onClose, onSaved }: { person: Perso
                 <button key={r.id} role="option" aria-selected={otherId === r.id} onClick={() => setOtherId(r.id)}
                   className={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-sm transition ${otherId === r.id ? 'bg-badge-500/20 text-white' : 'text-slate-200 hover:bg-white/5'}`}>
                   <span className="min-w-0 truncate">{r.name}{r.alias ? <span className="text-slate-400"> · “{r.alias}”</span> : null}</span>
-                  {otherId === r.id && <span aria-hidden className="flex-shrink-0 text-badge-500">✓</span>}
+                  {otherId === r.id && <CheckIcon size={14} className="flex-shrink-0 text-badge-500" />}
                 </button>
               ))}
             </div>
@@ -390,7 +391,7 @@ export function CasesSection({ data, canEdit, onAttach, onRefresh }: {
       )}
       {data.indirect.length > 0 && (
         <div>
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <p className="mb-1 text-xs font-medium text-slate-400">
             Indirect associations ({data.indirect.length}) — not durable intel links
           </p>
           <div className="flex flex-wrap gap-1.5">

@@ -27,6 +27,7 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { ListSkeleton } from '@/components/ui/Skeleton'
+import { CheckIcon } from '@/components/shell/icons'
 import { AccessDecisionModal } from './AccessDecisionModal'
 import { ActionItemRow, notificationIdsOf, type InlineActionKind } from './ActionItemRow'
 import { useActionItems } from './useActionItems'
@@ -137,8 +138,8 @@ function QueueSection({ id, title, subtitle, emptyText, showWhenEmpty, items, mu
   if (!items.length && !showWhenEmpty) return null
   return (
     <section aria-labelledby={`ac-sec-${id}`} className={className}>
-      <h2 id={`ac-sec-${id}`} className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">
-        {title} <span className="font-semibold">({items.length})</span>
+      <h2 id={`ac-sec-${id}`} className="text-[13px] font-semibold text-white">
+        {title} <span className="font-normal text-slate-400">({items.length})</span>
       </h2>
       <p className="mb-2 mt-0.5 text-xs text-slate-400">{subtitle}</p>
       {items.length ? (
@@ -399,7 +400,7 @@ export function ActionCenterView() {
             />
           ) : (
             <EmptyState
-              icon="✓"
+              icon={<CheckIcon size={22} />}
               title="You're all caught up."
               hint="Nothing needs your action right now. My Dashboard keeps the broader overview of your cases, drafts and mentions."
               action={{ label: 'Open My Dashboard', onClick: () => router.push('/inbox') }}
@@ -430,7 +431,7 @@ export function ActionCenterView() {
 
           {sections.activity.length > 0 && (
             <details>
-              <summary className="cursor-pointer rounded text-xs font-black uppercase tracking-[0.14em] text-slate-400 transition hover:text-slate-300">
+              <summary className="cursor-pointer rounded text-[13px] font-semibold text-white transition hover:text-slate-300">
                 <h2 className="inline">Recent activity ({sections.activity.length})</h2>
               </summary>
               <ul className="mt-2 space-y-1.5">

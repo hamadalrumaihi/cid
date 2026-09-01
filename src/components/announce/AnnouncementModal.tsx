@@ -21,6 +21,7 @@ import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { LinkIcon } from '@/components/shell/icons'
 import {
   AUDIENCE_LABEL, mentionLabel, parseLinks, parseMentions,
   type AnnLink, type AnnouncementRow, type Mention,
@@ -266,7 +267,7 @@ export function AnnouncementModal({ record, caseOptions, onClose, onSaved }: Ann
                 <div>
                   <label htmlFor="ann-mention" className="mb-1 block text-xs font-semibold text-slate-400">Mention</label>
                   <select id="ann-mention" value="" onChange={(e) => addMention(e.target.value)} className={SELECT_CLS}>
-                    <option value="">＠ add…</option>
+                    <option value="">Add…</option>
                     <option value="all|All Officers">@All Officers</option>
                     {ROLE_ORDER.map((r) => (
                       <option key={r} value={`role:${r}|All ${ROLE_LABEL[r] || r}s`}>@All {ROLE_LABEL[r] || r}s</option>
@@ -279,7 +280,7 @@ export function AnnouncementModal({ record, caseOptions, onClose, onSaved }: Ann
                 <div>
                   <label htmlFor="ann-link" className="mb-1 block text-xs font-semibold text-slate-400">Link case</label>
                   <select id="ann-link" value="" onChange={(e) => addLink(e.target.value)} className={SELECT_CLS}>
-                    <option value="">🔗 add…</option>
+                    <option value="">Add…</option>
                     {caseOptions.map((c) => <option key={c.id} value={`${c.id}|${c.case_number}`}>{c.case_number}</option>)}
                   </select>
                 </div>
@@ -290,7 +291,7 @@ export function AnnouncementModal({ record, caseOptions, onClose, onSaved }: Ann
                     <span key={m.target} className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[11px] text-blue-300">@{m.label || mentionLabel(m.target)}</span>
                   ))}
                   {links.map((l) => (
-                    <span key={l.id} className="rounded bg-violet-500/10 px-1.5 py-0.5 text-[11px] text-violet-300">🔗 {l.label || l.id}</span>
+                    <span key={l.id} className="inline-flex items-center gap-1 rounded bg-violet-500/10 px-1.5 py-0.5 text-[11px] text-violet-300"><LinkIcon size={12} /> {l.label || l.id}</span>
                   ))}
                 </div>
               )}

@@ -31,7 +31,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/PageHeader'
 import { SectionTabs } from '@/components/ui/SectionTabs'
-import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { MetricStrip } from '@/components/ui/MetricStrip'
 
 type SourceRow = Tables<'siu_sources'>
@@ -114,7 +114,7 @@ function useRows<T>(table: Parameters<typeof list>[0], order: string) {
 
 function SourcesLane() {
   const { rows, loading } = useRows<SourceRow>('siu_sources', 'registered_at')
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <ListSkeleton />
   return (
     <Card>
       <SectionHeader
@@ -124,7 +124,7 @@ function SourcesLane() {
       {!rows.length ? <Empty what="sources" /> : (
         <ul className="mt-3 space-y-2">
           {rows.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+            <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-3">
               <span className="font-mono text-sm font-semibold tracking-wide text-slate-100">{r.codename}</span>
               <Badge tint={statusTint(r.status)}>{siuSourceStatusLabel(r.status)}</Badge>
               <Badge tone="neutral">{siuReliabilityLabel(r.reliability)}</Badge>
@@ -145,7 +145,7 @@ function SourcesLane() {
 
 function UndercoverLane() {
   const { rows, loading } = useRows<UcRow>('siu_undercover_operations', 'created_at')
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <ListSkeleton />
   return (
     <Card>
       <SectionHeader
@@ -155,7 +155,7 @@ function UndercoverLane() {
       {!rows.length ? <Empty what="deployments" /> : (
         <ul className="mt-3 space-y-2">
           {rows.map((r) => (
-            <li key={r.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+            <li key={r.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-semibold text-slate-100">{r.legend_name}</span>
                 <Badge tint={statusTint(r.status)}>{siuUndercoverStatusLabel(r.status)}</Badge>
@@ -181,7 +181,7 @@ function UndercoverLane() {
 
 function FinancialLane() {
   const { rows, loading } = useRows<FinRow>('siu_financial_intel', 'occurred_at')
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <ListSkeleton />
   return (
     <Card>
       <SectionHeader
@@ -191,7 +191,7 @@ function FinancialLane() {
       {!rows.length ? <Empty what="financial records" /> : (
         <ul className="mt-3 space-y-2">
           {rows.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+            <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-3">
               <Badge tone="neutral">{r.record_type.replace(/_/g, ' ')}</Badge>
               {r.flagged && <Badge tint="bg-amber-500/15 text-amber-300">Flagged</Badge>}
               <span className="text-sm text-slate-100">{r.subject_label ?? r.counterparty ?? r.institution ?? '—'}</span>
@@ -211,7 +211,7 @@ function FinancialLane() {
 
 function CommsLane() {
   const { rows, loading } = useRows<CommsRow>('siu_comms_intel', 'occurred_at')
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <ListSkeleton />
   return (
     <Card>
       <SectionHeader
@@ -221,7 +221,7 @@ function CommsLane() {
       {!rows.length ? <Empty what="communications records" /> : (
         <ul className="mt-3 space-y-2">
           {rows.map((r) => (
-            <li key={r.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+            <li key={r.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone="neutral">{r.record_type.replace(/_/g, ' ')}</Badge>
                 <span className="font-mono text-sm text-slate-100">{r.identifier ?? '—'}</span>
@@ -251,7 +251,7 @@ function CommsLane() {
 
 function IntegrityLane() {
   const { rows, loading } = useRows<ReviewRow>('siu_integrity_reviews', 'opened_at')
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <ListSkeleton />
   return (
     <Card>
       <SectionHeader
@@ -261,7 +261,7 @@ function IntegrityLane() {
       {!rows.length ? <Empty what="reviews" /> : (
         <ul className="mt-3 space-y-2">
           {rows.map((r) => (
-            <li key={r.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+            <li key={r.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tint={statusTint(r.status)}>{siuReviewStatusLabel(r.status)}</Badge>
                 <Badge tone="neutral">{siuAllegationLabel(r.allegation_type)}</Badge>
@@ -306,7 +306,7 @@ function ExportsLane() {
     return () => { live = false }
   }, [load])
 
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <ListSkeleton />
 
   return (
     <Card>
@@ -317,7 +317,7 @@ function ExportsLane() {
       {!rows.length ? <Empty what="exports" /> : (
         <ul className="mt-3 space-y-2">
           {rows.map((r) => (
-            <li key={r.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+            <li key={r.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone="neutral">{siuExportScopeLabel(r.scope)}</Badge>
                 <span className="text-xs text-slate-300">{r.item_count} record{r.item_count === 1 ? '' : 's'}</span>
@@ -356,7 +356,7 @@ export function SiuOversightSection() {
     return () => { live = false }
   }, [])
 
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <ListSkeleton />
   if (!data?.access) return <Empty what="oversight data" />
 
   const g = (o: Record<string, number> | undefined, k: string) => o?.[k] ?? 0

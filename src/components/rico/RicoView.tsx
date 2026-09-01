@@ -11,8 +11,8 @@ import { useAuth } from '@/lib/auth'
 import { downloadDocx, type DocxPara } from '@/lib/docx'
 import { fmtDate, slug } from '@/lib/format'
 import { toast } from '@/lib/toast'
+import { AlertIcon } from '@/components/shell/icons'
 import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
 import { Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { RicoTab } from '@/components/cases/CaseDetail'
@@ -84,17 +84,18 @@ export function RicoView() {
 
   return (
     <div>
-      <Card pad="lg" className="mb-6">
+      <div className="mb-6 space-y-3">
         <PageHeader
-          title="⚖️ RICO Element Tracker"
+          title="RICO Element Tracker"
           subtitle="Assemble & track enterprise + pattern-of-racketeering elements per case."
         />
-        <p className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
-          ⚠️ Organizational tool only — not legal advice. Predicate-act sufficiency and charging decisions are a prosecutor&rsquo;s determination.
+        <p className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
+          <AlertIcon size={14} className="mt-0.5 flex-shrink-0" />
+          <span>Organizational tool only — not legal advice. Predicate-act sufficiency and charging decisions are a prosecutor&rsquo;s determination.</span>
         </p>
-      </Card>
+      </div>
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <label className="text-xs font-semibold uppercase tracking-wider text-slate-400" htmlFor="rico-case">Case</label>
+        <label className="text-xs font-semibold text-slate-400" htmlFor="rico-case">Case</label>
         <select id="rico-case" value={caseId} onChange={(e) => setCaseId(e.target.value)} className="rounded-lg border border-white/10 bg-ink-850 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">
           {!cases.length && <option value="">— no cases —</option>}
           {cases.map((c) => <option key={c.id} value={c.id}>{c.case_number} · {c.title || 'Untitled'}</option>)}

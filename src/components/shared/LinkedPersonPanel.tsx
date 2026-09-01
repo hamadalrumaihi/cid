@@ -139,7 +139,7 @@ export function LinkedPersonPanel({ personId, personLabel, onCaseOnly }: {
   const split: CompletionSplit | null = state === 'ready' && master ? splitCompletionFields(master) : null
 
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+    <div className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone="accent">Registry profile</Badge>
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{personLabel}</span>

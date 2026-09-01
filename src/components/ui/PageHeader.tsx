@@ -21,9 +21,9 @@ export function PageHeader({ title, subtitle, eyebrow, actions, className = '' }
     <div className={`flex flex-wrap items-start justify-between gap-3 ${className}`}>
       <div className="min-w-0">
         {eyebrow && (
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
+          <p className="text-xs font-medium text-slate-500">{eyebrow}</p>
         )}
-        <h1 className="text-2xl font-black text-white">{title}</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-white">{title}</h1>
         {subtitle && <p className="mt-0.5 text-sm text-slate-400">{subtitle}</p>}
       </div>
       {actions && <div className="flex max-w-full flex-wrap items-center justify-end gap-2">{actions}</div>}
@@ -35,7 +35,7 @@ export function SectionHeader({ title, subtitle, actions, className = '' }: Omit
   return (
     <div className={`flex flex-wrap items-end justify-between gap-3 ${className}`}>
       <div className="min-w-0">
-        <h2 className="text-lg font-bold text-white">{title}</h2>
+        <h2 className="text-base font-semibold tracking-tight text-white">{title}</h2>
         {subtitle && <p className="mt-0.5 text-sm text-slate-400">{subtitle}</p>}
       </div>
       {actions && <div className="flex max-w-full flex-wrap items-center justify-end gap-2">{actions}</div>}

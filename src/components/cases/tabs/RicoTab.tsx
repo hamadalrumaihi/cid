@@ -69,7 +69,7 @@ export function RicoTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolea
   const score = Math.min(100, (rico?.enterprise_gang_id ? 30 : 0) + Math.min(60, preds.length * 20) + (preds.some((p) => p.evidence_id || p.evidence_ref) ? 10 : 0))
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+      <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
         <div className="mb-2 flex items-center justify-between"><h3 className="font-bold text-white">RICO Readiness</h3><span className="font-mono text-sm text-badge-200">{score}%</span></div>
         <div className="h-2 overflow-hidden rounded-full bg-white/5"><span className="block h-full bg-emerald-400" style={{ width: `${score}%` }} /></div>
         <label className="mt-4 block text-sm text-slate-300">Enterprise gang
@@ -78,7 +78,7 @@ export function RicoTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolea
           </select>
         </label>
       </div>
-      {canEdit && <div className="grid gap-2 rounded-xl border border-white/10 bg-ink-950/50 p-4 md:grid-cols-2">
+      {canEdit && <div className="grid gap-2 rounded-lg border border-white/10 bg-ink-950/50 p-4 md:grid-cols-2">
         <div>
           <select value={form.predicate_type} onChange={(e) => setForm({ ...form, predicate_type: e.target.value })} disabled={!penalReady} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white disabled:opacity-60">
             <option value="">{penalReady ? 'Predicate type' : 'Loading penal code…'}</option>
@@ -116,8 +116,8 @@ export function RicoTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolea
         <Button variant="primary" className="md:col-span-2" onAction={addPredicate}>Add predicate act</Button>
       </div>}
       <div className="space-y-2">
-        {preds.map((p) => <div key={p.id} className="rounded-xl border border-white/10 bg-ink-950/50 p-3"><p className="font-bold text-white">{p.predicate_type}</p><p className="text-sm text-slate-500">{p.act_date || 'No date'}{p.evidence_ref ? ` - ${p.evidence_ref}` : ''}</p>{p.note && <p className="mt-1 text-sm text-slate-300">{p.note}</p>}{canDelete && <button aria-label={`Delete predicate act: ${p.predicate_type}`} onClick={() => void deleteWithUndo('predicate_acts', p, { confirmTitle: 'Delete predicate act', confirmMessage: `Delete the predicate act “${p.predicate_type}”? You can undo this for a few seconds.`, confirmText: 'Delete act', label: 'predicate act', after: refresh })} className="mt-2 text-xs font-bold text-rose-300 hover:text-rose-200">Delete</button>}</div>)}
-        {!preds.length && <p className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-500">No predicate acts recorded.</p>}
+        {preds.map((p) => <div key={p.id} className="rounded-lg border border-white/10 bg-ink-950/50 p-3"><p className="font-bold text-white">{p.predicate_type}</p><p className="text-sm text-slate-500">{p.act_date || 'No date'}{p.evidence_ref ? ` - ${p.evidence_ref}` : ''}</p>{p.note && <p className="mt-1 text-sm text-slate-300">{p.note}</p>}{canDelete && <button aria-label={`Delete predicate act: ${p.predicate_type}`} onClick={() => void deleteWithUndo('predicate_acts', p, { confirmTitle: 'Delete predicate act', confirmMessage: `Delete the predicate act “${p.predicate_type}”? You can undo this for a few seconds.`, confirmText: 'Delete act', label: 'predicate act', after: refresh })} className="mt-2 text-xs font-bold text-rose-300 hover:text-rose-200">Delete</button>}</div>)}
+        {!preds.length && <p className="rounded-lg border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-500">No predicate acts recorded.</p>}
       </div>
     </div>
   )

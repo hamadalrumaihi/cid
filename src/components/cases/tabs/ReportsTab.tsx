@@ -34,7 +34,7 @@ import { SaveState } from '@/components/ui/SaveState'
 import { toast } from '@/lib/toast'
 import { WarrantPrintButton } from './WarrantPrint'
 import type { CaseRow, EvidenceRow, MediaRow, ReportRow } from './shared'
-import { DocumentIcon, EyeIcon, RadioIcon, ReceiptIcon, ReportIcon, ScaleIcon, SearchIcon } from '@/components/shell/icons'
+import { DocumentIcon, EyeIcon, RadioIcon, ReceiptIcon, ReportIcon, ScaleIcon, SearchIcon, VideoIcon } from '@/components/shell/icons'
 
 /** Report-template glyphs, drawn from the shared icon set (was an emoji map in lib/forms). */
 function TemplateIcon({ id }: { id: string }) {
@@ -164,8 +164,8 @@ export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: C
       ) : (<>
         {canEdit && <div className="flex flex-wrap gap-2">{REPORT_TEMPLATES.map((tpl) => <Button key={tpl.id} onClick={() => void openEditor(tpl.id)}><TemplateIcon id={tpl.id} /> {tpl.name}</Button>)}</div>}
         <div className="space-y-2">
-          {reports.map((r) => <div key={r.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3"><button onClick={() => setOpenId(r.id)} className="min-w-0 flex-1 text-left"><p className="font-bold text-white">{reportTitle(r)}</p><p className="text-xs text-slate-500">{r.finalized ? 'Finalized' : 'Draft'} - {timeAgo(r.created_at)}</p></button>{!r.finalized && canEdit && <Button size="sm" variant="success" onClick={() => setConfirm({ kind: 'finalize', r })}>Finalize</Button>}{!r.finalized && canEdit && <button onClick={() => void openEditor(r.template, r)} className="text-sm font-bold text-badge-200">Edit</button>}{canDelete && (holdActive ? <span title="A legal hold preserves this case's reports" className="text-sm font-bold text-rose-300/50">Held</span> : <button onClick={() => { void deleteWithUndo('reports', r, { label: reportTitle(r), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }) }} className="text-sm font-bold text-rose-300">Delete</button>)}</div>)}
-          {!reports.length && <p className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-500">No reports yet.</p>}
+          {reports.map((r) => <div key={r.id} className="flex items-center gap-3 rounded-lg border border-white/10 bg-ink-950/50 p-3"><button onClick={() => setOpenId(r.id)} className="min-w-0 flex-1 text-left"><p className="font-semibold text-white">{reportTitle(r)}</p><p className="text-xs text-slate-500">{r.finalized ? 'Finalized' : 'Draft'} - {timeAgo(r.created_at)}</p></button>{!r.finalized && canEdit && <Button size="sm" variant="success" onClick={() => setConfirm({ kind: 'finalize', r })}>Finalize</Button>}{!r.finalized && canEdit && <button onClick={() => void openEditor(r.template, r)} className="text-sm font-bold text-badge-200">Edit</button>}{canDelete && (holdActive ? <span title="A legal hold preserves this case's reports" className="text-sm font-bold text-rose-300/50">Held</span> : <button onClick={() => { void deleteWithUndo('reports', r, { label: reportTitle(r), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }) }} className="text-sm font-bold text-rose-300">Delete</button>)}</div>)}
+          {!reports.length && <p className="rounded-lg border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-500">No reports yet.</p>}
         </div>
       </>)}
       <Modal open={!!editing} onClose={() => setEditing(null)} wide>
@@ -333,8 +333,8 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <button onClick={onBack} className="rounded-lg py-2 pr-2 text-sm font-bold text-badge-200 hover:text-white">← Back to reports</button>
-          <h3 className="min-w-0 truncate font-bold text-white">{reportTitle(r)}</h3>
+          <button onClick={onBack} className="rounded-lg py-2 pr-2 text-sm font-semibold text-badge-200 hover:text-white">← Back to reports</button>
+          <h3 className="min-w-0 truncate font-semibold text-white">{reportTitle(r)}</h3>
           <Badge tone={r.finalized ? 'good' : 'neutral'}>{r.finalized ? 'Sealed' : 'Draft'}</Badge>
           {/* Registry chip: 'returned' renders as "Return filed" — the return
               was filed with the court, NOT sent back for revision. */}
@@ -344,7 +344,7 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
         <div className="flex flex-wrap items-center gap-2">
           {r.template === 'arrest_warrant' && r.finalized && canEdit && (
             <Button size="sm" variant="warn" onClick={() => void submitForLegalReview()} disabled={legalBusy}>
-              ⚖️ Submit for Legal Review
+              <ScaleIcon size={14} /> Submit for Legal Review
             </Button>
           )}
           {!r.finalized && canEdit && <Button size="sm" variant="success" onClick={onFinalize}>Finalize</Button>}
@@ -362,14 +362,14 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
         </div>
       </div>
       {(r.finalized || reopenLog.length > 0) && (
-        <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
-          <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Signatures</h4>
+        <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
+          <h4 className="mb-2 text-[13px] font-semibold text-white">Signatures</h4>
           <SignatureViewer signatures={sealSignatures} />
         </div>
       )}
       {showVersions && (
-        <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
-          <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Versions</h4>
+        <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
+          <h4 className="mb-2 text-[13px] font-semibold text-white">Versions</h4>
           {!versions ? <ListSkeleton count={3} /> : (
             <VersionViewer
               versions={versions.map((ver) => ({ id: ver.id, number: ver.version_number, label: 'Sealed', at: ver.created_at, byName: parseReportSignature(ver.signature)?.officer ?? null }))}
@@ -382,7 +382,7 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
                     {vsig && <SignatureViewer signatures={[{ id: ver.id, name: vsig.officer, badge: vsig.badge ?? null, action: 'report seal', at: vsig.signed_at ?? null, versionLabel: `v${ver.version_number}` }]} />}
                     {schema
                       ? <ReportView schema={schema} values={parseFormValues(ver.fields)} evidence={pools.evidence} media={mediaPool} persons={personRefs} onOpenPerson={(id) => nav.openRecord('persons', id)} />
-                      : <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{JSON.stringify(ver.fields, null, 2)}</pre>}
+                      : <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{JSON.stringify(ver.fields, null, 2)}</pre>}
                   </div>
                 )
               }}
@@ -391,15 +391,15 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
         </div>
       )}
       {pools.linked.length > 0 && (
-        <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
-          <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Linked media ({pools.linked.length})</h4>
+        <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
+          <h4 className="mb-2 text-[13px] font-semibold text-white">Linked media ({pools.linked.length})</h4>
           <ul className="flex flex-wrap gap-2">
             {pools.linked.map((m) => {
               const url = m.external_url ? safeUrl(m.external_url) : ''
               const tile = m.type === 'image' && url
                 // eslint-disable-next-line @next/next/no-img-element -- external media URL
                 ? <img src={url} alt={m.title} loading="lazy" className="h-16 w-16 rounded-lg border border-white/10 object-cover" />
-                : <span aria-hidden className="flex h-16 w-16 items-center justify-center rounded-lg border border-white/10 bg-ink-800 text-2xl">{m.type === 'video' ? '🎬' : '📄'}</span>
+                : <span aria-hidden className="flex h-16 w-16 items-center justify-center rounded-lg border border-white/10 bg-ink-800 text-slate-400">{m.type === 'video' ? <VideoIcon size={24} /> : <DocumentIcon size={24} />}</span>
               return (
                 <li key={m.id}>
                   {url
@@ -414,7 +414,7 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
       )}
       {schema
         ? <ReportView schema={schema} values={parseFormValues(r.fields)} evidence={pools.evidence} media={mediaPool} persons={personRefs} onOpenPerson={(id) => nav.openRecord('persons', id)} />
-        : <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{JSON.stringify(r.fields, null, 2)}</pre>}
+        : <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{JSON.stringify(r.fields, null, 2)}</pre>}
     </div>
   )
 }
@@ -502,7 +502,7 @@ function FormEditor({ template, caseId, reportId, values, onChange }: { template
             }}
           />
         </div>
-  const labelCls = 'mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500'
+  const labelCls = 'mb-1 block text-xs font-medium text-slate-500'
   const inputCls = 'w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white'
   // Tolerant read for checks: legacy reports stored comma-joined strings.
   const checksVal = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : typeof v === 'string' && v.trim() ? v.split(',').map((t) => t.trim()).filter(Boolean) : [])
@@ -514,7 +514,7 @@ function FormEditor({ template, caseId, reportId, values, onChange }: { template
     if (s.type === 'textarea') {
       const taId = `${template}-${s.key}`
       return <div key={s.id}>
-        <label htmlFor={taId} className="block text-sm font-bold text-white">{s.label}</label>
+        <label htmlFor={taId} className="block text-sm font-semibold text-white">{s.label}</label>
         {s.mediaPick && pool && pool.media.length > 0 && <select aria-label={`Add attachment reference to ${s.label}`} value="" onChange={(e) => { const m = pool.media.find((x) => x.id === e.target.value); if (!m) return; /* Id-bearing token — render/export resolve the CURRENT title/url, so renames never orphan the reference. Legacy "title — url" lines keep rendering as plain text. */ const line = mediaRefLine(m.id, m.title || m.type || 'Attachment'); if (m.report_id && m.report_id !== reportId) toast('Already attached to another report — added as a text reference only.', 'info'); const cur = String(values[s.key] ?? '').trimEnd(); set(s.key, cur ? `${cur}\n${line}` : line) }} className="mt-2 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Add from case attachments…</option>{pool.media.map((m) => <option key={m.id} value={m.id}>{m.title || m.type || 'Attachment'}</option>)}</select>}
         <textarea id={taId} value={String(values[s.key] ?? '')} onChange={(e) => set(s.key, e.target.value)} rows={5} className="mt-2 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm font-normal text-white" />
       </div>
@@ -527,8 +527,8 @@ function FormEditor({ template, caseId, reportId, values, onChange }: { template
         const nums = rows.map((r) => parseFloat(String(r[col.key] ?? '').replace(/[$,\s]/g, ''))).filter((n) => Number.isFinite(n))
         return nums.length ? { label: col.label, sum: nums.reduce((a, b) => a + b, 0) } : null
       }).filter((t): t is { label: string; sum: number } => !!t)
-      return <div key={s.id} className="rounded-xl border border-white/10 p-3">
-        <h4 className="mb-2 font-bold text-white">{s.label}</h4>
+      return <div key={s.id} className="rounded-lg border border-white/10 p-3">
+        <h4 className="mb-2 font-semibold text-white">{s.label}</h4>
         {s.evidencePick && pool && pool.evidence.length > 0 && <select aria-label={`Add case evidence to ${s.label}`} value="" onChange={(e) => { const ev = pool.evidence.find((x) => x.id === e.target.value); if (!ev || !s.cols[0]) return; const row: Record<string, string> = { [s.cols[0].key]: ev.item_code || 'Untitled item' }; if (s.cols[1]) row[s.cols[1].key] = ev.description || ''; set(s.id, [...rows, row]) }} className="mb-2 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Add from case evidence…</option>{pool.evidence.map((ev) => <option key={ev.id} value={ev.id}>{evLabel(ev)}</option>)}</select>}
         {rows.map((row, i) => <div key={i} className="mb-2 flex items-start gap-2">
           <div className="grid min-w-0 flex-1 gap-2 md:grid-cols-2">{s.cols.map((col) => {
@@ -553,7 +553,7 @@ function FormEditor({ template, caseId, reportId, values, onChange }: { template
         {totals.length > 0 && <div className="mt-2 space-y-0.5">{totals.map((t) => <p key={t.label} className="text-xs font-bold text-slate-400">{t.label}: ${t.sum.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>)}</div>}
       </div>
     }
-    return <div key={s.id} className="rounded-xl border border-white/10 p-3"><h4 className="mb-2 font-bold text-white">{s.label}</h4>{s.evidenceLookup && lookup}{s.evidenceLookup && chips('ev_items', 'items')}{s.evidenceLookup && chips('ev_files', 'files')}<div className="grid gap-2 md:grid-cols-2">{s.fields.map((f) => {
+    return <div key={s.id} className="rounded-lg border border-white/10 p-3"><h4 className="mb-2 font-semibold text-white">{s.label}</h4>{s.evidenceLookup && lookup}{s.evidenceLookup && chips('ev_items', 'items')}{s.evidenceLookup && chips('ev_files', 'files')}<div className="grid gap-2 md:grid-cols-2">{s.fields.map((f) => {
       const id = `${template}-${f.key}`
       if (f.type === 'select') return <div key={f.key}><label htmlFor={id} className={labelCls}>{f.label}</label><select id={id} value={String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} className={inputCls}><option value="">{f.label}</option>{(f.opts || []).filter(Boolean).map((o) => <option key={o} value={o}>{o}</option>)}</select></div>
       if (f.type === 'checks') {
@@ -669,12 +669,12 @@ function ReportView({ schema, values, evidence = [], media = [], persons = [], o
   )
   return (
     <div className="max-h-[65vh] space-y-3 overflow-y-auto pr-1">
-      <p className="text-xs uppercase tracking-wider text-slate-500">{schema.subtitle}</p>
+      <p className="text-xs font-medium text-slate-500">{schema.subtitle}</p>
       {schema.sections.map((s) => {
         if (s.type === 'note') return <p key={s.id} className="rounded-lg bg-white/5 p-3 text-sm text-slate-300">{s.text}</p>
         return (
-          <section key={s.id} className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
-            <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">{s.label}</h4>
+          <section key={s.id} className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
+            <h4 className="mb-2 text-[13px] font-semibold text-white">{s.label}</h4>
             {s.type === 'textarea' && (s.mediaPick
               ? <MediaRefsView raw={text(V[s.key])} media={media} />
               : text(V[s.key]) ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{text(V[s.key])}</p> : <p className="text-sm text-slate-500">—</p>)}

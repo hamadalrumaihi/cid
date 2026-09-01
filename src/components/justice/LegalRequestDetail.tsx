@@ -35,6 +35,7 @@ import { parsePacketManifest } from '@/lib/schemas'
 import { toast } from '@/lib/toast'
 import { useNow } from '@/lib/useNow'
 import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
+import { DocumentIcon, ScaleIcon, UndoIcon } from '@/components/shell/icons'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Card } from '@/components/ui/Card'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
@@ -213,7 +214,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
       <div className="space-y-4">
         <Breadcrumbs items={[{ label: 'Legal requests', onClick: back }, { label: 'Not found' }]} />
         <EmptyState
-          icon="⚖️"
+          icon={<ScaleIcon className="h-5 w-5" />}
           title="Legal request unavailable"
           hint="This legal request does not exist or is outside your access."
           action={{ label: 'Back to legal requests', onClick: back }}
@@ -377,12 +378,12 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
   const menuItems: ActionItem[] = [
     {
       label: 'Print court packet',
-      icon: '🖨',
+      icon: <DocumentIcon size={15} />,
       disabled: !currentVersion,
       onClick: () => setPrintPreparedAt(fmtDateTime(new Date())),
     },
     ...(canWithdraw ? [{
-      label: 'Withdraw request…', icon: '⤺', danger: true, separatorBefore: true,
+      label: 'Withdraw request…', icon: <UndoIcon size={15} />, danger: true, separatorBefore: true,
       onClick: () => void withdraw(),
     }] : []),
   ]
@@ -400,7 +401,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
 
       {/* ── Return callout (investigator) ──────────────────────────────────── */}
       {isCreator && returnedBy && (
-        <div role="status" className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+        <div role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
           <p className="text-sm font-bold text-amber-200">
             Returned by the {returnedBy === 'judge' ? 'Judge' : 'prosecutor'}
             {latestReturn && (
@@ -427,12 +428,12 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-sm text-blue-300">{r.request_number}</span>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <span className="text-xs font-medium text-slate-500">
                 {humanize(r.request_type)} · {humanize(r.subtype)}
               </span>
               <ClassificationBadge value={r.classification} />
             </div>
-            <h1 className="mt-1 text-xl font-black text-white">{r.title}</h1>
+            <h1 className="mt-1 text-xl font-semibold text-white">{r.title}</h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <StatusChip label={reviewStatusLabel(status)} tone={reviewTone(status)} />
               <StatusChip label={fulfilmentLabel(r.fulfilment_status)} tone="slate" />

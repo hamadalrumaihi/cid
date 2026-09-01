@@ -80,7 +80,7 @@ export function CaseFilterBar({ filters, scope, query, activeViewName, onFilters
   ]
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-ink-900/50 p-3">
+    <div className="rounded-lg border border-white/10 bg-ink-900/50 p-3">
       <div className="grid gap-2 md:grid-cols-5">
         <select aria-label="Filter by bureau" value={filters.bureau} onChange={(e) => patch({ bureau: e.target.value })} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
           <option value="">All bureaus</option>

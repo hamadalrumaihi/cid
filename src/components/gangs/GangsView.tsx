@@ -207,24 +207,22 @@ export function GangsView() {
 
   return (
     <section className="view-in space-y-4">
-      <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <PageHeader
-          title="Gangs & Turf"
-          subtitle="Organizations, rank structure, linked properties, and territory control."
-          actions={
-            <>
-              {state === 'in' && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
-                  <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
-                </span>
-              )}
-              {canEdit && (
-                <Button variant="primary" onClick={() => setEditor('new')}>+ New Gang</Button>
-              )}
-            </>
-          }
-        />
-      </div>
+      <PageHeader
+        title="Gangs & Turf"
+        subtitle="Organizations, rank structure, linked properties, and territory control."
+        actions={
+          <>
+            {state === 'in' && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />live
+              </span>
+            )}
+            {canEdit && (
+              <Button variant="primary" onClick={() => setEditor('new')}>+ New Gang</Button>
+            )}
+          </>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search gang, alias, member, callsign, turf, place, case…" className={`min-w-[14rem] flex-1 rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-sm text-slate-200 outline-none transition focus:border-badge-500`} />
@@ -249,7 +247,7 @@ export function GangsView() {
       </div>
 
       {selected.size > 0 && (
-        <div className="sticky-below-header-2 z-10 flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 backdrop-blur">
+        <div className="sticky-below-header-2 z-10 flex items-center justify-between rounded-lg border border-rose-500/20 bg-rose-500/10 px-4 py-2 backdrop-blur">
           <span className="text-sm font-semibold text-rose-200">{selected.size} selected</span>
           <span className="flex gap-2">
             <button onClick={() => void deleteRows(gangs.filter((g) => selected.has(g.id)))} className="rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500">Delete selected</button>

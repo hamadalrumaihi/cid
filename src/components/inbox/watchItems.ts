@@ -19,7 +19,6 @@ export type WatchRow = Tables<'watchlist'>
  *  "Mark all seen" recomputes without a refetch. */
 export interface WatchTarget {
   w: WatchRow
-  icon: string
   title: string
   sub: string
   ts: string | null
@@ -73,7 +72,7 @@ export async function fetchWatchTargets(userId: string): Promise<WatchTarget[]> 
       const c = caseById.get(w.target_id)
       if (c) {
         items.push({
-          w, icon: '🗂️',
+          w,
           title: `${c.case_number} · ${c.title || 'Untitled'}`,
           sub: `Followed case · ${bureauShort(c.bureau)} · ${c.status}`,
           ts: c.updated_at, href: caseLink(c.id),
@@ -83,7 +82,7 @@ export async function fetchWatchTargets(userId: string): Promise<WatchTarget[]> 
       const p = personById.get(w.target_id)
       if (p) {
         items.push({
-          w, icon: '👤',
+          w,
           title: p.name || 'Person',
           sub: ['Followed person', p.alias ? `“${p.alias}”` : '', p.status || ''].filter(Boolean).join(' · '),
           ts: p.updated_at, href: `/persons?q=${encodeURIComponent(p.name ?? '')}`,
@@ -93,7 +92,7 @@ export async function fetchWatchTargets(userId: string): Promise<WatchTarget[]> 
       const v = vehicleById.get(w.target_id)
       if (v) {
         items.push({
-          w, icon: '🚗',
+          w,
           title: v.plate,
           sub: ['Followed plate', v.model, v.color].filter(Boolean).join(' · '),
           ts: v.updated_at, href: `/vehicles?q=${encodeURIComponent(v.plate)}`,

@@ -59,11 +59,11 @@ export function CaseBoard({ items, canEdit, onOpen, onMoved }: { items: CaseRow[
             key={status}
             onDragOver={(e) => { if (canEdit) e.preventDefault() }}
             onDrop={(e) => { if (canEdit) void move(e.dataTransfer.getData('text/case-id'), status) }}
-            className="min-h-[18rem] rounded-2xl border border-white/10 bg-ink-900/45 p-3"
+            className="min-h-[18rem] rounded-lg border border-white/10 bg-ink-900/45 p-3"
           >
             <div className="mb-3 flex items-center justify-between">
-              <h3 className={`text-sm font-bold uppercase tracking-[0.16em] ${tint}`}>{label}</h3>
-              <span className="rounded-full bg-white/5 px-2 py-1 text-xs text-slate-300">{col.length}</span>
+              <h3 className={`text-sm font-semibold ${tint}`}>{label}</h3>
+              <span className="rounded bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-slate-300">{col.length}</span>
             </div>
             <div className="space-y-3">
               {col.map((c) => (
@@ -75,14 +75,14 @@ export function CaseBoard({ items, canEdit, onOpen, onMoved }: { items: CaseRow[
                   data-status={c.status}
                   data-bureau={c.bureau}
                   data-stale={isStaleCase(c) ? 'true' : 'false'}
-                  className="board-card rounded-xl border border-white/10 bg-ink-950/70 p-3 transition hover:border-badge-400/50"
+                  className="board-card rounded-lg border border-white/10 bg-ink-950/70 p-3 transition hover:border-badge-400/50"
                 >
                   <button onClick={() => onOpen(c.id)} className="w-full text-left">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="font-mono text-sm font-bold text-white">{c.case_number.replaceAll('-', ' - ')}</p>
+                      <p className="font-mono text-sm font-semibold text-white">{c.case_number.replaceAll('-', ' - ')}</p>
                       <span className="flex flex-shrink-0 items-center gap-1">
-                        {(c.is_joint_case || jtfOpIds.has(c.operation_id ?? '')) && <span className="rounded-full bg-violet-500/15 px-1.5 py-1 text-[10px] font-bold uppercase text-violet-300">JTF</span>}
-                        <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${caseStatusTint(c.status)}`}>{bureauShort(c.bureau)}</span>
+                        {(c.is_joint_case || jtfOpIds.has(c.operation_id ?? '')) && <span className="rounded bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold text-violet-300">JTF</span>}
+                        <span className={`rounded px-2 py-0.5 text-[11px] font-semibold uppercase ${caseStatusTint(c.status)}`}>{bureauShort(c.bureau)}</span>
                       </span>
                     </div>
                     <p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-100">{c.title || 'Untitled case'}</p>
@@ -97,7 +97,7 @@ export function CaseBoard({ items, canEdit, onOpen, onMoved }: { items: CaseRow[
                       value={c.status}
                       onChange={(e) => void move(c.id, e.target.value as CaseRow['status'])}
                       aria-label={`Change status of ${c.case_number}`}
-                      className="mt-2 w-full rounded-lg border border-white/10 bg-ink-900 px-2 py-1 text-[11px] font-bold uppercase text-slate-300 outline-none focus:border-badge-500"
+                      className="mt-2 w-full rounded-lg border border-white/10 bg-ink-900 px-2 py-1 text-[11px] font-semibold text-slate-300 outline-none focus:border-badge-500"
                     >
                       {BOARD_COLS.map(([s, label]) => <option key={s} value={s}>{label}</option>)}
                     </select>

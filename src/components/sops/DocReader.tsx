@@ -393,7 +393,7 @@ export function DocReader(props: {
     <div className={ackPending ? 'pb-28 lg:pb-0' : ''}>
       <Breadcrumbs className="mb-4" items={[{ label: 'Back to library', onClick: onBack }, { label: title }]} />
 
-      <Card pad="lg" className="mb-6">
+      <div className="mb-6">
         <PageHeader
           title={title}
           actions={
@@ -426,7 +426,7 @@ export function DocReader(props: {
           {doc.mandatory && <Badge tone="warn">Mandatory</Badge>}
           <span className="text-xs text-slate-400">Updated {fmtDateTime(doc.updated_at)}</span>
         </div>
-      </Card>
+      </div>
 
       {ackPending && (
         <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
@@ -475,7 +475,7 @@ export function DocReader(props: {
             </div>
           )}
           <details className="mb-4 rounded-lg border border-white/5 bg-ink-900/60 xl:hidden">
-            <summary className="flex min-h-[44px] cursor-pointer select-none items-center px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            <summary className="flex min-h-[44px] cursor-pointer select-none items-center px-4 text-[13px] font-semibold text-white">
               Document details
             </summary>
             <div className="px-4 pb-4">{metaRail}{relationEditor}</div>
@@ -496,7 +496,7 @@ export function DocReader(props: {
           above the BottomNav (StickyActionBar owns the offset + safe area)
           instead of a fixed sheet that used to cover the nav itself. */}
       {ackPending && (
-        <StickyActionBar className="mt-4 rounded-2xl border border-white/10 bg-ink-950/95 p-3 backdrop-blur lg:hidden">
+        <StickyActionBar className="mt-4 rounded-lg border border-white/10 bg-ink-950/95 p-3 backdrop-blur lg:hidden">
           {deadline && <p className="mb-1.5 text-center text-xs text-amber-300">Due {fmtDate(deadline)}</p>}
           <Button variant="primary" className="min-h-[48px] w-full" onAction={acknowledge}>
             Acknowledge reading — v{doc.current_version_number}

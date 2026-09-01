@@ -100,7 +100,7 @@ export function DocGovernanceWarnings() {
       {warnings.length ? (
         <ul className="space-y-2">
           {warnings.map((w) => (
-            <li key={w.key} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/5 bg-ink-950/40 px-4 py-2.5">
+            <li key={w.key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/5 bg-ink-950/40 px-4 py-2.5">
               <div className="min-w-0">
                 <Link href={`/sops?doc=${w.docId}`} className="text-sm font-semibold text-white hover:text-badge-200">{w.title}</Link>
                 <p className="text-[11px] text-slate-400">{w.detail}</p>

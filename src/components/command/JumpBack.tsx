@@ -166,14 +166,14 @@ export function JumpBack({ cases }: { cases?: CaseRow[] }) {
       <div className="space-y-2.5">
         {pinned.length > 0 && (
           <div>
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Pinned</p>
+            <p className="mb-1.5 text-xs font-medium text-slate-500">Pinned</p>
             <div className="flex flex-wrap gap-2">{pinned.map(chipButton)}</div>
           </div>
         )}
         {recent.length > 0 && (
           <div>
             <div className="mb-1.5 flex items-center justify-between gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Recent</p>
+              <p className="text-xs font-medium text-slate-500">Recent</p>
               <button
                 type="button"
                 onClick={() => { clearRecents(); setRecents([]) }}

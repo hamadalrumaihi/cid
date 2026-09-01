@@ -33,7 +33,7 @@ export function SummarySection({ r, name, viewer, disposition, caseLinkable }: {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card pad="sm">
-        <h3 className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Request</h3>
+        <h3 className="mb-1 text-[13px] font-semibold text-white">Request</h3>
         <Row label="Case">
           {r.case_id && caseLinkable ? (
             <EntityLink kind="case" id={r.case_id} label={`${r.case_number_snapshot ?? 'Case'}${r.case_title_snapshot ? ` — ${r.case_title_snapshot}` : ''}`} />
@@ -61,7 +61,7 @@ export function SummarySection({ r, name, viewer, disposition, caseLinkable }: {
         <Row label="Assigned Judge">{name(r.assigned_judge_id)}</Row>
       </Card>
       <Card pad="sm">
-        <h3 className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Timeline</h3>
+        <h3 className="mb-1 text-[13px] font-semibold text-white">Timeline</h3>
         <Row label="Created">{fmtDateTime(r.created_at)}</Row>
         <Row label="Submitted to CID">{fmtDateTime(r.submitted_to_cid_at)}</Row>
         <Row label="Submitted to DOJ">{fmtDateTime(r.submitted_to_doj_at)}</Row>
@@ -70,7 +70,7 @@ export function SummarySection({ r, name, viewer, disposition, caseLinkable }: {
         {r.request_type === 'subpoena' && <Row label="Response deadline">{fmtDateTime(r.response_deadline)}</Row>}
       </Card>
       <Card pad="sm" className="lg:col-span-2">
-        <h3 className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Where this stands</h3>
+        <h3 className="mb-1 text-[13px] font-semibold text-white">Where this stands</h3>
         <p className="text-sm text-slate-200">
           <span className="font-semibold text-white">{disposition.stageLabel}</span>
           <span aria-hidden className="text-slate-500"> · </span>
@@ -95,7 +95,7 @@ export function ReviewSection({ actions, name }: { actions: ActionRow[]; name: N
     <div className="space-y-4">
       {returns.length > 0 && (
         <Card pad="sm" className="border-amber-500/20">
-          <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-amber-300">
+          <h3 className="mb-2 text-[13px] font-semibold text-amber-300">
             Returns ({returns.length})
           </h3>
           <WorkflowTimeline dense entries={returns.map((a): TimelineEntry => ({
@@ -110,7 +110,7 @@ export function ReviewSection({ actions, name }: { actions: ActionRow[]; name: N
         </Card>
       )}
       <Card pad="sm">
-        <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Review history</h3>
+        <h3 className="mb-2 text-[13px] font-semibold text-white">Review history</h3>
         <WorkflowTimeline
           entries={reviewActions.map((a): TimelineEntry => ({
             id: a.id,
@@ -155,7 +155,7 @@ export function DecisionSection({ r, name, onOpenRequest }: {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card pad="sm">
-        <h3 className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Decision record</h3>
+        <h3 className="mb-1 text-[13px] font-semibold text-white">Decision record</h3>
         {r.decision ? (
           <>
             <Row label="Decision">{`${humanize(r.decision)} by ${name(r.decided_by)}${r.decided_at ? ` · ${fmtDateTime(r.decided_at)}` : ''}`}</Row>
@@ -182,7 +182,7 @@ export function DecisionSection({ r, name, onOpenRequest }: {
         )}
       </Card>
       <Card pad="sm">
-        <h3 className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Assignment</h3>
+        <h3 className="mb-1 text-[13px] font-semibold text-white">Assignment</h3>
         <Row label="Assigned prosecutor">{name(r.assigned_prosecutor_id)}</Row>
         {r.assigned_ada_id && <Row label="Assigned ADA (legacy)">{name(r.assigned_ada_id)}</Row>}
         <Row label="Assigned Judge">{name(r.assigned_judge_id)}</Row>
@@ -206,7 +206,7 @@ export function ServiceSection({ r, name, canFulfil = false }: { r: LegalRequest
   return (
     <div className="space-y-4">
       <Card pad="sm">
-        <h3 className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Fulfilment status</h3>
+        <h3 className="mb-1 text-[13px] font-semibold text-white">Fulfilment status</h3>
         <div className="flex flex-wrap items-center gap-2 py-1">
           <StatusChip label={fulfilmentLabel(r.fulfilment_status)} tone="blue" />
           {warrant && r.execution_result && <StatusChip label={`Execution: ${humanize(r.execution_result)}`} tone={r.execution_result === 'unable' ? 'amber' : 'slate'} />}
@@ -257,7 +257,7 @@ export function ActivitySection({ actions, participants, name }: {
   return (
     <div className="space-y-4">
       <Card pad="sm">
-        <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Full activity</h3>
+        <h3 className="mb-2 text-[13px] font-semibold text-white">Full activity</h3>
         <WorkflowTimeline entries={actions.map((a): TimelineEntry => ({
           id: a.id,
           title: humanize(a.action),
@@ -269,7 +269,7 @@ export function ActivitySection({ actions, participants, name }: {
         }))} />
       </Card>
       <Card pad="sm">
-        <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Participants</h3>
+        <h3 className="mb-2 text-[13px] font-semibold text-white">Participants</h3>
         <ul className="space-y-1.5">
           {participants.map((p) => (
             <li key={`${p.user_id}:${p.participant_role}`} className={`flex flex-wrap items-center gap-2 text-sm ${p.removed_at ? 'opacity-50' : ''}`}>

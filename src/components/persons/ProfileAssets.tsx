@@ -14,6 +14,7 @@ import { fmtDate } from '@/lib/format'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { FileTypeIcon, PlaceIcon } from '@/components/shell/icons'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -333,12 +334,12 @@ export function PersonPlacesSection({ person, data, canEdit, onLink, onRefresh }
           linking; they stay until someone edits the person record. */}
       {legacy.length > 0 && (
         <div>
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Other addresses on file — {legacy.length}</p>
+          <p className="mb-1.5 text-xs font-medium text-slate-400">Other addresses on file — {legacy.length}</p>
           <div className="space-y-1.5">
             {legacy.map((pr, i) => (
               <Card key={i} pad="sm" className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0 text-sm text-slate-200">
-                  🏠 {pr.address || '—'}{pr.type ? <span className="text-slate-400"> · {pr.type}</span> : null}
+                  <PlaceIcon size={13} className="mr-1 inline align-[-2px] text-slate-400" />{pr.address || '—'}{pr.type ? <span className="text-slate-400"> · {pr.type}</span> : null}
                   {pr.notes && <p className="mt-0.5 text-[11px] text-slate-400">{pr.notes}</p>}
                 </div>
                 {canEdit && (
@@ -506,7 +507,7 @@ export function PersonMediaSection({ person, media, canEdit, onAdd, onOpen, onRe
                     // eslint-disable-next-line @next/next/no-img-element -- external media CDN
                     <img src={src} alt={m.title || 'Media item'} className="h-28 w-full object-cover transition hover:opacity-90" />
                   ) : (
-                    <div className="grid h-28 w-full place-items-center text-2xl" aria-hidden>{m.type === 'video' ? '🎬' : '📄'}</div>
+                    <div className="grid h-28 w-full place-items-center text-slate-500" aria-hidden><FileTypeIcon type={m.type ?? 'document'} size={28} /></div>
                   )}
                 </button>
                 <div className="flex items-center justify-between gap-1 px-1.5 py-1">
@@ -517,7 +518,7 @@ export function PersonMediaSection({ person, media, canEdit, onAdd, onOpen, onRe
                   <span className="flex flex-shrink-0 items-center gap-1.5">
                     {m.case_id && <EntityLink kind="case" id={m.case_id} label="Case" title="Source case" className="!px-1.5" />}
                     {canEdit && isImage && !isMugshot && (
-                      <button onClick={() => void setMugshot(m)} className="text-[10px] font-semibold text-blue-300 hover:text-blue-200" title="Use this image as the mugshot">
+                      <button onClick={() => void setMugshot(m)} className="text-[11px] font-semibold text-blue-300 hover:text-blue-200" title="Use this image as the mugshot">
                         Set mugshot
                       </button>
                     )}

@@ -19,6 +19,7 @@ import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
+import { PhotoIcon, RadioIcon } from '@/components/shell/icons'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -52,7 +53,7 @@ const locLabel = (value: string | null | undefined) => LOC_TYPES.find((t) => t.v
 const InvestigationMap = dynamic(() => import('@/components/map/InvestigationMap').then((m) => m.InvestigationMap), {
   ssr: false,
   loading: () => (
-    <div className="grid h-[420px] place-items-center rounded-2xl border border-white/5 bg-ink-900/60 text-sm text-slate-400 sm:h-[520px]">
+    <div className="grid h-[420px] place-items-center rounded-lg border border-white/5 bg-ink-900/60 text-sm text-slate-400 sm:h-[520px]">
       Loading map…
     </div>
   ),
@@ -237,53 +238,51 @@ export function PlacesView() {
 
   return (
     <section className="view-in space-y-4">
-      <Card pad="lg">
-        <PageHeader
-          title="Criminal Places & Production"
-          subtitle="Drug labs, stash houses, dead drops and fronts, with linked gangs, cases and substance intelligence."
-          actions={
-            <>
-              {state === 'in' && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
-                  <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
-                </span>
-              )}
-              {state === 'in' && (
-                <span className="inline-flex rounded-lg border border-white/10 bg-ink-900 p-0.5" role="group" aria-label="Presentation">
-                  {(['list', 'map'] as const).map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setMode(m)}
-                      aria-pressed={mode === m}
-                      className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${mode === m ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-                    >
-                      {m === 'list' ? 'List' : 'Map'}
-                    </button>
-                  ))}
-                </span>
-              )}
-              {places.length > 0 && (
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Filter name or area…"
-                  aria-label="Filter places"
-                  className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
-                />
-              )}
-              {canEdit && (
-                <Button variant="primary" onClick={() => setEditor('new')}>
-                  + New Location
-                </Button>
-              )}
-            </>
-          }
-        />
-      </Card>
+      <PageHeader
+        title="Criminal Places & Production"
+        subtitle="Drug labs, stash houses, dead drops and fronts, with linked gangs, cases and substance intelligence."
+        actions={
+          <>
+            {state === 'in' && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />live
+              </span>
+            )}
+            {state === 'in' && (
+              <span className="inline-flex rounded-lg border border-white/10 bg-ink-900 p-0.5" role="group" aria-label="Presentation">
+                {(['list', 'map'] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMode(m)}
+                    aria-pressed={mode === m}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${mode === m ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                  >
+                    {m === 'list' ? 'List' : 'Map'}
+                  </button>
+                ))}
+              </span>
+            )}
+            {places.length > 0 && (
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Filter name or area…"
+                aria-label="Filter places"
+                className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
+              />
+            )}
+            {canEdit && (
+              <Button variant="primary" onClick={() => setEditor('new')}>
+                + New Location
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {selected.size > 0 && (
-        <div className="sticky-below-header-2 z-10 flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 backdrop-blur">
+        <div className="sticky-below-header-2 z-10 flex items-center justify-between rounded-lg border border-rose-500/20 bg-rose-500/10 px-4 py-2 backdrop-blur">
           <span className="text-sm font-semibold text-rose-200">{selected.size} selected</span>
           <span className="flex gap-2">
             <Button size="sm" variant="danger" onClick={() => void deleteRows(places.filter((p) => selected.has(p.id)))}>Delete selected</Button>
@@ -413,8 +412,8 @@ function AddPlacePhotoModal({ place, onClose, onSaved }: { place: PlaceRow; onCl
           {fmConfigured() && (
             <div>
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f) }} />
-              <button onClick={() => fileRef.current?.click()} disabled={uploading} className="w-full rounded-lg border border-dashed border-white/20 bg-white/5 py-3 text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50">
-                {uploading ? 'Uploading…' : '📷 Upload photo'}
+              <button onClick={() => fileRef.current?.click()} disabled={uploading} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-white/20 bg-white/5 py-3 text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50">
+                {uploading ? 'Uploading…' : <><PhotoIcon size={16} className="text-slate-400" /> Upload photo</>}
               </button>
             </div>
           )}
@@ -445,7 +444,7 @@ function PhotoLightbox({ photo, onClose }: { photo: PlacePhoto; onClose: () => v
           // eslint-disable-next-line @next/next/no-img-element -- external evidence URL
           <img src={safe} alt={photo.title} className="max-h-[70vh] w-full rounded-lg object-contain" />
         ) : (
-          <div className="flex h-64 items-center justify-center rounded-lg bg-ink-800 text-5xl" aria-hidden>📡</div>
+          <EmptyState icon={<RadioIcon size={24} />} title="No preview available" />
         )}
         {safe && (
           <div className="mt-3 text-right">
@@ -484,7 +483,7 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, observationCo
           <p className="mt-0.5 text-xs text-slate-400">{locLabel(place.type)} · {place.area || '-'}</p>
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
-          {canEdit && <button onClick={onAddPhoto} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-emerald-200 transition hover:bg-white/10" title="Add a photo of this location">📷</button>}
+          {canEdit && <button onClick={onAddPhoto} aria-label="Add a photo of this location" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-emerald-200 transition hover:bg-white/10" title="Add a photo of this location"><PhotoIcon size={16} /></button>}
           {canEdit && <button onClick={onAttach} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-blue-200 transition hover:bg-white/10" title="Attach to case">Attach</button>}
           {canEdit && <button onClick={onEdit} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
           {canDelete && <button aria-label="Remove location" onClick={onDelete} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
@@ -506,7 +505,7 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, observationCo
           the section never claims "none exist" — only none are visible. */}
       {legal.length > 0 && (
         <div className="mt-3">
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-blue-300/70">Legal</p>
+          <p className="mb-1.5 text-[13px] font-semibold text-white">Legal</p>
           <div className="space-y-1.5">
             {legal.map((r) => <EntityLegalLine key={r.exhibitId} r={r} />)}
           </div>
@@ -540,8 +539,8 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, observationCo
         </div>
       )}
       {productionSite && drug && (
-        <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-amber-300/70">Suspected production site</p>
+        <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.02] p-3">
+          <p className="mb-2 text-[13px] font-semibold text-amber-200">Suspected production site</p>
           <p className="text-xs text-slate-300">
             <span className="text-white">{drug.name}</span>
             {drug.category ? ` · ${cap(drug.category)}` : ''}

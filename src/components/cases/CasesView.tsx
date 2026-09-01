@@ -443,7 +443,7 @@ function CasesViewInner() {
           client filters over RLS-scoped rows, never an authorization change. */}
       {savedViews.loaded && savedViews.views.length === 0 && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Try a view:</span>
+          <span className="text-xs font-medium text-slate-500">Try a view:</span>
           {VIEW_PRESETS.map((p) => (
             <button
               key={p.name}
@@ -463,7 +463,7 @@ function CasesViewInner() {
         : <CaseTable items={filtered} canSelect={canSelect} showDept={siu.inSiu} selected={selected} onSelect={(id, on) => setSelected((s) => on ? [...s, id] : s.filter((x) => x !== id))} onOpen={openCase} />}
       {!loading && !filtered.length && view !== 'table' && <Notice text="No cases match this view." />}
 
-      {selected.length > 0 && <StickyActionBar className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-ink-850 p-3">
+      {selected.length > 0 && <StickyActionBar className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-ink-850 p-3">
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-sm font-bold text-white" aria-live="polite">
             {bulk ? `${bulk.label} ${bulk.done} of ${bulk.total}…` : `${selected.length} selected`}
@@ -534,8 +534,8 @@ function CaseTable({ items, canSelect, showDept, selected, onSelect, onOpen }: {
       key: 'dept', label: 'Authority',
       value: (c: CaseRow) => caseDepartment(c) === 'siu' ? 'SIB' : 'CID',
       render: (c: CaseRow) => caseDepartment(c) === 'siu'
-        ? <span className="rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide bg-violet-500/15 text-violet-300">SIB</span>
-        : <span className="rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide bg-white/5 text-slate-400">CID</span>,
+        ? <span className="rounded px-1.5 py-0.5 text-[11px] font-semibold bg-violet-500/15 text-violet-300">SIB</span>
+        : <span className="rounded px-1.5 py-0.5 text-[11px] font-semibold bg-white/5 text-slate-400">CID</span>,
       className: 'px-3 py-1.5 whitespace-nowrap',
     } satisfies DataColumn<CaseRow>] : []),
     {
@@ -578,7 +578,7 @@ function CaseTable({ items, canSelect, showDept, selected, onSelect, onOpen }: {
             {flags.length > 0 && (
               <span
                 title={`Needs attention:\n${flags.map((f) => `• ${f.label}`).join('\n')}`}
-                className="ml-1 inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-amber-300"
+                className="ml-1 inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-amber-300"
               >
                 {flags.length}
               </span>
@@ -639,11 +639,11 @@ function CaseTable({ items, canSelect, showDept, selected, onSelect, onOpen }: {
 
 function CaseCard({ c, index, selected, canSelect, onSelect, onOpen }: { c: CaseRow; index: number; selected: boolean; canSelect: boolean; onSelect: (on: boolean) => void; onOpen: () => void }) {
   return (
-    <article data-status={c.status} data-bureau={c.bureau} data-stale={isStaleCase(c) ? 'true' : 'false'} style={{ ['--i' as string]: index }} className="case-card rounded-2xl border border-white/10 bg-ink-900/60 p-4 transition hover:border-badge-400/50">
+    <article data-status={c.status} data-bureau={c.bureau} data-stale={isStaleCase(c) ? 'true' : 'false'} style={{ ['--i' as string]: index }} className="case-card rounded-lg border border-white/10 bg-ink-900/60 p-4 transition hover:border-badge-400/50">
       <div className="flex items-start justify-between gap-3">
         <button onClick={onOpen} className="min-w-0 text-left">
-          <p className="font-mono text-sm font-bold text-badge-200">{c.case_number}</p>
-          <h3 className="mt-1 line-clamp-2 text-lg font-black text-white">{c.title || 'Untitled case'}</h3>
+          <p className="font-mono text-sm font-semibold text-badge-200">{c.case_number}</p>
+          <h3 className="mt-1 line-clamp-2 text-lg font-semibold text-white">{c.title || 'Untitled case'}</h3>
         </button>
         {canSelect && <input type="checkbox" aria-label={`Select case ${c.case_number}`} checked={selected} onChange={(e) => onSelect(e.target.checked)} className="mt-1" />}
       </div>

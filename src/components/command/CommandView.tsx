@@ -142,13 +142,13 @@ export function CommandView() {
 
       {/* KPI strip — flat border-separated stat cells; tiles navigate */}
       <div>
-        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">Division vitals</h3>
+        <h3 className="mb-2 text-[13px] font-semibold text-white">Division vitals</h3>
         <div className="flex flex-wrap gap-px overflow-hidden rounded-lg border border-white/10 bg-white/5">
           {kpis.map((m) => {
             const body = (
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-400">{m.label}</p>
+                  <p className="truncate text-xs font-medium text-slate-500">{m.label}</p>
                   <p className="mt-0.5 text-lg font-bold leading-6 tabular-nums text-white">{live ? m.value : '—'}</p>
                   <p className="truncate text-[10px] text-slate-400">{m.delta}</p>
                 </div>
@@ -176,11 +176,11 @@ export function CommandView() {
       {/* Crime analytics — collapsible so the dashboard scans; nothing removed.
           The dedicated Analytics tab keeps the full trend charts. */}
       {live && (data.cases.length > 0 || data.persons.length > 0) && (
-        <details open className="group rounded-2xl border border-white/5 bg-ink-900/40 p-4">
+        <details open className="group rounded-lg border border-white/5 bg-ink-900/40 p-4">
           <summary className="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
             <span aria-hidden className="text-xs text-slate-500 group-open:hidden">▸</span>
             <span aria-hidden className="hidden text-xs text-slate-500 group-open:inline">▾</span>
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">📈 Crime Analytics</h3>
+            <h3 className="text-[13px] font-semibold text-white">Crime analytics</h3>
             <button
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push('/analytics') }}
               className="ml-auto flex-shrink-0 text-xs font-bold text-badge-200 hover:text-white"
@@ -196,7 +196,7 @@ export function CommandView() {
           rendered only there so nobody else stares at a permanently empty panel. */}
       {live && isOwner && (
         <Card pad="lg">
-          <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-white"><span aria-hidden="true">🛰️</span> Division Activity Feed</h3>
+          <h3 className="mb-4 text-base font-semibold text-white">Division Activity Feed</h3>
           <ActivityFeed />
         </Card>
       )}

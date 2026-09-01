@@ -198,7 +198,7 @@ export function HeatmapView() {
           ))}
         </div>
         <div className="mt-3 flex w-full items-center gap-3">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Window</span>
+          <span className="text-xs font-medium text-slate-500">Window</span>
           <input
             type="range" min={0} max={WINDOWS.length - 1} step={1} value={winPreview}
             onChange={(e) => setWinPreview(Number(e.target.value))}
@@ -238,8 +238,8 @@ export function HeatmapView() {
           {rows.length > 1 && (
             <div className="mb-4 flex flex-wrap gap-2">
               {rows.slice(0, 3).map((r, i) => (
-                <button key={r.area} onClick={() => setSel(r.area)} className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-left transition hover:bg-amber-500/10">
-                  <span className="font-mono text-sm font-black text-amber-300" aria-hidden>#{i + 1}</span>
+                <button key={r.area} onClick={() => setSel(r.area)} className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-left transition hover:bg-amber-500/10">
+                  <span className="font-mono text-sm font-semibold text-amber-300" aria-hidden>#{i + 1}</span>
                   <span>
                     <span className="block text-sm font-bold text-white">{r.area}</span>
                     <span className="text-[11px] text-amber-200/80">intensity {Math.round((r.score / max) * 100)}<Trend r={r} /></span>
@@ -251,7 +251,7 @@ export function HeatmapView() {
           <HeatSvg rows={rows} max={max} layers={layers} onPick={setSel} focus={gangId ? focusAreas : undefined} />
           {sel && <AreaDetail area={sel} data={data} win={win} loadedAt={loadedAt} onClose={() => setSel(null)} />}
           {gangId && !showAll && !shown.length && (
-            <p className="mb-4 rounded-xl border border-white/5 bg-ink-900/60 p-4 text-sm text-slate-400">
+            <p className="mb-4 rounded-lg border border-white/5 bg-ink-900/60 p-4 text-sm text-slate-400">
               None of the focused gang&apos;s areas have records in this window. Use “Show all areas” above, or widen the time range.
             </p>
           )}
@@ -370,7 +370,7 @@ function AreaDetail({ area, data, win, loadedAt, onClose }: {
             <Link key={c.id} href={`/cases?case=${encodeURIComponent(c.id)}`} className="flex items-center gap-2 rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-sm hover:border-blue-300/30">
               <span className="font-mono text-xs font-bold text-blue-300">{c.case_number}</span>
               <span className="min-w-0 flex-1 truncate text-slate-200">{c.title || 'Untitled'}</span>
-              <span className={`rounded px-1.5 py-0.5 text-[10px] font-black uppercase ${caseStatusTint(c.status)}`}>{c.status}</span>
+              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${caseStatusTint(c.status)}`}>{c.status}</span>
             </Link>
           ))}
         </DetailBlock>
@@ -409,7 +409,7 @@ function AreaDetail({ area, data, win, loadedAt, onClose }: {
 function DetailBlock({ title, children }: { title: React.ReactNode; children: React.ReactNode[] }) {
   return (
     <div>
-      <h4 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-400">{title}</h4>
+      <h4 className="mb-2 text-[13px] font-semibold text-white">{title}</h4>
       <div className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
         {children.length ? children : <p className="text-sm text-slate-400">None in this window.</p>}
       </div>
@@ -488,7 +488,7 @@ function HeatSvg({ rows, max, layers, onPick, focus }: { rows: AreaRow[]; max: n
   const dotColor = (pct: number) => (pct >= 75 ? '#f43f5e' : pct >= 50 ? '#f59e0b' : '#3b82f6')
   const zoom = HOME.w / vb.w
   const fs = (base: number) => Math.max(base / Math.max(zoom, 1) ** 0.7, base * 0.35)
-  const btn = 'grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-ink-900/90 text-sm font-black text-slate-200 hover:bg-white/10'
+  const btn = 'grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-ink-900/90 text-sm font-semibold text-slate-200 hover:bg-white/10'
 
   return (
     <div className="relative mb-6 overflow-hidden rounded-lg border border-white/5 bg-ink-950/60">

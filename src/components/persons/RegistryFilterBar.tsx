@@ -89,7 +89,7 @@ export function RegistryFilterBar({ filters, onFilters, gangs, sort, onSort, sea
             <div
               role="dialog"
               aria-label="More filters"
-              className="absolute left-0 z-20 mt-2 w-72 max-w-[calc(100vw-2rem)] space-y-3 rounded-xl border border-white/10 bg-ink-850 p-3 shadow-glow"
+              className="absolute left-0 z-20 mt-2 w-72 max-w-[calc(100vw-2rem)] space-y-3 rounded-lg border border-white/10 bg-ink-850 p-3 shadow-pop"
             >
               <Field label="Gang">
                 {(id) => (
@@ -174,7 +174,7 @@ export function RegistryFilterBar({ filters, onFilters, gangs, sort, onSort, sea
 
       {chips.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Active:</span>
+          <span className="text-xs font-medium text-slate-400">Active:</span>
           {chips.map((c) => (
             <button
               key={c.key}

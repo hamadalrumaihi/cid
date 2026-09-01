@@ -38,7 +38,7 @@ export function CaseProvenance({ caseId }: { caseId: string }) {
   const fed = live.filter((l) => !isProvenance(l))
 
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+    <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
       <h3 className="mb-2 font-bold text-white">Where this came from</h3>
       {opened && (
         <p className="text-sm text-slate-200">
@@ -52,7 +52,7 @@ export function CaseProvenance({ caseId }: { caseId: string }) {
       )}
       {fed.length > 0 && (
         <div className={opened ? 'mt-3' : ''}>
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
+          <p className="text-xs font-medium text-slate-500">
             Also fed by
           </p>
           <ul className="mt-1 space-y-1">

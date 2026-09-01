@@ -17,6 +17,7 @@ import { priorityTint } from '@/lib/tint'
 import { toast } from '@/lib/toast'
 import { useNow } from '@/lib/useNow'
 import { useSavedViews, type SavedViewsApi } from '@/lib/savedViews'
+import { AlertIcon } from '@/components/shell/icons'
 import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -128,40 +129,38 @@ export function BoloView() {
 
   return (
     <section className="view-in space-y-4">
-      <div className="rounded-lg border border-rose-500/20 bg-ink-900/60 p-6">
-        <PageHeader
-          title="BOLO Board"
-          subtitle="At-large subjects flagged be-on-the-lookout, with risk, instructions and live warrant status."
-          actions={
-            <>
-              {state === 'in' && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 py-0.5 text-[11px] font-medium text-rose-300">
-                  <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-rose-400" />live
-                </span>
-              )}
-              {persons.length > 0 && (
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Filter name, alias, gang, reason..."
-                  aria-label="Filter BOLOs"
-                  className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
-                />
-              )}
-              {state === 'in' && persons.length > 0 && (
-                <BoloSavedViews
-                  sv={savedViews}
-                  active={activeSaved}
-                  currentQuery={query}
-                  onApply={(name, cfg) => { setActiveSaved(name); setQuery(cfg.q ?? '') }}
-                  onActive={setActiveSaved}
-                />
-              )}
-            </>
-          }
-        />
-      </div>
+      <PageHeader
+        title="BOLO Board"
+        subtitle="At-large subjects flagged be-on-the-lookout, with risk, instructions and live warrant status."
+        actions={
+          <>
+            {state === 'in' && (
+              <Badge tone="danger">
+                <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />live
+              </Badge>
+            )}
+            {persons.length > 0 && (
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Filter name, alias, gang, reason..."
+                aria-label="Filter BOLOs"
+                className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
+              />
+            )}
+            {state === 'in' && persons.length > 0 && (
+              <BoloSavedViews
+                sv={savedViews}
+                active={activeSaved}
+                currentQuery={query}
+                onApply={(name, cfg) => { setActiveSaved(name); setQuery(cfg.q ?? '') }}
+                onActive={setActiveSaved}
+              />
+            )}
+          </>
+        }
+      />
 
       {state === 'in' && (
         <MdtExportsPanel canPropose={canEdit} isCommand={isCommand} />
@@ -282,13 +281,13 @@ function BoloCard({ person, gang, legal, today, now, canEdit, onProfile, onEdit,
   return (
     <div className="overflow-hidden rounded-lg border border-rose-500/20 bg-ink-900/60">
       <div className="flex items-center justify-between gap-2 bg-rose-500/10 px-4 py-2">
-        <span className="text-[11px] font-bold uppercase tracking-widest text-rose-300">Be on the lookout</span>
+        <span className="text-xs font-semibold text-rose-300">Be on the lookout</span>
         <span className="flex items-center gap-1.5">
-          {bolo.expired && <Badge tone="warn" className="uppercase" title="The BOLO expiry date has passed — review or clear it">Expired</Badge>}
+          {bolo.expired && <Badge tone="warn" title="The BOLO expiry date has passed — review or clear it">Expired</Badge>}
           {person.bolo_risk && (
-            <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${priorityTint(person.bolo_risk)}`}>
+            <Badge tint={priorityTint(person.bolo_risk)}>
               {humanize(person.bolo_risk)} risk
-            </span>
+            </Badge>
           )}
         </span>
       </div>
@@ -297,15 +296,15 @@ function BoloCard({ person, gang, legal, today, now, canEdit, onProfile, onEdit,
           /* eslint-disable-next-line @next/next/no-img-element -- external mugshot CDN */
           <img src={mug} alt={`${person.name} photo`} onError={() => setImgBroken(true)} className="h-20 w-20 flex-shrink-0 rounded-lg object-cover" />
         ) : (
-          <div className="grid h-20 w-20 flex-shrink-0 place-items-center rounded-lg bg-ink-800 text-lg font-bold text-slate-400" aria-hidden="true">POI</div>
+          <div className="grid h-20 w-20 flex-shrink-0 place-items-center rounded-lg bg-ink-800 text-lg font-semibold text-slate-400" aria-hidden="true">POI</div>
         )}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-base font-bold text-white">{person.name}</p>
+          <p className="truncate text-base font-semibold text-white">{person.name}</p>
           {person.alias && <p className="text-xs text-slate-400">&ldquo;{person.alias}&rdquo;</p>}
           <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
             <span className="rounded bg-white/5 px-1.5 py-0.5 text-slate-300">{person.status || 'Suspect'}</span>
             {gang && <span className="rounded bg-violet-500/10 px-1.5 py-0.5 text-violet-300">{gang}</span>}
-            {person.ccw && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 font-semibold text-rose-300" title="May be armed - exercise caution">ARMED RISK</span>}
+            {person.ccw && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 font-semibold text-rose-300" title="May be armed - exercise caution">Armed risk</span>}
             {buckets.arrestWarrants.length > 0 && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 font-semibold text-rose-300">Arrest warrant ×{buckets.arrestWarrants.length}</span>}
             {buckets.searchWarrants.length > 0 && <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-amber-300">Search warrant ×{buckets.searchWarrants.length}</span>}
             {buckets.activeCount > 0 && <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-300" title="Legal instruments currently in force">{buckets.activeCount} active legal</span>}
@@ -313,7 +312,7 @@ function BoloCard({ person, gang, legal, today, now, canEdit, onProfile, onEdit,
           </div>
           {person.bolo_reason && <p className="mt-2 line-clamp-2 text-xs text-slate-300">{person.bolo_reason}</p>}
           {person.bolo_instructions && (
-            <p className="mt-1 line-clamp-2 text-[11px] text-amber-200/90" title={person.bolo_instructions}>⚠ {person.bolo_instructions}</p>
+            <p className="mt-1 line-clamp-2 text-[11px] text-amber-200/90" title={person.bolo_instructions}><AlertIcon size={12} className="inline align-[-2px]" /> {person.bolo_instructions}</p>
           )}
           <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
             {person.bolo_issued_at && <span>Issued {fmtDate(person.bolo_issued_at)}{issuedBy ? ` · ${issuedBy}` : ''}</span>}

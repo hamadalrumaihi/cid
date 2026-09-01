@@ -42,7 +42,7 @@ import {
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
-import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { DetailSkeleton } from '@/components/ui/Skeleton'
 
 const fmtDate = (v?: string | null) =>
   v ? new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
@@ -67,9 +67,9 @@ function Section({ title, count, hint, children }: {
   title: string; count?: number; hint?: string; children: React.ReactNode
 }) {
   return (
-    <section className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+    <section className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
       <div className="flex items-center gap-2">
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</h4>
+        <h4 className="text-[13px] font-semibold text-white">{title}</h4>
         {count !== undefined && count > 0 && <Badge tone="neutral">{count}</Badge>}
       </div>
       {hint && <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{hint}</p>}
@@ -110,7 +110,7 @@ export function SiuPersonDossierModal({ personId, onClose }: {
       <ModalHeader title={p?.name ?? 'Dossier'} onClose={onClose} />
 
       {loading ? (
-        <CardGridSkeleton cols="" />
+        <DetailSkeleton />
       ) : !d || !p ? (
         <p className="text-sm text-slate-400">
           That record is not available to you.
@@ -138,7 +138,7 @@ export function SiuPersonDossierModal({ personId, onClose }: {
           )}
 
           {p.bolo.active && (
-            <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-3">
+            <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3">
               <div className="flex items-center gap-2">
                 <Badge tone="danger">BOLO</Badge>
                 {p.bolo.risk && <Badge tone="warn">{p.bolo.risk}</Badge>}

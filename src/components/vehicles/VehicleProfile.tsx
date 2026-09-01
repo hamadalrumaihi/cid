@@ -20,6 +20,7 @@ import { pushRecent } from '@/lib/recents'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { copyText, fmtDate, timeAgo } from '@/lib/format'
+import { AlertIcon, FileTypeIcon, GangIcon, PersonIcon, VehicleIcon } from '@/components/shell/icons'
 import { Badge } from '@/components/ui/Badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Button } from '@/components/ui/Button'
@@ -68,12 +69,12 @@ function colorSwatch(color: string): string | null {
 
 /* ---- building blocks ---------------------------------------------------- */
 
-const PANEL_TITLE = 'text-[11px] font-semibold uppercase tracking-wider text-blue-300/70'
+const PANEL_TITLE = 'text-[13px] font-semibold text-white'
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 py-2.5">
-      <dt className="flex-shrink-0 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</dt>
+      <dt className="flex-shrink-0 text-xs font-medium text-slate-500">{label}</dt>
       <dd className="min-w-0 text-right text-sm text-slate-200">{children}</dd>
     </div>
   )
@@ -154,13 +155,13 @@ function LinkedCasesPanel({ plate, ownerId }: { plate: string; ownerId: string |
           <Skeleton className="h-11 w-full" />
         </div>
       ) : scan === 'failed' ? (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-200">
-          ⚠ Could not scan case reports for this plate (connection issue).{' '}
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-200">
+          <AlertIcon size={14} className="inline align-[-2px]" /> Could not scan case reports for this plate (connection issue).{' '}
           <button onClick={() => setRetry((n) => n + 1)} className="rounded p-1 font-semibold underline">Retry</button>
         </div>
       ) : !rows.length ? (
         <EmptyState
-          title="NO LINKED CASES"
+          title="No linked cases"
           hint="Cases appear here when a report mentions this plate or the registered owner is linked to a case."
         />
       ) : (
@@ -229,7 +230,7 @@ function VehiclePhotosPanel({ vehicleId }: { vehicleId: string }) {
           const tile = m.type === 'image' && url
             // eslint-disable-next-line @next/next/no-img-element -- external media URL
             ? <img src={url} alt={m.title} loading="lazy" className="h-20 w-20 rounded-lg border border-white/10 object-cover transition hover:brightness-110" />
-            : <span aria-hidden className="flex h-20 w-20 items-center justify-center rounded-lg border border-white/10 bg-ink-800 text-2xl">{m.type === 'video' ? '🎬' : '📄'}</span>
+            : <span aria-hidden className="flex h-20 w-20 items-center justify-center rounded-lg border border-white/10 bg-ink-800 text-slate-500"><FileTypeIcon type={m.type ?? 'document'} size={24} /></span>
           return (
             <li key={m.id}>
               {m.case_id ? (
@@ -575,9 +576,9 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
               (no separate right-hand Owner panel — avoids duplication). */}
           <div className="space-y-4 lg:w-80 lg:flex-shrink-0">
             <Card className="text-center">
-              <div aria-hidden className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-ink-800 text-3xl">🚗</div>
-              <h2 className="mt-3 text-xl font-black text-white">{v.model || 'Unknown model'}</h2>
-              <p className="mt-2 inline-block rounded-md border border-white/15 bg-ink-800 px-2.5 py-1 font-mono text-sm font-bold tracking-widest text-white">{v.plate}</p>
+              <div aria-hidden className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-ink-800 text-slate-400"><VehicleIcon size={28} /></div>
+              <h2 className="mt-3 text-xl font-semibold text-white">{v.model || 'Unknown model'}</h2>
+              <p className="mt-2 inline-block rounded-md border border-white/15 bg-ink-800 px-2.5 py-1 font-mono text-sm font-semibold tracking-widest text-white">{v.plate}</p>
               <dl className="mt-5 divide-y divide-white/5 border-t border-white/5 text-left">
                 <Row label="Model">{v.model || <span className="text-slate-400">Unknown</span>}</Row>
                 <Row label="Plate">
@@ -609,7 +610,7 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
                       onClick={() => nav.openRecord('persons', v.owner_id!, owner)}
                       className="-my-1 rounded px-1 py-1 text-blue-300 transition hover:text-blue-200"
                     >
-                      👤 {owner}
+                      <PersonIcon size={12} className="inline align-[-2px]" /> {owner}
                     </button>
                   ) : (
                     <span className="text-slate-400">Unknown</span>
@@ -621,7 +622,7 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
                       onClick={() => nav.openHref(`/gangs?q=${encodeURIComponent(gang)}`)}
                       className="rounded-md bg-violet-500/10 px-2 py-1 text-[11px] text-violet-300 transition hover:bg-violet-500/20"
                     >
-                      🚩 {gang}
+                      <GangIcon size={12} className="inline align-[-2px]" /> {gang}
                     </button>
                   ) : (
                     <span className="text-slate-400">—</span>

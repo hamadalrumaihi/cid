@@ -191,9 +191,9 @@ export function JointCaseModal({ open, onClose, c, mode, existingAssignments, on
           <>
             {selected.length > 0 && (
               <div className="mt-4 space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Selected members ({selected.length})</p>
+                <p className="text-[13px] font-semibold text-white">Selected members ({selected.length})</p>
                 {selected.map((m) => (
-                  <div key={m.officer_id} className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-ink-950/50 p-3">
+                  <div key={m.officer_id} className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-ink-950/50 p-3">
                     <span className="min-w-32 flex-1 text-sm font-semibold text-white">{nameOf(m.officer_id)}</span>
                     <select
                       value={m.joint_role}
@@ -261,7 +261,7 @@ export function JointCaseModal({ open, onClose, c, mode, existingAssignments, on
                 role="listbox"
                 aria-label="Eligible members"
                 aria-multiselectable="true"
-                className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-white/10 bg-ink-950/70"
+                className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-white/10 bg-ink-950/70"
               >
                 {options.map((p, i) => {
                   const on = selected.some((m) => m.officer_id === p.id)
@@ -295,7 +295,7 @@ export function JointCaseModal({ open, onClose, c, mode, existingAssignments, on
           </>
         ) : (
           <>
-            <div className="mt-4 rounded-xl border border-white/10 bg-ink-950/50 p-4">
+            <div className="mt-4 rounded-lg border border-white/10 bg-ink-950/50 p-4">
               <p className="text-sm font-semibold text-white">
                 {mode === 'convert' ? 'Convert to joint case' : 'Add to joint case'} — {selected.length} member(s)
               </p>

@@ -218,7 +218,7 @@ function SuggestionDrawer({ suggestion, docName, allSuggestions, canManage, onOp
 
         {/* Target document */}
         <div className="mt-4 rounded-lg border border-white/10 bg-ink-900/60 px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Target</p>
+          <p className="text-xs font-medium text-slate-500">Target</p>
           {s.document_id ? (
             <button
               type="button"
@@ -237,12 +237,12 @@ function SuggestionDrawer({ suggestion, docName, allSuggestions, canManage, onOp
         {/* Explanation + proposed text */}
         <section className="mt-4 space-y-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Explanation</p>
+            <p className="text-xs font-medium text-slate-500">Explanation</p>
             <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-200">{s.explanation}</p>
           </div>
           {s.proposed_text && (
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Proposed text</p>
+              <p className="text-xs font-medium text-slate-500">Proposed text</p>
               <p className="mt-1 whitespace-pre-wrap rounded-lg border border-white/5 bg-ink-900/60 p-3 text-sm leading-6 text-slate-200">{s.proposed_text}</p>
             </div>
           )}
@@ -328,7 +328,7 @@ function SuggestionDrawer({ suggestion, docName, allSuggestions, canManage, onOp
 
         {/* Event timeline */}
         <section className="mt-5">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">History</p>
+          <p className="mb-2 text-xs font-medium text-slate-500">History</p>
           {events === null ? (
             <p className="text-xs text-slate-400">Loading…</p>
           ) : events.length === 0 ? (
@@ -356,7 +356,7 @@ function SuggestionDrawer({ suggestion, docName, allSuggestions, canManage, onOp
 
         {/* Comment thread */}
         <section className="mt-5">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Discussion</p>
+          <p className="mb-2 text-xs font-medium text-slate-500">Discussion</p>
           {comments === null ? (
             <p className="text-xs text-slate-400">Loading…</p>
           ) : comments.length === 0 ? (

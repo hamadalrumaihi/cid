@@ -10,12 +10,13 @@ export type AnnouncementRow = Tables<'announcements'>
 export interface Mention { target: string; label?: string }
 export interface AnnLink { type: string; id: string; label?: string }
 
-/** Record-link chip vocabulary (collab.js REC_LINK). */
-export const REC_LINK: Record<string, { icon: string; tab: string }> = {
-  case: { icon: '🗂️', tab: 'cases' },
-  person: { icon: '🧑‍⚖️', tab: 'persons' },
-  evidence: { icon: '🧾', tab: 'cases' },
-  report: { icon: '📝', tab: 'reports' },
+/** Record-link chip vocabulary (collab.js REC_LINK) — chips render the glyph
+ *  via shell/icons KindIcon (the types match its kind vocabulary). */
+export const REC_LINK: Record<string, { tab: string }> = {
+  case: { tab: 'cases' },
+  person: { tab: 'persons' },
+  evidence: { tab: 'cases' },
+  report: { tab: 'reports' },
 }
 
 export function parseMentions(j: Json): Mention[] {

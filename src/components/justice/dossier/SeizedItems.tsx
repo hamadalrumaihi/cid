@@ -101,7 +101,7 @@ export function SeizedItemsPanel({ requestId, canFulfil }: { requestId: string; 
 
   return (
     <Card pad="sm">
-      <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Seized property</h3>
+      <h3 className="mb-2 text-[13px] font-semibold text-white">Seized property</h3>
       {rows === null ? (
         <p className="text-sm text-slate-400">Loading…</p>
       ) : rows.length === 0 ? (

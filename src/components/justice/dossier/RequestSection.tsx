@@ -38,7 +38,7 @@ function VersionHistory({ versions, name }: { versions: LegalVersion[]; name: (i
   }))
   return (
     <Card pad="sm">
-      <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+      <h3 className="mb-2 text-[13px] font-semibold text-white">
         Version history (immutable)
       </h3>
       <VersionViewer
@@ -97,7 +97,7 @@ export function RequestSection({
     <div className="space-y-4">
       {editable ? (
         <Card pad="sm" className="max-w-2xl space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Edit draft</h3>
+          <h3 className="text-[13px] font-semibold text-white">Edit draft</h3>
           {pendingDraft && pendingDraft.at > Date.parse(r.updated_at) && (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
               <span className="min-w-0 flex-1">

@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
+import { TraceIcon } from '@/components/shell/icons'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -71,35 +72,33 @@ export function BallisticsView() {
 
   return (
     <div>
-      <Card pad="lg" className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <PageHeader
-          className="flex-1"
-          title="🛠️ Ballistics & Logistics"
-          subtitle="Criminal weapon-manufacturing hubs, component tracing & ballistic footprints"
-          actions={
-            <div className="flex items-center gap-2">
-              <div className="inline-flex rounded-lg border border-white/10 bg-ink-850 p-1" role="tablist" aria-label="Bench type">
-                {[['street', 'Street Gang Bench'], ['organized', 'Organized Crime Bench']].map(([t, label]) => (
-                  <button
-                    key={t}
-                    role="tab"
-                    aria-selected={benchType === t}
-                    onClick={() => pick(t)}
-                    className={`rounded-md px-4 py-2 text-xs font-semibold transition ${benchType === t ? 'bg-badge-500 text-white' : 'text-slate-300 hover:text-white'}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {canEdit && (
-                <Button variant="primary" onClick={() => setBenchEditor({ record: null })}>
-                  + Bench
-                </Button>
-              )}
+      <PageHeader
+        className="mb-6"
+        title="Ballistics & Logistics"
+        subtitle="Criminal weapon-manufacturing hubs, component tracing & ballistic footprints"
+        actions={
+          <div className="flex items-center gap-2">
+            <div className="inline-flex rounded-lg border border-white/10 bg-ink-850 p-1" role="tablist" aria-label="Bench type">
+              {[['street', 'Street Gang Bench'], ['organized', 'Organized Crime Bench']].map(([t, label]) => (
+                <button
+                  key={t}
+                  role="tab"
+                  aria-selected={benchType === t}
+                  onClick={() => pick(t)}
+                  className={`rounded-md px-4 py-2 text-xs font-semibold transition ${benchType === t ? 'bg-badge-500 text-white' : 'text-slate-300 hover:text-white'}`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-          }
-        />
-      </Card>
+            {canEdit && (
+              <Button variant="primary" onClick={() => setBenchEditor({ record: null })}>
+                + Bench
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -126,14 +125,14 @@ export function BallisticsView() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {b.tier && <Badge tint={`border ${tierTint}`} className="uppercase">{b.tier}-Tier</Badge>}
-                      {b.heat && <Badge tint={heatTint} className="uppercase">{b.heat}</Badge>}
+                      {b.tier && <Badge tint={`border ${tierTint}`}>{b.tier}-Tier</Badge>}
+                      {b.heat && <Badge tint={heatTint}>{b.heat}</Badge>}
                       {canEdit && <Button size="sm" onClick={() => setBenchEditor({ record: b })}>Edit</Button>}
                     </div>
                   </div>
                   <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
                     <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-blue-300/70">Manufacturing Outputs</p>
+                      <p className="mb-2 text-[13px] font-semibold text-white">Manufacturing outputs</p>
                       <div className="flex flex-wrap gap-2">
                         {(b.outputs ?? []).length
                           ? (b.outputs ?? []).map((o, i) => <span key={i} className="rounded-full border border-white/10 bg-ink-850 px-3 py-1 text-xs text-slate-200">{o}</span>)
@@ -141,7 +140,7 @@ export function BallisticsView() {
                       </div>
                     </div>
                     <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-blue-300/70">Component Tracing</p>
+                      <p className="mb-2 text-[13px] font-semibold text-white">Component tracing</p>
                       <div className="space-y-1.5">
                         {(b.components ?? []).length
                           ? (b.components ?? []).map((c, i) => (
@@ -159,7 +158,7 @@ export function BallisticsView() {
 
         <Card pad="lg">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-white"><span aria-hidden>🧬</span> Ballistic Footprint Log</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-white"><TraceIcon size={16} className="text-slate-400" /> Ballistic Footprint Log</h2>
             {canEdit && (
               <Button size="sm" onClick={() => setFpEditor({ record: null })}>
                 + Footprint
@@ -171,7 +170,7 @@ export function BallisticsView() {
             {!footprints.length ? (
               <p className="text-sm text-slate-400">No footprints logged yet.{canEdit && ' Use “+ Footprint”.'}</p>
             ) : footprints.map((l) => (
-              <div key={l.id} className="rounded-xl border border-white/10 bg-ink-900 p-3">
+              <div key={l.id} className="rounded-lg border border-white/10 bg-ink-900 p-3">
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-mono text-xs text-violet-300">{l.signature}</p>
                   {canEdit && <button onClick={() => setFpEditor({ record: l })} className="-m-2 p-2 text-[11px] text-slate-400 hover:text-white">edit</button>}

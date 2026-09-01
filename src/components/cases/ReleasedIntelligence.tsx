@@ -66,7 +66,7 @@ export function ReleasedIntelligence({ caseId }: { caseId: string }) {
       />
       <ul className="mt-3 space-y-2">
         {rows.map((r) => (
-          <li key={r.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+          <li key={r.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
             <div className="flex flex-wrap items-center gap-2">
               <Badge tint="bg-violet-500/15 text-violet-300">{siuReleaseItemLabel(r.item_type)}</Badge>
               <span className="text-sm font-semibold text-slate-100">{r.title}</span>

@@ -342,7 +342,7 @@ export function InboxView() {
             </span>
           </span>
           <span className="flex items-center gap-2">
-            {pendingApprovals > 0 && <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-xs font-black text-amber-100">{pendingApprovals}</span>}
+            {pendingApprovals > 0 && <span className="rounded bg-amber-400/20 px-2 py-0.5 text-[11px] font-semibold text-amber-100">{pendingApprovals}</span>}
             <span className="text-xs font-semibold text-amber-200">Open Command Center →</span>
           </span>
         </button>
@@ -471,7 +471,7 @@ export function InboxView() {
           {model.watched.map((it) => (
             <DashRow
               key={it.w.id}
-              title={`${it.icon} ${it.title}`}
+              title={it.title}
               badge={it.fresh ? <Badge tone="warn">updated</Badge> : undefined}
               why={it.sub}
               meta={it.ts ? timeAgo(it.ts) : undefined}

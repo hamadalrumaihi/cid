@@ -11,5 +11,5 @@ import dynamic from 'next/dynamic'
 
 export const RichEditor = dynamic(() => import('./RichEditorInner').then((m) => m.RichEditorInner), {
   ssr: false,
-  loading: () => <div className="rounded-xl border border-white/10 bg-ink-950 p-3 text-sm text-slate-500" style={{ minHeight: '18rem' }}>Loading editor…</div>,
+  loading: () => <div className="rounded-lg border border-white/10 bg-ink-950 p-3 text-sm text-slate-500" style={{ minHeight: '18rem' }}>Loading editor…</div>,
 })

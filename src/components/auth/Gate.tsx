@@ -14,7 +14,7 @@ import { MembershipRequest } from './MembershipRequest'
 
 function ShieldLogo({ size = 'h-12 w-12' }: { size?: string }) {
   return (
-    <div className={`grid ${size} flex-shrink-0 place-items-center rounded-xl bg-gradient-to-br from-badge-500 to-blue-700 shadow-glow`}>
+    <div className={`grid ${size} flex-shrink-0 place-items-center rounded-lg bg-badge-500`}>
       <svg className="h-7 w-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M12 2.5l8 3v6.5c0 5.2-3.6 8.7-8 9.5-4.4-.8-8-4.3-8-9.5V5.5z" />
         <path d="M12 6l1.2 2.4 2.6.4-1.9 1.9.5 2.6-2.4-1.2-2.4 1.2.5-2.6-1.9-1.9 2.6-.4z" />
@@ -269,16 +269,16 @@ export function Gate() {
     // The gate replaces the app shell (and its <main>) while signed out /
     // booting, so it supplies the page's sole main landmark itself.
     <main className="flex min-h-screen items-center justify-center bg-ink-950 p-6">
-      <div className="gate-boot w-full max-w-md rounded-2xl border border-white/10 bg-ink-900 p-8 shadow-glow">
+      <div className="w-full max-w-md rounded-lg border border-white/10 bg-ink-900 p-8">
         <div className="mb-6 flex items-center gap-3">
           <ShieldLogo />
           <div>
-            <h1 className="text-lg font-bold text-white">CID Portal</h1>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-blue-300/70">San Andreas · Secure Access</p>
+            <h1 className="text-lg font-semibold tracking-tight text-white">CID Portal</h1>
+            <p className="text-xs text-slate-400">Criminal Investigation Division · San Andreas</p>
           </div>
         </div>
-        <p className="t-readout mb-4 flex items-center gap-2 rounded border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[10px] uppercase tracking-widest text-amber-300/90">
-          <span className="t-dot t-dot-amber pulse-dot" /> Authorized personnel only // All access is logged
+        <p className="t-readout mb-5 flex items-center gap-2 border-y border-white/5 py-2 text-[11px] text-amber-300/80">
+          <span className="t-dot t-dot-amber" /> Authorized personnel only — all access is logged
         </p>
         <div>
           {state === 'loading' && <p className="text-sm text-slate-400">Initializing secure session…</p>}

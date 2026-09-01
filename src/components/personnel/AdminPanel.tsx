@@ -89,7 +89,7 @@ export function AdminPanel({ profiles, emails, justiceByUser = {}, requests = nu
 
   return (
     <Card pad="lg">
-      <h4 className="mb-1 text-sm font-semibold uppercase tracking-wider text-amber-300/80">⚙️ Member Administration (Director / Command)</h4>
+      <h4 className="mb-1 text-[13px] font-semibold text-white">Member Administration (Director / Command)</h4>
       <p className="mb-4 text-xs text-slate-400">Approve and assign officers. New sign-ins are inactive until activated.</p>
       {/* Phones scroll the table inside this wrapper (min-width holds the
           5-column layout) instead of stretching the whole page. */}
@@ -139,7 +139,7 @@ export function AdminPanel({ profiles, emails, justiceByUser = {}, requests = nu
       </div>
       {moved.length > 0 && (
         <div className="mt-5 border-t border-white/5 pt-4">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-sky-300/70">Moved to DOJ / Judiciary ({moved.length})</p>
+          <p className="mb-2 text-xs font-medium text-sky-300/70">Moved to DOJ / Judiciary ({moved.length})</p>
           <div className="space-y-1.5">
             {moved.map((p) => {
               const j = justiceByUser[p.id]
@@ -158,7 +158,7 @@ export function AdminPanel({ profiles, emails, justiceByUser = {}, requests = nu
       )}
       {removed.length > 0 && (
         <div className="mt-5 border-t border-white/5 pt-4">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-rose-300/70">Permanently removed ({removed.length})</p>
+          <p className="mb-2 text-xs font-medium text-rose-300/70">Permanently removed ({removed.length})</p>
           <div className="space-y-1.5">
             {removed.map((p) => (
               <div key={p.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-ink-900 px-3 py-2">

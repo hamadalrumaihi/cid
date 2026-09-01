@@ -5,12 +5,13 @@
  *  Global search: Enter in the box (or Cmd/Ctrl-K anywhere) opens the search
  *  palette; `/` focuses the box (vanilla parity). Bell: NotificationsBell. */
 import { useEffect, useRef, useState } from 'react'
-import { PAGE_META } from '@/lib/nav'
+import { NAV_CATEGORIES, PAGE_META, TAB_CATEGORY } from '@/lib/nav'
 import { useAuth } from '@/lib/auth'
+import { roleLabel } from '@/lib/roles'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { CreateMenuButton } from './CreateHost'
-import { MenuIcon, SearchIcon } from './icons'
+import { MenuIcon, PersonIcon, SearchIcon } from './icons'
 import { NotificationsBell } from './NotificationsBell'
 import { SearchPalette } from './SearchPalette'
 import { useNav } from './useNav'
@@ -45,10 +46,13 @@ function AuthBar() {
       <button
         onClick={() => navigate('profile')}
         title={`Open your profile · ${caps}`}
-        className="hidden items-center gap-2 rounded-lg bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10 sm:flex"
+        className="hidden items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/5 sm:flex"
       >
-        {avatar ? <img src={avatar} className="h-5 w-5 rounded-full object-cover" alt="" /> : '👤'} {name}
-        {profile?.role && <> · <span className="uppercase text-blue-300">{roleShort(profile.role)}</span></>}
+        {avatar
+          ? <img src={avatar} className="h-5 w-5 rounded-full object-cover" alt="" />
+          : <span className="grid h-5 w-5 place-items-center rounded-full bg-ink-700 text-slate-300"><PersonIcon size={12} /></span>}
+        {name}
+        {profile?.role && <span className="text-slate-500">· {roleShort(profile.role)}</span>}
       </button>
       {onLoa && (
         <span className="rounded-lg bg-amber-500/15 px-2 py-2 text-[11px] font-semibold uppercase text-amber-300" title="You are marked On LOA">
@@ -77,12 +81,15 @@ function AuthBar() {
   )
 }
 
-/** Vanilla renders the raw enum in the chip (auth.js:72). */
-const roleShort = (r: string) => r
+/** Human label in the chip (the raw enum read as debug output). */
+const roleShort = (r: string) => roleLabel(r)
 
 export function Header({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   const { activeTab } = useNav()
   const meta = PAGE_META[activeTab] ?? PAGE_META.command
+  // Breadcrumb context: the owning nav category, when the tab has one. The
+  // page itself renders its own <h1>; the bar shows where you are, once.
+  const catLabel = NAV_CATEGORIES.find((c) => c.id === TAB_CATEGORY[activeTab])?.label
   const searchRef = useRef<HTMLInputElement>(null)
   const [palette, setPalette] = useState<{ open: boolean; query: string }>({ open: false, query: '' })
 
@@ -116,30 +123,36 @@ export function Header({ onOpenDrawer }: { onOpenDrawer: () => void }) {
     // z-30: above in-page sticky bars (z-10/z-20), tied with BottomNav (never
     // overlaps it), below the sidebar (z-40) and modals (z-50+). Height is
     // published as --app-header-h in globals.css — keep them in step.
-    <header className="sticky top-0 z-30 flex items-center justify-between gap-2 border-b sm:gap-3 border-white/5 bg-ink-950/70 px-3 py-3.5 backdrop-blur-xl sm:px-8 sm:py-4">
+    <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-white/5 bg-ink-950/90 px-3 backdrop-blur sm:gap-3 sm:px-6">
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <button
           onClick={onOpenDrawer}
-          className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-lg border border-white/10 bg-ink-850 text-slate-200 transition hover:bg-white/10 lg:hidden"
+          className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-lg text-slate-300 transition hover:bg-white/5 lg:hidden"
           aria-label="Open navigation"
           aria-controls="sidebar"
         >
           <MenuIcon />
         </button>
-        <div className="min-w-0">
-          <h2 className="truncate text-base font-semibold text-white sm:text-lg">{meta.title}</h2>
-          <p className="truncate text-xs text-slate-400">{meta.sub}</p>
+        <div className="flex min-w-0 items-baseline gap-2" title={meta.sub}>
+          {catLabel && catLabel !== meta.title && (
+            <>
+              <span className="hidden flex-shrink-0 text-sm text-slate-500 sm:inline">{catLabel}</span>
+              <span aria-hidden className="hidden flex-shrink-0 text-sm text-slate-600 sm:inline">/</span>
+            </>
+          )}
+          <h2 className="truncate text-sm font-semibold text-white">{meta.title}</h2>
         </div>
       </div>
       <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
         <div className="relative hidden lg:block">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-white/10 px-1.5 py-0.5 font-sans text-[10px] font-medium text-slate-500">⌘K</kbd>
           <input
             ref={searchRef}
             type="search"
-            placeholder="Search everything…  ( / focus · ⌘K )"
+            placeholder="Search cases, people, records…"
             aria-label="Search records"
-            className="w-72 rounded-lg border border-white/10 bg-ink-850 py-2 pl-9 pr-3 text-sm text-slate-200 outline-none transition focus:border-badge-500 focus:ring-2 focus:ring-badge-500/30"
+            className="w-72 rounded-lg border border-white/10 bg-ink-900 py-1.5 pl-9 pr-12 text-sm text-slate-200 outline-none transition focus:border-badge-500 focus:ring-2 focus:ring-badge-500/30"
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 const q = (e.target as HTMLInputElement).value.trim()
@@ -154,7 +167,7 @@ export function Header({ onOpenDrawer }: { onOpenDrawer: () => void }) {
         <button
           onClick={() => setPalette({ open: true, query: '' })}
           aria-label="Search records"
-          className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-lg border border-white/10 bg-ink-850 text-slate-200 transition hover:bg-white/10 lg:hidden"
+          className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-lg text-slate-300 transition hover:bg-white/5 lg:hidden"
         >
           <SearchIcon className="h-5 w-5" />
         </button>

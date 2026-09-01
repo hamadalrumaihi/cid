@@ -155,7 +155,7 @@ export function RestrictDialog({ target, onClose, onDone }: {
       {impact && mode && (
         <div className="mt-4 space-y-4">
           {/* Who and what — the identity of the thing being acted on. */}
-          <div className="rounded-xl border border-white/10 bg-ink-900 p-3">
+          <div className="rounded-lg border border-white/10 bg-ink-900 p-3">
             <div className="flex flex-wrap items-center gap-2">
               <Badge>{compartmentTypeLabel(impact.entity_type)}</Badge>
               <span className="text-sm font-semibold text-white">{impact.name ?? 'Unnamed record'}</span>
@@ -171,7 +171,7 @@ export function RestrictDialog({ target, onClose, onDone }: {
 
           {/* What CID currently has. Silence here is meaningful, so it is stated. */}
           <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <h4 className="text-[13px] font-semibold text-white">
               What CID currently has attached
             </h4>
             <ul className="mt-1.5 space-y-1">
@@ -194,7 +194,7 @@ export function RestrictDialog({ target, onClose, onDone }: {
 
           {/* The choice, with the consequence of each spelled out. */}
           <fieldset>
-            <legend className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <legend className="flex items-center gap-1.5 text-[13px] font-semibold text-white">
               How much to restrict
               {/* The canonical restrict/reveal sentences (lib/siuVisibility) —
                   the same wording every confirmation in the compartment uses. */}
@@ -207,7 +207,7 @@ export function RestrictDialog({ target, onClose, onDone }: {
               {(['sections', 'record'] as RestrictMode[]).map((m) => (
                 <label
                   key={m}
-                  className={`block cursor-pointer rounded-xl border p-3 transition ${
+                  className={`block cursor-pointer rounded-lg border p-3 transition ${
                     mode === m ? 'border-badge-500 bg-badge-500/5' : 'border-white/10 bg-ink-900'}`}
                 >
                   <span className="flex items-center gap-2">
@@ -248,7 +248,7 @@ export function RestrictDialog({ target, onClose, onDone }: {
 
           {mode === 'sections' && (
             <fieldset>
-              <legend className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <legend className="text-[13px] font-semibold text-white">
                 Sections to hide from CID
               </legend>
               {offered.length === 0 ? (
@@ -282,7 +282,7 @@ export function RestrictDialog({ target, onClose, onDone }: {
           {/* The second confirmation. Shown only when it is really needed, so it
               stays meaningful rather than becoming another box to tick. */}
           {needsAck && (
-            <label className="flex cursor-pointer gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3">
+            <label className="flex cursor-pointer gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
               <input
                 type="checkbox"
                 checked={ack}

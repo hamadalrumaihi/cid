@@ -3,7 +3,7 @@ import { Badge } from './Badge'
 import { Card } from './Card'
 import { SectionHeader } from './PageHeader'
 
-/** The canonical surface: rounded-2xl, border-white/5, bg-ink-900/60.
+/** The canonical surface: rounded-lg, border-white/5, bg-ink-900/60.
  *  Padding is a named scale (none/sm/md/lg), never ad-hoc p-* values. */
 const meta = {
   title: 'UI/Card',

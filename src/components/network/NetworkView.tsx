@@ -12,8 +12,8 @@ import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { IntelProfile, type IntelTarget } from '@/components/persons/IntelProfile'
+import { NetworkIcon } from '@/components/shell/icons'
 import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 
@@ -21,7 +21,6 @@ type GangRow = Tables<'gangs'>
 
 const FILL = { gang: '#3b82f6', person: '#10b981', place: '#f59e0b', narcotic: '#a78bfa', account: '#38bdf8' } as const
 const RADIUS = { gang: 26, person: 16, place: 14, narcotic: 15, account: 12 } as const
-const ICON = { gang: '🚩', person: '👤', place: '📍', narcotic: '💊', account: '🌐' } as const
 const VBW = 1000
 const VBH = 640
 
@@ -187,7 +186,7 @@ export function NetworkView() {
   if (!graph || !layout) return <Notice text="Building network…" />
   if (!Object.keys(graph.nodes).length) return (
     <EmptyState
-      icon="🕸️"
+      icon={<NetworkIcon size={24} />}
       title="No relationships on file yet"
       hint="Link persons or places to a gang, then revisit to see the network."
     />
@@ -212,30 +211,29 @@ export function NetworkView() {
 
   return (
     <div>
-      <Card pad="sm" className="mb-3">
-        <PageHeader
-          eyebrow="Relationship network"
-          title={focusNd ? `${ICON[focusNd.type]} ${focusNd.label}` : 'Overview — all gangs & their networks'}
-          subtitle={`${visible.size} node${visible.size === 1 ? '' : 's'} shown · click a node to re-centre${focusNd ? ' · click the centre to open its profile' : ''}`}
-          actions={
-            <>
-              <span className="hidden items-center gap-3 text-[11px] text-slate-400 sm:flex">
-                {(['gang', 'person', 'place', 'narcotic', 'account'] as const).map((t) => (
-                  <span key={t} className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: FILL[t] }} />{cap(t)}</span>
-                ))}
-              </span>
-              {focusNd && (focusNd.type === 'gang' || focusNd.type === 'person') && (
-                <button onClick={() => setProfile({ type: focusNd.type as 'gang' | 'person', id: focusNd.id })} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold text-blue-200 transition hover:bg-white/10">🔎 Profile</button>
-              )}
-              {layout.focus && <Button size="sm" className="-my-1" onClick={() => setFocusKey(null)}>⌂ Overview</Button>}
-              <Button size="sm" className="-my-1" onClick={() => zoomBy(1.2)} aria-label="Zoom in">＋</Button>
-              <Button size="sm" className="-my-1" onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom out">－</Button>
-              <Button size="sm" className="-my-1" onClick={() => setView({ tx: 0, ty: 0, k: 1 })} aria-label="Reset view">↺</Button>
-            </>
-          }
-        />
-      </Card>
-      <div className="overflow-hidden rounded-2xl border border-white/5 bg-ink-950/60">
+      <PageHeader
+        className="mb-3"
+        eyebrow="Relationship network"
+        title={focusNd ? focusNd.label : 'Overview — all gangs & their networks'}
+        subtitle={`${visible.size} node${visible.size === 1 ? '' : 's'} shown · click a node to re-centre${focusNd ? ' · click the centre to open its profile' : ''}`}
+        actions={
+          <>
+            <span className="hidden items-center gap-3 text-[11px] text-slate-400 sm:flex">
+              {(['gang', 'person', 'place', 'narcotic', 'account'] as const).map((t) => (
+                <span key={t} className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: FILL[t] }} />{cap(t)}</span>
+              ))}
+            </span>
+            {focusNd && (focusNd.type === 'gang' || focusNd.type === 'person') && (
+              <button onClick={() => setProfile({ type: focusNd.type as 'gang' | 'person', id: focusNd.id })} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold text-blue-200 transition hover:bg-white/10">Profile</button>
+            )}
+            {layout.focus && <Button size="sm" className="-my-1" onClick={() => setFocusKey(null)}>Overview</Button>}
+            <Button size="sm" className="-my-1" onClick={() => zoomBy(1.2)} aria-label="Zoom in">＋</Button>
+            <Button size="sm" className="-my-1" onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom out">－</Button>
+            <Button size="sm" className="-my-1" onClick={() => setView({ tx: 0, ty: 0, k: 1 })} aria-label="Reset view">↺</Button>
+          </>
+        }
+      />
+      <div className="overflow-hidden rounded-lg border border-white/5 bg-ink-950/60">
         <svg
           ref={svgRef}
           viewBox={`${-VBW / 2} ${-VBH / 2} ${VBW} ${VBH}`}
@@ -268,7 +266,6 @@ export function NetworkView() {
                 <g key={k} style={{ cursor: 'pointer' }} onClick={() => onNode(k)}>
                   {isF && <circle cx={p.x} cy={p.y} r={r + 7} fill="none" stroke="#e2e8f0" strokeWidth={2} />}
                   <circle cx={p.x} cy={p.y} r={r} fill={FILL[nd.type]} fillOpacity={0.9} stroke="#0b1120" strokeWidth={2} />
-                  <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize={nd.type === 'gang' ? 15 : 12}>{ICON[nd.type]}</text>
                   <text x={p.x} y={p.y + r + 14} textAnchor="middle" fontSize={11} fill="#cbd5e1">{trunc(nd.label)}</text>
                 </g>
               )

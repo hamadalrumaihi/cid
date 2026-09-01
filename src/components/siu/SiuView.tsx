@@ -72,8 +72,9 @@ import { EmptyState, Notice } from '@/components/ui/Notice'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { MetricStrip } from '@/components/ui/MetricStrip'
 import { PageHeader, SectionHeader } from '@/components/ui/PageHeader'
+import { SearchIcon, ArchiveIcon } from '@/components/shell/icons'
 import { SectionTabs } from '@/components/ui/SectionTabs'
-import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { DetailSkeleton, ListSkeleton } from '@/components/ui/Skeleton'
 import { Field, Input, Select, Textarea, inputCls } from '@/components/ui/Field'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 
@@ -136,13 +137,13 @@ export function SiuView() {
   }, [sp])
 
   if (state !== 'in') return <Notice text="Sign in to continue." />
-  if (siu.loading) return <CardGridSkeleton cols="" />
+  if (siu.loading) return <DetailSkeleton />
   // Unauthorized: the app's ordinary "nothing here" surface. No mention of
   // SIB, no hint that a restricted area exists.
   if (!siu.canAccess) {
     return (
       <EmptyState
-        icon="🔍"
+        icon={<SearchIcon className="h-5 w-5" />}
         title="Nothing to show here"
         hint="This section isn't available for your account."
       />
@@ -156,7 +157,7 @@ export function SiuView() {
       <div className="mb-4">
         <DashSwitcher />
       </div>
-      <Card pad="lg" className="mb-5">
+      <div className="mb-5">
         <PageHeader
           eyebrow="Special Investigations Bureau"
           title="SIB Workspace"
@@ -181,7 +182,7 @@ export function SiuView() {
             exactly as they will after launch — no other account can see or reach any of it.
           </p>
         )}
-      </Card>
+      </div>
 
       <SectionTabs
         tabs={SECTIONS}
@@ -325,7 +326,7 @@ function OverviewSection({ onGoto }: { onGoto: (s: Section) => void }) {
     [command],
   )
 
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <ListSkeleton />
   if (!data?.access) return <Notice text="Nothing to show here." />
 
   const q = command?.dash.queues
@@ -410,7 +411,7 @@ function OverviewSection({ onGoto }: { onGoto: (s: Section) => void }) {
               </div>
               {intel?.access && (
                 <div className="mt-3">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                  <p className="mb-2 text-[13px] font-semibold text-white">
                     Intelligence quality
                   </p>
                   <MetricStrip
@@ -650,10 +651,10 @@ function InvestigationsSection() {
       </Card>
 
       {loading ? (
-        <CardGridSkeleton cols="" />
+        <ListSkeleton />
       ) : !shown.length ? (
         <EmptyState
-          icon="🗂️"
+          icon={<ArchiveIcon />}
           title={rows.length ? 'No investigation matches that filter' : 'No SIB investigations yet'}
           hint={rows.length
             ? 'Clear the filter to see everything you are cleared for.'
@@ -776,7 +777,7 @@ function TargetsSection() {
     void load()
   }
 
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <ListSkeleton />
 
   return (
     <Card>
@@ -797,7 +798,7 @@ function TargetsSection() {
         }
       />
       {!shown.length ? (
-        <div className="mt-3 rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
+        <div className="mt-3 rounded-lg border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
           <p className="text-sm font-semibold text-slate-200">
             {rows.length ? 'No active designations — everything here is cleared.' : 'No targets designated yet.'}
           </p>
@@ -1033,7 +1034,7 @@ function OperationsSection() {
     void refresh()
   }
 
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <ListSkeleton />
 
   return (
     <Card>
@@ -1107,7 +1108,7 @@ function IntelligenceSection() {
     void load()
   }
 
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <ListSkeleton />
 
   const open = rows.filter((r) => !r.resolved_at)
   const ungraded = open.filter((n) => !n.info_credibility).length
@@ -1131,7 +1132,7 @@ function IntelligenceSection() {
         }
       />
       {!open.length ? (
-        <div className="mt-3 rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
+        <div className="mt-3 rounded-lg border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
           <p className="text-sm font-semibold text-slate-200">
             {rows.length ? 'No unresolved SIB intelligence.' : 'No intelligence recorded yet.'}
           </p>
@@ -1382,7 +1383,7 @@ function RecordIntelligenceModal({ onClose, onDone }: { onClose: () => void; onD
           {(id) => <Textarea id={id} rows={5} value={body} onChange={(e) => setBody(e.target.value)} />}
         </Field>
 
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+        <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
           <p className="text-xs font-semibold text-slate-200">Grading (5×5×5)</p>
           <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">
             Set here or leave blank. It can only be entered as the note is written — afterwards it
@@ -1583,7 +1584,7 @@ function AgentsSection() {
         />
       </Card>
 
-      {loading ? <CardGridSkeleton cols="" /> : (
+      {loading ? <ListSkeleton /> : (
         <>
           <Card>
             <SectionHeader title={`Active (${active.length})`} />
@@ -1592,7 +1593,7 @@ function AgentsSection() {
             ) : (
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full min-w-[46rem] text-left text-xs">
-                  <thead className="text-[10px] uppercase tracking-wider text-slate-400">
+                  <thead className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     <tr>
                       <th className="px-2 py-1.5">Agent</th>
                       <th className="px-2 py-1.5">SIB role</th>
@@ -1609,7 +1610,7 @@ function AgentsSection() {
                         <td className="px-2 py-2 text-white">
                           {r.display_name || 'Member'}
                           {r.user_id === profile?.id && (
-                            <span className="ml-1 rounded bg-blue-500/15 px-1.5 text-[10px] font-semibold uppercase text-blue-300">you</span>
+                            <span className="ml-1 rounded bg-blue-500/15 px-1.5 text-[10px] font-semibold text-blue-300">You</span>
                           )}
                           {r.badge_number && <span className="ml-1 text-[11px] text-slate-400">#{r.badge_number}</span>}
                         </td>
@@ -1798,7 +1799,7 @@ function ActivitySection() {
     return () => { live = false }
   }, [])
 
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <ListSkeleton />
 
   return (
     <Card>

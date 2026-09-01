@@ -185,7 +185,7 @@ export function WarrantPrintButton({ r, c }: { r: ReportRow; c: CaseRow }) {
   return (
     <>
       <Button onClick={() => setPreparedAt(fmtDateTime(new Date()))}>
-        🖨️ Print / Export
+        Print / Export
       </Button>
       {preparedAt && createPortal(<WarrantSheet r={r} c={c} schema={schema} preparedAt={preparedAt} />, document.body)}
     </>

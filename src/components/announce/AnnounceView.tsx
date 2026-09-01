@@ -15,11 +15,12 @@ import { useTableVersion } from '@/lib/realtime'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { fmtDateTime } from '@/lib/format'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { KindIcon, RadioIcon } from '@/components/shell/icons'
 import { AnnouncementModal } from './AnnouncementModal'
 import { useToolNav } from '@/components/tools/useToolNav'
 import {
@@ -106,17 +107,15 @@ export function AnnounceView() {
     // Long-form reading surface: capped at the GuideView measure (max-w-4xl)
     // so notice text never spans the full 100rem shell.
     <section className="view-in mx-auto w-full max-w-4xl space-y-4">
-      <Card pad="lg">
-        <PageHeader
-          title="📣 Announcements"
-          subtitle="Division-wide notices from CID command staff. Posting is restricted to Bureau Lead and above."
-          actions={isCommand ? (
-            <Button variant="primary" onClick={() => setEditing('new')}>
-              + New Announcement
-            </Button>
-          ) : undefined}
-        />
-      </Card>
+      <PageHeader
+        title="Announcements"
+        subtitle="Division-wide notices from CID command staff. Posting is restricted to Bureau Lead and above."
+        actions={isCommand ? (
+          <Button variant="primary" onClick={() => setEditing('new')}>
+            + New Announcement
+          </Button>
+        ) : undefined}
+      />
 
       <div className="space-y-4">
         {state !== 'in' ? (
@@ -128,14 +127,14 @@ export function AnnounceView() {
             <ErrorNotice message="Couldn't load announcements." onRetry={() => { void refresh() }} />
           ) : dismissedCount ? (
             <EmptyState
-              icon="📣"
+              icon={<RadioIcon size={22} />}
               title="All announcements dismissed"
               hint="You’ve hidden every current notice."
               action={{ label: `Show ${dismissedCount} dismissed`, onClick: restoreAll }}
             />
           ) : (
             <EmptyState
-              icon="📣"
+              icon={<RadioIcon size={22} />}
               title="No announcements yet"
               hint={isCommand ? 'Use “+ New Announcement” to post the first.' : 'Division-wide notices from CID command will appear here.'}
             />
@@ -190,8 +189,8 @@ function AnnChips({ a }: { a: AnnouncementRow }) {
         <span key={m.target} className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[11px] text-blue-300">@{m.label || mentionLabel(m.target)}</span>
       ))}
       {links.map((l) => (
-        <span key={l.id} className="rounded bg-violet-500/10 px-1.5 py-0.5 text-[11px] text-violet-300">
-          {REC_LINK[l.type]?.icon || '🔗'} {l.label || l.id}
+        <span key={l.id} className="inline-flex items-center gap-1 rounded bg-violet-500/10 px-1.5 py-0.5 text-[11px] text-violet-300">
+          <KindIcon kind={l.type} size={12} /> {l.label || l.id}
         </span>
       ))}
     </div>
@@ -208,11 +207,11 @@ function AnnouncementCard({ a, canManage, onOpen, onEdit, onDismiss }: {
   return (
     <article
       onClick={onOpen}
-      className={`cursor-pointer rounded-2xl border p-5 transition hover:border-blue-500/30 ${a.pinned ? 'border-amber-500/30 bg-amber-500/[0.04]' : 'border-white/5 bg-ink-900/60'}`}
+      className={`cursor-pointer rounded-lg border p-5 transition hover:border-blue-500/30 ${a.pinned ? 'border-amber-500/30 bg-amber-500/[0.04]' : 'border-white/5 bg-ink-900/60'}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-base font-bold text-white">{a.pinned ? '📌 ' : ''}{a.title}</h2>
+          <h2 className="flex items-center gap-2 text-base font-bold text-white">{a.title}{a.pinned && <Badge tone="warn">Pinned</Badge>}</h2>
           <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400">
             <span>{a.author_name || 'Command'} · {fmtDateTime(a.created_at)}</span>
             <AudienceChip audience={a.audience} />
@@ -247,7 +246,7 @@ function AnnouncementViewModal({ a, onClose }: { a: AnnouncementRow; onClose: ()
       <div className="p-6">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold text-white">{a.pinned ? '📌 ' : ''}{a.title}</h2>
+            <h2 className="flex flex-wrap items-center gap-2 text-xl font-bold text-white">{a.title}{a.pinned && <Badge tone="warn">Pinned</Badge>}</h2>
             <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400">
               <span>{a.author_name || 'Command'} · {fmtDateTime(a.created_at)}</span>
               <AudienceChip audience={a.audience} />
@@ -265,11 +264,11 @@ function AnnouncementViewModal({ a, onClose }: { a: AnnouncementRow; onClose: ()
         <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{a.body}</p>
         {links.length > 0 && (
           <div className="mt-4 border-t border-white/5 pt-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Linked records</p>
+            <p className="mb-2 text-[13px] font-semibold text-white">Linked records</p>
             <div className="flex flex-wrap gap-2">
               {links.map((l) => (
-                <button key={l.id} onClick={() => openLink(l)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-blue-300 hover:bg-white/10">
-                  {REC_LINK[l.type]?.icon || '🔗'} {l.label || l.id}
+                <button key={l.id} onClick={() => openLink(l)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-blue-300 hover:bg-white/10">
+                  <KindIcon kind={l.type} size={13} /> {l.label || l.id}
                 </button>
               ))}
             </div>

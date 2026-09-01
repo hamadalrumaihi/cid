@@ -56,7 +56,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         />
       )}
       <Sidebar drawerOpen={drawerOpen} onCloseDrawer={() => setDrawerOpen(false)} />
-      <main className="grid-texture min-w-0 flex-1 lg:ml-64">
+      <main className="min-w-0 flex-1 lg:ml-64">
         <Header onOpenDrawer={() => setDrawerOpen(true)} />
         <Subtabs />
         <SiuStatusStrip />

@@ -28,7 +28,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import { MetricStrip } from '@/components/ui/MetricStrip'
 import { SectionHeader } from '@/components/ui/PageHeader'
-import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { DetailSkeleton } from '@/components/ui/Skeleton'
 
 const fmtDate = (v?: string | null) =>
   v ? new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
@@ -60,7 +60,7 @@ export function SiuCommandSection() {
     return () => { live = false }
   }, [load])
 
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <DetailSkeleton />
 
   // The server already answered `access: false`. Render the ordinary
   // nothing-here surface rather than a locked panel.
@@ -97,7 +97,7 @@ export function SiuCommandSection() {
         </div>
         {!!intel?.access && (
           <div className="mt-3">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+            <p className="mb-2 text-[13px] font-semibold text-white">
               Intelligence quality
             </p>
             <MetricStrip
@@ -131,14 +131,14 @@ export function SiuCommandSection() {
         ) : (
           <div className="mt-3 overflow-x-auto">
             <table className="w-full min-w-[38rem] text-left text-xs">
-              <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+              <thead className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                 <tr>
-                  <th className="pb-2 pr-3 font-medium">Agent</th>
-                  <th className="pb-2 pr-3 font-medium">Open</th>
-                  <th className="pb-2 pr-3 font-medium">Leading</th>
-                  <th className="pb-2 pr-3 font-medium">Inquiries</th>
-                  <th className="pb-2 pr-3 font-medium">Overdue reviews</th>
-                  <th className="pb-2 font-medium">Recused from</th>
+                  <th className="pb-2 pr-3 font-semibold">Agent</th>
+                  <th className="pb-2 pr-3 font-semibold">Open</th>
+                  <th className="pb-2 pr-3 font-semibold">Leading</th>
+                  <th className="pb-2 pr-3 font-semibold">Inquiries</th>
+                  <th className="pb-2 pr-3 font-semibold">Overdue reviews</th>
+                  <th className="pb-2 font-semibold">Recused from</th>
                 </tr>
               </thead>
               <tbody className="text-slate-300">
@@ -181,7 +181,7 @@ export function SiuCommandSection() {
         ) : (
           <ul className="mt-3 space-y-2">
             {data.aging.map((c) => (
-              <li key={c.case_id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+              <li key={c.case_id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-semibold text-slate-100">{c.case_number}</span>
                   <span className="text-xs text-slate-400">{c.title ?? 'Untitled'}</span>
@@ -233,7 +233,7 @@ export function SiuOversightSupplementCard() {
     return () => { live = false }
   }, [load])
 
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <DetailSkeleton />
   if (!data?.access) return null
 
   const byReason = Object.entries(data.closed_by_reason ?? {})
@@ -272,7 +272,7 @@ export function SiuOversightSupplementCard() {
 
       {!!byCategory.length && (
         <div className="mt-4">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+          <p className="mb-2 text-[13px] font-semibold text-white">
             Open caseload by category
           </p>
           <div className="flex flex-wrap gap-2">
@@ -285,7 +285,7 @@ export function SiuOversightSupplementCard() {
 
       {!!byReason.length && (
         <div className="mt-4">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+          <p className="mb-2 text-[13px] font-semibold text-white">
             Closed by reason
           </p>
           <div className="flex flex-wrap gap-2">

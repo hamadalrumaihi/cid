@@ -257,13 +257,13 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
               <Card key={k} pad="sm" className={own ? 'border-badge-500/25 sm:col-span-2 xl:col-span-3' : undefined}>
                 <p className="text-sm font-bold text-white">
                   {bureauLabel(k)}
-                  {own && <span className="ml-2 text-[11px] font-semibold uppercase tracking-wider text-badge-200">Your bureau</span>}
+                  {own && <span className="ml-2 text-xs font-medium text-badge-200">Your bureau</span>}
                 </p>
                 <p className="mt-0.5 text-[11px] text-slate-400">{s.total} case{s.total === 1 ? '' : 's'} on file</p>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  <div><p className="text-2xl font-bold text-white">{s.open}</p><p className="text-[10px] uppercase tracking-wider text-slate-400">Active load</p></div>
-                  <div><p className={`text-2xl font-bold ${clrTint}`}>{clr}</p><p className="text-[10px] uppercase tracking-wider text-slate-400">Clearance</p></div>
-                  <div><p className="text-2xl font-bold text-white">{fmtAvgDays(s.avg)}</p><p className="text-[10px] uppercase tracking-wider text-slate-400">Avg close</p></div>
+                  <div><p className="text-2xl font-bold text-white">{s.open}</p><p className="text-xs font-medium text-slate-500">Active load</p></div>
+                  <div><p className={`text-2xl font-bold ${clrTint}`}>{clr}</p><p className="text-xs font-medium text-slate-500">Clearance</p></div>
+                  <div><p className="text-2xl font-bold text-white">{fmtAvgDays(s.avg)}</p><p className="text-xs font-medium text-slate-500">Avg close</p></div>
                 </div>
                 <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-ink-800" aria-hidden>
                   <div className={`h-full ${BAR_COLORS[k] ?? 'bg-slate-500'}`} style={{ width: `${Math.round(((openByBureau[k] ?? 0) / openMax) * 100)}%` }} />

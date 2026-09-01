@@ -30,6 +30,7 @@ import {
 } from '@/lib/legalWorkflow'
 import { useNow } from '@/lib/useNow'
 import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
+import { ScaleIcon } from '@/components/shell/icons'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Input, Select } from '@/components/ui/Field'
@@ -305,7 +306,7 @@ function LegalViewInner() {
         {loading && <p className="text-sm text-slate-400">Loading legal requests…</p>}
         {!loading && !isDojView && requests.length === 0 && (
           <EmptyState
-            icon="⚖️"
+            icon={<ScaleIcon className="h-5 w-5" />}
             title="No legal requests yet"
             hint="File a warrant or subpoena request to start the DOJ review workflow."
             {...(auth.profile?.active

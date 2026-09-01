@@ -11,7 +11,9 @@ import { toast } from '@/lib/toast'
 import { safeUrl } from '@/lib/safeUrl'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { parseIntelSummary } from '@/lib/jsonShapes'
+import { RadioIcon } from '@/components/shell/icons'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { EmptyState } from '@/components/ui/Notice'
 import { SaveState } from '@/components/ui/SaveState'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
@@ -270,7 +272,7 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
         </div>
 
         <div className="mb-2 mt-5 flex flex-wrap items-center gap-x-3 gap-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Structured intelligence</p>
+          <p className="text-[13px] font-semibold text-white">Structured intelligence</p>
           {record && <SaveState status={draftState.status} lastSavedAt={draftState.lastSavedAt} />}
         </div>
         <div className="space-y-2">
@@ -336,7 +338,7 @@ function MembershipHistory({ personId, currentId }: { personId: string; currentI
   if (!rows || rows.length <= 1) return null // nothing but the row being edited
   return (
     <div className="mt-4">
-      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Membership history</p>
+      <p className="mb-1.5 text-[13px] font-semibold text-white">Membership history</p>
       <ul className="space-y-1">
         {rows.map((r) => {
           const former = isFormerStatus(r.status)
@@ -840,7 +842,7 @@ export function GangPhotoLightbox({ media, onClose }: { media: { title: string; 
             ? <video src={src} controls className="max-h-[70vh] w-full rounded-lg" />
             // eslint-disable-next-line @next/next/no-img-element -- external media CDN
             : <img src={src} alt={media.title} className="max-h-[70vh] w-full rounded-lg object-contain" />
-        ) : <div className="grid h-40 place-items-center text-3xl" aria-hidden>📡</div>}
+        ) : <EmptyState icon={<RadioIcon size={24} />} title="No preview available" />}
         {src && <a href={src} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block text-xs font-semibold text-blue-300 hover:text-blue-200">Open original ↗</a>}
       </div>
     </Modal>

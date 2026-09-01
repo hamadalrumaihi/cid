@@ -80,7 +80,7 @@ export function ObservationHistory({ kind, refId }: { kind: ObservationHistoryKi
         <p className="text-sm text-slate-400">No verified observations yet.</p>
       )}
       {verified.map((o) => (
-        <div key={o.id} className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+        <div key={o.id} className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="good">Verified</Badge>
             <Badge>{SOURCE_TYPE_LABEL[o.source_type] ?? o.source_type}</Badge>
