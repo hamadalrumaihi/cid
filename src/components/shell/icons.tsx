@@ -201,6 +201,15 @@ export const MapIcon = (p: IconProps) => (
 export const RadioIcon = (p: IconProps) => (
   <T {...p}><circle cx="12" cy="12" r="2" /><path d="M7.8 16.2a6 6 0 0 1 0-8.4M16.2 7.8a6 6 0 0 1 0 8.4" /><path d="M5 19a10 10 0 0 1 0-14M19 5a10 10 0 0 1 0 14" /></T>
 )
+export const SettingsIcon = (p: IconProps) => (
+  <T {...p}><circle cx="12" cy="12" r="3" /><path d="M12 2.8l1.2 2.4 2.6.5 1.9-1 1.4 1.4-1 1.9.5 2.6 2.4 1.2v0l-2.4 1.2-.5 2.6 1 1.9-1.4 1.4-1.9-1-2.6.5L12 21.2l-1.2-2.4-2.6-.5-1.9 1-1.4-1.4 1-1.9-.5-2.6L2.8 12l2.4-1.2.5-2.6-1-1.9 1.4-1.4 1.9 1 2.6-.5z" /></T>
+)
+export const SlidersIcon = (p: IconProps) => (
+  <T {...p}><path d="M5 4v6M5 14v6M12 4v2M12 10v10M19 4v10M19 18v2" /><path d="M3 10h4M10 6h4M17 14h4" /></T>
+)
+export const SwapIcon = (p: IconProps) => (
+  <T {...p}><path d="M4 8h13l-3-3M20 16H7l3 3" /></T>
+)
 
 /** One glyph per searchable / linkable record kind — the single source both
  *  the command palette and cross-record chips draw from, replacing the two

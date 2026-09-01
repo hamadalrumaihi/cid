@@ -15,7 +15,7 @@ import { bureauShort, roleLabel } from '@/lib/roles'
 import { DEPARTMENT_LABEL, siuCallsign, siuRoleLabel } from '@/lib/siu'
 import { safeUrl } from '@/lib/safeUrl'
 import { Store } from '@/lib/store'
-import { CategoryIcon, ChevronIcon, CloseIcon, ShieldIcon } from './icons'
+import { CategoryIcon, ChevronIcon, CloseIcon, EyeIcon, ScaleIcon, SettingsIcon, ShieldIcon, SlidersIcon, SwapIcon } from './icons'
 import { useNav } from './useNav'
 import { useNavBadges } from './useNavBadges'
 
@@ -52,13 +52,13 @@ function OfficerCard() {
         className="flex w-full items-center gap-3 rounded-lg bg-white/5 px-3 py-2.5 text-left transition hover:bg-white/10"
         aria-label="Your profile and status"
       >
-        <div className="grid h-9 w-9 flex-shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-slate-600 to-slate-700 text-xs font-bold text-white">
+        <div className="grid h-9 w-9 flex-shrink-0 place-items-center overflow-hidden rounded-full bg-ink-700 text-xs font-semibold text-slate-200">
           {avatar ? <img src={avatar} className="h-9 w-9 rounded-full object-cover" alt="" /> : initials}
         </div>
         <div className="sidebar-hide min-w-0 flex-1 leading-tight">
-          <p className="truncate text-sm font-semibold text-white">{name}</p>
+          <p className="truncate text-[13px] font-semibold text-white">{name}</p>
           <p className="truncate text-[11px] text-slate-400">{sub}</p>
-          <p className={`mt-0.5 truncate text-[10px] font-semibold uppercase tracking-wider ${
+          <p className={`mt-0.5 truncate text-[11px] font-medium ${
             siu.inSiu ? 'text-violet-300/80' : 'text-blue-300/80'
           }`}>
             {siu.inSiu
@@ -69,11 +69,11 @@ function OfficerCard() {
           </p>
         </div>
         {profile?.loa && (
-          <span className="sidebar-hide flex-shrink-0 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-300" title="On Leave of Absence">
+          <span className="sidebar-hide flex-shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300" title="On Leave of Absence">
             LOA
           </span>
         )}
-        <span className={`sidebar-hide pulse-dot h-2.5 w-2.5 flex-shrink-0 rounded-full ${dot.cls}`} title={dot.title} />
+        <span className={`sidebar-hide h-2.5 w-2.5 flex-shrink-0 rounded-full ${dot.cls}`} title={dot.title} />
       </button>
     </div>
   )
@@ -92,12 +92,24 @@ const readCollapsed = () => document.body.classList.contains('nav-collapsed')
 /** The capability-gated dashboard leaves (the old standalone Command Center +
  *  Owner leaves, absorbed and extended). Order matches the capability model's
  *  display order; entries render only when useCapabilities grants them. */
-const DASH_LEAVES: { id: SwitchableId; icon: string; title: string }[] = [
-  { id: 'command', icon: '🛡️', title: 'Command Center — personnel, approvals, promotions & chain of command' },
-  { id: 'sib', icon: '🛰️', title: 'Special Investigations Bureau workspace' },
-  { id: 'doj', icon: '⚖️', title: 'Legal Review — warrants & subpoenas awaiting DOJ review' },
-  { id: 'owner', icon: '🛠️', title: 'Owner Console — project intelligence & engineering operations' },
+const DASH_LEAVES: { id: SwitchableId; icon: React.ComponentType<{ className?: string }>; title: string }[] = [
+  { id: 'command', icon: ShieldIcon, title: 'Command Center — personnel, approvals, promotions & chain of command' },
+  { id: 'sib', icon: EyeIcon, title: 'Special Investigations Bureau workspace' },
+  { id: 'doj', icon: ScaleIcon, title: 'Legal Review — warrants & subpoenas awaiting DOJ review' },
+  { id: 'owner', icon: SettingsIcon, title: 'Owner Console — project intelligence & engineering operations' },
 ]
+
+/** One nav-item recipe for every row in the rail — the ~200-char class string
+ *  used to be pasted five times with drift. Active = quiet fill + accent rail. */
+const navItemCls = (active: boolean, rail = 'before:bg-badge-500') =>
+  `nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition hover:bg-white/5 hover:text-white ${
+    active
+      ? `relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full ${rail}`
+      : 'text-slate-300'
+  }`
+
+/** Quiet sentence-case group label (replaces the uppercase micro-caps rows). */
+const groupLabelCls = 'sidebar-hide px-3 pb-1 pt-3 text-[11px] font-medium text-slate-500'
 
 export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; onCloseDrawer: () => void }) {
   const caps = useCapabilities()
@@ -119,28 +131,26 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
   return (
     <aside
       id="sidebar"
-      className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-white/5 bg-ink-900/95 backdrop-blur-xl lg:translate-x-0 lg:bg-ink-900/80 ${
+      className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-white/5 bg-ink-900 lg:translate-x-0 ${
         drawerOpen ? '' : '-translate-x-full'
       }`}
       aria-label="Primary navigation"
     >
-      <div className="sidebar-head flex items-center gap-3 border-b border-white/5 px-5 py-5">
-        <div className={`relative grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl shadow-glow ${
-          inSiu ? 'bg-gradient-to-br from-violet-500 to-violet-800' : 'bg-gradient-to-br from-badge-500 to-blue-700'
+      <div className="sidebar-head flex items-center gap-3 border-b border-white/5 px-4 py-4">
+        <div className={`grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg ${
+          inSiu ? 'bg-violet-600' : 'bg-badge-500'
         }`}>
-          <ShieldIcon className="h-6 w-6 text-white" />
+          <ShieldIcon className="h-5 w-5 text-white" />
         </div>
         <div className="sidebar-hide leading-tight">
           {/* Brand wordmark, not the page heading — each view owns its single
               <h1> (PageHeader / dossier), so the brand is a styled <div> to keep
               one-h1-per-page. The department owns the wordmark: an SIU agent is
               not looking at "the CID Portal". */}
-          <div className="text-base font-bold tracking-tight text-white">
+          <div className="text-sm font-semibold tracking-tight text-white">
             {inSiu ? 'SIB Portal' : 'CID Portal'}
           </div>
-          <p className={`text-[11px] font-medium uppercase tracking-[0.18em] ${
-            inSiu ? 'text-violet-300/70' : 'text-blue-300/70'
-          }`}>
+          <p className="text-[11px] text-slate-500">
             {inSiu ? DEPARTMENT_LABEL.siu : 'San Andreas'}
           </p>
         </div>
@@ -153,18 +163,7 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
         </button>
       </div>
 
-      <div className={`sidebar-hide mx-4 mt-4 rounded-lg border px-3 py-2 ${
-        inSiu ? 'border-violet-500/25 bg-violet-500/5' : 'border-amber-500/20 bg-amber-500/5'
-      }`}>
-        <p className={`flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider ${
-          inSiu ? 'text-violet-300/90' : 'text-amber-400/90'
-        }`}>
-          <span className={`pulse-dot inline-block h-2 w-2 rounded-full ${inSiu ? 'bg-violet-400' : 'bg-amber-400'}`} />
-          {inSiu ? 'Restricted // SIB Eyes Only' : 'Restricted // CID Eyes Only'}
-        </p>
-      </div>
-
-      <nav className="mt-4 flex-1 space-y-1 overflow-y-auto px-3 pb-4" role="navigation">
+      <nav className="mt-2 flex-1 space-y-1 overflow-y-auto px-3 pb-4" role="navigation">
         {/* Dashboards — capability-gated leaf links (useCapabilities), one per
             dashboard the account holds beyond the shared category nav. This
             absorbs the former standalone Command Center + Owner leaves and
@@ -173,28 +172,24 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
             caps.ready so nothing flashes in and out during boot. */}
         {!inSiu && caps.ready && caps.dashboards.some((d) => DASH_LEAVES.some((l) => l.id === d)) && (
           <div className="pb-1">
-            <p className="sidebar-hide px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Dashboards
-            </p>
+            <p className={groupLabelCls}>Dashboards</p>
             {DASH_LEAVES.filter((l) => caps.dashboards.includes(l.id)).map((l) => (
               <button
                 key={l.id}
                 data-label={DASH_LABEL[l.id]}
                 onClick={() => go(() => navigate(DASH_TAB[l.id]))}
                 title={l.title}
-                className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
-                  activeTab === DASH_TAB[l.id]
-                    ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-badge-500'
-                    : 'text-slate-300'
-                }`}
+                className={navItemCls(activeTab === DASH_TAB[l.id])}
               >
-                <span className="nav-icon flex-shrink-0" aria-hidden>{l.icon}</span>
+                <span className="nav-icon flex-shrink-0 text-slate-400 group-hover:text-slate-200" aria-hidden>
+                  <l.icon className="h-4 w-4" />
+                </span>
                 <span className="nav-label">{DASH_LABEL[l.id]}</span>
               </button>
             ))}
           </div>
         )}
-        <p className="sidebar-hide px-3 pb-2 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+        <p className={groupLabelCls}>
           {inSiu ? 'Bureau' : 'Divisions'}
         </p>
         {/* SIU renders its OWN navigation — it is a separate department, not a
@@ -203,17 +198,13 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
             grouping, labels and context differ. */}
         {inSiu && SIU_NAV_CATEGORIES.map((cat) => (
           <div key={cat.id} className="pb-1">
-            <p className="sidebar-hide px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{cat.label}</p>
+            <p className={groupLabelCls}>{cat.label}</p>
             {cat.tabs.map((t) => (
               <button
                 key={t}
                 data-label={SIU_TAB_LABEL[t] ?? TAB_LABEL[t] ?? t}
                 onClick={() => go(() => navigate(t))}
-                className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
-                  activeTab === t
-                    ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-violet-400'
-                    : 'text-slate-300'
-                }`}
+                className={navItemCls(activeTab === t, 'before:bg-violet-400')}
               >
                 <span className="nav-label">{SIU_TAB_LABEL[t] ?? TAB_LABEL[t] ?? t}</span>
               </button>
@@ -228,23 +219,21 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
               data-label={c.label}
               aria-current={on ? 'page' : undefined}
               onClick={() => go(() => navigateCategory(c.id))}
-              className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
-                on ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-badge-500' : 'text-slate-300'
-              }`}
+              className={navItemCls(on)}
             >
-              <span className="nav-icon flex-shrink-0"><CategoryIcon cat={c.id} /></span>
+              <span className="nav-icon flex-shrink-0 text-slate-400 group-hover:text-slate-200"><CategoryIcon cat={c.id} /></span>
               <span className="nav-label">
                 {c.label}
                 {/* Vanilla puts all three badges on the Command button
                     (#pending/#ann/#signoff-nav-badge). */}
                 {c.id === 'command' && badges.pending > 0 && (
-                  <span role="status" aria-label={`${badges.pending} member${badges.pending === 1 ? '' : 's'} awaiting approval`} className="ml-1 rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white" title="Members awaiting approval">{badges.pending}</span>
+                  <span role="status" aria-label={`${badges.pending} member${badges.pending === 1 ? '' : 's'} awaiting approval`} className="ml-1 rounded bg-amber-500/15 px-1.5 text-[10px] font-semibold tabular-nums text-amber-300" title="Members awaiting approval">{badges.pending}</span>
                 )}
                 {c.id === 'command' && badges.announcements > 0 && (
-                  <span className="ml-1 rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white" title="Unread announcements">{badges.announcements > 9 ? '9+' : badges.announcements}</span>
+                  <span className="ml-1 rounded bg-rose-500/15 px-1.5 text-[10px] font-semibold tabular-nums text-rose-300" title="Unread announcements">{badges.announcements > 9 ? '9+' : badges.announcements}</span>
                 )}
                 {c.id === 'command' && badges.signoff > 0 && (
-                  <span className="ml-1 rounded-full bg-badge-500 px-1.5 text-[10px] font-bold text-white" title="Sign-off actions awaiting you">{badges.signoff}</span>
+                  <span className="ml-1 rounded bg-badge-500/15 px-1.5 text-[10px] font-semibold tabular-nums text-blue-300" title="Sign-off actions awaiting you">{badges.signoff}</span>
                 )}
               </span>
             </button>
@@ -254,11 +243,9 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
           data-label="Feedback"
           onClick={() => go(() => navigate('feedback'))}
           title="Suggest a feature or report a bug"
-          className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
-            activeTab === 'feedback' ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-badge-500' : 'text-slate-300'
-          }`}
+          className={navItemCls(activeTab === 'feedback')}
         >
-          <span className="nav-icon flex-shrink-0"><CategoryIcon cat="feedback" /></span>
+          <span className="nav-icon flex-shrink-0 text-slate-400 group-hover:text-slate-200"><CategoryIcon cat="feedback" /></span>
           <span className="nav-label">Feedback</span>
         </button>}
         {/* §14 intake, from the reporter's side. Shown to every CID member —
@@ -268,11 +255,9 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
           data-label="Report a Concern"
           onClick={() => go(() => navigate('concern'))}
           title="Confidential reporting outside the ordinary chain of command"
-          className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
-            activeTab === 'concern' ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-badge-500' : 'text-slate-300'
-          }`}
+          className={navItemCls(activeTab === 'concern')}
         >
-          <span className="nav-icon flex-shrink-0"><CategoryIcon cat="concern" /></span>
+          <span className="nav-icon flex-shrink-0 text-slate-400 group-hover:text-slate-200"><CategoryIcon cat="concern" /></span>
           <span className="nav-label">Report a Concern</span>
         </button>}
         {/* Command Center / SIB / Legal Review / Owner Console leaves moved
@@ -291,25 +276,25 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
               navigate(next === 'siu' ? 'siu' : 'inbox')
             })}
             title={`Switch to ${inSiu ? DEPARTMENT_LABEL.cid : DEPARTMENT_LABEL.siu}`}
-            className="nav-link group mt-2 flex w-full items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"
+            className="nav-link group mt-2 flex w-full items-center gap-3 rounded-lg border border-white/10 px-3 py-2 text-[13px] font-medium text-slate-300 transition hover:bg-white/5 hover:text-white"
           >
-            <span className="nav-icon flex-shrink-0" aria-hidden>⇄</span>
+            <span className="nav-icon flex-shrink-0 text-slate-400 group-hover:text-slate-200" aria-hidden><SwapIcon className="h-4 w-4" /></span>
             <span className="nav-label">{inSiu ? 'Switch to CID' : 'Switch to SIB'}</span>
           </button>
         )}
       </nav>
 
-      <div className="hidden border-t border-white/5 p-3 lg:block">
+      <div className="hidden border-t border-white/5 p-3 lg:flex lg:gap-2">
         <button
           onClick={() => go(() => navigate('profile'))}
-          className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white"
+          className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/5 hover:text-white"
           aria-label="My profile and appearance settings"
         >
-          🎨 <span className="nav-label">Appearance</span>
+          <SlidersIcon className="h-4 w-4" /> <span className="nav-label">Appearance</span>
         </button>
         <button
           onClick={toggleCollapse}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white"
+          className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/5 hover:text-white"
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           aria-pressed={collapsed}
         >

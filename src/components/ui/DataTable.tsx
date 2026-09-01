@@ -235,7 +235,7 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = 50, pageSizeOpt
       </div>
 
       {!slice.length ? (
-        <div className="rounded-xl border border-white/5 bg-ink-900 p-6 text-center text-sm text-slate-400">
+        <div className="rounded-lg border border-white/5 bg-ink-900 p-6 text-center text-sm text-slate-400">
           {rows.length ? 'No rows match your filter — try a broader search.' : emptyText}
         </div>
       ) : asCards ? (

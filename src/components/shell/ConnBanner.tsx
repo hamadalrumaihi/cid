@@ -27,7 +27,7 @@ export function ConnBanner() {
 
   if (online) return null
   return (
-    <div className="fixed bottom-[calc(var(--bottom-nav-h,0rem)+1rem+env(safe-area-inset-bottom,0px))] left-1/2 z-[80] -translate-x-1/2 rounded-full border border-amber-500/30 bg-amber-500/15 px-4 py-2 text-xs font-semibold text-amber-200 shadow-glow backdrop-blur">
+    <div className="fixed bottom-[calc(var(--bottom-nav-h,0rem)+1rem+env(safe-area-inset-bottom,0px))] left-1/2 z-[80] -translate-x-1/2 rounded-full border border-amber-500/30 bg-amber-500/15 px-4 py-2 text-xs font-semibold text-amber-200 shadow-pop backdrop-blur">
       ⚠ Offline — reconnecting…
     </div>
   )

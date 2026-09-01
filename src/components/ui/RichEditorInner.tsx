@@ -56,11 +56,11 @@ export function RichEditorInner({ value, onChange, minHeight = '18rem' }: {
     },
   })
 
-  if (!editor) return <div className="rounded-xl border border-white/10 bg-ink-950 p-3 text-sm text-slate-500" style={{ minHeight }}>Loading editor…</div>
+  if (!editor) return <div className="rounded-lg border border-white/10 bg-ink-950 p-3 text-sm text-slate-500" style={{ minHeight }}>Loading editor…</div>
 
   const hd = (level: 2 | 3) => (e: Editor) => e.chain().focus().toggleHeading({ level }).run()
   return (
-    <div className="overflow-hidden rounded-xl border border-white/10 bg-ink-950 transition focus-within:border-badge-500 focus-within:ring-2 focus-within:ring-badge-500/30">
+    <div className="overflow-hidden rounded-lg border border-white/10 bg-ink-950 transition focus-within:border-badge-500 focus-within:ring-2 focus-within:ring-badge-500/30">
       <div className="flex flex-wrap items-center gap-0.5 border-b border-white/10 bg-white/[0.03] px-2 py-1.5">
         <Btn editor={editor} active="bold" title="Bold (⌘B)" onRun={(e) => e.chain().focus().toggleBold().run()}><span className="font-black">B</span></Btn>
         <Btn editor={editor} active="italic" title="Italic (⌘I)" onRun={(e) => e.chain().focus().toggleItalic().run()}><span className="italic">I</span></Btn>

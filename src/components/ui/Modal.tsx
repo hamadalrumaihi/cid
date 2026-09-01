@@ -150,7 +150,7 @@ export function Modal({ open, onClose, children, wide, slide, dismissible = true
         className={
           slide
             ? 'modal-card relative ml-auto flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-white/10 bg-ink-850 shadow-2xl shadow-black/50'
-            : `modal-card relative w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90dvh] overflow-y-auto rounded-2xl border border-white/10 bg-ink-850 shadow-2xl shadow-black/50`
+            : `modal-card relative w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90dvh] overflow-y-auto rounded-xl border border-white/10 bg-ink-850 shadow-2xl shadow-black/50`
         }
       >
         <ModalGuardContext.Provider value={guard}>{children}</ModalGuardContext.Provider>

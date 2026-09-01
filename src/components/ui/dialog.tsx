@@ -126,7 +126,7 @@ function DialogCard({ dialog, finish }: { dialog: PendingDialog; finish: (v: boo
     >
       <div
         ref={cardRef}
-        className="max-h-[85dvh] w-full max-w-[26rem] overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-ink-850 p-6 shadow-2xl shadow-black/50"
+        className="max-h-[85dvh] w-full max-w-[26rem] overflow-y-auto overscroll-contain rounded-xl border border-white/10 bg-ink-850 p-6 shadow-2xl shadow-black/50"
         role="dialog"
         aria-modal="true"
         aria-labelledby={dialog.title ? 'cid-dialog-title' : undefined}
@@ -148,14 +148,14 @@ function DialogCard({ dialog, finish }: { dialog: PendingDialog; finish: (v: boo
           <button
             ref={cancelRef}
             onClick={() => finish(cancelVal)}
-            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10"
           >
             {dialog.cancelText || 'Cancel'}
           </button>
           <button
             ref={okRef}
             onClick={() => finish(isPrompt ? val.trim() : true)}
-            className={`rounded-lg ${okCls} px-4 py-2 text-sm font-semibold text-white transition`}
+            className={`rounded-lg ${okCls} px-4 py-2 text-sm font-medium text-white transition`}
           >
             {dialog.confirmText || (isPrompt ? 'OK' : 'Confirm')}
           </button>

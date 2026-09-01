@@ -306,7 +306,7 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
     >
       {/* Full-screen sheet below lg (safe-area padded, results scroll under
           the fixed input); the familiar centered card from lg up. */}
-      <div className="flex h-full w-full flex-col overflow-hidden bg-ink-850 pt-[env(safe-area-inset-top)] shadow-glow lg:h-auto lg:max-w-xl lg:rounded-2xl lg:border lg:border-white/10 lg:pt-0">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-ink-850 pt-[env(safe-area-inset-top)] shadow-pop lg:h-auto lg:max-w-xl lg:rounded-lg lg:border lg:border-white/10 lg:pt-0">
         <input
           ref={inputRef}
           value={query}

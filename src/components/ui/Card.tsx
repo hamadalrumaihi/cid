@@ -1,6 +1,6 @@
 'use client'
 
-/** The canonical surface. `rounded-2xl border border-white/5 bg-ink-900/60`
+/** The canonical surface. `rounded-lg border border-white/5 bg-ink-900/60`
  *  recurs ~87 times across 35 files; padding drifted p-4/5/6 with no rule and
  *  a few dirs (command-center, profile, operations) used border-white/10,
  *  reading heavier than the rest. This fixes the border and gives padding a
@@ -29,7 +29,7 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 
 const VARIANT: Record<NonNullable<CardProps['variant']>, string> = {
   // 8px corners across both variants — record surfaces, not app-store tiles.
-  // Large rounding is reserved for major dialogs (Modal keeps rounded-2xl).
+  // Large rounding is reserved for major dialogs (Modal keeps rounded-lg).
   default: 'rounded-lg border border-white/5 bg-ink-900/60',
   flat: 'rounded-lg border border-white/10 bg-ink-900/40',
 }

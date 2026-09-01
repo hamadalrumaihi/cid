@@ -75,7 +75,7 @@ export function StaleIntelBadge({
   if (d < thresholdDays) return null
   return (
     <span className={`t-readout inline-flex flex-shrink-0 items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300 ${className}`} title={`Not reviewed in ${d} days (threshold ${thresholdDays})`}>
-      <span className="t-dot t-dot-amber pulse-dot" /> {d}D STALE
+      <span className="t-dot t-dot-amber" /> {d}D STALE
     </span>
   )
 }

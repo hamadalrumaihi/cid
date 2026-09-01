@@ -1,6 +1,10 @@
 @import "tailwindcss";
 
-/* ── CID Portal theme tokens — ported from the legacy styles.css ─────────── */
+/* ── CID Portal theme tokens ──────────────────────────────────────────────
+   Two tiers. The ink-* ramp is the legacy palette (kept: hundreds of call
+   sites still reference it). The SEMANTIC tier below it is the design-system
+   contract new/refactored code writes against — surfaces, edges and text
+   roles instead of raw palette values. The app is dark-only by design. */
 @theme {
   --color-ink-950: #070b14;
   --color-ink-900: #0b1220;
@@ -10,6 +14,23 @@
   --color-ink-600: #26385a;
   --color-badge-500: #3b82f6;
 
+  /* Semantic surfaces — solid fills (no translucency: glass panels over the
+     canvas were part of the generated look; solid surfaces + hairline edges
+     read as engineered chrome). canvas < surface < raised < overlay. */
+  --color-canvas: #070b14;         /* page background (ink-950) */
+  --color-surface: #0b1220;        /* default panel / table / input (ink-900) */
+  --color-surface-raised: #0f1726; /* menus, popovers, modals (ink-850) */
+  --color-surface-overlay: #131c2e;/* highest chrome (ink-800) */
+
+  /* Semantic edges — hairline borders carry structure instead of shadows. */
+  --color-edge: rgb(255 255 255 / 0.07);
+  --color-edge-strong: rgb(255 255 255 / 0.14);
+
+  /* Semantic text roles. fg > fg-mid (secondary) > fg-muted (metadata). */
+  --color-fg: #e6eaf2;
+  --color-fg-mid: #94a3b8;
+  --color-fg-muted: #64748b;
+
   /* Accent is a variable so data-accent themes swap it in one place. */
   --color-accent: var(--cid-accent);
   --color-accent-deep: var(--cid-accent-deep);
@@ -18,7 +39,10 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 
-  --shadow-glow: 0 0 24px rgba(59, 130, 246, 0.18);
+  /* Single elevation shadow — dropdowns / popovers / dialogs only. The old
+     decorative --shadow-glow is gone on purpose: nothing in the product
+     glows. */
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.45);
 }
 
 /* Accent themes — same Store keys and data attributes as the legacy app.
@@ -139,31 +163,10 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
   outline-offset: 2px;
 }
 
-/* ── Shell chrome (ported 1:1 from legacy styles.css) ────────────────────── */
-
-/* Subtle blueprint grid behind the workspace. */
-.grid-texture {
-  background-image:
-    linear-gradient(rgba(59, 130, 246, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(59, 130, 246, 0.02) 1px, transparent 1px);
-  background-size: 32px 32px;
-}
-
-/* Breathing status dot (login gate, sidebar, header). */
-.pulse-dot { position: relative; }
-.pulse-dot::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 9999px;
-  background: inherit;
-  animation: pulse 1.8s ease-out infinite;
-  opacity: 0.6;
-}
-@keyframes pulse {
-  0%   { transform: scale(1);   opacity: 0.6; }
-  100% { transform: scale(2.6); opacity: 0; }
-}
+/* ── Shell chrome ─────────────────────────────────────────────────────────
+   The decorative layer (blueprint grid texture, breathing pulse dots, the
+   staggered login entrance, glow shadows) was removed in the redesign:
+   status is a plain dot + label, chrome is flat surfaces + hairlines. */
 
 /* Hardware-readout typography + 7px status dots (tactical skin). */
 .t-readout { font-family: var(--font-mono); letter-spacing: 0.04em; }
@@ -172,15 +175,6 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
 .t-dot-amber { background: var(--t-amber); }
 .t-dot-green { background: var(--t-green); }
 .t-dot-rose  { background: var(--t-rose); }
-
-/* Login gate: staggered card entrance. */
-.gate-boot > * { animation: card-in 0.5s cubic-bezier(0.16, 0.84, 0.44, 1) both; }
-.gate-boot > *:nth-child(2) { animation-delay: 0.12s; }
-.gate-boot > *:nth-child(3) { animation-delay: 0.24s; }
-@keyframes card-in {
-  from { opacity: 0; transform: translateY(14px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
 
 /* View + modal + toast entrances. */
 @keyframes viewIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -217,13 +211,12 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
 }
 
 /* ── Shared layout tokens — shell chrome geometry, published once ──────────
-   --app-header-h: the sticky Header's height (px-3 py-3.5 + h-11 controls =
-   4.5rem; sm py-4 → 4.75rem). --bottom-nav-h: BottomNav's height EXCLUDING
+   --app-header-h: the sticky Header's height (a fixed h-14 bar = 3.5rem at
+   every breakpoint). --bottom-nav-h: BottomNav's height EXCLUDING
    its own safe-bottom padding (py-2.5 + icon + label ≈ 3.5rem); it renders
    below lg only, so the token is 0 at lg+ — anything offset by it collapses
    to its desktop position automatically. */
-:root { --app-header-h: 4.5rem; --bottom-nav-h: 0rem; }
-@media (min-width: 640px) { :root { --app-header-h: 4.75rem; } }
+:root { --app-header-h: 3.5rem; --bottom-nav-h: 0rem; }
 @media (max-width: 1023.98px) { :root { --bottom-nav-h: 3.5rem; } }
 
 @layer components {
@@ -270,7 +263,7 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pulse-dot::after, .gate-boot > *, .view-in, .modal-backdrop, .modal-card, .skel, .btn-spinner {
+  .view-in, .modal-backdrop, .modal-card, .skel, .btn-spinner {
     animation: none !important;
   }
 }

@@ -36,10 +36,10 @@ export function Subtabs() {
         role="tab"
         aria-selected={on}
         onClick={() => navigate(t)}
-        className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+        className={`relative flex-shrink-0 px-3 py-2 text-xs transition ${
           on
-            ? 'bg-blue-500/15 text-white shadow-[inset_0_-2px_0_0_rgb(var(--acc-500))]'
-            : 'text-slate-400 hover:bg-white/5 hover:text-white'
+            ? 'font-semibold text-white after:absolute after:inset-x-2 after:bottom-0 after:h-[2px] after:rounded-full after:bg-badge-500'
+            : 'font-medium text-slate-400 hover:text-slate-200'
         }`}
       >
         {TAB_LABEL[t] || t}
@@ -49,7 +49,7 @@ export function Subtabs() {
 
   return (
     <nav
-      className="scroll-strip z-10 flex items-center gap-1 overflow-x-auto border-b border-white/5 bg-ink-950/60 px-4 py-2 sm:px-8"
+      className="scroll-strip z-10 flex items-center gap-1 overflow-x-auto border-b border-white/5 bg-ink-950/90 px-4 sm:px-6"
       role="tablist"
       aria-label="Section tools"
     >
