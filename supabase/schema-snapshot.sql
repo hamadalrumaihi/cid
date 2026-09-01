@@ -14286,10 +14286,14 @@ revoke all on function public.report_create(uuid, text, text, jsonb) from public
 grant execute on function public.report_create(uuid, text, text, jsonb) to authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
--- City 2.0 operational reset tool (20261003120000_city2_operational_reset.sql)
+-- City 2.0 operational reset tool (20261003120000_city2_operational_reset.sql,
+-- superseded in place by 20261003130000_city2_reset_keep_roster.sql).
 -- One-time maintenance action, private schema only (not PostgREST-exposed).
--- Executed against the live project on 2026-09-01 (audit_log id 1 =
--- CITY2_RESET). private.city2_verify() remains usable as a health check.
+-- Executed 2026-09-01: first run unassigned personnel; a dashboard backup
+-- restore rolled the project back, and the keep-roster revision below was
+-- then executed, preserving profiles / siu_memberships / field_officers
+-- verbatim (audit_log id 1 = CITY2_RESET). city2_verify() remains usable
+-- as a health check. Definitions below are the live (keep-roster) versions.
 -- ---------------------------------------------------------------------------
 create or replace function private.city2_wipe_tables()
 returns text[]
@@ -14302,7 +14306,8 @@ as $$
     'notifications','watchlist','user_pins','user_drafts','announcements',
     'client_errors','case_files','cid_records','deletion_tokens',
     'deleted_member_ledger','shift_reports','commendations',
-    -- field intake domain (siu_targets references field_submissions NO ACTION)
+    -- field intake domain (siu_targets references field_submissions NO ACTION;
+    -- field_officers is roster and is NOT wiped in this revision)
     'field_siu_enterprise','field_siu_followups','field_siu_actions',
     'field_claim_links','field_claim_verdicts','field_submission_evidence',
     'field_submission_messages','field_submission_reviews',
@@ -14310,7 +14315,7 @@ as $$
     'field_submission_persons','field_submission_vehicles',
     'field_submission_orgs','field_submission_locations',
     'field_submission_items','field_access_requests','field_assignments',
-    'field_submissions','field_officers',
+    'field_submissions',
     -- surveillance / bridge
     'surveillance_alerts','surveillance_event_participants',
     'surveillance_observation_entities','surveillance_review_history',
@@ -14326,13 +14331,13 @@ as $$
     'mdt_wanted_projections','legal_request_actions','legal_request_exhibits',
     'legal_request_signatures','legal_request_participants',
     'legal_request_versions','legal_requests',
-    -- SIU operational + appointments
+    -- SIU operational (siu_memberships is roster and is NOT wiped)
     'siu_visibility_events','siu_visibility','siu_case_notes',
     'siu_disclosures','siu_sources','siu_undercover_operations',
     'siu_financial_intel','siu_comms_intel','siu_integrity_reviews',
     'siu_exports','siu_referrals','siu_conflicts','siu_watchlist',
     'siu_access_requests','siu_temporary_access','siu_compartment_members',
-    'siu_case_agents','siu_memberships',
+    'siu_case_agents',
     -- case periphery, reports, operations
     'case_charges','case_signoff_history','case_access_grants',
     'case_access_requests','case_assignments','case_messages',
@@ -14357,7 +14362,8 @@ as $$
     'document_acknowledgements','document_reading_campaigns',
     'document_user_state','document_suggestion_comments',
     'document_suggestion_events','document_suggestions','document_relations',
-    -- personnel workflow records
+    -- personnel workflow records (requests/history — the roster itself,
+    -- profiles / siu_memberships / field_officers, is preserved)
     'transfer_requests','member_transfers','membership_request_history',
     'membership_requests','justice_membership_request_history',
     'justice_membership_requests','justice_memberships',
@@ -14368,9 +14374,6 @@ as $$
   ]
 $$;
 
--- ---------------------------------------------------------------------------
--- Preview: exactly what will be affected, with current row counts. Read-only.
--- ---------------------------------------------------------------------------
 create or replace function private.city2_reset_preview()
 returns table (step integer, action text, target text, rows_now bigint)
 language plpgsql
@@ -14393,10 +14396,8 @@ begin
   step := i; action := 'delete filtered rows'; target := 'public.documents (category=investigative, + versions/sections via cascade)'; rows_now := n;
   return next;
   i := i + 1;
-  select count(*) into n from public.profiles
-   where not is_owner and not is_system and not is_test
-     and (active or role is not null or division is not null or loa or loa_since is not null);
-  step := i; action := 'personnel reset (active=false, role/division NULL, LOA cleared)'; target := 'public.profiles (non-owner, non-system)'; rows_now := n;
+  select count(*) into n from public.profiles;
+  step := i; action := 'PRESERVED VERBATIM (roster kept: role/bureau/active/LOA unchanged)'; target := 'public.profiles + siu_memberships + field_officers'; rows_now := n;
   return next;
   i := i + 1;
   select count(*) into n from private.field_submission_counters;
@@ -14421,11 +14422,6 @@ end $$;
 
 revoke all on function private.city2_reset_preview() from public, anon, authenticated;
 
--- ---------------------------------------------------------------------------
--- Verify: zero-counts on every operational target, generic FK-orphan scan,
--- preserved-configuration counts, sequence positions, RLS/realtime posture.
--- Safe to run any time.
--- ---------------------------------------------------------------------------
 create or replace function private.city2_verify()
 returns jsonb
 language plpgsql
@@ -14495,7 +14491,10 @@ begin
     'profiles_total',        (select count(*) from public.profiles),
     'profiles_owner',        (select count(*) from public.profiles where is_owner),
     'profiles_owner_active', (select count(*) from public.profiles where is_owner and active),
-    'profiles_assigned',     (select count(*) from public.profiles where not is_owner and not is_system and (active or role is not null or division is not null)),
+    'profiles_active_members', (select count(*) from public.profiles where active and not is_owner),
+    'profiles_role_assigned',  (select count(*) from public.profiles where role is not null and not is_owner),
+    'siu_memberships',       (select count(*) from public.siu_memberships),
+    'field_officers',        (select count(*) from public.field_officers),
     'penal_code_versions',   (select count(*) from public.penal_code_versions),
     'penal_charges',         (select count(*) from public.penal_charges),
     'penal_rules',           (select count(*) from public.penal_rules),
@@ -14539,11 +14538,6 @@ end $$;
 
 revoke all on function private.city2_verify() from public, anon, authenticated;
 
--- ---------------------------------------------------------------------------
--- The reset itself. Single transaction. Owner/maintenance only. One-shot:
--- requires the arming key and the exact confirmation phrase, and consumes
--- the arming key on success so it cannot run twice.
--- ---------------------------------------------------------------------------
 create or replace function private.city2_reset(p_confirm text)
 returns jsonb
 language plpgsql
@@ -14555,7 +14549,6 @@ declare
   n bigint;
   steps jsonb := '[]'::jsonb;
   total_deleted bigint := 0;
-  v_profiles_reset bigint;
   v_storage bigint;
   v_docs bigint;
   v_report jsonb;
@@ -14583,7 +14576,8 @@ begin
   update public.legal_requests set current_version_id = null
    where current_version_id is not null;
 
-  -- 4. ordered operational wipe
+  -- 4. ordered operational wipe (the roster — profiles, siu_memberships,
+  --    field_officers — is deliberately absent from the plan and untouched)
   foreach t in array private.city2_wipe_tables() loop
     execute format('delete from public.%I', t);
     get diagnostics n = row_count;
@@ -14598,15 +14592,7 @@ begin
   get diagnostics v_docs = row_count;
   total_deleted := total_deleted + v_docs;
 
-  -- 6. personnel reset: keep accounts; unassign everyone except Owner/system
-  update public.profiles
-     set active = false, role = null, division = null,
-         loa = false, loa_since = null
-   where not is_owner and not is_system and not is_test
-     and (active or role is not null or division is not null or loa or loa_since is not null);
-  get diagnostics v_profiles_reset = row_count;
-
-  -- 7. storage cleanup: operational objects out, bucket + policies stay.
+  -- 6. storage cleanup: operational objects out, bucket + policies stay.
   --    storage.protect_delete() blocks direct deletes unless this
   --    transaction-local flag is set (its own sanctioned escape hatch).
   perform set_config('storage.allow_delete_query', 'true', true);
@@ -14614,11 +14600,11 @@ begin
   get diagnostics v_storage = row_count;
   perform set_config('storage.allow_delete_query', 'false', true);
 
-  -- 8. numbering
+  -- 7. numbering
   perform setval('private.legal_request_seq', 1, false);       -- next = LR-YYYY-0001
   delete from private.field_submission_counters;               -- next = fresh per-year 001
 
-  -- 9. history tail: role events, notifications generated during the wipe,
+  -- 8. history tail: role events, notifications generated during the wipe,
   --    then the 1.0 audit history; auditing itself stays enabled and the
   --    first 2.0 audit event records this reset.
   delete from public.role_events;
@@ -14626,16 +14612,20 @@ begin
   delete from public.audit_log;
   perform setval('public.audit_log_id_seq', 1, false);
 
-  -- 10. consume the arming key: this tool is one-shot
+  -- 9. consume the arming key: this tool is one-shot
   delete from public.app_secrets where key = 'city2_reset_armed';
 
   v_report := jsonb_build_object(
-    'reset', 'CITY2_FRESH_START',
+    'reset', 'CITY2_FRESH_START_KEEP_ROSTER',
     'finished_at', now(),
     'rows_deleted_total', total_deleted,
     'rows_deleted_by_table', steps,
     'investigative_documents_deleted', v_docs,
-    'profiles_personnel_reset', v_profiles_reset,
+    'roster_preserved', jsonb_build_object(
+      'profiles', (select count(*) from public.profiles),
+      'active_members', (select count(*) from public.profiles where active and not is_owner),
+      'siu_memberships', (select count(*) from public.siu_memberships),
+      'field_officers', (select count(*) from public.field_officers)),
     'storage_objects_deleted', v_storage,
     'verification', private.city2_verify()
   );

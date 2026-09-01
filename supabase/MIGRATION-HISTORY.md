@@ -355,3 +355,29 @@ settings, surveillance alert rules) was altered.
 | Version (live) | Name | Repo file |
 |---|---|---|
 | applied via MCP (`city2_operational_reset`) | city2_operational_reset | `20261003120000_city2_operational_reset.sql` |
+
+## City 2.0 reset — keep-roster revision (2026-09-01, applied + executed)
+
+Follow-up to the entry above. After the first reset run, the Owner
+restored a pre-reset daily backup **into** the live project from the
+dashboard to recover the member roster; that rollback resurrected all 1.0
+operational data and removed the reset tool and its migration record.
+Per the Owner's directive ("keep member list as is"),
+`20261003130000_city2_reset_keep_roster.sql` re-creates the tool with the
+personnel step removed: `profiles` is untouched (role, bureau, active and
+LOA preserved verbatim for every account) and `siu_memberships` +
+`field_officers` are removed from the wipe plan. Both migrations were
+(re)applied to the live project via MCP (`city2_operational_reset` as a
+history stub, then `city2_reset_keep_roster` with the live definitions),
+and the reset was **re-executed on 2026-09-01 04:58 UTC**: 2,320
+operational rows deleted, 5 investigative documents removed, 2 storage
+objects cleared, sequences restarted, 1.0 audit history cleared.
+Post-run `private.city2_verify()`: `clean=true`, 0 rows remaining,
+0 FK orphans (559 constraints), roster preserved — 40 profiles,
+29 active members, 34 role/bureau assignments, 2 SIU memberships,
+2 field officers. Membership/transfer/justice request+history records
+(workflow history, not the roster) remain cleared.
+
+| Version (live) | Name | Repo file |
+|---|---|---|
+| applied via MCP (`city2_reset_keep_roster`) | city2_reset_keep_roster | `20261003130000_city2_reset_keep_roster.sql` |
