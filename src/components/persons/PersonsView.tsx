@@ -30,6 +30,7 @@ import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
@@ -120,13 +121,13 @@ function RegistrySavedViews({ sv, active, currentConfig, onApply, onActive }: {
 /** live / syncing presence chip — stale rows stay visible while refreshing. */
 function PresenceChip({ busy }: { busy: boolean }) {
   return busy ? (
-    <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-medium text-amber-300">
-      <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-amber-400" />syncing
-    </span>
+    <Badge tone="warn">
+      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />syncing
+    </Badge>
   ) : (
-    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
-      <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
-    </span>
+    <Badge tone="good">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />live
+    </Badge>
   )
 }
 
@@ -470,23 +471,21 @@ export function PersonsView() {
 
   return (
     <section className="view-in space-y-4">
-      <Card pad="lg">
-        <PageHeader
-          title="Persons of Interest"
-          subtitle="Identity, affiliations, legal status, relationships, and investigative history."
-          actions={
-            <>
-              {state === 'in' && <PresenceChip busy={refreshing || searching} />}
-              {canEdit && (
-                <Button variant="primary" onClick={() => setEditor({ record: null })}>
-                  New person
-                </Button>
-              )}
-            </>
-          }
-        />
-        {state === 'in' && !err && <MetricStrip metrics={metrics} className="mt-4 xl:grid-cols-5" />}
-      </Card>
+      <PageHeader
+        title="Persons of Interest"
+        subtitle="Identity, affiliations, legal status, relationships, and investigative history."
+        actions={
+          <>
+            {state === 'in' && <PresenceChip busy={refreshing || searching} />}
+            {canEdit && (
+              <Button variant="primary" onClick={() => setEditor({ record: null })}>
+                New person
+              </Button>
+            )}
+          </>
+        }
+      />
+      {state === 'in' && !err && <MetricStrip metrics={metrics} className="xl:grid-cols-5" />}
 
       <div className="flex flex-wrap items-center gap-2">
         <input
@@ -522,7 +521,7 @@ export function PersonsView() {
       />
 
       {selected.size > 0 && (
-        <div className="sticky-below-header-2 z-10 flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 backdrop-blur">
+        <div className="sticky-below-header-2 z-10 flex items-center justify-between rounded-lg border border-rose-500/20 bg-rose-500/10 px-4 py-2 backdrop-blur">
           <span className="text-sm font-semibold text-rose-200">{selected.size} selected</span>
           <span className="flex gap-2">
             <Button size="sm" variant="danger" onClick={() => void deleteSelected()}>Delete selected</Button>

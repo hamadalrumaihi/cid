@@ -15,8 +15,10 @@ import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { AlertIcon, GangIcon, PersonIcon, RadioIcon, VehicleIcon, XMarkIcon } from '@/components/shell/icons'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -103,33 +105,114 @@ export function VehiclesView() {
   // (openProfile below) and this list tab never swaps itself out.
   if (vehicleId && !nav.inWorkspace) return <VehicleProfile id={vehicleId} onBack={() => router.push('/vehicles')} />
 
+  const openProfile = (v: VehicleRow) => {
+    if (nav.inWorkspace) nav.openRecord('vehicles', v.id, v.plate)
+    else router.push(`/vehicles?vehicle=${v.id}`)
+  }
+
+  const actionBtn = 'min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10 sm:min-h-0'
+
+  const actions = (v: VehicleRow) => (
+    <span className="flex flex-shrink-0 items-center gap-2">
+      <WatchButton type="vehicle" id={v.id} label={v.plate} compact />
+      <button onClick={() => openProfile(v)} className={`-my-1 ${actionBtn}`}>Profile</button>
+      {canEdit && <button onClick={() => setEditor({ record: v })} className={`-my-1 ${actionBtn}`}>Edit</button>}
+      {canDelete && <button onClick={() => void onDelete(v)} aria-label={`Delete vehicle ${v.plate}`} className="-my-1 min-h-[44px] min-w-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10 sm:min-h-0 sm:min-w-0"><XMarkIcon size={14} className="mx-auto" /></button>}
+    </span>
+  )
+
+  // Narrow-viewport fallback for the table — the registry card, unchanged.
+  const vehicleCard = (v: VehicleRow) => {
+    const owner = ownerName(v.owner_id)
+    const gang = gangName(v.gang_id)
+    return (
+      <Card>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="inline-block rounded-md border border-white/15 bg-ink-800 px-2.5 py-1 font-mono text-sm font-semibold tracking-widest text-white">{v.plate}</p>
+            <p className="mt-1.5 text-sm font-semibold text-slate-200">
+              {v.model || 'Unknown model'}
+              {v.color && <span className="text-slate-500"> · {v.color}</span>}
+            </p>
+          </div>
+          {actions(v)}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+          {owner ? <span className="inline-flex items-center gap-1 rounded-md bg-blue-500/10 px-2 py-1 text-blue-300"><PersonIcon size={11} />{owner}</span> : <span className="rounded-md bg-white/5 px-2 py-1 text-slate-500">owner unknown</span>}
+          {gang && <span className="inline-flex items-center gap-1 rounded-md bg-violet-500/10 px-2 py-1 text-violet-300"><GangIcon size={11} />{gang}</span>}
+        </div>
+        {v.notes && <p className="mt-3 text-xs text-slate-400">{v.notes}</p>}
+      </Card>
+    )
+  }
+
+  // Table columns — the same fields the old card grid showed.
+  const columns: DataColumn<VehicleRow>[] = [
+    {
+      key: 'plate', label: 'Plate',
+      value: (v) => v.plate,
+      render: (v) => <span className="inline-block rounded-md border border-white/15 bg-ink-800 px-2 py-0.5 font-mono text-xs font-semibold tracking-widest text-white">{v.plate}</span>,
+    },
+    {
+      key: 'model', label: 'Model',
+      value: (v) => [v.model || 'Unknown model', v.color].filter(Boolean).join(' · '),
+      render: (v) => (
+        <span className="text-sm text-slate-200">
+          {v.model || 'Unknown model'}
+          {v.color && <span className="text-slate-500"> · {v.color}</span>}
+        </span>
+      ),
+    },
+    {
+      key: 'owner', label: 'Owner',
+      value: (v) => ownerName(v.owner_id) ?? '—',
+      render: (v) => {
+        const owner = ownerName(v.owner_id)
+        return owner
+          ? <span className="inline-flex items-center gap-1 rounded-md bg-blue-500/10 px-2 py-1 text-[11px] text-blue-300"><PersonIcon size={11} />{owner}</span>
+          : <span className="text-xs text-slate-500">owner unknown</span>
+      },
+    },
+    {
+      key: 'gang', label: 'Gang',
+      value: (v) => gangName(v.gang_id) ?? '—',
+      render: (v) => {
+        const gang = gangName(v.gang_id)
+        return gang
+          ? <span className="inline-flex items-center gap-1 rounded-md bg-violet-500/10 px-2 py-1 text-[11px] text-violet-300"><GangIcon size={11} />{gang}</span>
+          : <span className="text-slate-500">—</span>
+      },
+    },
+    { key: 'notes', label: 'Notes', value: (v) => v.notes ?? '', render: (v) => <span className="line-clamp-2 max-w-[18rem] text-xs text-slate-400">{v.notes || '—'}</span> },
+    { key: 'actions', label: 'Actions', value: () => '', render: (v) => actions(v) },
+  ]
+
   return (
     <div>
-      <Card pad="lg" className="mb-6">
-        <PageHeader
-          title="🚗 Vehicle Registry"
-          subtitle="Plates as first-class intel — owners, gang links & automatic cross-case matching"
-          actions={
-            <>
-              {vehicles.length > 0 && (
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Filter plate, owner, gang…"
-                  aria-label="Filter vehicles"
-                  className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
-                />
-              )}
-              {canEdit && (
-                <Button variant="primary" onClick={() => setEditor({ record: null })}>
-                  + New Vehicle
-                </Button>
-              )}
-            </>
-          }
-        />
-      </Card>
+      <PageHeader
+        className="mb-6"
+        title="Vehicle Registry"
+        subtitle="Plates as first-class intel — owners, gang links & automatic cross-case matching"
+        actions={
+          <>
+            {vehicles.length > 0 && (
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Filter plate, owner, gang…"
+                aria-label="Filter vehicles"
+                className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
+              />
+            )}
+            {canEdit && (
+              <Button variant="primary" onClick={() => setEditor({ record: null })}>
+                New Vehicle
+              </Button>
+            )}
+          </>
+        }
+      />
 
       <CrossrefPanel vehicles={vehicles} ownerName={ownerName} />
 
@@ -145,36 +228,18 @@ export function VehiclesView() {
       ) : !rows.length ? (
         <Notice text={`No vehicles match “${query.trim()}”.`} />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {rows.map((v) => {
-            const owner = ownerName(v.owner_id)
-            const gang = gangName(v.gang_id)
-            return (
-              <Card key={v.id}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="inline-block rounded-md border border-white/15 bg-ink-800 px-2.5 py-1 font-mono text-sm font-bold tracking-widest text-white">{v.plate}</p>
-                    <p className="mt-1.5 text-sm font-semibold text-slate-200">
-                      {v.model || 'Unknown model'}
-                      {v.color && <span className="text-slate-500"> · {v.color}</span>}
-                    </p>
-                  </div>
-                  <div className="flex flex-shrink-0 items-center gap-2">
-                    <WatchButton type="vehicle" id={v.id} label={v.plate} compact />
-                    <button onClick={() => { if (nav.inWorkspace) nav.openRecord('vehicles', v.id, v.plate); else router.push(`/vehicles?vehicle=${v.id}`) }} className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10 sm:min-h-0">Profile</button>
-                    {canEdit && <button onClick={() => setEditor({ record: v })} className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10 sm:min-h-0">Edit</button>}
-                    {canDelete && <button onClick={() => void onDelete(v)} aria-label={`Delete vehicle ${v.plate}`} className="-my-1 min-h-[44px] min-w-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10 sm:min-h-0 sm:min-w-0"><XMarkIcon size={14} className="mx-auto" /></button>}
-                  </div>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-                  {owner ? <span className="inline-flex items-center gap-1 rounded-md bg-blue-500/10 px-2 py-1 text-blue-300"><PersonIcon size={11} />{owner}</span> : <span className="rounded-md bg-white/5 px-2 py-1 text-slate-500">owner unknown</span>}
-                  {gang && <span className="inline-flex items-center gap-1 rounded-md bg-violet-500/10 px-2 py-1 text-violet-300"><GangIcon size={11} />{gang}</span>}
-                </div>
-                {v.notes && <p className="mt-3 text-xs text-slate-400">{v.notes}</p>}
-              </Card>
-            )
-          })}
-        </div>
+        <Card>
+          <DataTable
+            columns={columns}
+            rows={rows}
+            rowKey={(v) => v.id}
+            pageSize={30}
+            filterPlaceholder="Filter listed rows…"
+            countLabel="vehicles"
+            emptyText="No vehicles on file yet."
+            mobileCard={vehicleCard}
+          />
+        </Card>
       )}
 
       {editor && (
@@ -427,7 +492,7 @@ function CrossrefPanel({ vehicles, ownerName }: {
   if (scan === 'failed') {
     return (
       <div className="mb-6 rounded-lg border border-amber-500/20 bg-amber-500/5 p-5 text-sm text-amber-200">
-        ⚠ Could not scan for cross-case matches (connection issue).{' '}
+        <AlertIcon size={14} className="inline align-[-2px]" /> Could not scan for cross-case matches (connection issue).{' '}
         <button onClick={() => setRetry((n) => n + 1)} className="underline">Retry</button>
       </div>
     )
@@ -443,12 +508,12 @@ function CrossrefPanel({ vehicles, ownerName }: {
   }
   return (
     <div className="mb-6">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-amber-300/80"><AlertIcon size={12} className="inline align-[-2px]" /> Cross-reference alerts ({alerts.length})</p>
+      <p className="mb-2 text-[13px] font-semibold text-white"><AlertIcon size={13} className="inline align-[-2px] text-amber-300" /> Cross-reference alerts ({alerts.length})</p>
       <div className="space-y-2">
         {alerts.map((a, i) => (
-          <div key={`${a.kind}:${a.label}:${i}`} className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+          <div key={`${a.kind}:${a.label}:${i}`} className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
             <p className="text-sm font-semibold text-white">
-              {a.icon} {a.label} <span className="ml-1 rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-medium uppercase text-slate-400">{a.kind}</span>
+              {a.icon} {a.label} <Badge tone="neutral" className="ml-1 font-medium text-slate-400">{a.kind}</Badge>
             </p>
             <p className="mt-1 text-xs text-slate-300">
               Appears in {a.cases.length} cases:{' '}

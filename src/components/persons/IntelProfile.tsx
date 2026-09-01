@@ -80,7 +80,7 @@ async function loadProfile(type: 'person' | 'gang', id: string, gangs: GangRow[]
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="rounded-lg bg-ink-900 px-3 py-2">
-      <p className="text-[10px] uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
       <p className="text-sm font-semibold text-white">{children}</p>
     </div>
   )
@@ -90,7 +90,7 @@ function Section({ title, count, children }: { title: string; count: number; chi
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">{title}</p>
+        <p className="text-[13px] font-semibold text-white">{title}</p>
         <span className="text-[11px] text-slate-500">{count}</span>
       </div>
       {count ? <div className="space-y-1.5">{children}</div> : <p className="text-xs text-slate-400">None on file.</p>}
@@ -165,8 +165,8 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
       <div className="flex h-full flex-col">
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-white/10 bg-ink-850 px-6 py-4">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Intel profile</p>
-            <h3 className="flex items-center gap-2 text-xl font-bold text-white">
+            <p className="text-xs font-medium text-slate-400">Intel profile</p>
+            <h3 className="flex items-center gap-2 text-xl font-semibold text-white">
               {(p || g) && (
                 <span aria-hidden className="flex-shrink-0 text-slate-400">{p ? <PersonIcon size={18} /> : <GangIcon size={18} />}</span>
               )}

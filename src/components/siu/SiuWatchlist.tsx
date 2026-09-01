@@ -51,7 +51,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { SectionHeader } from '@/components/ui/PageHeader'
-import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { uiPrompt } from '@/components/ui/dialog'
 import { SiuPersonDossierModal } from './SiuPersonDossier'
@@ -119,7 +119,7 @@ export function SiuWatchlistSection() {
     )
   }
 
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <ListSkeleton />
 
   return (
     <div className="space-y-4">
@@ -154,7 +154,7 @@ export function SiuWatchlistSection() {
             {shown.map((w) => {
               const live = watchLive(w)
               return (
-                <li key={w.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                <li key={w.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge tint={siuWatchPriorityTint(w.priority)}>
                       {SIU_WATCH_PRIORITY_LABEL[w.priority] ?? w.priority}
@@ -266,7 +266,7 @@ export function SiuWatchlistSection() {
 /** An empty list should say what to do next, not just that it is empty. */
 function EmptyWatchlist({ ended, onAdd }: { ended: boolean; onAdd: () => void }) {
   return (
-    <div className="mt-3 rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
+    <div className="mt-3 rounded-lg border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
       <p className="text-sm font-semibold text-slate-200">
         {ended ? 'No live entries.' : 'Nothing is on the watchlist.'}
       </p>

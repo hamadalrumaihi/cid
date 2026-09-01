@@ -55,7 +55,7 @@ export function SupportingSection({ r, exhibits, signatures, versions, editable,
     <div className="space-y-4">
       <Card pad="sm">
         <div className="mb-2 flex items-center justify-between gap-2">
-          <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+          <h3 className="text-[13px] font-semibold text-white">
             Selected packet — reviewers see ONLY these items
           </h3>
           {editable && <Button disabled={busy} onClick={() => setAdding((x) => !x)}>{adding ? 'Done' : '+ Add exhibit'}</Button>}
@@ -64,7 +64,7 @@ export function SupportingSection({ r, exhibits, signatures, versions, editable,
           {exhibits.map((e) => (
             <li key={e.id} className="rounded-lg border border-white/10 bg-ink-950/50 px-3 py-2 text-sm">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{humanize(e.exhibit_type)}</span>
+                <span className="text-xs font-medium text-slate-500">{humanize(e.exhibit_type)}</span>
                 {e.exhibit_type === 'prior_legal_request' && e.source_id ? (
                   // Cross-referenced request → open its dossier in place. The
                   // snapshot title (request number + title) is already on this
@@ -116,7 +116,7 @@ export function SupportingSection({ r, exhibits, signatures, versions, editable,
           so an empty list renders nothing (never a "none exist" claim). */}
       {referencedBy.length > 0 && (
         <Card pad="sm">
-          <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+          <h3 className="mb-2 text-[13px] font-semibold text-white">
             Referenced by — requests citing this one
           </h3>
           <div className="flex flex-wrap gap-1.5">
@@ -136,7 +136,7 @@ export function SupportingSection({ r, exhibits, signatures, versions, editable,
       )}
 
       <Card pad="sm">
-        <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Signatures (version-bound)</h3>
+        <h3 className="mb-2 text-[13px] font-semibold text-white">Signatures (version-bound)</h3>
         {signatures.length === 0 ? (
           <p className="text-sm text-slate-400">No signatures recorded yet.</p>
         ) : (

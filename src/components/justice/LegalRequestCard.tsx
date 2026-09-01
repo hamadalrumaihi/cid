@@ -84,7 +84,7 @@ export function LegalRequestCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">{typeLine}</p>
+          <p className="text-xs font-medium text-slate-500">{typeLine}</p>
           <h3 className="mt-0.5 truncate text-sm font-semibold text-white">{request.title ?? 'Untitled request'}</h3>
         </div>
         <div className="flex flex-shrink-0 items-center gap-1.5">
@@ -110,7 +110,7 @@ export function LegalRequestCard({
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${actionTone(d)}`}>
+        <span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold ${actionTone(d)}`}>
           {d.awarenessOnly && <span className="mr-1 text-[13px] leading-none" aria-hidden="true">◦</span>}
           {d.nextAction}
         </span>

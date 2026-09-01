@@ -23,6 +23,7 @@ import { toast } from '@/lib/toast'
 import { useSiu } from '@/lib/useSiu'
 import { reserveVisibility, restrictPreview } from '@/lib/siuVisibility'
 import { uiConfirm } from '@/components/ui/dialog'
+import { XMarkIcon } from '@/components/shell/icons'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { HelpTip } from '@/components/ui/HelpTip'
@@ -99,10 +100,10 @@ const EMPTY_PERSON_DRAFT: PersonDraftShape = {
 }
 const EMPTY_PERSON_DRAFT_JSON = JSON.stringify(EMPTY_PERSON_DRAFT)
 
-/** Uppercase section rule inside the form grid. Module-scope (static). */
+/** Section rule inside the form grid. Module-scope (static). */
 function GroupLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mt-1 border-t border-white/5 pt-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 sm:col-span-2">
+    <p className="mt-1 border-t border-white/5 pt-3 text-[13px] font-semibold text-white sm:col-span-2">
       {children}
     </p>
   )
@@ -388,7 +389,7 @@ export function PersonModal({ record, prefillName, onCreated, onClose, onSaved }
             <p className="text-xs text-amber-200">Draft restored — your unsaved entry from last time.</p>
             <span className="flex items-center gap-1">
               <button type="button" onClick={discardDraft} className="rounded-md px-2 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/10 hover:text-white">Discard draft</button>
-              <button type="button" onClick={() => setDraftBanner(false)} aria-label="Dismiss restored-draft notice" className="grid h-8 w-8 place-items-center rounded-md text-amber-200/70 hover:bg-amber-500/10 hover:text-white">✕</button>
+              <button type="button" onClick={() => setDraftBanner(false)} aria-label="Dismiss restored-draft notice" className="grid h-8 w-8 place-items-center rounded-md text-amber-200/70 hover:bg-amber-500/10 hover:text-white"><XMarkIcon size={14} className="mx-auto" /></button>
             </span>
           </div>
         )}
@@ -474,8 +475,8 @@ export function PersonModal({ record, prefillName, onCreated, onClose, onSaved }
             <Field label="Felonies">{(id) => <Input id={id} type="number" value={felonies} onChange={(e) => setFelonies(e.target.value)} />}</Field>
           </div>
           {offerVisibility && (
-            <fieldset className="sm:col-span-2 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
-              <legend className="flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-violet-300">
+            <fieldset className="sm:col-span-2 rounded-lg border border-violet-500/30 bg-violet-500/5 p-3">
+              <legend className="flex items-center gap-1.5 px-1 text-xs font-medium text-violet-300">
                 Who can see this record
                 {/* Canonical compartment sentence (lib/siuVisibility) — the
                     same wording the restrict confirmation uses. */}
@@ -569,7 +570,7 @@ export function PersonModal({ record, prefillName, onCreated, onClose, onSaved }
                     {PROPERTY_TYPES.map((t) => <option key={t}>{t}</option>)}
                   </select>
                   <input value={pr.notes} onChange={(e) => setProp(i, { notes: e.target.value })} placeholder="Notes (optional)" aria-label={`Property ${i + 1} notes`} className="min-w-[8rem] flex-1 rounded-md border border-white/10 bg-ink-800 px-2 py-1.5 text-sm text-white outline-none focus:border-badge-500" />
-                  <button type="button" aria-label="Remove property" onClick={() => setProps((r) => r.filter((_, x) => x !== i))} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10">✕</button>
+                  <button type="button" aria-label="Remove property" onClick={() => setProps((r) => r.filter((_, x) => x !== i))} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10"><XMarkIcon size={14} className="mx-auto" /></button>
                 </div>
               ))}
             </div>

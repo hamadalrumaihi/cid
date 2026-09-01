@@ -48,7 +48,7 @@ export function BoloStateBadge({ person, today, className = '' }: { person: Pers
   return (
     <Badge
       tint={bs.expired ? 'bg-amber-500/15 text-amber-300' : 'bg-rose-500/15 text-rose-300'}
-      className={`uppercase ${className}`}
+      className={className}
       title={bs.reason ? `${label}: ${bs.reason}` : label}
     >
       {label}
@@ -83,7 +83,7 @@ function LegalBucket({ label, rows, now }: { label: string; rows: LegalLite[]; n
   if (!rows.length) return null
   return (
     <div>
-      <p className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <p className="mb-1.5 flex items-center gap-2 text-xs font-medium text-slate-400">
         {label} <Badge>{rows.length}</Badge>
       </p>
       <div className="space-y-1.5">{rows.map((r) => <LegalRow key={r.id} r={r} now={now} />)}</div>

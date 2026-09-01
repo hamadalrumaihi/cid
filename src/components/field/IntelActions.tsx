@@ -103,13 +103,13 @@ export function IntelActions({ submission, onChanged }: {
 
   return (
     <Card>
-      <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+      <h4 className="text-[13px] font-semibold text-white">
         What follows from this
       </h4>
 
       {/* ── Cases ─────────────────────────────────────────────────────────── */}
       <div className="mt-3">
-        <h5 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Cases</h5>
+        <h5 className="text-xs font-medium text-slate-500">Cases</h5>
         {!live.length && !removed.length && (
           <p className="mt-1 text-xs text-slate-500">
             Nothing yet. Opening a case from this record records permanently that it
@@ -179,7 +179,7 @@ export function IntelActions({ submission, onChanged }: {
 
       {/* ── Surveillance ──────────────────────────────────────────────────── */}
       <div className="mt-4 border-t border-white/5 pt-3">
-        <h5 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <h5 className="text-xs font-medium text-slate-500">
           Surveillance
         </h5>
         {observations.length > 0 ? (
@@ -227,7 +227,7 @@ export function IntelActions({ submission, onChanged }: {
 
       {/* ── The source ────────────────────────────────────────────────────── */}
       <div className="mt-4 border-t border-white/5 pt-3">
-        <h5 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <h5 className="text-xs font-medium text-slate-500">
           Source
         </h5>
         {submission.source_codename ? (
@@ -332,7 +332,7 @@ function OpenCase({ submission, defaultLead, onCancel, onDone }: {
   const [busy, setBusy] = useState(false)
 
   return (
-    <div className="mt-3 grid gap-3 rounded-xl border border-white/10 bg-ink-950/40 p-3 sm:grid-cols-2">
+    <div className="mt-3 grid gap-3 rounded-lg border border-white/10 bg-ink-950/40 p-3 sm:grid-cols-2">
       <Field label="Bureau">
         {(fid) => (
           <Select id={fid} value={bureau}
@@ -392,7 +392,7 @@ function AddObservation({ submission, links, cases, onCancel, onDone }: {
   const [busy, setBusy] = useState(false)
 
   return (
-    <div className="mt-3 grid gap-3 rounded-xl border border-white/10 bg-ink-950/40 p-3 sm:grid-cols-2">
+    <div className="mt-3 grid gap-3 rounded-lg border border-white/10 bg-ink-950/40 p-3 sm:grid-cols-2">
       <Field label="On which case">
         {(fid) => (
           <Select id={fid} value={caseId} onChange={(e) => setCaseId(e.target.value)}>
@@ -453,7 +453,7 @@ function RegisterSource({ onCancel, onDone }: {
   const [busy, setBusy] = useState(false)
 
   return (
-    <div className="mt-3 grid gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 sm:grid-cols-2">
+    <div className="mt-3 grid gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 sm:grid-cols-2">
       <Field label="Codename" hint="This is the part reviewers see.">
         {(fid) => <Input id={fid} value={codename} onChange={(e) => setCodename(e.target.value)}
           placeholder="CS-14" />}

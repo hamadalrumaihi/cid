@@ -131,7 +131,7 @@ export function SiuEnterprise({ submission, parts, onChanged }: {
   return (
     <div className="mt-4 border-t border-white/5 pt-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h5 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <h5 className="text-xs font-medium text-slate-500">
           SIB intelligence assessment
         </h5>
         {!adding && (
@@ -186,7 +186,7 @@ export function SiuEnterprise({ submission, parts, onChanged }: {
         <div className="mt-3 space-y-3">
           {groups.map((g) => (
             <div key={g.layer}>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <p className="text-xs font-medium text-slate-500">
                 {siuLayerLabel(g.layer)}
               </p>
               <ul className="mt-1 space-y-1">

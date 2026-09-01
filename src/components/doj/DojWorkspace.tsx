@@ -191,7 +191,7 @@ export function DojWorkspace({ view, role, myId, lists, requests, onOpen, onNavi
                   const rows = lists.queue.filter((r) => r.responsible_bureau === b)
                   return (
                     <section key={b} className="space-y-2">
-                      <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+                      <h3 className="flex items-center gap-2 text-[13px] font-semibold text-white">
                         {bureauLabel(b)} queue
                         <span className="rounded bg-white/10 px-1.5 text-[10px] font-bold text-slate-300">{rows.length}</span>
                       </h3>
@@ -208,7 +208,7 @@ export function DojWorkspace({ view, role, myId, lists, requests, onOpen, onNavi
                 })}
                 {extra.length > 0 && (
                   <section className="space-y-2">
-                    <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Unrouted</h3>
+                    <h3 className="text-[13px] font-semibold text-white">Unrouted</h3>
                     <DojQueueList
                       rows={extra}
                       onOpen={onOpen}

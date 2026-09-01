@@ -403,7 +403,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
         <>
           {/* Merged tombstone — everything below renders read-only. */}
           {readOnly && (
-            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-4">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 p-4">
               <p className="text-sm text-slate-200">This record was merged and is read-only.</p>
               {p.merged_into && <EntityLink kind="person" id={p.merged_into} label="Open the surviving record" />}
             </div>
@@ -420,13 +420,13 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
               <div className="flex min-w-0 items-start gap-4">
                 {mug && !imgBroken ? (
                   /* eslint-disable-next-line @next/next/no-img-element -- external mugshot CDN */
-                  <img src={mug} alt={`${p.name} photo`} onError={() => setImgBroken(true)} className="h-20 w-20 flex-shrink-0 rounded-xl border border-white/10 object-cover" />
+                  <img src={mug} alt={`${p.name} photo`} onError={() => setImgBroken(true)} className="h-20 w-20 flex-shrink-0 rounded-lg border border-white/10 object-cover" />
                 ) : (
-                  <div className="grid h-20 w-20 flex-shrink-0 place-items-center rounded-xl bg-ink-700 text-slate-500" aria-hidden><PersonIcon size={32} /></div>
+                  <div className="grid h-20 w-20 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-slate-500" aria-hidden><PersonIcon size={32} /></div>
                 )}
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="text-2xl font-black text-white">
+                    <h1 className="text-2xl font-semibold text-white">
                       {p.name}
                       {flag && <span title="≥8 violent felonies" role="img" aria-label="8 or more violent felonies" className="ml-1.5 inline-block align-[-2px] text-rose-400"><AlertIcon size={18} /></span>}
                     </h1>
@@ -441,7 +441,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
                     {gang && <EntityLink kind="gang" id={gang.id} label={gang.name} />}
                     {p.confidence && <ConfidenceBadge confidence={p.confidence} />}
                     <StaleIntelBadge reviewedAt={p.reviewed_at} now={now} thresholdDays={PERSON_REVIEW_DAYS} />
-                    {p.lifecycle !== 'active' && <Badge tint={statusTint(p.lifecycle)} className="uppercase">{humanize(p.lifecycle)}</Badge>}
+                    {p.lifecycle !== 'active' && <Badge tint={statusTint(p.lifecycle)}>{humanize(p.lifecycle)}</Badge>}
                     {p.priority && <Badge tint={priorityTint(p.priority)}>{humanize(p.priority)} priority</Badge>}
                   </div>
                   <p className="mt-1.5 text-[11px] text-slate-500">
@@ -509,7 +509,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
             )}
             {section === 'observations' && (
               <Card>
-                <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Surveillance history</h3>
+                <h3 className="mb-3 text-[13px] font-semibold text-white">Surveillance history</h3>
                 <ObservationHistory kind="person" refId={p.id} />
               </Card>
             )}

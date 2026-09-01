@@ -82,7 +82,7 @@ export function EvidencePanel({ submissionId }: { submissionId: string }) {
 
   return (
     <Card>
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Evidence</h3>
+      <h3 className="text-[13px] font-semibold text-white">Evidence</h3>
       <p className="mt-1 text-xs text-slate-500">
         Screenshots, photos, clips or documents. Paste a Medal link rather than
         exporting the clip — the link is kept as-is and plays for the investigator.
@@ -120,12 +120,12 @@ export function EvidencePanel({ submissionId }: { submissionId: string }) {
       {busy && <p className="mt-2 text-xs text-slate-400">Uploading…</p>}
 
       {rows.length > 0 && (
-        <ul className="mt-3 divide-y divide-white/5 rounded-xl border border-white/10">
+        <ul className="mt-3 divide-y divide-white/5 rounded-lg border border-white/10">
           {rows.map((e) => (
             <li key={e.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
               <span className="min-w-0 truncate text-slate-200">
                 {evidenceLabel(e)}
-                <span className="ml-2 text-[11px] uppercase tracking-wider text-slate-500">
+                <span className="ml-2 text-xs font-medium text-slate-500">
                   {e.kind === 'upload' ? 'file' : e.is_medal ? 'medal' : 'link'}
                 </span>
               </span>

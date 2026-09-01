@@ -31,6 +31,7 @@ import {
   type VisibilityEvent, type VisibilityRow,
 } from '@/lib/siuVisibility'
 import { toast } from '@/lib/toast'
+import { ArchiveIcon } from '@/components/shell/icons'
 import { AccessBadge } from '@/components/ui/AccessBadge'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -38,7 +39,7 @@ import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/Notice'
 import { SectionHeader } from '@/components/ui/PageHeader'
-import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Field, Textarea } from '@/components/ui/Field'
 import { RestrictDialog } from './RestrictToSiu'
 
@@ -162,7 +163,7 @@ function Row({ row, onAct }: { row: VisibilityRow; onAct: (a: Act) => void }) {
   const [open, setOpen] = useState(false)
   const flagged = row.needs_review
   return (
-    <li className="rounded-xl border border-white/10 bg-ink-900 p-3">
+    <li className="rounded-lg border border-white/10 bg-ink-900 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <Badge>{compartmentTypeLabel(row.entity_type)}</Badge>
         <AccessBadge kind="sib" row={row} />
@@ -253,7 +254,7 @@ export function SiuCompartmentsSection() {
   // the ones CID already holds sit at the bottom and can be cleared in a pass.
   const ranked = useMemo(() => queue.slice().sort((a, b) => reviewRank(a) - reviewRank(b)), [queue])
 
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <ListSkeleton />
 
   return (
     <div className="space-y-6">
@@ -294,7 +295,7 @@ export function SiuCompartmentsSection() {
         {rows.length === 0 ? (
           <EmptyState
             className="mt-3"
-            icon="🗄"
+            icon={<ArchiveIcon />}
             title="Nothing is compartmented"
             hint={siu.canAccess
               ? 'Registry records are shared with CID by default. A record only leaves CID’s view when somebody here deliberately takes it.'

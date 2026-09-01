@@ -641,7 +641,7 @@ export function DojAdmin({ requests, onOpen, reload, onConflict }: {
         </ul>
         {settledTransfers.length > 0 && (
           <Card pad="sm">
-            <h3 className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Recently settled</h3>
+            <h3 className="mb-1 text-[13px] font-semibold text-white">Recently settled</h3>
             <ul className="divide-y divide-white/5">
               {settledTransfers.map((t) => (
                 <li key={t.id} className="flex flex-wrap items-center gap-2 py-1.5 text-xs text-slate-400">
@@ -672,7 +672,7 @@ export function DojAdmin({ requests, onOpen, reload, onConflict }: {
                 className="-mx-1.5 -my-1 flex min-h-[40px] min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-1.5 py-1 text-left transition hover:bg-white/5"
               >
                 <span className="font-mono text-xs tabular-nums text-blue-300">{r.request_number}</span>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">{humanize(r.subtype ?? r.request_type)}</span>
+                <span className="text-xs font-medium text-slate-500">{humanize(r.subtype ?? r.request_type)}</span>
                 <span className="text-xs text-slate-300">held by {name(r.assigned_prosecutor_id)}</span>
               </button>
               <span className="text-xs text-slate-400">

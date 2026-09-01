@@ -19,6 +19,7 @@ import { humanize } from '@/lib/legalWorkflow'
 import { useTableVersion } from '@/lib/realtime'
 import { useNow } from '@/lib/useNow'
 import { Badge } from '@/components/ui/Badge'
+import { ScaleIcon } from '@/components/shell/icons'
 import { Card } from '@/components/ui/Card'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { EntityLink } from '@/components/ui/EntityLink'
@@ -157,7 +158,7 @@ export function EntityLegalLine({ r }: { r: EntityLegalRef }) {
         title={`Open ${req.request_number}${req.title ? ` — ${req.title}` : ''}`}
         className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-blue-200 transition hover:bg-white/10"
       >
-        <span aria-hidden>⚖️</span>
+        <ScaleIcon size={13} className="flex-shrink-0" />
         <span className="font-mono">{req.request_number}</span>
         <span className="truncate text-slate-300">{reviewStatusLabel(req.review_status)}</span>
       </button>
@@ -179,7 +180,7 @@ export function EntityLegalPanel({ exhibitType, sourceId, noun }: {
   return (
     <Card>
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Legal</h3>
+        <h3 className="text-[13px] font-semibold text-white">Legal</h3>
         {state === 'done' && refs.length > 0 && <span className="text-[11px] text-slate-400">{refs.length}</span>}
       </div>
       {state === 'loading' ? (
@@ -189,13 +190,13 @@ export function EntityLegalPanel({ exhibitType, sourceId, noun }: {
           <Skeleton className="h-11 w-full" />
         </div>
       ) : state === 'failed' ? (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-200">
-          ⚠ Could not load legal references (connection issue).{' '}
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-200">
+          Could not load legal references (connection issue).{' '}
           <button onClick={retry} className="rounded p-1 font-semibold underline">Retry</button>
         </div>
       ) : !refs.length ? (
         <EmptyState
-          title="NO VISIBLE LEGAL ACTIVITY"
+          title="No visible legal activity"
           hint={`Legal requests naming this ${noun} as a structured target appear here when they are within your access.`}
         />
       ) : (

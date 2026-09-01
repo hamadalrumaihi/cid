@@ -106,7 +106,7 @@ export function FieldAccessQueue({ rows, onChanged }: {
   return (
     <Card pad="none" className="overflow-hidden">
       <div className="border-b border-white/5 px-5 py-3">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+        <h3 className="text-[13px] font-semibold text-white">
           Access requests
         </h3>
         <p className="mt-1 text-xs text-slate-500">

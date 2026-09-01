@@ -130,22 +130,20 @@ export function FieldReviewView() {
 
   return (
     <div className="space-y-5">
-      <Card>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <PageHeader
-            title="📻 Intelligence"
-            subtitle="Everything that comes into CID as information — patrol, detectives, surveillance and outside agencies. Review what arrived, decide what it means."
-          />
-          {!writing && (
+      <div>
+        <PageHeader
+          title="Intelligence"
+          subtitle="Everything that comes into CID as information — patrol, detectives, surveillance and outside agencies. Review what arrived, decide what it means."
+          actions={!writing ? (
             <Button variant="primary" onClick={() => setWriting(true)}>
               + New intelligence
             </Button>
-          )}
-        </div>
+          ) : undefined}
+        />
         {/* Whichever documents have declared themselves relevant to this work.
             Renders nothing until one does, which is the honest state today. */}
         <RelatedGuidance route="field" className="mt-3 border-t border-white/5 pt-3" />
-      </Card>
+      </div>
 
       {/* The same structured form a patrol officer fills in. An investigator
           writing something down produces the same kind of record -- that is
@@ -154,7 +152,7 @@ export function FieldReviewView() {
       {writing && (
         <Card>
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+            <h3 className="text-[13px] font-semibold text-white">
               New intelligence
             </h3>
             <Button size="sm" variant="ghost" onClick={() => setWriting(false)}>Cancel</Button>
@@ -241,7 +239,7 @@ export function FieldReviewView() {
       ) : (
         <Card pad="none" className="overflow-hidden">
           <div className="border-b border-white/5 px-5 py-3">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+            <h3 className="text-[13px] font-semibold text-white">
               {searching ? `Search — ${shown.length} record${shown.length === 1 ? '' : 's'}`
                 : tab === 'access' ? 'Submitter access'
                 : tab === 'legacy' ? 'Legacy requests'
@@ -589,8 +587,8 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
             reading them a week apart, which is why it is said here rather than
             left for somebody to work out. */}
         {repeats.length > 0 && (
-          <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-amber-300">
+          <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+            <p className="text-[13px] font-semibold text-amber-300">
               Seen before
             </p>
             <ul className="mt-1 space-y-0.5">
@@ -607,7 +605,7 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
 
       <Card>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400">What was reported</h4>
+          <h4 className="text-[13px] font-semibold text-white">What was reported</h4>
           {progress && <span className="text-xs text-slate-500">{progressLabel(progress)}</span>}
         </div>
         <p className="mt-1 text-xs text-slate-500">
@@ -626,13 +624,13 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
 
       {evidence.length > 0 && (
         <Card>
-          <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Evidence</h4>
-          <ul className="mt-2 divide-y divide-white/5 rounded-xl border border-white/10">
+          <h4 className="text-[13px] font-semibold text-white">Evidence</h4>
+          <ul className="mt-2 divide-y divide-white/5 rounded-lg border border-white/10">
             {evidence.map((e) => (
               <li key={e.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
                 <span className="min-w-0 truncate text-slate-200">
                   {evidenceLabel(e)}
-                  <span className="ml-2 text-[11px] uppercase tracking-wider text-slate-500">
+                  <span className="ml-2 text-xs font-medium text-slate-500">
                     {e.kind === 'upload' ? 'file' : e.is_medal ? 'medal' : 'link'}
                   </span>
                 </span>
@@ -655,7 +653,7 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
         onChanged={() => { void load(); onChanged() }} />
 
       <Card>
-        <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+        <h4 className="text-[13px] font-semibold text-white">
           Assignment
         </h4>
         <p className="mt-1 text-sm text-slate-300">
@@ -680,7 +678,7 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
       </Card>
 
       <Card>
-        <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Decide</h4>
+        <h4 className="text-[13px] font-semibold text-white">Decide</h4>
         <div className="mt-3 flex flex-wrap gap-2">
           {/* Only one of these is ever the honest offer: an unheld report can be
               taken, a held one can be handed back. Showing "Take it" on a report
@@ -782,12 +780,10 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
       </Card>
 
       <Card>
-        <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+        <h4 className="text-[13px] font-semibold text-white">
           Thread with the officer
           {awaitingReviewer(messages) && (
-            <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
-              REPLY WAITING
-            </span>
+            <Badge tone="warn" className="ml-2">Reply waiting</Badge>
           )}
         </h4>
         {!messages.length ? (
@@ -798,7 +794,7 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
               <li key={m.id} className={`rounded-lg px-3 py-2 text-sm ${
                 m.from_reviewer ? 'bg-white/5 text-slate-200' : 'bg-blue-500/10 text-blue-100'
               }`}>
-                <p className="text-[11px] uppercase tracking-wider text-slate-500">
+                <p className="text-xs font-medium text-slate-500">
                   {m.from_reviewer ? 'CID/SIB' : 'Reporting officer'} · {fmtDateTime(m.created_at)}
                 </p>
                 <p className="mt-0.5 whitespace-pre-wrap">{m.body}</p>
@@ -809,7 +805,7 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
       </Card>
 
       <Card>
-        <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+        <h4 className="text-[13px] font-semibold text-white">
           Internal notes
         </h4>
         <p className="mt-1 text-xs text-slate-500">
@@ -822,7 +818,7 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
           <ul className="mt-2 space-y-2">
             {notes.map((nte) => (
               <li key={nte.id} className="rounded-lg bg-ink-950/60 px-3 py-2 text-sm text-slate-300">
-                <p className="text-[11px] uppercase tracking-wider text-slate-500">
+                <p className="text-xs font-medium text-slate-500">
                   {officerName(nte.author_id) ?? "Reviewer"} · {fmtDateTime(nte.created_at)}
                 </p>
                 <p className="mt-0.5 whitespace-pre-wrap">{nte.note}</p>
@@ -893,7 +889,7 @@ function ClaimList({ parts, verdicts, links, onDecide, onLink }: {
                 <Badge tone={VERDICT_TONE[current]}>{VERDICT_LABEL[current]}</Badge>
               )}
             </div>
-            <p className="mt-0.5 text-[11px] uppercase tracking-wider text-slate-500">
+            <p className="mt-0.5 text-xs font-medium text-slate-500">
               {r.basis === 'observed' ? 'Officer saw this'
                 : r.basis === 'reported' ? 'Officer was told this'
                 : 'Basis not stated'}

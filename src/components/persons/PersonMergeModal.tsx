@@ -219,9 +219,9 @@ export function PersonDuplicatesModal({ person, isCommand, onClose, onMerged }: 
             <>
             {cluster ? (
               <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
-                <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-amber-300/80">
+                <p className="flex items-center gap-2 text-xs font-medium text-amber-300/80">
                   Why these records look like duplicates
-                  <Badge tint={cluster.confidence === 'strong' ? 'bg-rose-500/15 text-rose-300' : 'bg-amber-500/15 text-amber-300'} className="uppercase">
+                  <Badge tint={cluster.confidence === 'strong' ? 'bg-rose-500/15 text-rose-300' : 'bg-amber-500/15 text-amber-300'}>
                     {cluster.confidence}
                   </Badge>
                 </p>
@@ -246,7 +246,7 @@ export function PersonDuplicatesModal({ person, isCommand, onClose, onMerged }: 
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-white">
                         {m.name}{m.alias ? <span className="font-normal text-slate-400"> · “{m.alias}”</span> : null}
-                        {m.id === person.id && <span className="ml-1.5 text-[10px] uppercase text-slate-500">(this profile)</span>}
+                        {m.id === person.id && <span className="ml-1.5 text-[11px] text-slate-500">(this profile)</span>}
                       </p>
                       <p className="text-[11px] text-slate-400">
                         {m.phone ? `${m.phone} · ` : ''}{m.dob ? `DOB ${m.dob} · ` : ''}Added {fmtDate(m.created_at)} · Updated {fmtDate(m.updated_at)}
@@ -255,7 +255,7 @@ export function PersonDuplicatesModal({ person, isCommand, onClose, onMerged }: 
                     {isCommand && (
                       <div className="flex flex-shrink-0 items-center gap-2">
                         {isSurvivor ? (
-                          <Badge tone="good" className="uppercase">Survivor</Badge>
+                          <Badge tone="good">Survivor</Badge>
                         ) : (
                           <>
                             <Button size="sm" onClick={() => pickSurvivor(m.id)} title="Keep this record and merge the others into it">Keep this one</Button>
@@ -282,7 +282,7 @@ export function PersonDuplicatesModal({ person, isCommand, onClose, onMerged }: 
               <>
                 {plan && plan.fieldConflicts.length > 0 && (
                   <div>
-                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    <p className="mb-1 text-xs font-medium text-slate-400">
                       Field differences — the survivor&rsquo;s value is kept; differing victim values are surfaced here so nothing is lost silently
                     </p>
                     <div className="space-y-1">
@@ -300,7 +300,7 @@ export function PersonDuplicatesModal({ person, isCommand, onClose, onMerged }: 
                 )}
 
                 <div>
-                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Linked records that will repoint to {survivor.name}</p>
+                  <p className="mb-1 text-xs font-medium text-slate-400">Linked records that will repoint to {survivor.name}</p>
                   {counts === null ? (
                     <p className="text-xs text-slate-400">Counting linked records…</p>
                   ) : plan && plan.willRepoint.length ? (

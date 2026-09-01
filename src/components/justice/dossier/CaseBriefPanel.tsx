@@ -71,7 +71,7 @@ function parseBrief(data: unknown): Brief | null {
 }
 
 function GroupHeading({ children }: { children: React.ReactNode }) {
-  return <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{children}</h4>
+  return <h4 className="text-[13px] font-semibold text-white">{children}</h4>
 }
 
 export function CaseBriefPanel({ requestId }: { requestId: string }) {
@@ -89,9 +89,9 @@ export function CaseBriefPanel({ requestId }: { requestId: string }) {
   const c = brief.case
 
   return (
-    <details className="rounded-2xl border border-white/5 bg-ink-900/60">
-      <summary className="flex min-h-[44px] cursor-pointer flex-wrap items-center gap-2 rounded-2xl px-4 py-2.5 hover:bg-white/5">
-        <span className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Case brief</span>
+    <details className="rounded-lg border border-white/5 bg-ink-900/60">
+      <summary className="flex min-h-[44px] cursor-pointer flex-wrap items-center gap-2 rounded-lg px-4 py-2.5 hover:bg-white/5">
+        <span className="text-[13px] font-semibold text-white">Case brief</span>
         <span className="text-xs text-slate-400">
           Referenced material only — this is your complete case access.
         </span>
@@ -151,7 +151,7 @@ export function CaseBriefPanel({ requestId }: { requestId: string }) {
             <ul className="space-y-1.5">
               {brief.referenced_media.map((m) => (
                 <li key={m.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-ink-950/50 px-3 py-2 text-sm">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{humanize(m.type) || 'Media'}</span>
+                  <span className="text-xs font-medium text-slate-500">{humanize(m.type) || 'Media'}</span>
                   <span className="min-w-0 flex-1 truncate text-slate-200">{m.title ?? 'Untitled'}</span>
                   {m.evidence_ref && <Badge tone="accent">{m.evidence_ref}</Badge>}
                   {m.external_url && (
@@ -179,7 +179,7 @@ export function CaseBriefPanel({ requestId }: { requestId: string }) {
             <ul className="space-y-1.5">
               {brief.exhibits.map((e) => (
                 <li key={e.id} className="flex items-start gap-2 rounded-lg border border-white/10 bg-ink-950/50 px-3 py-2 text-sm">
-                  <span className="mt-0.5 flex-shrink-0 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <span className="mt-0.5 flex-shrink-0 text-xs font-medium text-slate-500">
                     {humanize(e.type) || 'Item'}
                   </span>
                   <span className="min-w-0 flex-1">

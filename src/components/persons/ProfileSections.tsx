@@ -22,6 +22,7 @@ import { Field, Input, Textarea, inputCls } from '@/components/ui/Field'
 import { ConfidenceBadge, StaleIntelBadge } from '@/components/ui/IntelBadges'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { SaveState } from '@/components/ui/SaveState'
+import { XMarkIcon } from '@/components/shell/icons'
 import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTimeline'
 import { humanize } from '@/components/gangs/gangIntel'
 import {
@@ -33,7 +34,7 @@ import type { PersonRow } from './PersonModal'
 export function KV({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-3 py-1.5">
-      <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+      <span className="text-xs font-medium text-slate-400">{label}</span>
       <span className="min-w-0 text-right text-sm text-slate-200">{children}</span>
     </div>
   )
@@ -58,7 +59,7 @@ export function PersonIntelligenceSummary({ person, canEdit, onEdit }: { person:
   return (
     <Card pad="lg">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Intelligence summary</h3>
+        <h3 className="text-[13px] font-semibold text-white">Intelligence summary</h3>
         <div className="flex items-center gap-1.5">
           {(hasStructured || notes) && <button onClick={copyAll} title="Copy summary" className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-300 hover:bg-white/10">Copy</button>}
           {canEdit && <button onClick={onEdit} className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-blue-200 hover:bg-white/10">Edit</button>}
@@ -69,7 +70,7 @@ export function PersonIntelligenceSummary({ person, canEdit, onEdit }: { person:
         <div className="space-y-3">
           {shownSections.map((s) => (
             <div key={s.key}>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-300/70">{s.label}</p>
+              <p className="text-xs font-medium text-blue-300/80">{s.label}</p>
               <p className="mt-0.5 max-w-[68ch] whitespace-pre-wrap text-sm leading-relaxed text-slate-300">{summary[s.key]}</p>
             </div>
           ))}
@@ -171,7 +172,7 @@ export function SummaryEditorModal({ person, onClose, onSaved }: { person: Perso
             <p className="text-xs text-amber-200">Draft restored — your unsaved edits from last time.</p>
             <span className="flex items-center gap-1">
               <button type="button" onClick={discardDraft} className="rounded-md px-2 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/10 hover:text-white">Discard draft</button>
-              <button type="button" onClick={() => setDraftBanner(false)} aria-label="Dismiss restored-draft notice" className="grid h-8 w-8 place-items-center rounded-md text-amber-200/70 hover:bg-amber-500/10 hover:text-white">✕</button>
+              <button type="button" onClick={() => setDraftBanner(false)} aria-label="Dismiss restored-draft notice" className="grid h-8 w-8 place-items-center rounded-md text-amber-200/70 hover:bg-amber-500/10 hover:text-white"><XMarkIcon size={14} className="mx-auto" /></button>
             </span>
           </div>
         )}
@@ -211,8 +212,8 @@ export function InvestigationStatusCard({ person, now, warnings, canEdit, onMark
   return (
     <Card pad="lg">
       <div className="mb-1 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Investigation status</h3>
-        <StatusBadge domain="personReview" value={due} className="uppercase" />
+        <h3 className="text-[13px] font-semibold text-white">Investigation status</h3>
+        <StatusBadge domain="personReview" value={due} />
       </div>
       <div className="divide-y divide-white/5">
         <KV label="Lead detective">{lead ?? '—'}</KV>
@@ -232,7 +233,7 @@ export function InvestigationStatusCard({ person, now, warnings, canEdit, onMark
       )}
       {warnings.length > 0 && (
         <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300/80">Intelligence quality</p>
+          <p className="text-xs font-medium text-amber-300/80">Intelligence quality</p>
           <ul className="mt-1 space-y-1">
             {warnings.map((w) => (
               <li key={w.key} className="flex flex-wrap items-baseline gap-x-2 text-xs text-slate-300">
@@ -249,7 +250,7 @@ export function InvestigationStatusCard({ person, now, warnings, canEdit, onMark
       )}
       {canEdit && (
         <Button variant="secondary" className="mt-3 w-full" onClick={onMarkReviewed} title="Stamp this record as reviewed now">
-          ✓ Mark reviewed
+          Mark reviewed
         </Button>
       )}
     </Card>
@@ -320,7 +321,7 @@ export function IdentitySection({ person, canEdit, onEdit, onEditPerson }: {
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Card pad="lg">
         <div className="mb-1 flex items-center justify-between gap-2">
-          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Identity</h3>
+          <h3 className="text-[13px] font-semibold text-white">Identity</h3>
           {canEdit && <Button size="sm" onClick={onEdit}>Edit identity</Button>}
         </div>
         <div className="divide-y divide-white/5">
@@ -335,7 +336,7 @@ export function IdentitySection({ person, canEdit, onEdit, onEditPerson }: {
       </Card>
       <Card pad="lg">
         <div className="mb-1 flex items-center justify-between gap-2">
-          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Descriptors &amp; record</h3>
+          <h3 className="text-[13px] font-semibold text-white">Descriptors &amp; record</h3>
           {canEdit && <Button size="sm" onClick={onEditPerson}>Edit person</Button>}
         </div>
         <div className="divide-y divide-white/5">
@@ -447,7 +448,7 @@ export function ActivitySection({ entries, total, reviewedAt, now }: {
   return (
     <Card pad="lg">
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Activity</h3>
+        <h3 className="text-[13px] font-semibold text-white">Activity</h3>
         <StaleIntelBadge reviewedAt={reviewedAt} now={now} thresholdDays={PERSON_REVIEW_DAYS} />
       </div>
       <WorkflowTimeline entries={entries} empty="No recorded activity yet." />

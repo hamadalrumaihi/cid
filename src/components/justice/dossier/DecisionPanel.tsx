@@ -450,7 +450,7 @@ function JudgeDecisionModal({ decision, requestNumber, busy, onSubmit, onClose }
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{title}</p>
+      <p className="text-[13px] font-semibold text-white">{title}</p>
       <div className="mt-1.5 flex flex-wrap items-center gap-2">{children}</div>
     </div>
   )
@@ -682,7 +682,7 @@ export function DecisionPanel({
       <section aria-label="Your available actions">
         <Card pad="sm" className="space-y-3 backdrop-blur">
           <div>
-            <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Your actions</h2>
+            <h2 className="text-[13px] font-semibold text-white">Your actions</h2>
             <p className="mt-0.5 text-xs text-slate-400">
               {disposition.statusLabel}
               {disposition.responsibleRoleLabel !== '—' ? ` — awaiting ${disposition.responsibleRoleLabel}.` : '.'}

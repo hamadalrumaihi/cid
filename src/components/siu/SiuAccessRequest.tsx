@@ -148,7 +148,7 @@ export function SiuAccessRequestCard() {
       {!!rows.length && (
         <ul className="mt-3 space-y-2">
           {rows.map((r) => (
-            <li key={r.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+            <li key={r.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tint={siuAccessStatusTint(r.status)}>{siuAccessStatusLabel(r.status)}</Badge>
                 <span className="font-mono text-sm font-semibold text-slate-100">{r.case_number}</span>
@@ -225,7 +225,7 @@ export function SiuAccessQueue({ rows, onDone }: {
       ) : (
         <ul className="mt-3 space-y-2">
           {rows.map((r) => (
-            <li key={r.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+            <li key={r.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tint={siuAccessStatusTint(r.status)}>{siuAccessStatusLabel(r.status)}</Badge>
                 <span className="font-mono text-sm font-semibold text-slate-100">

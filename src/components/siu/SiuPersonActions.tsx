@@ -399,7 +399,7 @@ function IntelSheet({ personId, personName, onClose, onDone }: {
         <Field label="The note" required>
           {(id) => <Textarea id={id} rows={5} value={body} onChange={(e) => setBody(e.target.value)} />}
         </Field>
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+        <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
           <p className="text-xs font-semibold text-slate-200">Grading (5×5×5)</p>
           <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">
             Only settable as the note is written. Leaving it blank is fine — the note is then shown

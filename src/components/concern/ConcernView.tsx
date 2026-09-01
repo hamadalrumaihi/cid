@@ -33,7 +33,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Notice } from '@/components/ui/Notice'
 import { PageHeader, SectionHeader } from '@/components/ui/PageHeader'
-import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 
 const fmtWhen = (v?: string | null) =>
@@ -87,7 +87,7 @@ export function ConcernView() {
 
   return (
     <div>
-      <Card pad="lg" className="mb-5">
+      <div className="mb-5">
         <PageHeader
           eyebrow="Confidential"
           title="Report a Concern"
@@ -100,7 +100,7 @@ export function ConcernView() {
           anything, follows from it — including whether it was acted on. That is
           intentional, and it is not a reflection on your report.
         </p>
-      </Card>
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Card>
@@ -164,13 +164,13 @@ export function ConcernView() {
             subtitle="Only you can see this list."
           />
           {loading ? (
-            <div className="mt-3"><CardGridSkeleton cols="" /></div>
+            <div className="mt-3"><ListSkeleton count={3} /></div>
           ) : !mine.length ? (
             <p className="mt-3 text-xs text-slate-400">You have not submitted any reports.</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {mine.map((r) => (
-                <li key={r.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                <li key={r.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge tone="neutral">{siuReferralCategoryLabel(r.category)}</Badge>
                     {r.acknowledged && (

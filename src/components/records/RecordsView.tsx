@@ -9,23 +9,25 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
 import { insert, list, update, withRetry } from '@/lib/db'
+import { timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
-import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { RecordThumb } from '@/components/ui/RecordThumb'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { inputCls, labelCls } from '@/components/ui/Field'
-import { SearchIcon } from '@/components/shell/icons'
+import { ArchiveIcon, GangIcon, SearchIcon } from '@/components/shell/icons'
 
 type RecordRow = Tables<'cid_records'>
 
-const PAGE = 24
+const TABLE_PAGE = 30
 
 const statusTint = (s: string | null) =>
   s === 'Wanted' ? 'bg-rose-500/15 text-rose-300'
@@ -40,7 +42,6 @@ export function RecordsView() {
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [query, setQuery] = useState(() => sp.get('q') ?? '')
-  const [page, setPage] = useState({ q: '', shown: PAGE })
   const [editor, setEditor] = useState<{ record: RecordRow | null } | null>(null)
   const version = useTableVersion('cid_records')
 
@@ -68,8 +69,44 @@ export function RecordsView() {
     () => records.filter((r) => !q || JSON.stringify(r).toLowerCase().includes(q)),
     [records, q],
   )
-  const shown = page.q === q ? page.shown : PAGE
-  const slice = items.slice(0, shown)
+
+  // Table columns — value() feeds sort/filter/CSV, render() the chips. The
+  // fields mirror what the old card grid showed.
+  const columns: DataColumn<RecordRow>[] = [
+    {
+      key: 'name', label: 'Name',
+      value: (r) => r.name,
+      render: (r) => (
+        <span className="flex items-center gap-2.5">
+          <RecordThumb url={r.mugshot_url} label={r.name} size="sm" />
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate font-semibold text-white">{r.name}</span>
+            <span className="truncate text-xs text-slate-400">{r.callsign || '—'}{r.bureau && ` · ${r.bureau}`}</span>
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: 'case', label: 'Case #',
+      value: (r) => r.case_number ?? '—',
+      render: (r) => r.case_number ? <span className="font-mono text-xs text-blue-300">{r.case_number}</span> : <span className="text-slate-500">—</span>,
+    },
+    { key: 'gang', label: 'Gang', value: (r) => r.gang ?? '—' },
+    {
+      key: 'status', label: 'Status',
+      value: (r) => r.status ?? '—',
+      render: (r) => <Badge tint={statusTint(r.status)}>{r.status || '—'}</Badge>,
+    },
+    { key: 'charges', label: 'Charges', value: (r) => r.charges ?? '', render: (r) => <span className="line-clamp-2 max-w-[18rem] text-xs text-slate-300">{r.charges || '—'}</span> },
+    { key: 'officer', label: 'Officer', value: (r) => r.officer || 'Unassigned' },
+    { key: 'seen', label: 'Last seen', value: (r) => r.last_seen ?? '—' },
+    { key: 'updated', label: 'Updated', value: (r) => timeAgo(r.updated_at), sortValue: (r) => r.updated_at },
+    ...(canEdit ? [{
+      key: 'actions', label: 'Actions',
+      value: () => '',
+      render: (r) => <Button size="sm" onClick={() => setEditor({ record: r })}>Edit</Button>,
+    } satisfies DataColumn<RecordRow>] : []),
+  ]
 
   if (state !== 'in') {
     return <Notice text="Sign in to the portal to view and manage records." />
@@ -77,21 +114,19 @@ export function RecordsView() {
 
   return (
     <div>
-      <Card pad="lg" className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <PageHeader
-          className="flex-1"
-          title="🗃️ CID Records"
-          subtitle="Shared records — everyone sees updates instantly."
-          actions={
-            <>
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
-                <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
-              </span>
-              <span className="rounded-lg bg-white/5 px-3 py-2 text-xs text-slate-300">👤 {profile?.display_name || 'Signed in'}</span>
-            </>
-          }
-        />
-      </Card>
+      <PageHeader
+        className="mb-6"
+        title="CID Records"
+        subtitle="Shared records — everyone sees updates instantly."
+        actions={
+          <>
+            <Badge tone="good">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />live
+            </Badge>
+            <span className="rounded-lg bg-white/5 px-3 py-2 text-xs text-slate-300">{profile?.display_name || 'Signed in'}</span>
+          </>
+        }
+      />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative min-w-[12rem] flex-1">
@@ -107,11 +142,11 @@ export function RecordsView() {
         </div>
         {canEdit && (
           <Button variant="primary" onClick={() => setEditor({ record: null })}>
-            + New Record
+            New Record
           </Button>
         )}
         <Button onClick={() => void refresh()}>
-          ↻ Refresh
+          Refresh
         </Button>
       </div>
 
@@ -124,25 +159,26 @@ export function RecordsView() {
           <Notice text="No records match your filter." />
         ) : (
           <EmptyState
-            icon="🗃️"
+            icon={<ArchiveIcon size={24} />}
             title="No records yet"
             hint={canEdit ? 'Create the first record to start the shared, two-way registry.' : 'No records have been created yet.'}
-            action={canEdit ? { label: '+ New Record', onClick: () => setEditor({ record: null }) } : undefined}
+            action={canEdit ? { label: 'New Record', onClick: () => setEditor({ record: null }) } : undefined}
           />
         )
       ) : (
-        <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {slice.map((r) => <RecordCard key={r.id} r={r} canEdit={canEdit} onEdit={() => setEditor({ record: r })} />)}
-          </div>
-          {items.length > shown && (
-            <div className="mt-4 text-center">
-              <Button size="sm" className="min-h-[44px] sm:min-h-0" onClick={() => setPage({ q, shown: shown + PAGE })}>
-                Load more ({items.length - shown} remaining)
-              </Button>
-            </div>
-          )}
-        </>
+        <Card>
+          <DataTable
+            columns={columns}
+            rows={items}
+            rowKey={(r) => r.id}
+            pageSize={TABLE_PAGE}
+            initialSort={{ key: 'updated', dir: 'desc' }}
+            filterPlaceholder="Filter listed rows…"
+            countLabel="records"
+            emptyText="No records yet."
+            mobileCard={(r) => <RecordCard r={r} canEdit={canEdit} onEdit={() => setEditor({ record: r })} />}
+          />
+        </Card>
       )}
 
       {editor && (
@@ -158,27 +194,20 @@ export function RecordsView() {
 }
 
 function RecordCard({ r, canEdit, onEdit }: { r: RecordRow; canEdit: boolean; onEdit: () => void }) {
-  const [imgFailed, setImgFailed] = useState(false)
-  const mug = safeUrl(r.mugshot_url ?? '')
   return (
     <Card pad="none" className="overflow-hidden">
       <div className="flex gap-4 p-5">
-        {mug && !imgFailed ? (
-          // eslint-disable-next-line @next/next/no-img-element -- external mugshot URL
-          <img src={mug} alt="" onError={() => setImgFailed(true)} className="h-16 w-16 flex-shrink-0 rounded-lg object-cover" />
-        ) : (
-          <div className="grid h-16 w-16 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-2xl">👤</div>
-        )}
+        <RecordThumb url={r.mugshot_url} label={r.name} size="md" />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="truncate font-semibold text-white">{r.name}</p>
               <p className="text-xs text-slate-400">{r.callsign || '—'}{r.bureau && ` · ${r.bureau}`}</p>
             </div>
-            <Badge tint={statusTint(r.status)} className="flex-shrink-0 uppercase">{r.status || '—'}</Badge>
+            <Badge tint={statusTint(r.status)} className="flex-shrink-0">{r.status || '—'}</Badge>
           </div>
           {r.case_number && <p className="mt-1 font-mono text-[11px] text-blue-300">{r.case_number}</p>}
-          {r.gang && <p className="mt-1 text-xs text-violet-300">🚩 {r.gang}</p>}
+          {r.gang && <p className="mt-1 text-xs text-violet-300"><GangIcon size={12} className="inline align-[-2px]" /> {r.gang}</p>}
           {r.charges && <p className="mt-2 line-clamp-3 text-xs text-slate-300">{r.charges}</p>}
         </div>
       </div>

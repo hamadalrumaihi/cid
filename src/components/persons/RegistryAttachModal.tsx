@@ -57,7 +57,7 @@ export function RegistryAttachModal({ person, onClose }: { person: RegistryPerso
       const chat = await insert('case_messages', {
         case_id: caseId,
         author_name: profile?.display_name || 'CID',
-        body: `🔗 Intel reference — Person: ${label}${role ? ` (${classificationLabel(role)})` : ''}${note.trim() ? ` — ${note.trim()}` : ''}`,
+        body: `Intel reference — Person: ${label}${role ? ` (${classificationLabel(role)})` : ''}${note.trim() ? ` — ${note.trim()}` : ''}`,
         mentions: [],
         links: [],
       })

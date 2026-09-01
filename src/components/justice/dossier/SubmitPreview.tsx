@@ -55,7 +55,7 @@ export function SubmitPreview({ r, draft, exhibits, records, checklist, busy, re
         </p>
 
         <section className="space-y-1.5">
-          <h4 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Requirements</h4>
+          <h4 className="text-[13px] font-semibold text-white">Requirements</h4>
           <ul className="space-y-1">
             {checklist.map((c) => (
               <li key={c.label} className="flex items-center gap-2 text-sm">
@@ -72,7 +72,7 @@ export function SubmitPreview({ r, draft, exhibits, records, checklist, busy, re
         </section>
 
         <section className="space-y-1.5">
-          <h4 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+          <h4 className="text-[13px] font-semibold text-white">
             Included exhibits ({exhibits.length})
           </h4>
           {exhibits.length === 0 && <p className="text-sm text-slate-400">No supporting items selected.</p>}
@@ -80,7 +80,7 @@ export function SubmitPreview({ r, draft, exhibits, records, checklist, busy, re
             {flagged.map(({ e, flag }) => (
               <li key={e.id} className={`rounded-lg border px-3 py-2 text-sm ${flag ? 'border-amber-500/30 bg-amber-500/5' : 'border-white/10 bg-ink-900/50'}`}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{humanize(e.exhibit_type)}</span>
+                  <span className="text-xs font-medium text-slate-500">{humanize(e.exhibit_type)}</span>
                   <span className="min-w-0 flex-1 truncate text-slate-200">{e.display_title}</span>
                   {e.exhibit_type === 'finalized_report' && !flag && (
                     <span className="rounded border border-emerald-500/25 bg-emerald-500/10 px-1.5 text-[10px] font-semibold text-emerald-300">finalized</span>

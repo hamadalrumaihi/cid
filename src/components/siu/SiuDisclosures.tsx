@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { SectionHeader } from '@/components/ui/PageHeader'
-import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { uiPrompt } from '@/components/ui/dialog'
 
@@ -80,7 +80,7 @@ export function SiuDisclosuresSection() {
     void load()
   }
 
-  if (loading) return <CardGridSkeleton cols="" />
+  if (loading) return <ListSkeleton />
 
   return (
     <Card>
@@ -106,7 +106,7 @@ export function SiuDisclosuresSection() {
       ) : (
         <ul className="mt-3 space-y-2">
           {shown.map((r) => (
-            <li key={r.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+            <li key={r.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tint={audienceTint(r.audience)}>{SIU_AUDIENCE_SHORT[r.audience] ?? r.audience}</Badge>
                 <Badge tone="neutral">{siuReleaseItemLabel(r.item_type)}</Badge>
