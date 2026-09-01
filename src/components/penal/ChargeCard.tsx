@@ -22,7 +22,7 @@ import { Badge } from '@/components/ui/Badge'
 function Fact({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
+      <dt className="text-xs font-medium text-slate-500">{label}</dt>
       <dd className={`truncate text-sm ${muted ? 'text-slate-500' : 'text-slate-200'}`}>{value}</dd>
     </div>
   )
@@ -34,7 +34,7 @@ export function ChargeCard({ c, selected, onToggle }: {
   onToggle?: () => void
 }) {
   return (
-    <div className={`rounded-xl border p-3 transition ${
+    <div className={`rounded-lg border p-3 transition ${
       selected ? 'border-badge-500/60 bg-badge-500/5' : 'border-white/10 bg-ink-900'}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
@@ -43,7 +43,7 @@ export function ChargeCard({ c, selected, onToggle }: {
             {c.title}
           </p>
           {c.penalTitle && (
-            <p className="text-[11px] uppercase tracking-wide text-slate-500">{c.penalTitle}</p>
+            <p className="text-xs font-medium text-slate-500">{c.penalTitle}</p>
           )}
         </div>
         <span className="flex flex-wrap items-center gap-1.5">

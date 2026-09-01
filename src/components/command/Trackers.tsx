@@ -85,7 +85,7 @@ export function Trackers({ cases }: { cases: CaseRow[] }) {
   return (
     <Card pad="lg">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="flex items-center gap-2 text-base font-semibold text-white"><span aria-hidden="true">🛰️</span> Tracker Deployment Logs</h3>
+        <h3 className="text-base font-semibold text-white">Tracker Deployment Logs</h3>
         {canDelete && (
           <Button size="sm" variant="primary" onClick={() => setModalOpen(true)}>
             + Authorize
@@ -103,7 +103,7 @@ export function Trackers({ cases }: { cases: CaseRow[] }) {
             const authorized = t.status === 'authorized' && !!t.director_sig && !!t.deputy_sig
             const expired = t.status === 'expired' || (authorized && remaining <= 0)
             return (
-              <div key={t.id} className="rounded-xl border border-white/10 bg-ink-900 p-4">
+              <div key={t.id} className="rounded-lg border border-white/10 bg-ink-900 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-mono text-xs text-blue-300">{t.tracker_code}</p>
@@ -111,7 +111,7 @@ export function Trackers({ cases }: { cases: CaseRow[] }) {
                     <p className="text-[11px] text-slate-400">{caseNumById(cases, t.case_id) || '—'}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-[10px] uppercase tracking-wider text-slate-400">{authorized ? 'Remaining' : 'Status'}</p>
+                    <p className="text-xs font-medium text-slate-500">{authorized ? 'Remaining' : 'Status'}</p>
                     {authorized
                       ? <p className={`font-mono text-sm font-bold ${remaining > 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{fmtCountdown(remaining)}</p>
                       : <p className="text-sm font-bold text-amber-300">{expired ? 'EXPIRED' : 'Pending'}</p>}
@@ -194,7 +194,7 @@ function TrackerModal({ cases, onClose, onSaved }: { cases: CaseRow[]; onClose: 
   return (
     <Modal open onClose={onClose} dirty={dirty}>
       <div className="p-6">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Surveillance Authorization</p>
+        <p className="text-xs font-medium text-blue-300/70">Surveillance authorization</p>
         <ModalHeader title="Deploy GPS Tracker" onClose={onClose} />
         <p className="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
           Per SOP Title 7, deployment requires dual command authorization. You sign as Director now; a second command officer co-signs to activate.

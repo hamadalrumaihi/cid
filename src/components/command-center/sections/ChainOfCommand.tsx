@@ -28,7 +28,7 @@ function Person({ p }: { p: RosterProfile }) {
 function Tier({ title, people, tint }: { title: string; people: RosterProfile[]; tint: string }) {
   return (
     <div className={`rounded-lg border ${tint} p-3`}>
-      <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-300">{title} <span className="text-slate-500">({people.length})</span></p>
+      <p className="mb-2 text-[13px] font-semibold text-white">{title} <span className="font-normal text-slate-500">({people.length})</span></p>
       {people.length ? <div className="flex flex-wrap gap-2">{people.map((p) => <Person key={p.id} p={p} />)}</div> : <p className="text-xs text-slate-500">Vacant.</p>}
     </div>
   )

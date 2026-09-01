@@ -101,7 +101,7 @@ export function ProfileView() {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-black text-white">{profile!.display_name || 'Officer'}</h1>
+            <h1 className="text-2xl font-semibold text-white">{profile!.display_name || 'Officer'}</h1>
             <span className="inline-flex items-center gap-1.5 rounded bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-300">
               <span className={`h-2 w-2 rounded-full ${dot.cls}`} /> {dot.t}
             </span>
@@ -339,7 +339,7 @@ function NotificationsSection() {
       <div className="flex items-center justify-between gap-2 rounded-lg bg-ink-950/50 p-4">
         <div>
           <p className="font-semibold text-white">In-app notifications</p>
-          <p className="text-xs text-slate-400">Mentions, sign-off pings and follows — the 🔔 bell in the top bar. Always on.</p>
+          <p className="text-xs text-slate-400">Mentions, sign-off pings and follows — the bell in the top bar. Always on.</p>
         </div>
         <Badge tone="good">On</Badge>
       </div>

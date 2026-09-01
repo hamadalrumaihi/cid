@@ -17,7 +17,7 @@ export function RaidComp() {
 
   return (
     <Card pad="lg">
-      <h3 className="mb-1 flex items-center gap-2 text-base font-semibold text-white"><span aria-hidden="true">💰</span> Raid Compensation Breakdown</h3>
+      <h3 className="mb-1 text-base font-semibold text-white">Raid Compensation Breakdown</h3>
       <p className="mb-4 text-xs text-slate-400">Official payout brackets applied to net seizure value, split across Primary Detective / Supporting Units / CIs.</p>
       <label htmlFor="comp-input" className="mb-1 block text-xs font-semibold text-slate-300">Total Net Seizure Value ($)</label>
       <div className="relative mb-3">
@@ -41,21 +41,21 @@ export function RaidComp() {
         ) : (
           <>
             <div className="flex items-center justify-between rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-blue-300/80">Applicable Bracket</span>
+              <span className="text-xs font-medium text-blue-300/80">Applicable bracket</span>
               <span className="font-mono text-lg font-bold text-blue-300">{bracket.pct}%</span>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
-                <p className="text-[10px] uppercase tracking-wider text-emerald-300/80">Compensation Pool</p>
+                <p className="text-xs font-medium text-emerald-300/80">Compensation pool</p>
                 <p className="font-mono text-lg font-bold text-emerald-300">{fmtUSD(given)}</p>
               </div>
               <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
-                <p className="text-[10px] uppercase tracking-wider text-amber-300/80">Retained to Division</p>
+                <p className="text-xs font-medium text-amber-300/80">Retained to division</p>
                 <p className="font-mono text-lg font-bold text-amber-300">{fmtUSD(retain)}</p>
               </div>
             </div>
             <div className="rounded-lg border border-white/5 bg-ink-850 p-3">
-              <p className="mb-2 text-[10px] uppercase tracking-wider text-slate-400">Automated Payout Split</p>
+              <p className="mb-2 text-xs font-medium text-slate-500">Automated payout split</p>
               {Object.entries(COMP_SPLIT).map(([role, frac]) => (
                 <div key={role} className="mb-1.5 flex items-center justify-between text-sm">
                   <span className="text-slate-300">{role}</span>

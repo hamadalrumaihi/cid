@@ -101,7 +101,7 @@ export function PenalAdminPanel() {
   const needReason = confirming?.mode === 'rollback'
 
   return (
-    <section className="mt-8 rounded-2xl border border-white/10 bg-ink-950/40 p-4">
+    <section className="mt-8 rounded-lg border border-white/10 bg-ink-950/40 p-4">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold text-white">Penal code administration</h2>
         <p className="t-readout text-[11px] text-slate-500">
@@ -111,7 +111,7 @@ export function PenalAdminPanel() {
 
       <div className="space-y-2">
         {versions.map((v) => (
-          <div key={v.id} className="rounded-xl border border-white/10 bg-ink-900 px-4 py-3">
+          <div key={v.id} className="rounded-lg border border-white/10 bg-ink-900 px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-sm text-slate-200">
@@ -167,7 +167,7 @@ export function PenalAdminPanel() {
       </div>
 
       {confirming && (
-        <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+        <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
           <p className="text-sm font-semibold text-white">
             {confirming.mode === 'publish' ? 'Publish' : 'Roll back to'} “{confirming.v.name}”?
           </p>

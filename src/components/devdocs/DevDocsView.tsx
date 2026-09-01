@@ -211,7 +211,7 @@ function DocsNav({ sections, active, onGo }: {
       </button>
       {sections.map((s) => (
         <div key={s.title}>
-          <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">{s.title}</p>
+          <p className="px-3 pb-1 text-xs font-medium text-slate-500">{s.title}</p>
           <div className="space-y-0.5">
             {s.pages.map((p) => (
               <button
@@ -251,10 +251,10 @@ function HomePage({ content, sections, onGo }: {
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-white/5 bg-ink-900/60 p-6">
-        <p className="t-readout mb-3 inline-flex items-center gap-2 rounded border border-blue-400/20 bg-blue-500/10 px-2 py-1 text-[10px] uppercase tracking-widest text-blue-200">
+        <p className="mb-1 flex items-center gap-2 text-xs font-medium text-slate-500">
           <span className="t-dot t-dot-cyan" /> Internal documentation · updated {content.updated}
         </p>
-        <h2 className="text-xl font-black text-white">How the CID Portal works — all of it</h2>
+        <h2 className="text-xl font-semibold text-white">How the CID Portal works — all of it</h2>
         <p className="mt-1 max-w-2xl text-sm text-slate-400">
           A Next.js single-page app on Vercel talking straight to a Supabase Postgres backend.
           There is no custom server: every security rule that matters lives in the database as
@@ -267,7 +267,7 @@ function HomePage({ content, sections, onGo }: {
       </div>
 
       <div className="rounded-lg border border-white/5 bg-ink-900/60 p-6">
-        <h3 className="mb-3 text-sm font-black uppercase tracking-wider text-slate-400">Architecture at a glance</h3>
+        <h3 className="mb-3 text-[13px] font-semibold text-white">Architecture at a glance</h3>
         <pre className="overflow-x-auto rounded-lg border border-white/10 bg-ink-950 p-4 font-mono text-[11px] leading-relaxed text-slate-300">{`┌───────────────────────────┐         ┌──────────────────────────────┐
 │  The web app (this repo)  │  HTTPS  │  Supabase (hosted backend)   │
 │  Next.js + React + TS     │ ──────► │  Postgres DB + Auth +        │
@@ -289,14 +289,14 @@ function HomePage({ content, sections, onGo }: {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {QUICK_LINKS.map((q) => (
           <button key={q.slug} onClick={() => onGo(q.slug, q.anchor)} className="rounded-lg border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
-            <p className="text-sm font-black text-white">{q.label}</p>
+            <p className="text-sm font-semibold text-white">{q.label}</p>
             <p className="mt-1 text-xs text-slate-400">{q.sub}</p>
           </button>
         ))}
       </div>
 
       <div className="rounded-lg border border-white/5 bg-ink-900/60 p-6">
-        <h3 className="mb-3 text-sm font-black uppercase tracking-wider text-slate-400">All chapters</h3>
+        <h3 className="mb-3 text-[13px] font-semibold text-white">All chapters</h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {sections.map((s) => (
             <div key={s.title}>
@@ -335,8 +335,8 @@ function ArticlePage({ page, onGo }: { page: HandbookPage; onGo: (slug: string |
           blocks (tables, code) keep their own overflow-x-auto and scroll. */}
       <div className="order-2 min-w-0 flex-1 xl:order-1">
         <article className="mx-auto max-w-3xl rounded-lg border border-white/5 bg-ink-900/60 p-6">
-          <h1 className="text-xl font-black text-white">{page.title}</h1>
-          <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{page.section}</p>
+          <h1 className="text-xl font-semibold text-white">{page.title}</h1>
+          <p className="mt-0.5 text-xs font-medium text-slate-500">{page.section}</p>
           {rendered}
           {page.slug === 'dependency-map' && <DepExplorer />}
         </article>
@@ -363,7 +363,7 @@ export function DepExplorer() {
 
   return (
     <section aria-label="Dependency explorer" className="mt-8 border-t border-white/10 pt-6">
-      <h2 className="mb-1 text-lg font-black text-white">Interactive explorer</h2>
+      <h2 className="mb-1 text-lg font-semibold text-white">Interactive explorer</h2>
       <p className="mb-3 text-xs text-slate-500">
         Pick anything to see what it depends on, what depends on it, and what to check if you change it.
         Read-only — for understanding, not editing.
@@ -391,7 +391,7 @@ export function DepExplorer() {
         <div ref={panelRef} className="mt-4 rounded-lg bg-ink-950/60 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-black text-white">{sel.label}
+              <p className="text-sm font-semibold text-white">{sel.label}
                 <span className={`ml-2 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase ${DEP_KIND_META[sel.kind].tint}`}>{DEP_KIND_META[sel.kind].label}</span>
                 <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${sel.risk === 'high' ? 'bg-rose-500/15 text-rose-300' : sel.risk === 'medium' ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300'}`}>{sel.risk} risk</span>
               </p>
@@ -404,7 +404,7 @@ export function DepExplorer() {
             <DepList title="Depended on by" nodes={dependentsOf(sel.id)} empty="Nothing depends on it directly." onPick={pick} />
           </div>
           <div className="mt-3 rounded-lg bg-amber-500/5 px-3 py-2">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-300/80">If I change this…</p>
+            <p className="text-xs font-semibold text-amber-300/80">If I change this…</p>
             <p className="mt-0.5 text-xs text-slate-300">{sel.ifChanged}</p>
           </div>
         </div>
@@ -427,7 +427,7 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
 function DepList({ title, nodes, empty, onPick }: { title: string; nodes: DepNode[]; empty: string; onPick: (n: DepNode) => void }) {
   return (
     <div>
-      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">{title}</p>
+      <p className="mb-1.5 text-xs font-medium text-slate-500">{title}</p>
       {nodes.length ? (
         <div className="flex flex-wrap gap-1">
           {nodes.map((n) => (

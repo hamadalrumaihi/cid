@@ -8,6 +8,7 @@
  *  oversized cards, no gradients. */
 import { PAGE_META, TAB_LABEL } from '@/lib/nav'
 import { TOOL_GROUPS, type ToolId } from '@/lib/toolsModel'
+import { Badge } from '@/components/ui/Badge'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { ToolIcon } from './toolIcons'
 import { useToolCounts, COUNTED_TOOLS } from './useToolCounts'
@@ -29,7 +30,7 @@ export function ToolDirectory({ openKeys, onOpen }: ToolDirectoryProps) {
       />
       {TOOL_GROUPS.map((group) => (
         <div key={group.id}>
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+          <p className="mb-2 text-[13px] font-semibold text-white">
             {group.label}
           </p>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -42,7 +43,7 @@ export function ToolDirectory({ openKeys, onOpen }: ToolDirectoryProps) {
                 <button
                   key={tool}
                   onClick={() => onOpen(tool)}
-                  className={`group flex items-center gap-3 rounded-2xl border p-3 text-left transition ${
+                  className={`group flex items-center gap-3 rounded-lg border p-3 text-left transition ${
                     urgent
                       ? 'border-rose-500/20 bg-ink-900/60 hover:border-rose-500/40 hover:bg-rose-500/5'
                       : 'border-white/10 bg-ink-900/60 hover:border-white/20 hover:bg-white/5'
@@ -60,19 +61,20 @@ export function ToolDirectory({ openKeys, onOpen }: ToolDirectoryProps) {
                     <span className="flex items-center gap-2">
                       <span className="truncate text-sm font-semibold text-white">{TAB_LABEL[tool] ?? tool}</span>
                       {counted && count !== undefined && (
-                        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                          urgent && count > 0 ? 'bg-rose-500/15 text-rose-300' : 'bg-white/10 text-slate-300'
-                        }`}>
+                        <Badge
+                          tint={urgent && count > 0 ? 'bg-rose-500/15 text-rose-300' : 'bg-white/10 text-slate-300'}
+                          className="tabular-nums"
+                        >
                           {count}
-                        </span>
+                        </Badge>
                       )}
                       {counted && count === undefined && loading && (
-                        <span aria-hidden className="skel inline-block h-4 w-7 rounded-full bg-white/10" />
+                        <span aria-hidden className="skel inline-block h-4 w-7 rounded bg-white/10" />
                       )}
                       {isOpen && (
-                        <span className="ml-auto flex-shrink-0 rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-300">
+                        <Badge tone="accent" className="ml-auto flex-shrink-0">
                           Open
-                        </span>
+                        </Badge>
                       )}
                     </span>
                     <span className="mt-0.5 block truncate text-xs text-slate-400">{PAGE_META[tool]?.sub}</span>

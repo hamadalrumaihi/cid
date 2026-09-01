@@ -70,7 +70,7 @@ export function DocCard({ d, myAcks, bookmarked, deadline, onOpen, onToggleBookm
   return (
     <Card interactive className="flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
-        <span className="min-w-0 flex-1 truncate pt-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        <span className="min-w-0 flex-1 truncate pt-1 text-xs font-medium text-slate-500">
           {category}
         </span>
         <BookmarkToggle title={title} bookmarked={bookmarked} onToggle={onToggleBookmark} />

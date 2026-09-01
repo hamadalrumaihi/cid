@@ -166,7 +166,7 @@ export function ToolTabBar({ tabs, activeKey, onActivate, onClose, onCloseOthers
               <div
                 role="menu"
                 aria-label="Open tabs"
-                className="absolute right-0 top-full z-30 mt-1.5 w-72 rounded-2xl border border-white/10 bg-ink-850 p-1.5 shadow-glow"
+                className="absolute right-0 top-full z-30 mt-1.5 w-72 rounded-lg border border-white/10 bg-ink-850 p-1.5 shadow-pop"
               >
                 <div className="max-h-72 overflow-y-auto">
                   {tabs.map((t) => {
@@ -180,7 +180,7 @@ export function ToolTabBar({ tabs, activeKey, onActivate, onClose, onCloseOthers
                         >
                           <ToolIcon tool={t.toolId} size={15} className="flex-shrink-0" />
                           <span className="min-w-0 flex-1 truncate">{t.title}</span>
-                          {t.recordId && <span className="flex-shrink-0 text-[10px] uppercase tracking-wider text-slate-500">{TAB_LABEL[t.toolId] ?? t.toolId}</span>}
+                          {t.recordId && <span className="flex-shrink-0 text-[11px] font-medium text-slate-500">{TAB_LABEL[t.toolId] ?? t.toolId}</span>}
                           {t.dirty && <span aria-label="Unsaved changes" className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-400" />}
                         </button>
                         <button
@@ -223,7 +223,7 @@ export function ToolTabBar({ tabs, activeKey, onActivate, onClose, onCloseOthers
         <div
           role="menu"
           aria-label={`${menuTab.title} tab actions`}
-          className="fixed z-40 w-44 rounded-xl border border-white/10 bg-ink-850 p-1 shadow-glow"
+          className="fixed z-40 w-44 rounded-lg border border-white/10 bg-ink-850 p-1 shadow-pop"
           style={{ left: Math.min(menu.x, typeof window !== 'undefined' ? window.innerWidth - 192 : menu.x), top: menu.y + 4 }}
         >
           <button role="menuitem" onClick={() => { onClose(menu.key); setMenu(null) }} className="block h-10 w-full rounded-lg px-3 text-left text-xs font-medium text-slate-200 transition hover:bg-white/5">

@@ -48,7 +48,7 @@ function KV({ label, children }: { label: string; children: React.ReactNode }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-lg border border-white/5 bg-ink-900/60 p-4">
-      <h2 className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">{title}</h2>
+      <h2 className="mb-1.5 text-[13px] font-semibold text-white">{title}</h2>
       {children}
     </section>
   )
@@ -66,7 +66,7 @@ function RelatedLink({ id, meta, prefix, onOpenDoc }: {
         onClick={() => onOpenDoc(id)}
         className="flex min-h-[40px] w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-white/5"
       >
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{prefix}</span>
+        <span className="text-xs font-medium text-slate-500">{prefix}</span>
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-badge-200">
           {meta ? docTitle(meta.name) : 'Document'}
         </span>
@@ -193,7 +193,7 @@ export function DocMetaRail({ doc, relations, backlinks, relatedMeta, campaign, 
             ))}
             {otherLinks.map((r) => (
               <li key={r.id} className="px-2 py-1.5 text-xs text-slate-400">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{relLabel(r.relation)}</span>{' '}
+                <span className="text-xs font-medium text-slate-500">{relLabel(r.relation)}</span>{' '}
                 {r.label ?? r.target_kind}
               </li>
             ))}

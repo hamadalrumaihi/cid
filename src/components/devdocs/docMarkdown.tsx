@@ -130,8 +130,8 @@ export function renderDocMarkdown(body: string, onLink: LinkFn): ReactNode {
           #
         </a>
       )
-      if (level <= 2) blocks.push(<h2 key={key++} id={id} className="group mt-8 mb-3 scroll-mt-24 border-b border-white/10 pb-2 text-lg font-black text-white">{content}{anchor}</h2>)
-      else blocks.push(<h3 key={key++} id={id} className="group mt-6 mb-2 scroll-mt-24 text-sm font-black uppercase tracking-wider text-blue-300">{content}{anchor}</h3>)
+      if (level <= 2) blocks.push(<h2 key={key++} id={id} className="group mt-8 mb-3 scroll-mt-24 border-b border-white/10 pb-2 text-lg font-semibold text-white">{content}{anchor}</h2>)
+      else blocks.push(<h3 key={key++} id={id} className="group mt-6 mb-2 scroll-mt-24 text-sm font-semibold text-blue-300">{content}{anchor}</h3>)
       i++
       continue
     }

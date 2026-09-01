@@ -18,10 +18,18 @@ import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState } from '@/components/ui/Notice'
 import { Card } from '@/components/ui/Card'
+import { AudioIcon, CaseIcon, DocumentIcon, PhotoIcon, VideoIcon } from '@/components/shell/icons'
 
 type FileRow = Tables<'case_files'>
 
-const CF_ICON: Record<string, string> = { image: '🖼️', video: '🎬', audio: '🔊', pdf: '📄', file: '📎' }
+function CfIcon({ k, size = 18 }: { k: string; size?: number }) {
+  switch (k) {
+    case 'image': return <PhotoIcon size={size} />
+    case 'video': return <VideoIcon size={size} />
+    case 'audio': return <AudioIcon size={size} />
+    default: return <DocumentIcon size={size} />
+  }
+}
 
 function cfKind(f: FileRow): string {
   const m = (f.mime_type ?? '').toLowerCase()
@@ -139,7 +147,7 @@ export function CaseFilesView() {
         />
         <datalist id="cf-case-list">{caseNumbers.map((n) => <option key={n} value={n} />)}</datalist>
         <Button variant="primary" onClick={attach} disabled={uploading}>
-          {uploading ? 'Uploading…' : '📎 Attach file'}
+          {uploading ? 'Uploading…' : 'Attach file'}
         </Button>
         <input ref={fileRef} type="file" accept="image/*,video/*,audio/*,.pdf" multiple className="hidden" onChange={(e) => { void onFiles(e.target.files); e.target.value = '' }} />
         <input
@@ -157,7 +165,7 @@ export function CaseFilesView() {
           <Notice text="No files match your filter." />
         ) : (
           <EmptyState
-            icon="🗂️"
+            icon={<CaseIcon size={22} />}
             title="No case files attached yet"
             hint="Pick a case number above and use “Attach file” to upload evidence to a case."
           />
@@ -167,7 +175,7 @@ export function CaseFilesView() {
           {grouped.map(([cn, rows]) => (
             <Card key={cn}>
               <div className="mb-3 flex items-center gap-2">
-                <span className="text-lg" aria-hidden>🗂️</span>
+                <span className="text-slate-400" aria-hidden><CaseIcon size={16} /></span>
                 <h3 className="font-mono text-sm font-semibold text-blue-300">{cn}</h3>
                 <span className="text-[11px] text-slate-400">{rows.length} file{rows.length === 1 ? '' : 's'}</span>
               </div>
@@ -181,11 +189,11 @@ export function CaseFilesView() {
                           // eslint-disable-next-line @next/next/no-img-element -- uploaded attachment
                           <img src={safeUrl(f.web_view_link)} alt="" loading="lazy" className="h-10 w-10 flex-shrink-0 rounded object-cover" />
                         ) : (
-                          <span className="grid h-10 w-10 flex-shrink-0 place-items-center rounded bg-ink-800 text-lg" aria-hidden>{CF_ICON[k]}</span>
+                          <span className="grid h-10 w-10 flex-shrink-0 place-items-center rounded bg-ink-800 text-slate-400" aria-hidden><CfIcon k={k} /></span>
                         )}
                         <span className="min-w-0">
                           <span className="block truncate">{f.name}</span>
-                          <span className="text-[10px] uppercase tracking-wider text-slate-500">{k} · preview</span>
+                          <span className="text-[11px] font-medium text-slate-500">{k} · preview</span>
                         </span>
                       </button>
                       {canDelete && (
@@ -210,7 +218,7 @@ function PreviewModal({ f, onClose }: { f: FileRow; onClose: () => void }) {
   const url = safeUrl(f.web_view_link)
   return (
     <Modal open onClose={onClose} wide>
-      <ModalHeader title={<>{CF_ICON[k]} {f.name}</>} onClose={onClose} />
+      <ModalHeader title={<span className="inline-flex items-center gap-2"><CfIcon k={k} size={16} /> {f.name}</span>} onClose={onClose} />
       {!url ? (
         <div className="flex h-48 items-center justify-center rounded-lg bg-ink-800 text-sm text-slate-300">No preview available.</div>
       ) : k === 'image' ? (

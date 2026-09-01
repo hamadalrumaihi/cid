@@ -80,7 +80,7 @@ export function DocToc({ headings, activeId, onSelect, size = 'rail' }: {
 
   return (
     <nav aria-label="On this page">
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">On this page</p>
+      <p className="mb-2 text-xs font-medium text-slate-500">On this page</p>
       <ul className={`border-l border-white/10 ${sheet ? 'space-y-1' : 'space-y-0.5'}`}>
         {headings.map((h) => {
           const active = activeId === h.id

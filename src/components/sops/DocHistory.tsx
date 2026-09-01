@@ -123,7 +123,7 @@ export function DocHistoryModal({ doc, canEdit, onClose, onChanged }: {
       ) : (
         <div className="space-y-5">
           <section>
-            <h4 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Versions</h4>
+            <h4 className="mb-2 text-[13px] font-semibold text-white">Versions</h4>
             {!versions.length ? (
               <p className="text-sm text-slate-500">No versions recorded yet — a snapshot is captured on every save.</p>
             ) : (
@@ -177,7 +177,7 @@ export function DocHistoryModal({ doc, canEdit, onClose, onChanged }: {
 
           {restoreTarget && (
             <section className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
-              <h4 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+              <h4 className="mb-2 text-[13px] font-semibold text-amber-300">
                 Restore {vName(restoreTarget)}
               </h4>
               <p className="mb-2 text-xs text-slate-400">Changes the restore would apply to the current text:</p>
@@ -194,7 +194,7 @@ export function DocHistoryModal({ doc, canEdit, onClose, onChanged }: {
 
           {versions.length >= 2 && !restoreTarget && (
             <section>
-              <h4 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Compare</h4>
+              <h4 className="mb-2 text-[13px] font-semibold text-white">Compare</h4>
               <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="From">
                   {(id) => (

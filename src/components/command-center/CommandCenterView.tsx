@@ -16,7 +16,6 @@ import { useAuth } from '@/lib/auth'
 import { useCapabilities } from '@/lib/capabilities'
 import { bureauLabel } from '@/lib/roles'
 import { Badge } from '@/components/ui/Badge'
-import { Card } from '@/components/ui/Card'
 import { Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CommandCenterOverview } from './sections/Overview'
@@ -78,21 +77,19 @@ export function CommandCenterView() {
 
   return (
     <div className="space-y-5">
-      <Card>
-        <PageHeader
-          title="Command Center"
-          subtitle={`The single home for command administration — ${active.sub.toLowerCase()}.`}
-          actions={
-            // Command reach, on every section: a Bureau Lead acts within their
-            // bureau; DD/Director (and the Owner) see the whole division.
-            <Badge tone={commandScope?.level === 'bureau' ? 'accent' : 'neutral'}>
-              {commandScope?.level === 'bureau'
-                ? `Your bureau: ${bureauLabel(commandScope.bureau)}`
-                : 'Scope: Division-wide'}
-            </Badge>
-          }
-        />
-      </Card>
+      <PageHeader
+        title="Command Center"
+        subtitle={`The single home for command administration — ${active.sub.toLowerCase()}.`}
+        actions={
+          // Command reach, on every section: a Bureau Lead acts within their
+          // bureau; DD/Director (and the Owner) see the whole division.
+          <Badge tone={commandScope?.level === 'bureau' ? 'accent' : 'neutral'}>
+            {commandScope?.level === 'bureau'
+              ? `Your bureau: ${bureauLabel(commandScope.bureau)}`
+              : 'Scope: Division-wide'}
+          </Badge>
+        }
+      />
 
       <div className="grid gap-5 lg:grid-cols-[15rem_1fr]">
         <nav className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible" aria-label="Command Center sections">

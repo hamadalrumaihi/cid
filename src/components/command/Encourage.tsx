@@ -35,7 +35,7 @@ export function Encourage() {
 
   if (dismissed || !text) return null
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-white/5 bg-gradient-to-r from-blue-500/[0.07] to-transparent px-4 py-2.5">
+    <div className="flex items-center gap-3 rounded-lg border border-white/5 bg-blue-500/5 px-4 py-2.5">
       <span className="text-cyan-300" aria-hidden="true">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="7" /><path d="M12 3.5V7M12 17v3.5M3.5 12H7M17 12h3.5" /></svg>
       </span>

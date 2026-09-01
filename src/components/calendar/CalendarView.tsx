@@ -142,7 +142,7 @@ export function CalendarView() {
   return (
     <div>
       <Card pad="sm" className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-black text-white">{MONTHS[month.m]} {month.y} <span className="ml-2 text-xs font-medium text-slate-400">{monthTotal} item{monthTotal === 1 ? '' : 's'}</span></h2>
+        <h2 className="text-lg font-semibold text-white">{MONTHS[month.m]} {month.y} <span className="ml-2 text-xs font-medium text-slate-400">{monthTotal} item{monthTotal === 1 ? '' : 's'}</span></h2>
         <div className="flex gap-2">
           <Button size="sm" onClick={() => nav(-1)} aria-label="Previous month">←</Button>
           <Button size="sm" onClick={goToday}>Today</Button>
@@ -154,7 +154,7 @@ export function CalendarView() {
 
       <Card pad="none" className="overflow-hidden">
         <div className="grid grid-cols-7 border-b border-white/5">
-          {DOW.map((d) => <div key={d} className="px-2 py-2 text-center text-[10px] font-black uppercase tracking-widest text-slate-500">{d}</div>)}
+          {DOW.map((d) => <div key={d} className="px-2 py-2 text-center text-xs font-medium text-slate-500">{d}</div>)}
         </div>
         <div className="grid grid-cols-7">
           {cells.map((day, i) => {
@@ -169,7 +169,7 @@ export function CalendarView() {
                 onClick={() => setSel(items.length ? date : null)}
                 className={`min-h-[4.5rem] border-b border-r border-white/5 p-1.5 text-left align-top transition hover:bg-white/[0.04] ${sel === date ? 'bg-blue-500/10' : ''}`}
               >
-                <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded px-1 text-xs font-black ${isToday ? 'bg-blue-500 text-white' : overdue ? 'text-rose-300' : 'text-slate-400'}`}>{day}</span>
+                <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded px-1 text-xs font-semibold ${isToday ? 'bg-blue-500 text-white' : overdue ? 'text-rose-300' : 'text-slate-400'}`}>{day}</span>
                 <span className="mt-1 block space-y-0.5">
                   {items.slice(0, 2).map((it) => (
                     <span key={it.key} className={`block truncate rounded px-1 py-0.5 text-[10px] font-semibold ${tint[it.tone]}`}>{it.icon} {it.label}</span>
@@ -183,9 +183,9 @@ export function CalendarView() {
       </Card>
 
       {sel && (byDay[sel]?.length ?? 0) > 0 && (
-        <div className="mt-4 rounded-2xl border border-blue-500/20 bg-ink-900/70 p-4">
+        <div className="mt-4 rounded-lg border border-blue-500/20 bg-ink-900/70 p-4">
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-black uppercase tracking-wide text-slate-100">{sel}{sel === today ? ' — today' : sel < today ? ' — past' : ''}</h3>
+            <h3 className="text-[13px] font-semibold text-white">{sel}{sel === today ? ' — today' : sel < today ? ' — past' : ''}</h3>
             <Button size="sm" className="-my-1" onClick={() => setSel(null)} aria-label="Close day details">✕</Button>
           </div>
           <div className="space-y-1.5">

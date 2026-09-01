@@ -32,6 +32,7 @@ import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader, SectionHeader } from '@/components/ui/PageHeader'
 import { SectionTabs, panelDomId, tabDomId } from '@/components/ui/SectionTabs'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { FilterIcon } from '@/components/shell/icons'
 import {
   CATEGORY_HINT, CATEGORY_LABEL, CATEGORY_ORDER, SORT_LABEL, STATUS_LABEL,
   STATUS_TONE, TYPE_LABEL, VIEWS, VIEW_LABEL, applyDocFilters,
@@ -105,7 +106,7 @@ function SearchHitCard({ r, onOpen, sections = [], onOpenSection }: {
   return (
     <Card interactive className="flex flex-col gap-2">
       {category && (
-        <span className="truncate text-[10px] font-bold uppercase tracking-wider text-slate-500">{category}</span>
+        <span className="truncate text-xs font-medium text-slate-500">{category}</span>
       )}
       <button
         type="button"
@@ -231,7 +232,7 @@ function FilterPopover({ filters, sort, activeCount, onFilters, onSort, onClear 
         onClick={() => setOpen((v) => !v)}
         className="inline-flex min-h-[40px] items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-500"
       >
-        <span aria-hidden>⚙</span> Filters
+        <FilterIcon size={15} /> Filters
         {activeCount > 0 && (
           <span className="rounded bg-badge-500 px-1.5 text-[11px] font-bold tabular-nums text-ink-950">{activeCount}</span>
         )}
@@ -242,7 +243,7 @@ function FilterPopover({ filters, sort, activeCount, onFilters, onSort, onClear 
           role="dialog"
           aria-label="Filter and sort documents"
           onKeyDown={onPanelKey}
-          className="absolute right-0 z-30 mt-2 w-[min(20rem,90vw)] space-y-3 rounded-lg border border-white/10 bg-ink-850 p-4 shadow-glow"
+          className="absolute right-0 z-30 mt-2 w-[min(20rem,90vw)] space-y-3 rounded-lg border border-white/10 bg-ink-850 p-4 shadow-pop"
         >
           <Field label="Type">
             {(id) => (

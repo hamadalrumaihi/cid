@@ -18,6 +18,7 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { CalendarIcon } from '@/components/shell/icons'
 import { inputCls, labelCls } from '@/components/ui/Field'
 
 type ShiftRow = Tables<'shift_reports'>
@@ -53,22 +54,21 @@ export function ShiftsView() {
 
   return (
     <div>
-      <Card pad="lg" className="mb-5">
-        <PageHeader
-          title="🗓️ Weekly Shift Reports"
-          subtitle="Log your weekly activity (cases worked, arrests, evidence). Rolls up to your Bureau Lead & Command."
-          actions={canEdit ? (
-            <Button variant="primary" onClick={() => setEditor({ record: null })}>
-              + This week&rsquo;s report
-            </Button>
-          ) : undefined}
-        />
-      </Card>
+      <PageHeader
+        className="mb-5"
+        title="Weekly Shift Reports"
+        subtitle="Log your weekly activity (cases worked, arrests, evidence). Rolls up to your Bureau Lead & Command."
+        actions={canEdit ? (
+          <Button variant="primary" onClick={() => setEditor({ record: null })}>
+            + This week&rsquo;s report
+          </Button>
+        ) : undefined}
+      />
       {loading ? (
         <CardGridSkeleton cols="" />
       ) : !shifts.length ? (
         <EmptyState
-          icon="🗓️"
+          icon={<CalendarIcon size={22} />}
           title="No shift reports yet"
           hint="Log your weekly activity so it rolls up to your Bureau Lead and Command."
           action={canEdit ? { label: "+ This week’s report", onClick: () => setEditor({ record: null }) } : undefined}
@@ -93,10 +93,10 @@ export function ShiftsView() {
                     </Button>
                   )}
                 </div>
-                <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-300">
-                  <span>📁 {s.cases_worked || '—'}</span>
-                  <span>🚓 {s.arrests} arrest{s.arrests === 1 ? '' : 's'}</span>
-                  <span>🔬 {s.evidence_count} evidence</span>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-300">
+                  <span><span className="font-medium text-slate-500">Cases</span> {s.cases_worked || '—'}</span>
+                  <span>{s.arrests} arrest{s.arrests === 1 ? '' : 's'}</span>
+                  <span>{s.evidence_count} evidence</span>
                 </div>
                 {s.notes && <p className="mt-2 whitespace-pre-wrap text-xs text-slate-400">{s.notes}</p>}
               </Card>

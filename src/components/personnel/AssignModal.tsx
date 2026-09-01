@@ -251,7 +251,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
 
         {/* Current authoritative assignment — read-only; changes go through the
             audited actions below, never a silent dropdown save. */}
-        <div className="mb-4 grid grid-cols-2 gap-x-6 gap-y-1 rounded-xl border border-white/10 bg-ink-950/50 p-3 text-xs">
+        <div className="mb-4 grid grid-cols-2 gap-x-6 gap-y-1 rounded-lg border border-white/10 bg-ink-950/50 p-3 text-xs">
           <p className="text-slate-400">Current Role <span className="block text-sm text-slate-100">{roleLabel(p.role)}</span></p>
           <p className="text-slate-400">Current Department <span className="block text-sm text-slate-100">{p.division ? bureauLabel(p.division) : 'Unassigned (pending approval)'}</span></p>
           <p className="text-slate-400">Active <span className="block text-sm text-slate-100">{p.active ? 'Yes' : 'No'}</span></p>
@@ -274,7 +274,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
         <Button className="mt-3 w-full" disabled={busy} onClick={() => void saveProfile()}>Save profile details</Button>
 
         <div className="mt-4 border-t border-white/5 pt-3">
-          <p className="mb-2 text-[11px] uppercase tracking-wider text-slate-400">Administrative actions</p>
+          <p className="mb-2 text-xs font-medium text-slate-500">Administrative actions</p>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" disabled={!roleOptions.length} onClick={() => openPanel('role')}
               title={roleOptions.length ? undefined : 'No role you can grant for this member (authority matrix)'}>
@@ -296,7 +296,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
           </div>
 
           {panel === 'role' && (
-            <div className="mt-3 space-y-3 rounded-xl border border-badge-400/20 bg-ink-950/50 p-3">
+            <div className="mt-3 space-y-3 rounded-lg border border-badge-400/20 bg-ink-950/50 p-3">
               <Field label="New role" required hint="Options are limited to roles you may grant.">
                 {(id) => (
                   <Select id={id} value={newRole} onChange={(e) => setNewRole(e.target.value)}>
@@ -320,7 +320,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
           )}
 
           {panel === 'org' && (
-            <div className="mt-3 space-y-3 rounded-xl border border-amber-400/20 bg-ink-950/50 p-3">
+            <div className="mt-3 space-y-3 rounded-lg border border-amber-400/20 bg-ink-950/50 p-3">
               <p className="text-xs text-amber-200">
                 Owner-only correction for an account approved into the wrong organization.
                 This is not a bureau transfer: the CID membership is deactivated (all history
@@ -348,7 +348,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
           )}
 
           {panel === 'doj' && (
-            <div className="mt-3 space-y-3 rounded-xl border border-amber-400/20 bg-ink-950/50 p-3">
+            <div className="mt-3 space-y-3 rounded-lg border border-amber-400/20 bg-ink-950/50 p-3">
               <p className="text-xs text-amber-200">
                 Department of Justice — direct assignment, effective immediately (no approval chain).
                 {p.active
@@ -385,7 +385,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
           )}
 
           {panel === 'transfer' && (
-            <div className="mt-3 space-y-3 rounded-xl border border-badge-400/20 bg-ink-950/50 p-3">
+            <div className="mt-3 space-y-3 rounded-lg border border-badge-400/20 bg-ink-950/50 p-3">
               <Field label="Destination department" required hint="Transfers apply immediately. SIB is never a destination — its membership moves only through the SIB appointment workflow.">
                 {(id) => (
                   <Select id={id} value={toBureau} onChange={(e) => setToBureau(e.target.value as Bureau)}>
@@ -410,7 +410,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
         </div>
 
         <div className="mt-4 border-t border-white/5 pt-3">
-          <p className="mb-1 text-[11px] uppercase tracking-wider text-rose-300/70">Danger zone</p>
+          <p className="mb-1 text-xs font-medium text-rose-300/70">Danger zone</p>
           <p className="mb-2 text-[10px] text-slate-500">Three different actions, in order of severity: <b className="text-slate-400">Deny login</b> blocks the door but keeps the account; <b className="text-slate-400">Remove from portal</b> revokes access and keeps every record, and can be undone; <b className="text-slate-400">Permanently delete</b> (Owner only) erases the account itself.</p>
           {canDenyThis && (p.login_denied ? (
             <div className="mb-2">
@@ -448,7 +448,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
               system, and the RPC refuses everybody else whatever renders. */}
           {isOwner && (
             <div className="mt-3 border-t border-rose-500/20 pt-3">
-              <p className="mb-1 text-[11px] uppercase tracking-wider text-rose-300/70">
+              <p className="mb-1 text-xs font-medium text-rose-300/70">
                 Owner only
               </p>
               <PermanentDelete

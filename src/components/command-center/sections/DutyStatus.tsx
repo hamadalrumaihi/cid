@@ -27,9 +27,9 @@ export function DutyStatus() {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-3 gap-3">
-        <Card pad="sm"><p className="font-mono text-2xl font-black text-white">{roster.length}</p><p className="text-xs uppercase tracking-wider text-slate-400">Active</p></Card>
-        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="font-mono text-2xl font-black text-emerald-300">{onDuty}</p><p className="text-xs uppercase tracking-wider text-emerald-300/80">On duty</p></div>
-        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4"><p className="font-mono text-2xl font-black text-amber-300">{onLoa}</p><p className="text-xs uppercase tracking-wider text-amber-300/80">On LOA</p></div>
+        <Card pad="sm"><p className="font-mono text-2xl font-semibold text-white">{roster.length}</p><p className="text-xs font-medium text-slate-400">Active</p></Card>
+        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="font-mono text-2xl font-semibold text-emerald-300">{onDuty}</p><p className="text-xs font-medium text-emerald-300/80">On duty</p></div>
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4"><p className="font-mono text-2xl font-semibold text-amber-300">{onLoa}</p><p className="text-xs font-medium text-amber-300/80">On LOA</p></div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">

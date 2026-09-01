@@ -114,7 +114,7 @@ function OperationCard({ op, cases, onOpen }: { op: OperationRow; cases: OpsCase
   return (
     <button onClick={onOpen} className="rounded-lg border border-white/5 bg-ink-900/60 p-4 text-left transition hover:border-badge-400/50">
       <div className="flex items-start justify-between gap-3">
-        <h3 className="text-lg font-black text-white">{op.name}</h3>
+        <h3 className="text-lg font-semibold text-white">{op.name}</h3>
         <Badge tint={opStatusTint(op.status)} className="uppercase">{op.status}</Badge>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -261,7 +261,7 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
                   ? <Badge>{bureauShort(op.bureau)} operation</Badge>
                   : <Badge>Operation</Badge>}
             </div>
-            <h1 className="text-2xl font-black text-white">{op.name}</h1>
+            <h1 className="text-2xl font-semibold text-white">{op.name}</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-300">{op.description || 'No description recorded.'}</p>
             {jtf && (
               <p className="mt-2 text-xs text-slate-500">
@@ -288,7 +288,7 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
       {/* ── Participating bureaus (JTF) ──────────────────────────────────── */}
       {jtf && (
         <section className="rounded-lg border border-white/5 bg-ink-900/60 p-5">
-          <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Participating bureaus</h2>
+          <h2 className="mb-3 text-[13px] font-semibold text-white">Participating bureaus</h2>
           <div className="space-y-2">
             {bureaus.filter((b) => !b.left_at).map((b) => (
               <div key={b.id} className="flex flex-wrap items-center gap-3 rounded-lg bg-ink-950/50 p-3">
@@ -323,7 +323,7 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
 
       {/* ── Cases ────────────────────────────────────────────────────────── */}
       <section className="rounded-lg border border-white/5 bg-ink-900/60 p-5">
-        <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Cases</h2>
+        <h2 className="mb-3 text-[13px] font-semibold text-white">Cases</h2>
         {viewer.active && !isOpEnded(op.status) && (
           <div className="mb-3 flex flex-col gap-2 rounded-lg bg-ink-900/50 p-3 sm:flex-row sm:items-end">
             <div className="min-w-0 flex-1">
@@ -378,7 +378,7 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
       {/* ── Personnel (derived from linked cases) ────────────────────────── */}
       {jtf && personnel.length > 0 && (
         <section className="rounded-lg border border-white/5 bg-ink-900/60 p-5">
-          <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Personnel</h2>
+          <h2 className="mb-3 text-[13px] font-semibold text-white">Personnel</h2>
           <div className="flex flex-wrap gap-2">
             {personnel.map((p) => (
               <span key={p.name} className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200">
@@ -392,7 +392,7 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
 
       {/* ── Timeline (derived) ───────────────────────────────────────────── */}
       <section className="rounded-lg border border-white/5 bg-ink-900/60 p-5">
-        <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Timeline</h2>
+        <h2 className="mb-3 text-[13px] font-semibold text-white">Timeline</h2>
         <div className="space-y-2">
           {timeline.map((e, i) => (
             <div key={`${e.at}-${i}`} className="rounded-lg bg-ink-950/50 p-3">

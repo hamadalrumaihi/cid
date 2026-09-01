@@ -19,10 +19,10 @@ import { Notice, EmptyState } from '@/components/ui/Notice'
 
 type FeedbackRow = Tables<'feedback'>
 
-const FB_KIND: Record<string, { icon: string; label: string; tint: string }> = {
-  feature: { icon: '💡', label: 'Feature', tint: 'bg-blue-500/15 text-blue-300' },
-  bug: { icon: '🐞', label: 'Bug', tint: 'bg-rose-500/15 text-rose-300' },
-  document: { icon: '📄', label: 'Document', tint: 'bg-amber-500/15 text-amber-300' },
+const FB_KIND: Record<string, { label: string; tint: string }> = {
+  feature: { label: 'Feature', tint: 'bg-blue-500/15 text-blue-300' },
+  bug: { label: 'Bug', tint: 'bg-rose-500/15 text-rose-300' },
+  document: { label: 'Document', tint: 'bg-amber-500/15 text-amber-300' },
 }
 const FB_STATUS: Record<string, { label: string; tint: string }> = {
   open: { label: 'Open', tint: 'bg-amber-500/15 text-amber-300' },
@@ -88,10 +88,10 @@ export function FeedbackView() {
     const who = profile && f.created_by === profile.id ? 'You' : officerName(f.created_by) ?? 'Member'
     const when = fmtDateTime(f.created_at)
     return (
-      <div key={f.id} className="rounded-xl border border-white/10 bg-ink-900 p-4">
+      <div key={f.id} className="rounded-lg border border-white/10 bg-ink-900 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-white">{k.icon} {f.title}</p>
+            <p className="text-sm font-semibold text-white">{f.title}</p>
             {f.details && <p className="mt-1 whitespace-pre-wrap text-xs text-slate-400">{f.details}</p>}
             <p className="mt-1.5 text-[11px] text-slate-400">{owner ? `${who} · ${when}` : when}</p>
           </div>
@@ -132,8 +132,8 @@ export function FeedbackView() {
           <>
             <div className="flex flex-wrap items-center gap-3">
               <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Feedback kind" className={inputCls}>
-                <option value="feature">💡 Feature idea</option>
-                <option value="bug">🐞 Bug report</option>
+                <option value="feature">Feature idea</option>
+                <option value="bug">Bug report</option>
               </select>
               <input
                 value={title}
@@ -158,24 +158,23 @@ export function FeedbackView() {
       </Card>
       {!items.length ? (
         <EmptyState
-          icon="💡"
           title={owner ? 'No submissions yet' : 'Nothing submitted yet'}
           hint={owner ? 'Members’ feature requests and bug reports will land here.' : 'Add a feature idea or a bug above.'}
         />
       ) : owner ? (
         <>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Open ({open.length})</p>
+          <p className="mb-2 text-[13px] font-semibold text-white">Open ({open.length})</p>
           <div className="space-y-3">{open.length ? open.map(card) : <EmptyState title="No open items — nice." />}</div>
           {closed.length > 0 && (
             <>
-              <p className="mb-2 mt-6 text-xs font-semibold uppercase tracking-wider text-slate-400">Closed ({closed.length})</p>
+              <p className="mb-2 mt-6 text-[13px] font-semibold text-white">Closed ({closed.length})</p>
               <div className="space-y-3">{closed.map(card)}</div>
             </>
           )}
         </>
       ) : (
         <>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Your submissions ({items.length})</p>
+          <p className="mb-2 text-[13px] font-semibold text-white">Your submissions ({items.length})</p>
           <div className="space-y-3">{items.map(card)}</div>
         </>
       )}
