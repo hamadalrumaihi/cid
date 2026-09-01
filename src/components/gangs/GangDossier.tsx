@@ -61,7 +61,7 @@ const fmtDate = (iso: string | null | undefined) => {
 function KV({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-3 py-1.5">
-      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+      <span className="text-xs font-medium text-slate-500">{label}</span>
       <span className="text-right text-sm text-slate-200">{children}</span>
     </div>
   )
@@ -101,7 +101,7 @@ function IntelligenceSummary({ gang, canEdit, onEdit }: { gang: GangRow; canEdit
   return (
     <Card pad="lg" className="max-w-prose-none">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Intelligence summary</h3>
+        <h3 className="text-[13px] font-semibold text-white">Intelligence summary</h3>
         <div className="flex items-center gap-1.5">
           {(hasStructured || notes) && <button onClick={copyAll} title="Copy summary" className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-300 hover:bg-white/10">Copy</button>}
           {canEdit && <button onClick={onEdit} className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-blue-200 hover:bg-white/10">Edit</button>}
@@ -112,7 +112,7 @@ function IntelligenceSummary({ gang, canEdit, onEdit }: { gang: GangRow; canEdit
         <div className="space-y-3">
           {shownSections.map((s) => (
             <div key={s.key}>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-300/70">{s.label}</p>
+              <p className="text-xs font-medium text-slate-500">{s.label}</p>
               <p className="mt-0.5 max-w-[68ch] whitespace-pre-wrap text-sm leading-relaxed text-slate-300">{summary[s.key]}</p>
             </div>
           ))}
@@ -148,7 +148,7 @@ function InvestigationStatus({ gang, now }: { gang: GangRow; now: number }) {
   const reviewer = officerName(gang.reviewed_by)
   return (
     <Card pad="lg">
-      <h3 className="mb-1 text-sm font-bold uppercase tracking-wide text-slate-300">Investigation status</h3>
+      <h3 className="mb-1 text-[13px] font-semibold text-white">Investigation status</h3>
       <div className="divide-y divide-white/5">
         <KV label="Lead detective">{lead ?? '—'}</KV>
         <KV label="Lifecycle">{gang.status ? <Badge tint={statusTint(gang.status)}>{humanize(gang.status)}</Badge> : '—'}</KV>
@@ -159,7 +159,7 @@ function InvestigationStatus({ gang, now }: { gang: GangRow; now: number }) {
       </div>
       {summary.gaps && (
         <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300/80">Outstanding intelligence gaps</p>
+          <p className="text-[13px] font-semibold text-amber-200">Outstanding intelligence gaps</p>
           <p className="mt-0.5 whitespace-pre-wrap text-xs text-slate-300">{summary.gaps}</p>
         </div>
       )}
@@ -178,7 +178,7 @@ function TerritorySection({ gangId, turf, canEdit, canDelete, onAdd, onEdit, onD
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2"><h3 className="text-sm font-bold text-white">Territory</h3><Badge>{turf.length}</Badge></div>
+        <div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-white">Territory</h3><Badge>{turf.length}</Badge></div>
         <div className="flex items-center gap-2">
           <button onClick={() => router.push(`/heatmap?gang=${encodeURIComponent(gangId)}`)} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-blue-200 hover:bg-white/10">View on map</button>
           {canEdit && <button onClick={onAdd} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">+ Turf</button>}
@@ -195,7 +195,7 @@ function TerritorySection({ gangId, turf, canEdit, canDelete, onAdd, onEdit, onD
       {!turf.length ? (
         <EmptyState title="No territory logged" hint={canEdit ? 'Add a block with “+ Turf”.' : undefined} />
       ) : !rows.length ? (
-        <p className="rounded-xl border border-white/5 bg-ink-900/60 p-4 text-sm text-slate-400">No turf matches these filters.</p>
+        <p className="rounded-lg border border-white/5 bg-ink-900/60 p-4 text-sm text-slate-400">No turf matches these filters.</p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((t) => {
@@ -205,7 +205,7 @@ function TerritorySection({ gangId, turf, canEdit, canDelete, onAdd, onEdit, onD
               <Card key={t.id} pad="sm" className="flex flex-col gap-1.5">
                 <div className="flex items-start justify-between gap-2">
                   <p className="min-w-0 truncate font-semibold text-white">{t.block}</p>
-                  <span className={`flex-shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${densityTint(t.density)}`}>{cap(t.density)}</span>
+                  <Badge tint={densityTint(t.density)} className="flex-shrink-0">{cap(t.density)}</Badge>
                 </div>
                 {t.hotspot_area && <p className="text-xs text-slate-400">{t.hotspot_area}</p>}
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -245,7 +245,7 @@ function PlacesSection({ linked, media, canEdit, canDelete, onLink, onEdit, onUn
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2"><h3 className="text-sm font-bold text-white">Controlled properties</h3><Badge>{linked.length}</Badge></div>
+        <div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-white">Controlled properties</h3><Badge>{linked.length}</Badge></div>
         {canEdit && <button onClick={onLink} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">Link place</button>}
       </div>
       {!linked.length ? (
@@ -274,7 +274,7 @@ function PlacesSection({ linked, media, canEdit, canDelete, onLink, onEdit, onUn
                     {link?.role && <Badge tone="accent">{link.role}</Badge>}
                     {link && <StatusBadge domain="confidence" value={link.confidence ?? 'unverified'} />}
                     {link?.provenance && <StatusBadge domain="provenance" value={link.provenance} />}
-                    {via === 'controlling' && <span className="text-[10px] uppercase tracking-wide text-slate-500" title="Linked via the place's controlling gang">controlling</span>}
+                    {via === 'controlling' && <span className="text-xs font-medium text-slate-500" title="Linked via the place's controlling gang">controlling</span>}
                   </div>
                   {link && (canEdit || canDelete) && (
                     <div className="mt-1 flex items-center gap-2">
@@ -297,7 +297,7 @@ function VehiclesSection({ vehicles }: { vehicles: VehicleRow[] }) {
   const nav = useToolNav()
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2"><h3 className="text-sm font-bold text-white">Vehicles</h3><Badge>{vehicles.length}</Badge></div>
+      <div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-white">Vehicles</h3><Badge>{vehicles.length}</Badge></div>
       {!vehicles.length ? (
         <EmptyState title="No linked vehicles" hint="Vehicles set to this gang appear here. A text mention alone is not a confirmed link." />
       ) : (
@@ -325,7 +325,7 @@ function CasesSection({ links, cases, indirect, canEdit, onAttach, onUnlink }: {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2"><h3 className="text-sm font-bold text-white">Linked cases</h3><Badge>{links.length}</Badge></div>
+        <div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-white">Linked cases</h3><Badge>{links.length}</Badge></div>
         {canEdit && <button onClick={onAttach} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-blue-200 hover:bg-white/10">Attach to case</button>}
       </div>
       {!links.length ? (
@@ -356,7 +356,7 @@ function CasesSection({ links, cases, indirect, canEdit, onAttach, onUnlink }: {
       )}
       {indirect.length > 0 && (
         <div>
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Indirect references ({indirect.length})</p>
+          <p className="mb-1 text-[13px] font-semibold text-white">Indirect references ({indirect.length})</p>
           <div className="flex flex-wrap gap-1.5">
             {indirect.map((i) => <EntityLink key={`${i.id}-${i.via}`} kind="case" id={i.id} label={`${i.label} · ${i.via}`} />)}
           </div>
@@ -371,7 +371,7 @@ function MediaSection({ media, canEdit, onAdd, onOpen }: { media: MediaRow[]; ca
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2"><h3 className="text-sm font-bold text-white">Media</h3><Badge>{media.length}</Badge></div>
+        <div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-white">Media</h3><Badge>{media.length}</Badge></div>
         {canEdit && <button onClick={onAdd} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">+ Photo</button>}
       </div>
       {!media.length ? (
@@ -596,7 +596,7 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-black text-white">{gang.name}</h1>
+              <h1 className="text-2xl font-semibold text-white">{gang.name}</h1>
               {gang.aliases && <span className="text-sm text-slate-400">aka {gang.aliases}</span>}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -642,7 +642,7 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
               <div className="space-y-4">
                 <InvestigationStatus gang={gang} now={now} />
                 <Card pad="lg">
-                  <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-300">Recent activity</h3>
+                  <h3 className="mb-2 text-[13px] font-semibold text-white">Recent activity</h3>
                   {activity.length ? <WorkflowTimeline entries={activity.slice(0, 8)} dense /> : <p className="text-sm text-slate-500">No recorded activity yet.</p>}
                 </Card>
               </div>

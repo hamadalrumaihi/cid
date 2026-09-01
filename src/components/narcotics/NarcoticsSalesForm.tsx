@@ -236,8 +236,8 @@ export function SalesObservationForm({
       )}</Field>
 
       {/* Live-derived preview */}
-      <div className="mt-4 rounded-xl border border-white/10 bg-ink-900/60 p-3">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Live preview (derived)</p>
+      <div className="mt-4 rounded-lg border border-white/10 bg-ink-900/60 p-3">
+        <p className="mb-2 text-[13px] font-semibold text-white">Live preview (derived)</p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
           <PreviewStat label="Proceeds" value={paymentNum != null ? formatProceeds(paymentNum) : '—'} />
           <PreviewStat label="Units" value={unitsNum != null ? formatInt(unitsNum) : '—'} strong />

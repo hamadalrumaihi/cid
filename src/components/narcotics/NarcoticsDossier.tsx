@@ -20,6 +20,7 @@ import { safeUrl } from '@/lib/safeUrl'
 import { statusTint } from '@/lib/tint'
 import { toast } from '@/lib/toast'
 import { useNow } from '@/lib/useNow'
+import { CheckIcon, NarcoticIcon, PhotoIcon, SwapIcon } from '@/components/shell/icons'
 import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Badge } from '@/components/ui/Badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
@@ -241,10 +242,10 @@ export function NarcoticsDossier({ drugId, onClose }: { drugId: string; onClose:
 
   const menuItems: ActionItem[] = [
     { label: 'Suggest correction…', icon: '✎', onClick: () => setSuggestOpen(true) },
-    ...(mayEdit ? [{ label: 'Set representative image…', icon: '🖼', onClick: () => setSection('media'), separatorBefore: true }] : []),
+    ...(mayEdit ? [{ label: 'Set representative image…', icon: <PhotoIcon size={14} />, onClick: () => setSection('media'), separatorBefore: true }] : []),
     ...(isCommand && !merged ? [
-      ...(provisional ? [{ label: 'Confirm / resolve provisional…', icon: '✔', onClick: () => setResolveOpen(true), separatorBefore: true }] : []),
-      { label: 'Merge duplicate…', icon: '🧬', onClick: () => setMergeOpen(true), separatorBefore: !provisional },
+      ...(provisional ? [{ label: 'Confirm / resolve provisional…', icon: <CheckIcon size={14} />, onClick: () => setResolveOpen(true), separatorBefore: true }] : []),
+      { label: 'Merge duplicate…', icon: <SwapIcon size={14} />, onClick: () => setMergeOpen(true), separatorBefore: !provisional },
     ] : []),
   ]
 
@@ -261,7 +262,7 @@ export function NarcoticsDossier({ drugId, onClose }: { drugId: string; onClose:
       ) : (
         <>
           {merged && (
-            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-4">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 p-4">
               <p className="text-sm text-slate-100">This record was merged into another substance and is read-only.</p>
             </div>
           )}
@@ -272,12 +273,12 @@ export function NarcoticsDossier({ drugId, onClose }: { drugId: string; onClose:
               <div className="flex min-w-0 items-start gap-4">
                 {repSrc && !imgBroken ? (
                   // eslint-disable-next-line @next/next/no-img-element -- external media CDN
-                  <img src={repSrc} alt={`${n.name} representative image`} onError={() => setImgBroken(true)} className="h-20 w-20 flex-shrink-0 rounded-xl border border-white/10 object-cover" />
+                  <img src={repSrc} alt={`${n.name} representative image`} onError={() => setImgBroken(true)} className="h-20 w-20 flex-shrink-0 rounded-lg border border-white/10 object-cover" />
                 ) : (
-                  <div className="grid h-20 w-20 flex-shrink-0 place-items-center rounded-xl bg-ink-700 text-3xl" aria-hidden>{n.icon || '💊'}</div>
+                  <div className="grid h-20 w-20 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-3xl" aria-hidden>{n.icon || <NarcoticIcon size={20} className="text-slate-400" />}</div>
                 )}
                 <div className="min-w-0">
-                  <h1 className="text-2xl font-black text-white">{n.name}</h1>
+                  <h1 className="text-2xl font-semibold text-white">{n.name}</h1>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <Badge tone="neutral">{categoryLabel(n.category)}</Badge>
                     <Badge tint={statusTint(statusTintKey(n.status))}>{statusLabel(n.status)}</Badge>

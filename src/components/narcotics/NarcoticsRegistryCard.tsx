@@ -4,15 +4,16 @@
  *  one button opening the dossier (?drug=<id>), so it is a single focusable,
  *  keyboard-accessible, ≥44px target. Colour is never the only signal — every
  *  chip carries a text label, and the head falls back from representative image
- *  → emoji icon → neutral category glyph. Deliberately shows only a summary of
- *  the record; the dossier owns the full field set. */
+ *  → user-set icon → neutral substance glyph. Deliberately shows only a summary
+ *  of the record; the dossier owns the full field set. */
 import { useState } from 'react'
 import { fmtDate } from '@/lib/format'
 import { safeUrl } from '@/lib/safeUrl'
+import { NarcoticIcon } from '@/components/shell/icons'
 import { Badge } from '@/components/ui/Badge'
 import { ConfidenceBadge, StaleIntelBadge } from '@/components/ui/IntelBadges'
 import {
-  categoryGlyph, categoryLabel, narcoticStatusTint, statusLabel,
+  categoryLabel, narcoticStatusTint, statusLabel,
   NARCOTIC_REVIEW_DAYS, type RegistryNarcotic,
 } from './narcoticsRegistry'
 
@@ -45,7 +46,7 @@ export function NarcoticsRegistryCard({
   const [imgBroken, setImgBroken] = useState(false)
   const img = imageUrl ? safeUrl(imageUrl) : ''
   const showImg = !!img && !imgBroken
-  const glyph = n.icon || categoryGlyph(n.category)
+  const glyph = n.icon
   const shownAliases = aliases.slice(0, 3)
   const extraAliases = aliases.length - shownAliases.length
 
@@ -53,7 +54,7 @@ export function NarcoticsRegistryCard({
     <button
       type="button"
       onClick={onOpen}
-      className="group flex min-h-[44px] w-full flex-col rounded-2xl border border-white/5 bg-ink-900/60 p-4 text-left transition hover:border-white/15 hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-500"
+      className="group flex min-h-[44px] w-full flex-col rounded-lg border border-white/5 bg-ink-900/60 p-4 text-left transition hover:border-white/15 hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-500"
     >
       <div className="flex items-start gap-3">
         {showImg ? (
@@ -70,7 +71,7 @@ export function NarcoticsRegistryCard({
             aria-hidden="true"
             title={categoryLabel(n.category)}
           >
-            {glyph}
+            {glyph || <NarcoticIcon size={20} className="text-slate-400" />}
           </div>
         )}
         <div className="min-w-0 flex-1">

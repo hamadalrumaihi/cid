@@ -5,6 +5,7 @@
  *  cross-record chip is an EntityLink; visibility stays RLS-enforced (rows the
  *  caller can't see resolve to restricted stubs, never leaks). Seizure amounts
  *  are rendered VERBATIM — never normalized. */
+import { FileTypeIcon } from '@/components/shell/icons'
 import { Badge } from '@/components/ui/Badge'
 import { bureauShort } from '@/lib/roles'
 import { Card } from '@/components/ui/Card'
@@ -31,7 +32,7 @@ export function CasesSection({ data }: { data: CasesData }) {
   const entries = [...relation.entries()]
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2"><h3 className="text-sm font-bold text-white">Linked cases</h3><Badge>{entries.length}</Badge></div>
+      <div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-white">Linked cases</h3><Badge>{entries.length}</Badge></div>
       {entries.length === 0 ? (
         <EmptyState title="No linked cases" hint="Cases appear here when this substance is attached to a case, seized in one, or tied to a case-sourced place." />
       ) : (
@@ -66,7 +67,7 @@ export function CasesSection({ data }: { data: CasesData }) {
 export function SeizuresSection({ data }: { data: SeizuresData }) {
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2"><h3 className="text-sm font-bold text-white">Seizures</h3><Badge>{data.rows.length}</Badge></div>
+      <div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-white">Seizures</h3><Badge>{data.rows.length}</Badge></div>
       {data.rows.length === 0 ? (
         <EmptyState title="No seizures recorded" hint="Recorded seizures of this substance appear here." />
       ) : (
@@ -107,7 +108,7 @@ export function SeizuresSection({ data }: { data: SeizuresData }) {
 export function PlacesSection({ data }: { data: PlacesData }) {
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2"><h3 className="text-sm font-bold text-white">Places</h3><Badge>{data.rows.length}</Badge></div>
+      <div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-white">Places</h3><Badge>{data.rows.length}</Badge></div>
       {data.rows.length === 0 ? (
         <EmptyState title="No linked places" hint="Places tied to this substance (production, distribution, seizure) appear here." />
       ) : (
@@ -144,7 +145,7 @@ export function PeopleSection({ data }: { data: PeopleData }) {
   const total = data.persons.length + data.gangs.length
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2"><h3 className="text-sm font-bold text-white">People &amp; gangs</h3><Badge>{total}</Badge></div>
+      <div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-white">People &amp; gangs</h3><Badge>{total}</Badge></div>
       {total === 0 ? (
         <EmptyState title="No linked people or gangs" hint="Associations recorded for this substance appear here." />
       ) : (
@@ -203,7 +204,7 @@ export function MediaSection({ media, representativeId, canEdit, onOpen, onSetRe
 }) {
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2"><h3 className="text-sm font-bold text-white">Media</h3><Badge>{media.length}</Badge></div>
+      <div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-white">Media</h3><Badge>{media.length}</Badge></div>
       {media.length === 0 ? (
         <EmptyState title="No media" hint="Imagery linked to this substance appears here." />
       ) : (
@@ -218,14 +219,14 @@ export function MediaSection({ media, representativeId, canEdit, onOpen, onSetRe
                     // eslint-disable-next-line @next/next/no-img-element -- external media CDN
                     <img src={src} alt={m.title} className="h-28 w-full object-cover transition group-hover:opacity-90" />
                   ) : (
-                    <div className="grid h-28 w-full place-items-center text-2xl" aria-hidden>{m.type === 'video' ? '🎬' : '📄'}</div>
+                    <div className="grid h-28 w-full place-items-center text-slate-400" aria-hidden><FileTypeIcon type={m.type} size={24} /></div>
                   )}
                   <span className="flex items-center gap-1 truncate px-1.5 py-1 text-[11px] text-slate-300">
-                    {isRep && <span className="rounded bg-amber-500/15 px-1 text-[10px] font-semibold uppercase text-amber-300">Cover</span>}
+                    {isRep && <span className="rounded bg-amber-500/15 px-1 text-[10px] font-semibold text-amber-300">Cover</span>}
                     <span className="truncate">{m.title}</span>
                   </span>
                 </button>
-                {m.kind && <span className="block truncate px-1.5 pb-1 text-[10px] uppercase tracking-wide text-slate-400">{humanize(m.kind)}</span>}
+                {m.kind && <span className="block truncate px-1.5 pb-1 text-[11px] font-medium text-slate-500">{humanize(m.kind)}</span>}
                 {canEdit && !isRep && m.type !== 'document' && (
                   <button
                     onClick={() => onSetRepresentative(m)}
@@ -250,7 +251,7 @@ export function ActivitySection({ entries, reviewedAt, now }: {
   return (
     <Card pad="lg">
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Activity</h3>
+        <h3 className="text-[13px] font-semibold text-white">Activity</h3>
         <StaleIntelBadge reviewedAt={reviewedAt} now={now} thresholdDays={180} />
       </div>
       <WorkflowTimeline entries={entries} empty="No recorded activity yet." />

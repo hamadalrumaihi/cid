@@ -15,7 +15,9 @@ import { notify } from '@/lib/notify'
 import { activeProfiles } from '@/lib/profiles'
 import { COMMAND_ROLES } from '@/lib/roles'
 import { toast } from '@/lib/toast'
+import { LockIcon } from '@/components/shell/icons'
 import { uiPrompt } from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -130,12 +132,11 @@ export function ModusView() {
 
   return (
     <div>
-      <Card pad="lg" className="mb-6">
-        <PageHeader
-          title="🔍 Modus Operandi (M.O.) Detector & Criminal Profiler"
-          subtitle="Paste narrative incident updates, scene notes or witness statements — the engine extracts tactical indicators and cross-references open / cold files."
-        />
-      </Card>
+      <PageHeader
+        className="mb-6"
+        title="Modus Operandi (M.O.) Detector & Criminal Profiler"
+        subtitle="Paste narrative incident updates, scene notes or witness statements — the engine extracts tactical indicators and cross-references open / cold files."
+      />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card pad="lg">
           <label className="mb-2 block text-sm font-semibold text-white" htmlFor="mo-input">Incident Narrative / Scene Notes</label>
@@ -156,10 +157,10 @@ export function ModusView() {
           </div>
           {scan && (
             <div className="mt-5">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-blue-300/70">Extracted Tactical Indicators ({all.length})</p>
+              <p className="mb-2 text-[13px] font-semibold text-white">Extracted tactical indicators ({all.length})</p>
               {all.length ? CATS.filter((c) => scan.indicators[c].length > 0).map((c) => (
                 <div key={c} className="mb-2">
-                  <p className="mb-1 text-[10px] uppercase tracking-wider text-slate-500">{CAT_META[c].l}</p>
+                  <p className="mb-1 text-xs font-medium text-slate-500">{CAT_META[c].l}</p>
                   <div className="flex flex-wrap gap-2">
                     {scan.indicators[c].map((t) => <span key={t} className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${CAT_META[c].t}`}>{t}</span>)}
                   </div>
@@ -169,7 +170,7 @@ export function ModusView() {
           )}
         </Card>
         <Card pad="lg">
-          <h2 className="mb-1 text-sm font-semibold text-white">🎯 M.O. Cross-Reference</h2>
+          <h2 className="mb-1 text-sm font-semibold text-white">M.O. Cross-Reference</h2>
           <p className="mb-4 text-xs text-slate-400">Matching open / cold files sharing tactical operational profiles.</p>
           <div className="space-y-3">
             {!scan && <p className="text-sm text-slate-400">Run an analysis to surface matching case files.</p>}
@@ -180,11 +181,11 @@ export function ModusView() {
               const tint = m.pct >= 70 ? 'border-rose-500/40 bg-rose-500/5' : m.pct >= 40 ? 'border-amber-500/30 bg-amber-500/5' : 'border-white/10 bg-ink-900'
               const bar = m.pct >= 70 ? 'bg-rose-500' : m.pct >= 40 ? 'bg-amber-500' : 'bg-blue-500'
               return (
-                <div key={i} className={`rounded-xl border ${tint} p-4`}>
+                <div key={i} className={`rounded-lg border ${tint} p-4`}>
                   <div className="flex items-center justify-between">
                     <div>
                       <button onClick={() => { if (m.caseObj) router.push(`/cases?case=${m.caseObj.id}`) }} className="font-mono text-sm font-semibold text-white hover:text-blue-300">{m.label}</button>
-                      <span className={`ml-2 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${m.status === 'Cold' ? 'bg-slate-500/20 text-slate-300' : 'bg-emerald-500/15 text-emerald-300'}`}>{m.status}</span>
+                      <Badge className="ml-2" tint={m.status === 'Cold' ? 'bg-slate-500/20 text-slate-300' : 'bg-emerald-500/15 text-emerald-300'}>{m.status}</Badge>
                     </div>
                     <span className={`font-mono text-lg font-bold ${m.pct >= 70 ? 'text-rose-300' : m.pct >= 40 ? 'text-amber-300' : 'text-blue-300'}`}>{m.pct}%</span>
                   </div>
@@ -194,8 +195,8 @@ export function ModusView() {
               )
             })}
             {crossRows.map((row) => (
-              <div key={row.case_id} className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-                <div className="flex items-center gap-2"><span className="text-lg" aria-hidden>🔒</span><span className="text-sm font-semibold text-amber-200">Flagged in another bureau&rsquo;s investigation</span></div>
+              <div key={row.case_id} className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+                <div className="flex items-center gap-2"><LockIcon size={16} className="flex-shrink-0 text-amber-300" /><span className="text-sm font-semibold text-amber-200">Flagged in another bureau&rsquo;s investigation</span></div>
                 <p className="mt-1 text-xs text-slate-300">
                   Indicators (<span className="text-amber-200">{row.shared.join(', ')}</span>) match case{' '}
                   <span className="font-mono text-amber-200">{row.case_number}</span> you don&rsquo;t have access to. Details are restricted.

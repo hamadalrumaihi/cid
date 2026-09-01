@@ -18,7 +18,6 @@ import { useTableVersion } from '@/lib/realtime'
 import { useNow } from '@/lib/useNow'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
@@ -55,11 +54,11 @@ interface MediaLite { id: string; external_url: string | null; storage_path: str
 function PresenceChip({ busy }: { busy: boolean }) {
   return busy ? (
     <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-medium text-amber-300">
-      <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-amber-400" />syncing
+      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />syncing
     </span>
   ) : (
     <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
-      <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />live
     </span>
   )
 }
@@ -267,24 +266,22 @@ export function NarcoticsView() {
     <section className="view-in space-y-4">
       <Breadcrumbs items={[{ label: 'Intel' }, { label: 'Narcotics' }]} />
 
-      <Card pad="lg">
-        <PageHeader
-          title="Narcotics Intelligence"
-          subtitle="Controlled substances, packaging, investigative indicators, seizures, and linked criminal activity."
-          actions={
-            <>
-              {state === 'in' && <PresenceChip busy={refreshing || searching} />}
-              {state === 'in' && (
-                <Button onClick={() => setSuggesting(true)}>Suggest correction</Button>
-              )}
-              {canEdit && (
-                <Button variant="primary" onClick={() => setCreating(true)}>Add substance</Button>
-              )}
-            </>
-          }
-        />
-        {state === 'in' && !err && <MetricStrip metrics={metricStrip} className="mt-4" />}
-      </Card>
+      <PageHeader
+        title="Narcotics Intelligence"
+        subtitle="Controlled substances, packaging, investigative indicators, seizures, and linked criminal activity."
+        actions={
+          <>
+            {state === 'in' && <PresenceChip busy={refreshing || searching} />}
+            {state === 'in' && (
+              <Button onClick={() => setSuggesting(true)}>Suggest correction</Button>
+            )}
+            {canEdit && (
+              <Button variant="primary" onClick={() => setCreating(true)}>Add substance</Button>
+            )}
+          </>
+        }
+      />
+      {state === 'in' && !err && <MetricStrip metrics={metricStrip} />}
 
       {state !== 'in' ? (
         <Notice text="Live narcotics records require sign-in." />
@@ -398,7 +395,7 @@ function NarcoticsFilterBar({ filters, onFilters }: { filters: NarcoticFilters; 
           Filters{count ? ` (${count})` : ''}
         </button>
         {open && (
-          <div role="dialog" aria-label="Filters" className="absolute left-0 z-20 mt-2 w-72 max-w-[calc(100vw-2rem)] space-y-3 rounded-xl border border-white/10 bg-ink-850 p-3 shadow-glow">
+          <div role="dialog" aria-label="Filters" className="absolute left-0 z-20 mt-2 w-72 max-w-[calc(100vw-2rem)] space-y-3 rounded-lg border border-white/10 bg-ink-850 p-3 shadow-pop">
             <Field label="Status">
               {(id) => (
                 <Select id={id} value={filters.status} onChange={(e) => patch({ status: e.target.value })}>
