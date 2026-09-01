@@ -316,3 +316,42 @@ keeps working until the client rewire deploys.
 | Version (live) | Name | Repo file |
 |---|---|---|
 | applied via MCP (`shared_case_services`) | shared_case_services | `20261002130000_shared_case_services.sql` |
+
+## City 2.0 operational reset (2026-09-01, applied + executed)
+
+`20261003120000_city2_operational_reset.sql` creates the one-time City 2.0
+fresh-start tool in the `private` schema (never PostgREST-exposed, all
+grants revoked from `anon`/`authenticated` — a deliberate maintenance
+action, not an admin button): `private.city2_wipe_tables()` (the canonical
+ordered wipe plan), `private.city2_reset_preview()` (read-only preview with
+row counts), `private.city2_reset(p_confirm)` (the reset itself — Owner or
+maintenance role only, requires the exact confirmation phrase **and** a
+separately inserted one-shot arming key in `app_secrets` that it consumes
+on success), and `private.city2_verify()` (zero-count checks over every
+operational target, a generic orphan scan across all 559 public-schema FK
+constraints, preserved-configuration counts, sequence positions, RLS +
+realtime posture — safe to run any time as a health check).
+
+**Executed against the live project on 2026-09-01** (single transaction):
+2,324 operational rows deleted across 77 non-empty tables (cases, reports,
+evidence, media, registries, intelligence/field submissions, legal
+requests + history, SIU operational data + appointments, operations,
+surveillance, personnel workflow records, legacy `cid_records` /
+`case_files` link rows), 5 investigative documents removed (SOP/command
+library kept), 35 non-owner profiles reset to unassigned
+(`active=false`, `role`/`division` NULL, LOA cleared — accounts kept,
+Owner untouched), 2 `field-evidence` storage objects removed (bucket +
+policies kept), `private.legal_request_seq` restarted (next
+`LR-YYYY-0001`), `private.field_submission_counters` cleared, and the 1.0
+`audit_log` (15,459 rows) + `role_events` history deleted last —
+`audit_log` id 1 is now the `CITY2_RESET` event itself. Post-run
+`private.city2_verify()`: `clean=true`, 0 operational rows remaining,
+0 FK orphans, RLS enabled on every public table, realtime publication
+intact (74 tables), `next_case_number` = `MCB-4000001` / `SCB-5000001` /
+`SIB-8000001` / `JTF-3000001`. No table, policy, trigger, publication or
+reference-data row (penal code, case templates, app secrets, SIU
+settings, surveillance alert rules) was altered.
+
+| Version (live) | Name | Repo file |
+|---|---|---|
+| applied via MCP (`city2_operational_reset`) | city2_operational_reset | `20261003120000_city2_operational_reset.sql` |
