@@ -138,7 +138,7 @@ export function InvestigationMap({ items, onSelect, selectLabel = 'View in list'
   }, [placed, selectLabel])
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/5 bg-ink-950/60">
+    <div className="overflow-hidden rounded-lg border border-white/5 bg-ink-950/60">
       <div ref={containerRef} className="h-[420px] w-full sm:h-[520px]" role="region" aria-label="San Andreas investigation map — drag to pan, scroll or use +/− to zoom" />
       <p className="border-t border-white/5 px-4 py-2 text-[11px] text-slate-400">
         {placed.length} of {items.length} plotted — postal codes place precisely, named areas approximately.
