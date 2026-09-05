@@ -131,7 +131,7 @@ real records in the production database. The UI is thin and wired to already-liv
 ## 6. Deferred follow-ups (documented in the PR)
 
 - **D5 — notifications:** Discord-for-high-priority + daily digest need a Discord edge-function
-  redeploy + scheduled-job infra (no `pg_cron` / `pg_net` in this project). Code-only parts
+  redeploy + scheduled-job infra (`pg_cron` / `pg_net` run the SOP sync live but were not yet declared in migrations when this was written — see `docs/PLAN-PORTAL-IMPROVEMENTS.md` Phase 0, P0-04). Code-only parts
   (per-type default deadlines, deadline-clock pause) also remain.
 - **D2 automation:** auto-parse return content → Intelligence-Review items; return-driven
   account-ownership auto-confirm hook. The confidence ladder + confirm-stamp trigger already exist;

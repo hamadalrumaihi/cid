@@ -72,7 +72,7 @@ nothing, so removing them cost nothing.
 | F2 | `delete operations where created_by = any(ids)` | same, except one linked to a non-fixture case — skipped and reported, since the cascade would strip that case's joint access |
 | F3 | `delete role_events … or actor_id = any(ids)` | `target_id` only. An event a fixture *acted on* for a real member is that member's assignment provenance and is never deleted |
 | F4 | `update cases/gangs set lead_detective_id = null` | test-created rows only. A disposable leading a real case leaves it untouched and is simply not deleted |
-| F5 | `surveillance_*` / `intelligence_tips` author branches | case-scoped; escapes reported |
+| F5 | `surveillance_*` / `field_submissions` author branches (the former `intelligence_tips` tables were merged into `field_submissions` and dropped) | case-scoped; escapes reported |
 
 **The rule.** A row is deleted only if it is fixture-owned **and** deleting it
 cannot alter a record belonging to someone else. Reports and surveillance rows
