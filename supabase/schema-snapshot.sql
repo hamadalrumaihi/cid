@@ -2799,6 +2799,22 @@ alter table public.penal_substance_schedules add constraint penal_substance_sche
 alter table public.penal_substance_schedules add constraint penal_substance_schedules_unique UNIQUE (version_id, schedule);
 alter table public.penal_substance_schedules enable row level security;
 
+create table public.permission_catalog (
+  action text not null,
+  kind text not null,
+  area text not null,
+  rule text not null,
+  enforcing_object text not null,
+  test_id text,
+  matrix jsonb not null default '{}'::jsonb,
+  sort_order integer not null default 100,
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.permission_catalog add constraint permission_catalog_action_check CHECK ((action ~ '^[a-z_]+$'::text));
+alter table public.permission_catalog add constraint permission_catalog_kind_check CHECK ((kind ~ '^[a-z_*]+$'::text));
+alter table public.permission_catalog add constraint permission_catalog_pkey PRIMARY KEY (action, kind);
+alter table public.permission_catalog enable row level security;
+
 create table public.person_places (
   id uuid not null default gen_random_uuid(),
   person_id uuid not null,
@@ -5764,6 +5780,19 @@ begin
   return jsonb_build_object('status', 'processed', 'ingestion_id', v_event.id,
                             'observation_id', v_obs_id);
 end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.can_record(p_action text, p_kind text, p_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select case
+    when p_action is null or p_kind is null or p_id is null then false
+    else coalesce(private.perm_dispatch(lower(p_action), lower(p_kind), p_id), false)
+  end
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION public.cancel_transfer(p_id uuid)
@@ -11461,6 +11490,85 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.my_permissions()
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  with u as (select (select auth.uid()) as uid),
+  me as (
+    select p.id, p.active, p.role, p.division, p.is_owner, p.is_test, p.login_denied, p.loa, p.removed_at
+      from public.profiles p, u where p.id = u.uid
+  ),
+  d as (
+    select
+      (select uid from u) as uid,
+      exists (select 1 from me) as has_profile,
+      coalesce((select active from me), false) as active,
+      (select role from me) as role,
+      (select division from me) as division,
+      private.is_owner() as is_owner,
+      private.is_command() as is_command,
+      private.siu_standing() as sib_standing,
+      private.user_department() as department,
+      private.justice_role_effective((select uid from u)) as doj_role,
+      private.justice_role_of((select uid from u)) as doj_membership_role,
+      private.is_field_officer() as is_field_officer
+  )
+  select case when d.uid is null then jsonb_build_object('access_class', 'none') else jsonb_build_object(
+    'access_class', case
+      when d.is_owner then 'owner'
+      when d.active and d.is_command then 'command'
+      when d.active then 'member'
+      when d.doj_role is not null then 'justice'
+      when d.is_field_officer then 'field'
+      when d.has_profile then 'inactive'
+      else 'none' end,
+    'active', d.active,
+    'role', case when d.active then d.role end,
+    'rank', case when d.active then private.cid_role_rank(d.role) else 0 end,
+    'bureau', case when d.active then d.division end,
+    'is_owner', d.is_owner,
+    'sib_standing', d.sib_standing,
+    'department', d.department,
+    'doj_role', d.doj_role,
+    'doj_membership_role', d.doj_membership_role,
+    'is_field_officer', d.is_field_officer,
+    'command_scope', case
+      when d.active and d.is_command and d.role = 'bureau_lead'
+        then jsonb_build_object('level', 'bureau', 'bureau', d.division)
+      when d.active and d.is_command
+        then jsonb_build_object('level', 'division', 'bureau', null::text)
+      else null end,
+    'expiries', jsonb_build_object(
+      'doj_membership', (select m.expires_at from public.justice_memberships m
+                          where m.user_id = d.uid and m.active
+                            and (m.expires_at is null or m.expires_at > now())
+                          limit 1),
+      'joint_assignments', coalesce((
+        select jsonb_agg(jsonb_build_object('case_id', a.case_id, 'expires_at', a.expires_at) order by a.expires_at)
+          from public.case_assignments a
+         where a.officer_id = d.uid and a.assignment_source = 'joint_case'
+           and a.removed_at is null and a.expires_at is not null and a.expires_at > now()), '[]'::jsonb),
+      'sib_temporary_access', coalesce((
+        select jsonb_agg(jsonb_build_object('case_id', t.case_id, 'expires_at', t.expires_at) order by t.expires_at)
+          from public.siu_temporary_access t
+         where t.user_id = d.uid and t.revoked_at is null and t.expires_at > now()), '[]'::jsonb)),
+    'flags', jsonb_build_object(
+      'is_test', coalesce((select is_test from me), false),
+      'login_denied', coalesce((select login_denied from me), false),
+      'loa', coalesce((select loa from me), false),
+      'removed', coalesce((select removed_at is not null from me), false),
+      'sib_release_open', private.siu_release_open(),
+      'sib_may_switch', coalesce(d.sib_standing in ('owner', 'oversight'), false),
+      'sib_may_control_visibility', private.siu_may_control_visibility()),
+    'generated_at', now())
+  end
+  from d
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.next_case_number(p_bureau text)
  RETURNS text
  LANGUAGE sql
@@ -12113,6 +12221,30 @@ begin
                              'reason', btrim(p_reason)));
 
   return jsonb_build_object('published', p_version, 'superseded', v_prev);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.perm_denied_ack(p_action text, p_kind text, p_id uuid, p_reason text DEFAULT NULL::text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid());
+begin
+  if v_uid is null or p_action is null or p_kind is null then return false; end if;
+  -- Only an account with a profile row can be refused anything worth
+  -- recording; an unknown subject would write an actor-less row.
+  if not exists (select 1 from public.profiles p where p.id = v_uid) then return false; end if;
+  if exists (select 1 from public.audit_log a
+              where a.actor_id = v_uid and a.action = 'PERMISSION_DENIED'
+                and a.entity = lower(btrim(p_kind)) and a.entity_id is not distinct from p_id
+                and a.detail->>'action' = lower(btrim(p_action))
+                and a.created_at > now() - interval '1 minute') then
+    return false;
+  end if;
+  perform private.perm_deny(lower(btrim(p_action)), lower(btrim(p_kind)), p_id, p_reason, 'client_ack');
+  return true;
 end $function$
 ;
 
@@ -22731,6 +22863,230 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.perm_can_delete_child(p_case uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.can_delete_case_child(p_case) $function$
+;
+
+CREATE OR REPLACE FUNCTION private.perm_can_grant_case(p_case uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.can_grant_case(p_case) $function$
+;
+
+CREATE OR REPLACE FUNCTION private.perm_case_access(p_case uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.can_access_case(p_case) $function$
+;
+
+CREATE OR REPLACE FUNCTION private.perm_case_read(p_case uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.can_read_case(p_case) $function$
+;
+
+CREATE OR REPLACE FUNCTION private.perm_deny(p_action text, p_kind text, p_id uuid, p_reason text DEFAULT NULL::text, p_source text DEFAULT 'rpc'::text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (
+    (select p.id from public.profiles p where p.id = (select auth.uid())),
+    'PERMISSION_DENIED',
+    coalesce(nullif(btrim(coalesce(p_kind, '')), ''), 'unknown'),
+    p_id,
+    jsonb_build_object(
+      'action', coalesce(nullif(btrim(coalesce(p_action, '')), ''), 'unknown'),
+      'reason', left(nullif(btrim(coalesce(p_reason, '')), ''), 120),
+      'source', case when p_source in ('rpc', 'client_ack') then p_source else 'rpc' end));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.perm_dispatch(p_action text, p_kind text, p_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce(case p_kind
+    when 'case' then case p_action
+      when 'read'         then private.can_read_case(p_id)
+      when 'access'       then private.can_access_case(p_id)
+      when 'edit'         then private.can_access_case(p_id)
+                               and exists (select 1 from public.cases c where c.id = p_id and c.archived_at is null)
+      when 'archive'      then private.is_command()
+                               and exists (select 1 from public.cases c where c.id = p_id and c.archived_at is null)
+                               and not private.case_has_active_hold(p_id)
+      when 'restore'      then private.is_command()
+                               and exists (select 1 from public.cases c where c.id = p_id and c.archived_at is not null)
+      when 'grant_access' then private.can_grant_case(p_id)
+                               and exists (select 1 from public.cases c where c.id = p_id)
+      when 'delete_child' then private.can_delete_case_child(p_id)
+      when 'permanent_delete' then private.is_owner()
+                               and exists (select 1 from public.cases c where c.id = p_id and c.archived_at is not null)
+      else false end
+    when 'report' then case p_action
+      when 'read'   then (select private.can_read_case(r.case_id) from public.reports r where r.id = p_id)
+      when 'edit'   then (select private.can_access_case(r.case_id) from public.reports r where r.id = p_id)
+      when 'delete' then (select private.can_delete_case_child(r.case_id) from public.reports r where r.id = p_id)
+      else false end
+    when 'evidence' then case p_action
+      when 'read'   then (select private.can_read_case(e.case_id) from public.evidence e where e.id = p_id)
+      when 'delete' then (select private.can_delete_case_child(e.case_id) from public.evidence e where e.id = p_id)
+      else false end
+    when 'legal' then case p_action
+      when 'read'    then private.can_view_legal_request(p_id, (select auth.uid()))
+      when 'edit'    then private.can_edit_legal_draft(p_id, (select auth.uid()))
+      when 'approve' then private.can_approve_legal(p_id, (select auth.uid()))
+      else false end
+    when 'person' then case p_action
+      when 'read'   then private.perm_registry_visible('person', p_id) and exists (select 1 from public.persons x where x.id = p_id)
+      when 'edit'   then private.perm_registry_visible('person', p_id) and exists (select 1 from public.persons x where x.id = p_id)
+      when 'delete' then private.can_delete() and private.perm_registry_visible('person', p_id) and exists (select 1 from public.persons x where x.id = p_id)
+      else false end
+    when 'vehicle' then case p_action
+      when 'read'   then private.perm_registry_visible('vehicle', p_id) and exists (select 1 from public.vehicles x where x.id = p_id)
+      when 'edit'   then private.perm_registry_visible('vehicle', p_id) and exists (select 1 from public.vehicles x where x.id = p_id)
+      when 'delete' then private.can_delete() and private.perm_registry_visible('vehicle', p_id) and exists (select 1 from public.vehicles x where x.id = p_id)
+      else false end
+    when 'gang' then case p_action
+      when 'read'   then private.perm_registry_visible('gang', p_id) and exists (select 1 from public.gangs x where x.id = p_id)
+      when 'edit'   then private.perm_registry_visible('gang', p_id) and exists (select 1 from public.gangs x where x.id = p_id)
+      when 'delete' then private.can_delete() and private.perm_registry_visible('gang', p_id) and exists (select 1 from public.gangs x where x.id = p_id)
+      else false end
+    when 'place' then case p_action
+      when 'read'   then private.perm_registry_visible('place', p_id) and exists (select 1 from public.places x where x.id = p_id)
+      when 'edit'   then private.perm_registry_visible('place', p_id) and exists (select 1 from public.places x where x.id = p_id)
+      when 'delete' then private.can_delete() and private.perm_registry_visible('place', p_id) and exists (select 1 from public.places x where x.id = p_id)
+      else false end
+    when 'account' then case p_action
+      when 'read'   then private.perm_registry_visible('account', p_id) and exists (select 1 from public.accounts x where x.id = p_id)
+      when 'edit'   then private.perm_registry_visible('account', p_id) and exists (select 1 from public.accounts x where x.id = p_id)
+      when 'delete' then private.can_delete() and private.perm_registry_visible('account', p_id) and exists (select 1 from public.accounts x where x.id = p_id)
+      else false end
+    else false end, false)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.perm_doj_role()
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.justice_role_effective((select auth.uid())) $function$
+;
+
+CREATE OR REPLACE FUNCTION private.perm_is_active()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.is_active() $function$
+;
+
+CREATE OR REPLACE FUNCTION private.perm_is_command()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.is_command() $function$
+;
+
+CREATE OR REPLACE FUNCTION private.perm_is_field_officer()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.is_field_officer() $function$
+;
+
+CREATE OR REPLACE FUNCTION private.perm_is_owner()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.is_owner() $function$
+;
+
+CREATE OR REPLACE FUNCTION private.perm_legal_view(p_request uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.can_view_legal_request(p_request, (select auth.uid())) $function$
+;
+
+CREATE OR REPLACE FUNCTION private.perm_raise(p_action text, p_kind text, p_id uuid, p_reason text, p_message text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  raise exception using
+    message = coalesce(nullif(btrim(coalesce(p_message, '')), ''), 'not authorized'),
+    errcode = 'P0403',
+    detail = jsonb_build_object('action', p_action, 'kind', p_kind, 'id', p_id,
+                                'reason', left(coalesce(p_reason, ''), 120))::text;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.perm_rank()
+ RETURNS integer
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.cid_role_rank(private.role()) $function$
+;
+
+CREATE OR REPLACE FUNCTION private.perm_registry_visible(p_kind text, p_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.is_active() and case p_kind
+    when 'person'  then not private.siu_hidden('person', p_id)
+    when 'vehicle' then not private.siu_hidden('vehicle', p_id)
+    when 'gang'    then not private.siu_hidden('gang', p_id)
+    when 'place'   then not private.siu_hidden('place', p_id)
+    when 'account' then not private.siu_blocked('account', p_id, null)
+    else false end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.perm_siu_standing()
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.siu_standing() $function$
+;
+
 CREATE OR REPLACE FUNCTION private.permanent_delete_active_filter(p_ref text)
  RETURNS text
  LANGUAGE sql
@@ -25384,6 +25740,10 @@ create policy penal_schedules_upd on public.penal_substance_schedules
   using (private.penal_is_admin())
   with check (private.penal_is_admin());
 
+create policy permission_catalog_sel on public.permission_catalog
+  as permissive for select to authenticated
+  using (private.is_owner());
+
 create policy person_places_del on public.person_places
   as permissive for delete to authenticated
   using (((private.can_delete() OR (created_by = ( SELECT auth.uid() AS uid))) AND (NOT private.siu_blocked('person'::text, person_id, 'addresses'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'addresses'::text))));
@@ -26253,6 +26613,7 @@ create policy wl_sel on public.watchlist
 --   penal_limits -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   penal_rules -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   penal_substance_schedules -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   permission_catalog -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   person_places -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   person_relationships -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   person_vehicles -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -26559,6 +26920,22 @@ create policy wl_sel on public.watchlist
 --   private.owner_flag(p_user uuid): default (PUBLIC)
 --   private.pba_validate(p_prosecutor uuid, p_bureau bureau, p_type text): default (PUBLIC)
 --   private.penal_is_admin(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.perm_can_delete_child(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.perm_can_grant_case(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.perm_case_access(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.perm_case_read(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.perm_deny(p_action text, p_kind text, p_id uuid, p_reason text, p_source text): {postgres=X/postgres,service_role=X/postgres}
+--   private.perm_dispatch(p_action text, p_kind text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.perm_doj_role(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.perm_is_active(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.perm_is_command(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.perm_is_field_officer(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.perm_is_owner(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.perm_legal_view(p_request uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.perm_raise(p_action text, p_kind text, p_id uuid, p_reason text, p_message text): {postgres=X/postgres,service_role=X/postgres}
+--   private.perm_rank(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.perm_registry_visible(p_kind text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.perm_siu_standing(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.permanent_delete_active_filter(p_ref text): default (PUBLIC)
 --   private.permanent_delete_active_refs(): default (PUBLIC)
 --   private.permanent_delete_blocker_refs(): default (PUBLIC)
@@ -26634,6 +27011,7 @@ create policy wl_sel on public.watchlist
 --   public.assign_judge(p_request uuid, p_judge uuid): {postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}
 --   public.assign_member(target uuid, set_active boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.bridge_ingest_event(p_source text, p_event_type text, p_source_event_id text, p_event_time timestamp with time zone, p_payload jsonb): {postgres=X/postgres,service_role=X/postgres}
+--   public.can_record(p_action text, p_kind text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.cancel_transfer(p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_access_decide(p_request uuid, p_approve boolean, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_archive(p_case uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -26763,6 +27141,7 @@ create policy wl_sel on public.watchlist
 --   public.merge_narcotics(p_survivor uuid, p_merged uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.mo_crossref(terms text[]): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.my_field_access(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.my_permissions(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.next_case_number(p_bureau text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.next_siu_case_number(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.observation_promote(p_observation uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -26782,6 +27161,7 @@ create policy wl_sel on public.watchlist
 --   public.penal_publish_version(p_version uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.penal_restore_charge(p_charge uuid, p_reason text, p_code text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.penal_rollback_to(p_version uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.perm_denied_ack(p_action text, p_kind text, p_id uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.permanent_delete_arm(p_target uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.permanent_delete_execute(p_token uuid, p_confirm text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.permanent_delete_preview(p_target uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}

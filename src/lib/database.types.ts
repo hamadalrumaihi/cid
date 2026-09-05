@@ -8068,6 +8068,42 @@ export type Database = {
         }
         Relationships: []
       }
+      permission_catalog: {
+        Row: {
+          action: string
+          area: string
+          enforcing_object: string
+          kind: string
+          matrix: Json
+          rule: string
+          sort_order: number
+          test_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          area: string
+          enforcing_object: string
+          kind: string
+          matrix?: Json
+          rule: string
+          sort_order?: number
+          test_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          area?: string
+          enforcing_object?: string
+          kind?: string
+          matrix?: Json
+          rule?: string
+          sort_order?: number
+          test_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       persons: {
         Row: {
           alias: string | null
@@ -11378,6 +11414,10 @@ export type Database = {
         Args: { p_judge: string; p_request: string }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
       }
+      can_record: {
+        Args: { p_action: string; p_id: string; p_kind: string }
+        Returns: boolean
+      }
       claim_legal_request_as_judge: {
         Args: { p_request: string }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
@@ -11672,6 +11712,10 @@ export type Database = {
           warrant_type: string
         }[]
       }
+      my_permissions: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       next_case_number: {
         Args: { p_bureau: string }
         Returns: string
@@ -11713,6 +11757,10 @@ export type Database = {
           p_op: string
         }
         Returns: undefined
+      }
+      perm_denied_ack: {
+        Args: { p_action: string; p_id: string; p_kind: string; p_reason?: string }
+        Returns: boolean
       }
       reassign_legal_ada: {
         Args: { p_new_ada: string; p_reason?: string; p_request: string }

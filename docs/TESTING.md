@@ -108,6 +108,7 @@ The vitest RLS config and Playwright config both auto-load a git-ignored `.env.r
 | `npm run build` | `next build` (also required before E2E) |
 | `npm run check:schema` | fails if `supabase/schema-snapshot.sql` disagrees with production-generated types (drift gate) |
 | `npm run check:realtime` | fails if a migration adds a table to `supabase_realtime` that the snapshot's publication block does not list (`scripts/check-realtime.mjs`) |
+| `npm run gen:permissions -- --check` | fails if `src/lib/permissionsMatrix.ts` is stale against the `permission_catalog` seed in `supabase/migrations` (`scripts/gen-permissions-matrix.mjs`; run without `--check` to regenerate) |
 | `npm run test:rls` | live RLS/RPC suite (needs `RLS_TEST_PASSWORD_*`) |
 | `npm run test:e2e` | Playwright functional E2E (needs the same env; build first) |
 | `npm run test:visual` / `:update` | visual regression against an isolated project (unprovisioned) |
