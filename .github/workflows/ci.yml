@@ -18,7 +18,7 @@ jobs:
       NEXT_PUBLIC_FIVEMANAGE_API_KEY: PASTE_FIVEMANAGE_KEY
       NEXT_PUBLIC_FIVEMANAGE_BASE_URL: https://api.fivemanage.com
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -79,7 +79,7 @@ jobs:
       RLS_TEST_PASSWORD_DIRECTOR: ${{ secrets.RLS_TEST_PASSWORD_DIRECTOR }}
       RLS_TEST_PASSWORD_TARGET: ${{ secrets.RLS_TEST_PASSWORD_TARGET }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
