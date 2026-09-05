@@ -14,13 +14,13 @@
  *  (current_version_id), its frozen packet manifest, prior returns, and the
  *  signature trail. All stage/status interpretation comes from the
  *  deterministic legalWorkflow model. */
-import { Suspense, useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { useSiu } from '@/lib/useSiu'
 import { list, rpc } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
-import { Drafts } from '@/lib/drafts'
+import { adoptLegacyDraft, clearDraft, saveDraft as saveUserDraft, type LoadedDraft } from '@/lib/userDrafts'
 import { fmtDateTime, timeAgo } from '@/lib/format'
 import { useTableVersion } from '@/lib/realtime'
 import {
@@ -172,10 +172,18 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
   const [draft, setDraft] = useState<DraftShape>({ title: '', priority: '', narrative: '', classification: '', form: {} })
   const [seededKey, setSeededKey] = useState<string | null>(null)
   const [seedJson, setSeedJson] = useState('')
-  // Never-lose-work recovery (v1.14): a stash from a previous session on this
-  // device. Offered ONLY via an explicit banner, and only when it is newer
+  // Never-lose-work recovery (v1.14): a stash from a previous session (this
+  // device, or any device via the per-user drafts layer). Offered ONLY via an explicit banner, and only when it is newer
   // than the server row — it never auto-fills the form.
-  const [pendingDraft, setPendingDraft] = useState(() => Drafts.load<DraftShape>(`legal:edit:${requestId}`))
+  const [pendingDraft, setPendingDraft] = useState<LoadedDraft<DraftShape> | null>(null)
+  const loadedDraftFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (loadedDraftFor.current === requestId) return
+    loadedDraftFor.current = requestId
+    void adoptLegacyDraft<DraftShape>(`legal:edit:${requestId}`).then((d) => {
+      if (loadedDraftFor.current === requestId) setPendingDraft(d)
+    })
+  }, [requestId])
   const draftKey = r ? `${r.id}:${r.review_status}` : null
   if (r && draftKey !== seededKey) {
     setSeededKey(draftKey)
@@ -198,7 +206,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
   useEffect(() => {
     if (!editingEnabled || !r || !seedJson) return
     if (JSON.stringify(draft) === seedJson) return
-    Drafts.save(`legal:edit:${r.id}`, draft)
+    void saveUserDraft(`legal:edit:${r.id}`, draft)
   }, [draft, editingEnabled, r, seedJson])
 
   const act = useCallback(async (fn: () => Promise<{ error: { message: string } | null }>, okMsg: string) => {
@@ -272,7 +280,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
       p_classification: draft.classification || undefined,
       p_form: draft.form,
     })
-    if (!res.error) { Drafts.clear(`legal:edit:${r.id}`); setPendingDraft(null) }
+    if (!res.error) { void clearDraft(`legal:edit:${r.id}`); setPendingDraft(null) }
     return res
   }, 'Draft saved.')
 
@@ -336,7 +344,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
           ...(v.changeSummary ? { p_change_summary: v.changeSummary } : {}),
         } : {}),
       })
-      if (!res.error) { Drafts.clear(`legal:edit:${r.id}`); setPendingDraft(null) }
+      if (!res.error) { void clearDraft(`legal:edit:${r.id}`); setPendingDraft(null) }
       return res
     }, fastTrack
       ? 'Resubmitted — the corrected request returned directly to the prosecutor queue.'
@@ -350,7 +358,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
       const res = await rpc('withdraw_legal_request', { p_request: r.id })
       // A withdrawn request is abandoned — don't leave its narrative in
       // localStorage on shared terminals.
-      if (!res.error) { Drafts.clear(`legal:edit:${r.id}`); setPendingDraft(null) }
+      if (!res.error) { void clearDraft(`legal:edit:${r.id}`); setPendingDraft(null) }
       return res
     }, 'Request withdrawn.')
   }

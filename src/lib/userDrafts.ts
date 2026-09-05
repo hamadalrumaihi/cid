@@ -124,6 +124,22 @@ export async function loadDraft<T = unknown>(key: string): Promise<LoadedDraft<T
   return local ? { data: local.data, at: local.at, source: 'local' } : null
 }
 
+/** Load a draft, adopting a pre-userDrafts stash if one exists. Surfaces that
+ *  migrated from the plain `Drafts` keys (`cid-draft:<key>`, not per-user) may
+ *  still find a stash written by the old code on this device. If no per-user
+ *  draft exists, that stash is moved under the caller's own key (mirror +
+ *  server) and the shared key is cleared, so the shared-terminal leak closes
+ *  the first time the new code runs. A per-user draft always wins. */
+export async function adoptLegacyDraft<T = unknown>(key: string): Promise<LoadedDraft<T> | null> {
+  const own = await loadDraft<T>(key)
+  if (own) return own
+  const legacy = Drafts.load<T>(key)
+  if (!legacy) return null
+  await saveDraft(key, legacy.data)
+  Drafts.clear(key)
+  return { data: legacy.data, at: legacy.at, source: 'local' }
+}
+
 /** Clear a draft everywhere: cancels any pending debounced write (so a save
  *  landing after "record saved" cannot resurrect it), drops the local mirror,
  *  and best-effort deletes the server row. */

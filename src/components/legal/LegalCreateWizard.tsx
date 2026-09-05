@@ -25,7 +25,7 @@ import { useAuth } from '@/lib/auth'
 import { ScaleIcon } from '@/components/shell/icons'
 import type { Tables } from '@/lib/database.types'
 import { ilikeAny, list, rpc } from '@/lib/db'
-import { Drafts, type Draft } from '@/lib/drafts'
+import { adoptLegacyDraft, clearDraft, saveDraft, type LoadedDraft } from '@/lib/userDrafts'
 import { timeAgo } from '@/lib/format'
 import {
   CLASSIFICATIONS, SOCIAL_PLATFORMS, SUBPOENA_FIELDS, SUBPOENA_TYPES,
@@ -287,20 +287,24 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
   }, [editId])
 
   /* ── Never-lose-work stashes (restore is always user-triggered) ───────────── */
-  // CREATE: same Drafts key family as the old form (`legal:new:<kind>`).
+  // CREATE: same key family as the old form (`legal:new:<kind>`), now on the
+  // per-user DB-backed layer; a stash left by the old shared-key code is
+  // adopted once and the shared key cleared.
   const stashKey = !isEdit && requestType ? `legal:new:${requestType}` : null
-  const [pendingStash, setPendingStash] = useState<Draft<WizardStash> | null>(null)
+  const [pendingStash, setPendingStash] = useState<LoadedDraft<WizardStash> | null>(null)
   const loadedStashKey = useRef<string | null>(null)
   useEffect(() => {
     if (!stashKey || loadedStashKey.current === stashKey) return
     loadedStashKey.current = stashKey
-    setPendingStash(Drafts.load<WizardStash>(stashKey))
+    void adoptLegacyDraft<WizardStash>(stashKey).then((d) => {
+      if (loadedStashKey.current === stashKey) setPendingStash(d)
+    })
   }, [stashKey])
   const hasContent = !!(title.trim() || narrative.trim() || recipientName.trim()
     || caseSel || personSel || targets.length || Object.keys(form).length)
   useEffect(() => {
     if (!stashKey || !hasContent) return
-    Drafts.save(stashKey, {
+    void saveDraft(stashKey, {
       subtype, caseSel, personSel, recipientType, recipientName,
       title, priority, narrative, classification, form, targets,
     } satisfies WizardStash)
@@ -318,18 +322,24 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     setTargets(asTargets(d.targets))
     setPendingStash(null)
   }
-  const discardStash = () => { if (stashKey) Drafts.clear(stashKey); setPendingStash(null) }
+  const discardStash = () => { if (stashKey) void clearDraft(stashKey); setPendingStash(null) }
 
   // EDIT: the dossier's key + shape (`legal:edit:<id>`, DraftShape) so a stash
   // typed in either editor is recoverable from the other.
-  const [editPending, setEditPending] = useState<Draft<DraftShape> | null>(
-    () => (editId ? Drafts.load<DraftShape>(`legal:edit:${editId}`) : null),
-  )
+  const [editPending, setEditPending] = useState<LoadedDraft<DraftShape> | null>(null)
+  const loadedEditKey = useRef<string | null>(null)
+  useEffect(() => {
+    if (!editId || loadedEditKey.current === editId) return
+    loadedEditKey.current = editId
+    void adoptLegacyDraft<DraftShape>(`legal:edit:${editId}`).then((d) => {
+      if (loadedEditKey.current === editId) setEditPending(d)
+    })
+  }, [editId])
   useEffect(() => {
     if (!editId || !seedJson) return
     const shape: DraftShape = { title, priority, narrative, classification, form }
     if (JSON.stringify(shape) === seedJson) return
-    Drafts.save(`legal:edit:${editId}`, shape)
+    void saveDraft(`legal:edit:${editId}`, shape)
   }, [editId, seedJson, title, priority, narrative, classification, form])
 
   /* ── Bounded server-backed pickers (ilike + limit 20; RLS scopes rows) ────── */
@@ -595,7 +605,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
       else submitted = true
     }
     setBusy(false)
-    if (stashKey) Drafts.clear(stashKey)
+    if (stashKey) void clearDraft(stashKey)
     if (targetFailures) toast(`${targetFailures} structured target(s) could not be attached — add them on the request's Supporting section.`, 'warn')
     toast(
       submitted
@@ -628,7 +638,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     if (res.error) { setBusy(false); toast(res.error.message, 'danger'); return }
     if (!submit) {
       setBusy(false)
-      Drafts.clear(`legal:edit:${row.id}`)
+      void clearDraft(`legal:edit:${row.id}`)
       toast('Draft saved.', 'success')
       onDone(row.id)
       return
@@ -640,7 +650,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     })
     setBusy(false)
     if (sr.error) { toast(sr.error.message, 'danger'); return }
-    Drafts.clear(`legal:edit:${row.id}`)
+    void clearDraft(`legal:edit:${row.id}`)
     toast(
       isFastReturn && !materialChange
         ? 'Resubmitted — the corrected request returned directly to the prosecutor queue.'
@@ -739,7 +749,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
             setNarrative(s.narrative); setClassification(s.classification); setForm(s.form)
             setEditPending(null)
           }}>Restore</Button>
-          <Button size="sm" variant="ghost" onClick={() => { Drafts.clear(`legal:edit:${row.id}`); setEditPending(null) }}>Discard</Button>
+          <Button size="sm" variant="ghost" onClick={() => { void clearDraft(`legal:edit:${row.id}`); setEditPending(null) }}>Discard</Button>
         </div>
       )}
 
