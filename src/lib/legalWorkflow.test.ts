@@ -124,13 +124,13 @@ describe('action vs awareness distinction', () => {
     const scb = viewer({ myId: 'p-2', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['street_crimes'] })
     expect(isBureauAwareness(req({ responsible_bureau: 'major_crimes' }), scb)).toBe(false)
   })
-  it('the assigned ADA is action, not awareness', () => {
+  it('a row parked in the retired ADA stage is surfaced to the assignee as history, never as a live action label', () => {
     const ada = viewer({ myId: 'a-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['major_crimes'] })
     const d = dispositionFor(req({ review_status: 'ada_review', assigned_ada_id: 'a-1' }), ada, NOW)
     expect(d.viewerCanAct).toBe(true)
     expect(d.awarenessOnly).toBe(false)
     expect(d.group).toBe('assigned_to_you')
-    expect(d.nextAction).toBe('Review as assigned ADA')
+    expect(d.nextAction).toBe('Retired review stage — no action available')
   })
 })
 

@@ -331,8 +331,6 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
                 {(id) => (
                   <Select id={id} value={justiceRole} onChange={(e) => setJusticeRole(e.target.value)}>
                     <option value="">Select…</option>
-                    <option value="assistant_district_attorney">DOJ — Assistant District Attorney</option>
-                    <option value="district_attorney">DOJ — District Attorney</option>
                     <option value="attorney_general">DOJ — Attorney General</option>
                     <option value="judge">Judiciary — Judge</option>
                   </Select>
