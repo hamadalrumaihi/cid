@@ -119,7 +119,25 @@ reason written in a comment.
 
 ## Accessibility & performance
 
-Focus rings follow the accent (`:focus-visible` global). Touch targets keep
-the 44px floor below `lg`. Reduced motion is honored everywhere. No new
-client-side dependencies for visuals; the icon set is local, the animations
-are CSS.
+Focus rings follow the accent (`:focus-visible` global — an unlayered rule
+that beats the Tailwind `outline-none` utility, so keyboard focus is always
+visible). A skip link is the first focusable element in the shell. Touch
+targets keep the 44px floor below `lg`; tappable controls set
+`touch-action: manipulation` and overlays contain overscroll. Reduced motion
+is honored everywhere. No new client-side dependencies for visuals; the icon
+set is local, the animations are CSS.
+
+## Stacking
+
+One z-index scale, declared as tokens in `globals.css` and used as utilities:
+`z-sticky` (10, in-page sticky bars) < `z-raised` (20) < `z-chrome` (30,
+header / bottom nav / drawer backdrop) < `z-rail` (40, sidebar, sticky action
+bar, assistant) < `z-modal` (50, modals and the palette) < `z-toast` (60) <
+`z-dialog` (70, confirm dialogs) < `z-banner` (80, connectivity banner).
+Nothing else; no `z-[…]` arbitrary values.
+
+## Review
+
+Run the `ui-review` project skill (`.claude/skills/ui-review/`) against
+changed components before opening a UI pull request; it checks the vendored
+Web Interface Guidelines plus this document.

@@ -2,7 +2,7 @@
 
 /** Themed replacements for native confirm/prompt — port of vanilla uiDialog/
  *  uiConfirm/uiPrompt (core.js:1090-1126). Promise-based; rendered as a
- *  top-layer overlay (z-70, above the modal at z-50) so they stack over an
+ *  top-layer overlay (z-dialog, above the modal at z-50) so they stack over an
  *  open modal without disturbing it. */
 import { useEffect, useRef, useState } from 'react'
 import { create } from 'zustand'
@@ -121,7 +121,7 @@ function DialogCard({ dialog, finish }: { dialog: PendingDialog; finish: (v: boo
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-ink-950/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-dialog flex items-center justify-center bg-ink-950/70 p-4 backdrop-blur-sm"
       onMouseDown={(e) => { if (e.target === e.currentTarget) finish(cancelVal) }}
     >
       <div

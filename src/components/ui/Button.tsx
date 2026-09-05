@@ -28,7 +28,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 const BASE =
-  'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition disabled:cursor-not-allowed disabled:opacity-60'
+  'inline-flex touch-manipulation items-center justify-center gap-2 rounded-lg font-medium transition disabled:cursor-not-allowed disabled:opacity-60'
 
 // Touch floor below lg (md ≥44px, sm ≥36px); desktop keeps its density via
 // the lg: resets, so the visual rhythm on wide screens is unchanged.

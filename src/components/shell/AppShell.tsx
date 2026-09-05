@@ -49,6 +49,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // command palette share one useCreate() context (and one modal mount).
     <CreateHost>
     <div className="flex min-h-screen">
+      <a href="#main" className="skip-link">Skip to content</a>
       {drawerOpen && (
         <div
           className="fixed inset-0 z-30 bg-ink-950/70 backdrop-blur-sm lg:hidden"
@@ -56,7 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         />
       )}
       <Sidebar drawerOpen={drawerOpen} onCloseDrawer={() => setDrawerOpen(false)} />
-      <main className="min-w-0 flex-1 lg:ml-64">
+      <main id="main" tabIndex={-1} className="min-w-0 flex-1 outline-none lg:ml-64">
         <Header onOpenDrawer={() => setDrawerOpen(true)} />
         <Subtabs />
         <SiuStatusStrip />
