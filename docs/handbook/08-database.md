@@ -75,7 +75,10 @@ convenience state, never shared records.
 
 ### System
 `audit_log` (written ONLY by the `private.audit()` trigger and the
-membership/joint/announcement RPCs; readable by one owner UUID),
+membership/joint/announcement RPCs; readable by one owner UUID; append-only
+in SQL since `20261006120000` — `UPDATE`/`DELETE`/`TRUNCATE` refused by
+trigger, every row hash-chained via `prev_hash`/`row_hash`, verified daily by
+the `audit-chain-verify` job and on demand by `audit_chain_status()`),
 `announcements` (write = `can_announce()` + `can_post_audience(audience)`;
 SELECT is audience-scoped: 'all', own division, 'command' for command,
 'members' for mentioned users, author, command/owner oversight),

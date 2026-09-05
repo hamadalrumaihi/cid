@@ -182,6 +182,22 @@ drill is the single highest-value operational task open.
   append instead: e.g. `import_rollback_by_key()` leaves `audit_log` intact
   and appends `LEGAL_IMPORT_ROLLBACK`. The RLS suites assert hard-delete
   resistance.
+- **Enforced in SQL since `20261006120000_audit_chain`.** `UPDATE`, `DELETE`
+  and `TRUNCATE` are revoked from every client role and refused by trigger
+  for every role (SQLSTATE `P0403`) unless the transaction has set
+  `cid.audit_maintenance = 'on'` — which only `private.city2_reset()` does.
+  Every row carries `prev_hash` / `row_hash` (`sha256(prev_hash || row)`,
+  stamped on insert under an advisory lock so the chain never forks). The
+  daily `audit-chain-verify` pg_cron job (03:15 UTC) walks the chain into
+  `scheduled_job_runs` and notifies every active Owner
+  (`audit_chain_mismatch`) on the first broken row; the Owner can run the
+  same check on demand with `select audit_chain_status()`. Tampering is
+  therefore *detectable*, not impossible: a maintenance-role actor who sets
+  the GUC can still rewrite a row, and the next verify names its id.
+  `audit_log.actor_id` no longer carries a foreign key: permanent member
+  deletion used to re-point it to the tombstone profile, which is exactly the
+  rewrite the chain forbids; a deleted member's uuid now stays on their rows
+  and `deleted_member_ledger` keeps the identity snapshot for it.
 - The same rule extends to the append-only history tables the workflow RPCs
   write (`case_signoff_history`, membership/legal histories, `role_events`)
   and to sealed `report_versions` (client-immutable by trigger + revoked
