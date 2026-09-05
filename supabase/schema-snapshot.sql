@@ -12539,7 +12539,7 @@ create policy wl_sel on public.watchlist
 -- audience rule so it cannot be used as an existence oracle. Definitive SQL in
 -- supabase/migrations/20260824130000_siu_disclosure.sql.
 
--- SIB Phase 3 (20260825120000_siu_phase3 + 20260825130000_siu_phase3_rpcs) —
+-- SIB Phase 3 (20260825120001_siu_phase3 + 20260825130000_siu_phase3_rpcs) —
 -- tradecraft. NEW TABLES (blocks above): siu_sources, siu_undercover_operations,
 -- siu_financial_intel, siu_comms_intel, siu_integrity_reviews, siu_exports.
 --
@@ -12578,7 +12578,7 @@ create policy wl_sel on public.watchlist
 -- disposition, tradecraft VOLUME, export volume. No case id, title, name,
 -- codename, legend or identifier ever appears. Any SIB standing may read it;
 -- an unauthorized caller gets {"access": false}. Definitive SQL in
--- supabase/migrations/20260825120000_siu_phase3.sql and
+-- supabase/migrations/20260825120001_siu_phase3.sql and
 -- supabase/migrations/20260825130000_siu_phase3_rpcs.sql.
 
 -- rls_test_cleanup SIB coverage (20260826120000_rls_cleanup_siu_coverage) —

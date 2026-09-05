@@ -325,7 +325,7 @@ Four routes, all auditable and revocable: **`cid`** (the whole Division), **`cas
 
 Release requires `siu_case_access` **and** `siu_is_agent`: oversight standing cannot release (the Director deciding what SIB tells CID about CID would invert the unit), and on a compartmented investigation release authority is confined to the allow-list automatically. Revocation: the releasing agent or SIB command. `siu_acknowledge_disclosure()` re-checks the audience rule rather than trusting the caller, so it can never be used as an existence oracle.
 
-### Phase 3 — tradecraft ([`20260825120000`](../supabase/migrations/20260825120000_siu_phase3.sql) + [`20260825130000`](../supabase/migrations/20260825130000_siu_phase3_rpcs.sql))
+### Phase 3 — tradecraft ([`20260825120001`](../supabase/migrations/20260825120001_siu_phase3.sql) + [`20260825130000`](../supabase/migrations/20260825130000_siu_phase3_rpcs.sql))
 
 | Table | Read | Write | Delete |
 |---|---|---|---|
