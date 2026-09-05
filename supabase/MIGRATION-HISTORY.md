@@ -408,3 +408,18 @@ secret read from `app_secrets` at run time.
 | Version (live) | Name | Repo file |
 |---|---|---|
 | applied via MCP (`scheduler_pg_cron`) | scheduler_pg_cron | `20261004130000_scheduler_pg_cron.sql` |
+
+## Portal Improvements — Phase 1 foundations (2026-09-05 →)
+
+**P1-01 Central permission module.** `20261005120000_permission_module.sql`
+adds `public.permission_catalog` (Owner-readable, seeded, rendered into
+`src/lib/permissionsMatrix.ts` by `npm run gen:permissions`), the
+`private.perm_*` aliases, `public.my_permissions()`, `public.can_record()`
+with `private.perm_dispatch`, and the denial ledger
+(`private.perm_deny`, `private.perm_raise`, `public.perm_denied_ack`). No
+existing predicate, policy or RPC is changed. See `docs/AUTHORIZATION.md` §6.
+
+| Version (live) | Name | Repo file |
+|---|---|---|
+| applied via MCP (`permission_module`) | permission_module | `20261005120000_permission_module.sql` |
+| applied via MCP (`permission_module_ack_profile_guard`) | permission_module_ack_profile_guard | folded into the same repo file (`perm_denied_ack` profile-row guard, applied minutes later) |
