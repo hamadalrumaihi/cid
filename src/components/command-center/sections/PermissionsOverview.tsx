@@ -2,7 +2,8 @@
 
 /** Command Center → Permissions. A read-only view of the access matrix so
  *  command staff can see who can do what without needing owner access. Reads
- *  the shared matrix data lib — no Owner Portal coupling. */
+ *  the generated matrix module (src/lib/permissionsMatrix.ts, rendered from
+ *  the permission_catalog seed) — no Owner Portal coupling, no gate. */
 import { PERMISSIONS_MATRIX, MATRIX_NOTE } from '@/lib/permissionsMatrix'
 
 export function PermissionsOverview() {
@@ -21,7 +22,7 @@ export function PermissionsOverview() {
           </thead>
           <tbody className="divide-y divide-white/5">
             {PERMISSIONS_MATRIX.map((r) => (
-              <tr key={r.area}>
+              <tr key={r.key}>
                 <td className="px-4 py-2.5 font-semibold text-white">{r.area}</td>
                 <td className="px-4 py-2.5 text-slate-300">{r.owner}</td>
                 <td className="px-4 py-2.5 text-slate-300">{r.command}</td>

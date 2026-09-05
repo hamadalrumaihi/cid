@@ -64,6 +64,8 @@ versioned entry when they ship together.
 - Member-facing changes → `docs/USER-GUIDE.md` + regenerate
   `src/components/guide/guideContent.ts`.
 - Owner-facing operational changes → `src/components/owner/ownerData.ts`.
+- New or changed permission actions → a `permission_catalog` seed row in the
+  migration + `npm run gen:permissions` (CI fails on drift).
 
 ## What every change must include
 
