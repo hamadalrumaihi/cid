@@ -88,3 +88,4 @@ __pycache__/
 # Storybook build output + logs
 storybook-static/
 *storybook.log
+supabase/schema-dump.json
