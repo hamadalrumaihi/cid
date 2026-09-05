@@ -3208,6 +3208,18 @@ alter table public.role_events add constraint role_events_target_id_fkey FOREIGN
 alter table public.role_events add constraint role_events_pkey PRIMARY KEY (id);
 alter table public.role_events enable row level security;
 
+create table public.scheduled_job_runs (
+  id bigint generated always as identity not null,
+  job text not null,
+  started_at timestamp with time zone not null default now(),
+  finished_at timestamp with time zone,
+  status text not null default 'running'::text,
+  detail jsonb not null default '{}'::jsonb
+);
+alter table public.scheduled_job_runs add constraint scheduled_job_runs_status_check CHECK ((status = ANY (ARRAY['running'::text, 'succeeded'::text, 'failed'::text, 'skipped'::text])));
+alter table public.scheduled_job_runs add constraint scheduled_job_runs_pkey PRIMARY KEY (id);
+alter table public.scheduled_job_runs enable row level security;
+
 create table public.security_test_runs (
   id uuid not null default gen_random_uuid(),
   suite text not null,
@@ -4721,6 +4733,7 @@ CREATE INDEX restricted_access_log_entity_idx ON public.restricted_access_log US
 CREATE INDEX rico_cases_enterprise_gang_id_fkey_idx ON public.rico_cases USING btree (enterprise_gang_id);
 CREATE INDEX role_events_actor_id_idx ON public.role_events USING btree (actor_id);
 CREATE INDEX role_events_target_id_idx ON public.role_events USING btree (target_id);
+CREATE INDEX scheduled_job_runs_job_started_idx ON public.scheduled_job_runs USING btree (job, started_at DESC);
 CREATE INDEX security_test_runs_created_by_idx ON public.security_test_runs USING btree (created_by);
 CREATE INDEX shift_reports_bureau_week_idx ON public.shift_reports USING btree (bureau, week_start DESC);
 CREATE INDEX siu_access_requests_decided_by_idx ON public.siu_access_requests USING btree (decided_by);
@@ -22085,6 +22098,31 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.job_begin(p_job text)
+ RETURNS bigint
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_id bigint;
+begin
+  insert into public.scheduled_job_runs (job) values (p_job) returning id into v_id;
+  return v_id;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.job_end(p_run bigint, p_status text, p_detail jsonb DEFAULT '{}'::jsonb)
+ RETURNS void
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  update public.scheduled_job_runs
+     set finished_at = now(), status = p_status, detail = coalesce(p_detail, '{}'::jsonb)
+   where id = p_run;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.joint_apply_members(p_case uuid, p_members jsonb, p_actor uuid)
  RETURNS integer
  LANGUAGE plpgsql
@@ -25589,6 +25627,10 @@ create policy role_events_sel on public.role_events
   as permissive for select to authenticated
   using ((private.is_command() OR private.is_owner()));
 
+create policy scheduled_job_runs_sel on public.scheduled_job_runs
+  as permissive for select to authenticated
+  using (private.is_owner());
+
 create policy shift_reports_del on public.shift_reports
   as permissive for delete to authenticated
   using (((author_id = ( SELECT auth.uid() AS uid)) OR private.can_delete()));
@@ -26230,6 +26272,7 @@ create policy wl_sel on public.watchlist
 --   restricted_access_log -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   rico_cases -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   role_events -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   scheduled_job_runs -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   security_test_runs -> service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   shift_reports -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   siu_access_requests -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -26485,6 +26528,8 @@ create policy wl_sel on public.watchlist
 --   private.is_siu_department(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.is_test_user(p_user uuid): default (PUBLIC)
 --   private.jmr_history(p_request uuid, p_action text, p_from text, p_to text, p_note text, p_internal boolean): default (PUBLIC)
+--   private.job_begin(p_job text): {postgres=X/postgres}
+--   private.job_end(p_run bigint, p_status text, p_detail jsonb): {postgres=X/postgres}
 --   private.joint_apply_members(p_case uuid, p_members jsonb, p_actor uuid): default (PUBLIC)
 --   private.justice_role(): {postgres=X/postgres,authenticated=X/postgres}
 --   private.justice_role_effective(p_user uuid): {postgres=X/postgres,authenticated=X/postgres}
