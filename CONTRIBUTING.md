@@ -76,8 +76,11 @@ versioned entry when they ship together.
    change is a timestamped file in `supabase/migrations/`, applied to the
    live project; never a dashboard-only edit.
 5. **Update the schema snapshot and generated types** —
-   `supabase/schema-snapshot.sql` + `src/lib/database.types.ts`
-   (`npm run check:schema` enforces sync).
+   regenerate `supabase/schema-snapshot.sql` from the live catalog
+   (`scripts/schema-dump.sql` → `supabase/schema-dump.json` →
+   `npm run gen:snapshot`; never edit it by hand) and regenerate
+   `src/lib/database.types.ts` (`npm run check:schema`, `check:freshness`
+   and `check:realtime` enforce sync).
 6. **Add positive AND negative permission tests** — every new permission
    needs an allow test and a deny test in the live RLS suite
    (`tests/rls/`); see [`docs/TESTING.md`](docs/TESTING.md).

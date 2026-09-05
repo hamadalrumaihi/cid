@@ -81,7 +81,7 @@ export function PortalAssistant() {
                 value={instruction}
                 onChange={(e) => setInstruction(e.target.value)}
                 rows={3}
-                placeholder="e.g. Open case SAB-9000026 and go to the Evidence tab"
+                placeholder="e.g. Open case MCB-4000001 and go to the Evidence tab"
                 className="w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
               />
               <Button

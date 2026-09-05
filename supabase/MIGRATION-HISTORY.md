@@ -381,3 +381,30 @@ Post-run `private.city2_verify()`: `clean=true`, 0 rows remaining,
 | Version (live) | Name | Repo file |
 |---|---|---|
 | applied via MCP (`city2_reset_keep_roster`) | city2_reset_keep_roster | `20261003130000_city2_reset_keep_roster.sql` |
+
+## Portal Improvements — Phase 0 hygiene (2026-09-05)
+
+Plan: `docs/PLAN-PORTAL-IMPROVEMENTS.md`. Repo-only hygiene first: the
+duplicate-timestamp pairs (`20260825120000_siu_phase3.sql`,
+`20260921120000_permanent_delete_refresh.sql`) were renamed to `…120001_`
+(SQL unchanged; live history unaffected because live versions are
+MCP-assigned). `20261004120000_field_jurisdiction_replay.sql` re-emits the
+live bodies of `private.field_jurisdiction_visible_for` and
+`public.field_submission_create_case` so a clean filename-order replay no
+longer ends on the pre-restructure definitions carried by
+`20260917120000_field_assignment.sql` / `20260924120000_intelligence_actions.sql`.
+
+| Version (live) | Name | Repo file |
+|---|---|---|
+| applied via MCP (`field_jurisdiction_replay`, no-op on live) | field_jurisdiction_replay | `20261004120000_field_jurisdiction_replay.sql` |
+
+`20261004130000_scheduler_pg_cron.sql` declares the scheduler in the repo:
+`pg_cron` + `pg_net` (pg_net had been **missing since the 2026-09-01 backup
+restore** — every `sops-sync` run since then failed with `schema "net" does
+not exist`; this migration restores it), the `scheduled_job_runs` ledger with
+`private.job_begin/job_end`, and the `sops-sync` schedule re-declared with the
+secret read from `app_secrets` at run time.
+
+| Version (live) | Name | Repo file |
+|---|---|---|
+| applied via MCP (`scheduler_pg_cron`) | scheduler_pg_cron | `20261004130000_scheduler_pg_cron.sql` |

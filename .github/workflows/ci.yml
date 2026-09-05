@@ -35,6 +35,10 @@ jobs:
         # Content-based: every migration must leave a trace in
         # supabase/schema-snapshot.sql (scripts/check-snapshot-freshness.mjs).
         run: npm run check:freshness
+      - name: Realtime publication check
+        # Every table a migration adds to supabase_realtime must appear in the
+        # snapshot's publication block (scripts/check-realtime.mjs).
+        run: npm run check:realtime
       - name: Dead exports / dead deps (knip)
         run: npm run check:dead
       - name: Inert form submit buttons

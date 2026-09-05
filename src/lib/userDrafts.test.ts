@@ -38,3 +38,10 @@ describe('userDrafts — server size guard', () => {
     expect(oversizedForServer(cyclic)).toBe(true)
   })
 })
+
+describe('userDrafts — legacy stash adoption', () => {
+  it('adoptLegacyDraft is exported for surfaces migrating off the shared-key layer', async () => {
+    const mod = await import('./userDrafts')
+    expect(typeof mod.adoptLegacyDraft).toBe('function')
+  })
+})

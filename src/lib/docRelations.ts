@@ -63,7 +63,7 @@ export const DOC_ROUTES = [
   { route: 'evidence', label: 'Evidence' },
   { route: 'field', label: 'Intelligence' },
   { route: 'legal', label: 'Legal requests' },
-  { route: 'siu', label: 'SIU' },
+  { route: 'siu', label: 'SIB' },
   { route: 'penal', label: 'Penal Code' },
   { route: 'personnel', label: 'Personnel' },
   { route: 'records', label: 'Records' },

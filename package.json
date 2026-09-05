@@ -23,6 +23,8 @@
     "check:dead": "knip",
     "check:submit": "node scripts/check-submit-buttons.mjs",
     "check:freshness": "node scripts/check-snapshot-freshness.mjs",
+    "check:realtime": "node scripts/check-realtime.mjs",
+    "gen:snapshot": "node scripts/build-schema-snapshot.mjs",
     "check:bundle": "node scripts/check-bundle-budget.mjs",
     "import:cid-general": "node scripts/import-cid-general.mjs",
     "storybook": "storybook dev -p 6006",

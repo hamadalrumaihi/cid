@@ -195,7 +195,14 @@ drill is the single highest-value operational task open.
 One-way sync of Google Docs into Reference → SOPs & Library, via the
 `supabase/functions/sops-sync` edge function (deploy with "Verify JWT"
 **off**), fired every 15 minutes by a pg_cron job (`sops-sync`) through
-pg_net. Docs are upserted by `content.sync.file_id` and skipped when
+pg_net. Since `20261004130000_scheduler_pg_cron.sql` the extensions and the
+schedule are declared in the repo (the job command reads `SYNC_SECRET` from
+`app_secrets` at run time — no credential in git), and every scheduled RPC
+added by the Portal Improvements plan records its runs in
+`public.scheduled_job_runs` (Owner-readable) via `private.job_begin/job_end`.
+Check `cron.job_run_details` when a sync goes quiet: after the 2026-09-01
+backup restore `pg_net` was missing and every run failed until that
+migration re-enabled it. Docs are upserted by `content.sync.file_id` and skipped when
 `modifiedTime` is unchanged. Configuration lives in the deny-all
 `app_secrets` table: `GOOGLE_SA_EMAIL`, `GOOGLE_SA_KEY`, `SYNC_SECRET`,
 and optional `SOPS_FOLDER_ID` (unset = every Google Doc shared with the

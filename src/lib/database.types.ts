@@ -10255,6 +10255,33 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_job_runs: {
+        Row: {
+          detail: Json
+          finished_at: string | null
+          id: number
+          job: string
+          started_at: string
+          status: string
+        }
+        Insert: {
+          detail?: Json
+          finished_at?: string | null
+          id?: never
+          job: string
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          detail?: Json
+          finished_at?: string | null
+          id?: never
+          job?: string
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
       shift_reports: {
         Row: {
           arrests: number

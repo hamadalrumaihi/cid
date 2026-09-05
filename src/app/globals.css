@@ -36,6 +36,20 @@
   --color-accent-deep: var(--cid-accent-deep);
   --color-accent-soft: var(--cid-accent-soft);
 
+  /* Z-index scale — the only stacking values the app uses (utilities
+     z-sticky … z-banner). In-page sticky bars < shell chrome (header,
+     bottom nav, drawer backdrop) < rails (sidebar, sticky action bar,
+     assistant) < modal / palette < toasts < confirm dialogs < the
+     connectivity banner, which must sit above everything. */
+  --z-index-sticky: 10;
+  --z-index-raised: 20;
+  --z-index-chrome: 30;
+  --z-index-rail: 40;
+  --z-index-modal: 50;
+  --z-index-toast: 60;
+  --z-index-dialog: 70;
+  --z-index-banner: 80;
+
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 
@@ -154,6 +168,15 @@ body {
   color: #e2e8f0;
 }
 select option, select optgroup { background-color: #0b1220; color: #f8fafc; }
+/* Skip link — first focusable element in the shell; visible only on focus. */
+.skip-link {
+  position: fixed; top: 0.5rem; left: 0.5rem; z-index: var(--z-index-banner);
+  transform: translateY(-200%);
+  padding: 0.5rem 0.75rem; border-radius: 0.5rem;
+  background: var(--color-surface-raised); color: var(--color-fg);
+  border: 1px solid var(--color-edge-strong); font-size: 0.875rem; font-weight: 500;
+}
+.skip-link:focus-visible { transform: none; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible,
 textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
   /* Follows the data-accent remap (--acc-400 is defined on :root for first

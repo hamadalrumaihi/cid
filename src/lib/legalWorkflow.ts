@@ -258,7 +258,7 @@ export const RESPONSIBLE_ROLE_LABEL: Record<ResponsibleRole, string> = {
   investigator: 'Requesting investigator',
   cid_supervisor: 'Bureau Lead',
   siu_command: 'SIB command (X-1)',
-  assigned_ada: 'Assigned ADA',
+  assigned_ada: 'Assigned ADA (retired stage)',
   bureau_prosecutor: 'Bureau prosecutor',
   district_attorney: 'District Attorney',
   attorney_general: 'Attorney General',
@@ -488,8 +488,9 @@ function nextActionLabel(
     if (RETURNED.has(s)) return 'Revise and resubmit'
     if (s === 'cid_supervisor_review') return 'Review as Bureau Lead'
     if (s === 'siu_command_review') return 'Review as SIB command'
-    if (s === 'ada_review') return 'Review as assigned ADA'
-    if (s === 'da_review') return 'Review as DA'
+    // ADA/DA review stages were retired in Phase 1 (20260808140000): their RPCs are
+    // EXECUTE-revoked, so a row parked there is history and cannot be actioned.
+    if (s === 'ada_review' || s === 'da_review') return 'Retired review stage — no action available'
     if (s === 'ag_review') return 'Review as AG'
     if (s === 'prosecutor_queue') {
       return r.classification === 'sealed' ? 'Assign a prosecutor' : 'Claim from the queue'
@@ -509,7 +510,7 @@ function nextActionLabel(
   if (role === 'any_judge') return 'Available for judicial pickup'
   if (role === 'cid_supervisor') return 'Waiting on CID review'
   if (role === 'siu_command') return 'Waiting on SIB command'
-  if (role === 'assigned_ada' || role === 'bureau_prosecutor') return 'Waiting on ADA'
+  if (role === 'assigned_ada' || role === 'bureau_prosecutor') return 'Parked in a retired review stage'
   if (role === 'prosecutor') return s === 'prosecutor_queue' ? 'Waiting in the prosecutor queue' : 'Waiting on the prosecutor'
   if (role === 'district_attorney' || role === 'attorney_general') return 'Waiting on prosecution'
   if (role === 'assigned_judge') return 'Waiting on Judge'
@@ -649,8 +650,7 @@ export function routingExplanation(r: LegalReqLike, v?: LegalViewer): string {
     return `Waiting in the ${r.responsible_bureau ? bureauLabel(r.responsible_bureau) : 'responsible bureau'} prosecutor queue — prosecutors covering that bureau (home or temporary coverage) may claim it.`
   }
   if (s === 'prosecutor_review') return 'This request is under prosecutorial review by the assigned prosecutor, who may approve it for judicial review, return it for corrections, or decline it.'
-  if (s === 'ada_review') return 'This request is under review by the assigned bureau ADA.'
-  if (s === 'da_review') return 'This request is under District Attorney review.'
+  if (s === 'ada_review' || s === 'da_review') return 'This request is parked in a retired review stage (the ADA/DA pipeline was retired). It cannot be actioned here — the Attorney General can reassign it.'
   if (s === 'ag_review') return 'This request is under Attorney General review.'
   if (s === 'submitted_to_judge') {
     if (r.assigned_judge_id) return 'This request is assigned to a Judge for judicial review.'

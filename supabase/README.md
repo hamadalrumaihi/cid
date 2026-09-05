@@ -120,9 +120,13 @@ the repo honest about that gap:
 
 - [`schema-snapshot.sql`](schema-snapshot.sql) — a **generated, reference-only**
   dump of the full live schema (enums, tables, constraints, indexes, functions,
-  triggers, RLS policies, realtime publication, grants). It is *not* replayed
-  by `supabase db reset` and is not ordered for replay; regenerate it after
-  applying new migrations.
+  triggers, RLS policies, realtime publication, grants, column and function
+  ACLs). It is *not* replayed by `supabase db reset` and is not ordered for
+  replay. **Regenerate it after applying migrations — never edit it by hand:**
+  run [`scripts/schema-dump.sql`](../scripts/schema-dump.sql) against the live
+  project (SQL editor or MCP `execute_sql`), save the returned JSON as
+  `supabase/schema-dump.json` (git-ignored), then `npm run gen:snapshot`. The
+  gates `check:schema`, `check:freshness` and `check:realtime` read it.
 - [`MIGRATION-HISTORY.md`](MIGRATION-HISTORY.md) — every entry in the live
   `supabase_migrations.schema_migrations` history mapped to its repo file
   (or marked *applied live only*).

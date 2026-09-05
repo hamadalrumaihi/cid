@@ -16,8 +16,7 @@ import { Button } from '@/components/ui/Button'
 const EXPECTED_MATRIX: { user: string; ownCase: string; otherBureau: string; joint: string; legal: string; justiceAdmin: string; owner: string }[] = [
   { user: 'Detective', ownCase: 'Yes', otherBureau: 'No', joint: 'Assigned only', legal: 'Own / participant', justiceAdmin: 'No', owner: 'No' },
   { user: 'Bureau Lead', ownCase: 'Bureau-wide', otherBureau: 'No', joint: 'Bureau + assigned', legal: 'Supervisor review', justiceAdmin: 'No', owner: 'No' },
-  { user: 'ADA', ownCase: 'None', otherBureau: 'No', joint: 'No', legal: 'Assigned requests', justiceAdmin: 'No', owner: 'No' },
-  { user: 'DA / AG', ownCase: 'None', otherBureau: 'No', joint: 'No', legal: 'DOJ oversight', justiceAdmin: 'Yes', owner: 'No' },
+  { user: 'Attorney General', ownCase: 'None', otherBureau: 'No', joint: 'No', legal: 'DOJ oversight + sealed assignment', justiceAdmin: 'Yes', owner: 'No' },
   { user: 'Judge', ownCase: 'None', otherBureau: 'No', joint: 'No', legal: 'Assigned judicial', justiceAdmin: 'No', owner: 'No' },
   { user: 'Owner', ownCase: 'Oversight', otherBureau: 'Oversight', joint: 'Oversight', legal: 'Oversight', justiceAdmin: 'Yes', owner: 'Yes' },
 ]

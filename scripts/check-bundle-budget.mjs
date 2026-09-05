@@ -14,8 +14,9 @@
  *    2. set BUDGET_GZIP_KB to measured * 1.10 (rounded up) below;
  *    3. explain the shift in the PR (what got bigger and why it is worth it).
  *  Baseline 2026-07-15: measured 128.9 KB gzip (445.9 KB raw, 5 chunks)
- *  -> budget 142 KB. NOTE: measured mid-sweep of src/; re-baseline on the
- *  merged tree before promoting the CI step from advisory to blocking.
+ *  -> budget 142 KB. Re-measured 2026-09-05 on the merged tree after the
+ *  design-system waves: 128.9 KB gzip (445.9 KB raw, 5 chunks) — the budget
+ *  stands and the CI step is blocking.
  *
  *  Deep-dive when it trips: `npx next experimental-analyze` (Turbopack) or
  *  `ANALYZE=1 npm run build` (@next/bundle-analyzer, wired in next.config.ts;

@@ -22,7 +22,7 @@ const ENTRIES: TimelineEntry[] = [
   {
     id: 'e3',
     title: 'Returned for changes',
-    actor: 'ADA M. Reyes',
+    actor: 'Judge M. Reyes',
     at: '2026-07-24T11:47:00Z',
     from: 'Submitted',
     to: 'Changes requested',
@@ -31,7 +31,7 @@ const ENTRIES: TimelineEntry[] = [
   {
     id: 'e4',
     title: 'Approved',
-    actor: 'ADA M. Reyes',
+    actor: 'Judge M. Reyes',
     at: '2026-07-27T16:30:00Z',
     to: 'Approved',
   },

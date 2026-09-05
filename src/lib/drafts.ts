@@ -5,9 +5,10 @@
  *  CAVEAT: these keys are NOT per-user — on a shared terminal one member can
  *  see another's stash. Surfaces migrated to lib/userDrafts (the DB-backed
  *  layer over `user_drafts`) avoid this: it uses this module as its local
- *  mirror but under per-user keys (`u:<uid>:<key>`). New draft surfaces
- *  should use userDrafts; the legal wizard's hardened stash flow and any
- *  remaining direct consumers keep the vanilla keys deliberately. */
+ *  mirror but under per-user keys (`u:<uid>:<key>`). Every draft surface now goes
+ *  through userDrafts (the legal wizard and dossier moved last, adopting any
+ *  stash left under the shared keys via userDrafts.adoptLegacyDraft); this
+ *  module is only the local-mirror primitive and must not gain new callers. */
 export interface Draft<T = unknown> { at: number; data: T }
 
 const k = (key: string) => `cid-draft:${key}`

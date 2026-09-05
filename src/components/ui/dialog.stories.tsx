@@ -5,7 +5,7 @@ import { DialogHost, uiConfirm, uiPrompt } from './dialog'
 
 /** Themed replacements for native confirm()/prompt(). Promise-based: callers
  *  await uiConfirm/uiPrompt while <DialogHost/> (mounted once in the app
- *  shell) renders the pending dialog at z-70 — above any open modal. */
+ *  shell) renders the pending dialog at z-dialog — above any open modal. */
 const meta = {
   title: 'UI/Dialog',
   component: DialogHost,

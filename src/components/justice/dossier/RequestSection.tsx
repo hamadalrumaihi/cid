@@ -5,7 +5,7 @@
  *  other viewer sees the exact immutable version reviewers act on
  *  (current_version_id). Below either mode: the full version history with a
  *  per-version document diff so returns and revisions are auditable. */
-import { Drafts, type Draft } from '@/lib/drafts'
+import { clearDraft, type LoadedDraft } from '@/lib/userDrafts'
 import { fmtDateTime, timeAgo } from '@/lib/format'
 import {
   CLASSIFICATIONS, SOCIAL_PLATFORMS,
@@ -84,8 +84,8 @@ export function RequestSection({
   spec: FieldSpec[]
   draft: DraftShape
   setDraft: React.Dispatch<React.SetStateAction<DraftShape>>
-  pendingDraft: Draft<DraftShape> | null
-  setPendingDraft: (d: Draft<DraftShape> | null) => void
+  pendingDraft: LoadedDraft<DraftShape> | null
+  setPendingDraft: (d: LoadedDraft<DraftShape> | null) => void
   currentVersion: LegalVersion | null
   versions: LegalVersion[]
   name: (id: string | null | undefined) => string
@@ -101,10 +101,10 @@ export function RequestSection({
           {pendingDraft && pendingDraft.at > Date.parse(r.updated_at) && (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
               <span className="min-w-0 flex-1">
-                An unsaved draft from {timeAgo(pendingDraft.at)} was found on this device (newer than the saved request).
+                An unsaved draft from {timeAgo(pendingDraft.at)} was found{pendingDraft.source === 'local' ? ' on this device' : ' in your drafts'} (newer than the saved request).
               </span>
               <Button onClick={() => { setDraft(sanitizeStash(pendingDraft.data, r.classification)); setPendingDraft(null) }}>Restore</Button>
-              <Button onClick={() => { Drafts.clear(`legal:edit:${r.id}`); setPendingDraft(null) }}>Discard</Button>
+              <Button onClick={() => { void clearDraft(`legal:edit:${r.id}`); setPendingDraft(null) }}>Discard</Button>
             </div>
           )}
           <Field label={r.request_type === 'warrant' ? 'Warrant Title' : 'Title'} required>

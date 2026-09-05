@@ -28,7 +28,6 @@ import { timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { parseSecurityOverview, type SecurityOverview } from '@/lib/schemas'
 import { parseStringArray } from '@/lib/jsonShapes'
-import { AGENCY_LABEL, justiceRoleLabel, type JusticeAgency } from '@/lib/justice'
 import { PERMANENT_BUREAUS, bureauLabel, roleLabel } from '@/lib/roles'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -673,91 +672,8 @@ function AccessSection() {
         )}
       </Panel>
 
-      <JusticeGrantPanel roster={roster} />
       <TestFlagPanel roster={roster} />
     </div>
-  )
-}
-
-/** Mirrors owner_grant_justice_membership()'s server validation exactly:
- *  DOJ takes the three prosecutorial titles, the Judiciary takes judge. */
-const GRANTABLE_JUSTICE: { role: string; agency: JusticeAgency }[] = [
-  { role: 'assistant_district_attorney', agency: 'doj' },
-  { role: 'district_attorney', agency: 'doj' },
-  { role: 'attorney_general', agency: 'doj' },
-  { role: 'judge', agency: 'judiciary' },
-]
-
-/** First UI for public.owner_grant_justice_membership() — the dual-identity
- *  grant. The RPC is owner-only, reason-required and self-auditing
- *  (JUSTICE_GRANTED); it refuses test fixtures and removed/login-denied
- *  accounts server-side. */
-function JusticeGrantPanel({ roster }: { roster: ReturnType<typeof useProfilesStore.getState>['profiles'] }) {
-  const { profile } = useAuth()
-  const [targetId, setTargetId] = useState('')
-  const [role, setRole] = useState(GRANTABLE_JUSTICE[0].role)
-  const [reason, setReason] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const candidates = useMemo(() =>
-    roster
-      .filter((p) => p.active && !p.is_system && !p.removed_at)
-      .slice()
-      .sort((x, y) => (x.display_name || '').localeCompare(y.display_name || '')),
-  [roster])
-  const target = candidates.find((p) => p.id === targetId) ?? null
-  const agency = GRANTABLE_JUSTICE.find((g) => g.role === role)?.agency ?? 'doj'
-
-  const grant = async () => {
-    const r = reason.trim()
-    if (!target) { toast('Pick a member first.', 'warn'); return }
-    if (!r) { toast('A reason is required — the RPC refuses without one.', 'warn'); return }
-    const ok = await uiConfirm(
-      `Grant ${justiceRoleLabel(role)} (${AGENCY_LABEL[agency]}) to ${target.display_name}?\n\nThis inserts or REPLACES their justice membership immediately — a dual identity alongside their CID role (${roleLabel(target.role)}, ${bureauLabel(target.division)}). They are notified, and the grant is audited server-side (JUSTICE_GRANTED) with your reason.\n\nLegacy ADA/DA titles act with the effective role ‘prosecutor’; the AG additionally holds ex-officio SIB oversight once the release gate is open.`,
-      { title: 'Grant a justice membership?', confirmText: 'Grant' },
-    )
-    if (!ok) return
-    setBusy(true)
-    const res = await rpc('owner_grant_justice_membership', {
-      p_target: target.id, p_agency: agency, p_justice_role: role, p_reason: r,
-    })
-    setBusy(false)
-    if (res.error) { toast(res.error.message, 'danger'); return }
-    toast(`${justiceRoleLabel(role)} granted to ${target.display_name}`, 'success')
-    setTargetId(''); setReason('')
-  }
-
-  return (
-    <Panel title="Justice grant (dual identity)" sub="Direct owner appointment into the DOJ/Judiciary — the ordinary signup path deliberately blocks active CID members from applying; dual identity is an owner decision.">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div>
-          <label htmlFor="jg-target" className={labelCls}>Member (active CID)</label>
-          <select id="jg-target" value={targetId} onChange={(e) => setTargetId(e.target.value)} className={inputCls}>
-            <option value="">— select a member —</option>
-            {candidates.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.display_name} · {roleLabel(p.role)}/{bureauLabel(p.division)}{p.id === profile?.id ? ' (you)' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="jg-role" className={labelCls}>Role (agency follows)</label>
-          <select id="jg-role" value={role} onChange={(e) => setRole(e.target.value)} className={inputCls}>
-            {GRANTABLE_JUSTICE.map((g) => (
-              <option key={g.role} value={g.role}>{justiceRoleLabel(g.role)} — {AGENCY_LABEL[g.agency]}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="jg-reason" className={labelCls}>Reason (required, audited)</label>
-          <input id="jg-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why this appointment…" className={inputCls} />
-        </div>
-      </div>
-      <Button variant="primary" className="mt-3" disabled={busy || !targetId} onClick={() => void grant()}>
-        {busy ? 'Granting…' : 'Grant justice membership'}
-      </Button>
-    </Panel>
   )
 }
 
