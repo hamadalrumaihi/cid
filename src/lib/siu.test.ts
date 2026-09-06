@@ -18,6 +18,7 @@ import {
   siuDesignationLabel, siuNoteTypeLabel, siuOperationCategoryLabel,
   siuAssignableClassifications, siuCanAppoint, siuCanAppointRole, siuCanReadCid,
   siuCanRemove, siuCaseAccess, siuCaseReadOnly, siuIsAgent, siuIsCommand, siuOperates, siuStanding,
+  isOversightStanding,
   siuMayRequestAccess, siuAccessStatusLabel,
   SIU_ACCESS_REQUEST_STATUSES, SIU_ACCESS_REQUEST_STATUS_LABEL,
   siuAuditLabel, siuCallsign, siuClassificationLabel, siuRoleLabel,
@@ -68,32 +69,45 @@ const live = (over: Partial<SiuContext> = {}): SiuContext =>
   ({ profile: profile(), release: true, ...over })
 
 describe('siuStanding — the single authority resolver', () => {
-  it('is null at EVERY CID rank, the Director included', () => {
-    // No CID rank confers SIU standing. Seniority inside CID buys nothing
-    // inside SIU — that is the whole separation.
+  it('is null at EVERY CID rank except the Director', () => {
+    // No CID rank confers SIU authority. Seniority inside CID buys nothing
+    // inside SIU — that is the whole separation. The Director is the one
+    // exception, and what they get is a READ (next test).
     for (const role of ROLE_ORDER) {
+      if (role === 'director') continue
       expect(siuStanding(live({ profile: profile({ role }) })), `${role} must get nothing`).toBeNull()
     }
   })
 
-  it('gives the Director of CID NOTHING — CID command does not command SIU', () => {
-    // This reverses the earlier SOP reading (migration 20260823120000), which
-    // put the Director in the SIU chain. Oversight is not a passive label:
-    // siuCanAppoint() includes it and siu_remove() lets it end an X-1's
-    // membership, so a Director holding it could dissolve the unit
-    // investigating CID.
+  it('gives the Director of CID READ-ONLY oversight — never appointment or field authority', () => {
+    // Migration 20261010120000 (decision P1b). 20260902120000 removed the
+    // Director because 'oversight' is not a passive label: siuCanAppoint()
+    // includes it and siu_remove() lets it end an X-1's membership, so a
+    // Director holding it could dissolve the unit investigating CID. The
+    // Director now holds a DIFFERENT standing, a strict read subset, that no
+    // power predicate lists.
     const director = live({ profile: profile({ role: 'director' }) })
-    expect(siuStanding(director)).toBeNull()
-    expect(siuOperates(director)).toBe(false)
+    expect(siuStanding(director)).toBe('director_oversight')
+    expect(siuOperates(director)).toBe(true)
+    expect(maySwitchDepartment(director)).toBe(true)
+    expect(isOversightStanding('director_oversight')).toBe(true)
     expect(siuIsAgent(director)).toBe(false)
     expect(siuIsCommand(director)).toBe(false)
     expect(siuCanAppoint(director)).toBe(false)
+    expect(siuCanRemove(director, member({ user_id: 'u9' }))).toBe(false)
     expect(siuCanReadCid(director)).toBe(false)
+    expect(siuCanReviewReferrals(director)).toBe(false)
     expect(siuAssignableClassifications(director)).toEqual([])
-    // …and no SIU case is readable at any classification.
-    for (const c of ['siu', 'siu_restricted', 'siu_command', 'siu_compartmented']) {
+    // A standard investigation is readable, and read-only…
+    expect(siuCaseAccess(director, { siu_classification: 'siu' })).toBe(true)
+    expect(siuCaseReadOnly({ department: 'cid', standing: 'director_oversight' }, { case_authority: 'siu' })).toBe(true)
+    // …never a preliminary inquiry, never anything above the base level.
+    expect(siuCaseAccess(director, { siu_classification: 'siu', siu_stage: 'preliminary_inquiry' })).toBe(false)
+    for (const c of ['siu_restricted', 'siu_command', 'siu_compartmented']) {
       expect(siuCaseAccess(director, { siu_classification: c })).toBe(false)
     }
+    // A live conflict beats the read like everything else.
+    expect(siuCaseAccess(director, { siu_classification: 'siu' }, { recused: true })).toBe(false)
   })
 
   it('still admits a Director who is genuinely APPOINTED to SIU', () => {
@@ -116,8 +130,9 @@ describe('siuStanding — the single authority resolver', () => {
     expect(siuStanding(live({ membership: member({ oversight_only: true }) }))).toBe('oversight')
     // The AG is SIU's reporting line, so this one stays ex officio.
     expect(siuStanding(live({ justiceRole: 'attorney_general' }))).toBe('oversight')
-    // The Director of CID is NOT oversight. See the dedicated test above.
-    expect(siuStanding(live({ profile: profile({ role: 'director' }) }))).toBeNull()
+    // The Director of CID is NOT 'oversight' — their standing is its own
+    // (read-only) value so no power predicate ever lists it by accident.
+    expect(siuStanding(live({ profile: profile({ role: 'director' }) }))).toBe('director_oversight')
   })
 
   it('prefers an appointed SIU role over ex-officio oversight', () => {
@@ -294,8 +309,10 @@ describe('siuCaseAccess — classification levels', () => {
     expect(siuCaseAccess(x1, c)).toBe(true)
     expect(siuCaseAccess(agent, c)).toBe(true)
     expect(siuCaseAccess(ag, c)).toBe(true)
-    // Nobody outside SIU standing, at any CID rank — the Director included.
-    expect(siuCaseAccess(director, c)).toBe(false)
+    // The Director of CID reads it too — read-only oversight (20261010120000);
+    // nobody else outside SIU standing, at any CID rank.
+    expect(siuCaseAccess(director, c)).toBe(true)
+    expect(siuCaseAccess(director, { ...c, siu_stage: 'preliminary_inquiry' })).toBe(false)
     expect(siuCaseAccess(detective, c)).toBe(false)
     expect(siuCaseAccess(live({ profile: profile({ role: 'deputy_director' }) }), c)).toBe(false)
   })
@@ -361,8 +378,9 @@ describe('no role is above investigation', () => {
 
 describe('the SIU chain of command', () => {
   // Attorney General → X-Ray 1 → Senior Special Agent → Special Agent.
-  // The Director of CID is NOT in it. The Portal Owner sits above as the
-  // platform's build-phase authority.
+  // The Director of CID is NOT in it (they read standard investigations, and
+  // nothing more). The Portal Owner sits above as the platform's build-phase
+  // authority.
   const director = live({ profile: profile({ role: 'director' }) })
   const ag = live({ justiceRole: 'attorney_general' })
   const x1 = live({ membership: member({ siu_role: 'special_agent_in_charge' }) })
@@ -382,9 +400,10 @@ describe('the SIU chain of command', () => {
     expect(siuCaseAccess(ag, { siu_classification: 'siu_command' })).toBe(false)
   })
 
-  it('leaves the Director of CID entirely outside the chain', () => {
-    // The reversal of 20260823120000, pinned. CID command does not command SIU.
-    expect(siuStanding(director)).toBeNull()
+  it('leaves the Director of CID entirely outside the personnel chain', () => {
+    // The reversal of 20260823120000, pinned — 20261010120000 gives the
+    // Director a READ, not a seat. CID command does not command SIU.
+    expect(siuStanding(director)).toBe('director_oversight')
     expect(siuCanAppoint(director)).toBe(false)
     expect(siuCanRemove(director, member({ user_id: 'u9' }))).toBe(false)
     expect(siuCanAppointRole(director, 'special_agent')).toBe(false)
@@ -441,9 +460,10 @@ describe('department model — one platform, two departments', () => {
   it('offers a deliberate switch ONLY to accounts holding both contexts', () => {
     expect(maySwitchDepartment(live({ profile: profile({ is_owner: true }) }))).toBe(true)
     expect(maySwitchDepartment(live({ justiceRole: 'attorney_general' }))).toBe(true)
-    // The Director of CID holds ONE context now, so there is nothing to switch
-    // to and no switch is offered.
-    expect(maySwitchDepartment(live({ profile: profile({ role: 'director' }) }))).toBe(false)
+    // The Director of CID legitimately holds both contexts again — CID by
+    // role, SIB by read-only oversight (20261010120000) — so the switch is
+    // offered; their HOME department stays CID (standing is not membership).
+    expect(maySwitchDepartment(live({ profile: profile({ role: 'director' }) }))).toBe(true)
     expect(userDepartment(live({ profile: profile({ role: 'director' }) }))).toBe('cid')
     // Field agents hold exactly one context; normal CID members hold one too.
     expect(maySwitchDepartment(live({ membership: member() }))).toBe(false)
@@ -1081,14 +1101,17 @@ describe('cross-department write gates — read is not write', () => {
 describe('Director access requests — the right to ASK, not to see', () => {
   const director = live({ profile: profile({ role: 'director' }) })
 
-  it('gives the Director the ask, and nothing else', () => {
-    // This is the ONE place a CID role confers something in the SIU model, and
-    // what it confers is a request. It must not leak back into standing.
+  it('gives the Director the ask — and, since 20261010120000, a read, but never a power', () => {
+    // The request is a profile-role window, independent of standing. The
+    // Director's read-only standing sits beside it and confers no power:
+    // nothing to appoint with, nothing above the standard level to see.
     expect(siuMayRequestAccess(director)).toBe(true)
-    expect(siuStanding(director)).toBeNull()
-    expect(siuOperates(director)).toBe(false)
+    expect(siuStanding(director)).toBe('director_oversight')
+    expect(siuOperates(director)).toBe(true)
     expect(siuCanAppoint(director)).toBe(false)
-    expect(siuCaseAccess(director, { siu_classification: 'siu' })).toBe(false)
+    expect(siuIsAgent(director)).toBe(false)
+    expect(siuCaseAccess(director, { siu_classification: 'siu' })).toBe(true)
+    expect(siuCaseAccess(director, { siu_classification: 'siu_restricted' })).toBe(false)
   })
 
   it('is offered to nobody else', () => {
