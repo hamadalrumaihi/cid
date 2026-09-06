@@ -13,7 +13,7 @@
 import { useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
-import { useCapabilities } from '@/lib/capabilities'
+import { useCapabilities } from '@/lib/permissions'
 import { bureauLabel } from '@/lib/roles'
 import { Badge } from '@/components/ui/Badge'
 import { Notice } from '@/components/ui/Notice'

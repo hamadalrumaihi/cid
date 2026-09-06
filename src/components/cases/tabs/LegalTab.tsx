@@ -23,7 +23,7 @@ import { ScaleIcon } from '@/components/shell/icons'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { LegalRequestCard } from '@/components/justice/LegalRequestCard'
 import { buildLegalViewer, useMyProsecutorBureaus } from '@/components/justice/legalShared'
-import { useSiu } from '@/lib/useSiu'
+import { useSiu } from '@/lib/permissions'
 
 /** Registry triage order (LegalView) + the awareness lane last. */
 const GROUP_ORDER: OpGroup[] = [

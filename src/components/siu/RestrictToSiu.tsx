@@ -24,7 +24,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { useSiu } from '@/lib/useSiu'
+import { useSiu } from '@/lib/permissions'
 import {
   COMPARTMENT_TYPES, compartmentTypeLabel, reasonIsUsable, restrict,
   restrictionImpact, restrictPreview, revealPreview, sectionsFor,

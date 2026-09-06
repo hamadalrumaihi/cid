@@ -1,5 +1,6 @@
 'use client'
 
+import { canOverrideSignoff, isSignoffOwner, isSignoffReviewer } from '@/lib/permissions'
 import { useCallback, useEffect, useState } from 'react'
 import { WorkflowTimeline } from '@/components/ui/WorkflowTimeline'
 import { Badge } from '@/components/ui/Badge'
@@ -143,17 +144,15 @@ export function SignoffTab({ c }: { c: CaseRow }) {
     } catch (e) { setErr(e) }
   }, [c.id])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, v])
-  const owner = profile?.id && (profile.id === c.lead_detective_id || profile.id === c.signoff_submitted_by)
+  const owner = isSignoffOwner(c, profile?.id)
   // Mirror of private.signoff_assert_decider: the routed assignee, or any
   // Director (the explicit override) — never the case owner deciding their
   // own submission.
-  const reviewer = profile?.id && !owner && !!c.signoff_stage
-    && (profile.id === c.signoff_assignee_id || profile.role === 'director')
+  const reviewer = isSignoffReviewer(c, profile)
   // Cosmetic mirror of the RPC's own gate (signoff_command_override): active
   // AND (Deputy Director / Director role OR the owner flag). Bureau Leads are
   // command but are NOT accepted — do not widen this to isCommand.
-  const canOverride = !!profile?.active
-    && (profile.role === 'deputy_director' || profile.role === 'director' || !!profile.is_owner)
+  const canOverride = canOverrideSignoff(profile)
   // Busy-guarded (useAction): a double-click can't fire the RPC twice, and
   // every sign-off button disables while one is in flight.
   const { run: callRpc, busy } = useAction(async (kind: 'submit' | 'approve' | 'deny' | 'changes' | 'complete' | 'escalate') => {

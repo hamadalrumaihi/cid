@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { Profile } from './auth'
-import { type CapsInput, capsFrom, effectiveDojRole } from './capabilities'
+import type { Profile } from '../auth'
+import { type CapsInput, capsFrom } from './capabilities'
+import { effectiveDojRole } from './mirrors'
 
 /** Full persona matrix for the pure capability derivation. capsFrom is the
  *  single model every dashboard/nav gate reads, so each spec persona pins its

@@ -20,7 +20,6 @@ import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { FORM_SCHEMAS, REPORT_TEMPLATES, WARRANT_TPLS, formToText, reportFinalizeGaps, reportTitle, warrantStatusOf, type FormSchema, type FormValues } from '@/lib/forms'
 import { mediaRefLine, parseMediaRefEntries, resolveMediaRefText } from '@/lib/mediaRefs'
-import { isCommandRole } from '@/lib/roles'
 import { parseFormValues } from '@/lib/jsonShapes'
 import { parseReopenLog, parseReportSignature } from '@/lib/schemas'
 import { Field } from '@/components/ui/Field'
@@ -35,6 +34,7 @@ import { toast } from '@/lib/toast'
 import { WarrantPrintButton } from './WarrantPrint'
 import type { CaseRow, EvidenceRow, MediaRow, ReportRow } from './shared'
 import { DocumentIcon, EyeIcon, RadioIcon, ReceiptIcon, ReportIcon, ScaleIcon, SearchIcon, VideoIcon } from '@/components/shell/icons'
+import { isCommandRole } from '@/lib/permissions'
 
 /** Report-template glyphs, drawn from the shared icon set (was an emoji map in lib/forms). */
 function TemplateIcon({ id }: { id: string }) {

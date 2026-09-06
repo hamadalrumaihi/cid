@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { withRetry } from '@/lib/db'
-import { useSiu } from '@/lib/useSiu'
+import { useSiu } from '@/lib/permissions'
 import {
   fetchSiuCommandDashboard, fetchSiuIntelQuality, fetchSiuOversightSupplement,
   siuCaseCategoryLabel, siuClassificationLabel, siuClosureReasonLabel, siuRoleLabel,

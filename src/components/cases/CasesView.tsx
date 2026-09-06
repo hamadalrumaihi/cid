@@ -3,12 +3,12 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { listCaseHealth } from '@/lib/caseHealth'
-import { useCapabilities } from '@/lib/capabilities'
+import { isBureauCommandFor, useCapabilities } from '@/lib/permissions'
 import { list, rpc, update, updateWhere, withRetry } from '@/lib/db'
 import { setCaseStatus } from '@/lib/services/cases'
 import { timeAgo, todayISO } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
-import { useSiu } from '@/lib/useSiu'
+import { useSiu } from '@/lib/permissions'
 import { caseDepartment } from '@/lib/siu'
 import { useOperationsStore } from '@/lib/operations'
 import { notify } from '@/lib/notify'
@@ -705,12 +705,11 @@ function maybeEscalateStale(rows: CaseRow[], meId: string | null) {
   window.setTimeout(() => {
     void (async () => {
       const now = new Date().toISOString()
-      const leadRoles = new Set(['bureau_lead', 'deputy_director', 'director', 'command'])
       for (const c of rows.filter(isStaleCase).filter((x) => !x.last_stale_notified_at)) {
         const cas = await updateWhere('cases', { is: { last_stale_notified_at: null }, eq: { id: c.id } }, { last_stale_notified_at: now })
         if (cas.error || !cas.data?.length) continue
         const targets = activeProfiles()
-          .filter((p) => (p.id === c.lead_detective_id) || (p.division === c.bureau && (!!p.role && leadRoles.has(p.role))) || p.role === 'deputy_director')
+          .filter((p) => (p.id === c.lead_detective_id) || isBureauCommandFor(p, c.bureau))
           .map((p) => p.id)
         await Promise.all([...new Set(targets)].map((uid) => notify(uid, 'stale_case', { case_id: c.id, case_number: c.case_number })))
       }

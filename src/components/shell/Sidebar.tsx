@@ -8,14 +8,15 @@
 import { useSyncExternalStore } from 'react'
 import { DASH_LABEL, DASH_TAB, type SwitchableId } from '@/components/dash/DashSwitcherView'
 import { useAuth } from '@/lib/auth'
-import { useCapabilities } from '@/lib/capabilities'
-import { useSiu } from '@/lib/useSiu'
+import { useCapabilities } from '@/lib/permissions'
+import { useSiu } from '@/lib/permissions'
 import { NAV_CATEGORIES, SIU_NAV_CATEGORIES, SIU_TAB_LABEL, TAB_LABEL } from '@/lib/nav'
 import { bureauShort, roleLabel } from '@/lib/roles'
 import { DEPARTMENT_LABEL, siuCallsign, siuRoleLabel, siuStandingLabel } from '@/lib/siu'
 import { safeUrl } from '@/lib/safeUrl'
 import { Store } from '@/lib/store'
 import { CategoryIcon, ChevronIcon, CloseIcon, EyeIcon, ScaleIcon, SettingsIcon, ShieldIcon, SlidersIcon, SwapIcon } from './icons'
+import { PermissionsNotice } from './PermissionsNotice'
 import { useNav } from './useNav'
 import { useNavBadges } from './useNavBadges'
 
@@ -160,6 +161,7 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
           <CloseIcon />
         </button>
       </div>
+      <PermissionsNotice />
 
       <nav className="mt-2 flex-1 space-y-1 overflow-y-auto px-3 pb-4" role="navigation">
         {/* Dashboards — capability-gated leaf links (useCapabilities), one per

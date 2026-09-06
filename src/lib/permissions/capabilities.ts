@@ -12,12 +12,11 @@
  *  UX gating ONLY. RLS and definer RPCs remain the authority for every read
  *  and write behind each dashboard — hiding an entry is cosmetic. */
 
-import { useEffect, useState } from 'react'
-import { type GateState, type Profile, useAuth } from './auth'
-import { list } from './db'
-import { useTableVersion } from './realtime'
-import { isCommandRole } from './roles'
-import type { SiuStanding } from './siu'
+import { type GateState, type Profile, useAuth } from '../auth'
+import { isCommandRole } from '../roles'
+import type { SiuStanding } from '../siu'
+import { type DojRole } from './mirrors'
+import { usePermissions } from './usePermissions'
 import { useSiu } from './useSiu'
 
 /** Every dashboard surface an account can hold. 'submitter' (the Field
@@ -25,8 +24,7 @@ import { useSiu } from './useSiu'
  *  a field officer to a separate shell entirely (auth.tsx: CID wins). */
 export type DashboardId = 'my' | 'cases' | 'command' | 'sib' | 'doj' | 'submitter' | 'owner'
 
-/** Effective DOJ role (expiry- and legacy-mapping-aware), or null. */
-export type DojRole = 'prosecutor' | 'judge' | 'attorney_general' | null
+export type { DojRole }
 
 /** Command reach of an active CID command-staff member: a Bureau Lead sees
  *  their own bureau; Deputy Director and Director see the whole division. */
@@ -57,17 +55,6 @@ export interface Caps {
   doj: { role: DojRole }
   /** Field officer (SAHP/BCSO/LSPD) — the submission portal, nothing else. */
   submitter: boolean
-}
-
-/** Client mirror of private.justice_role_effective: legacy ADA/DA memberships
- *  act with the effective role 'prosecutor'; historical rows are never
- *  rewritten — only interpreted. Duplicated from
- *  components/justice/legalShared.tsx `effectiveJusticeRole` because this lib
- *  must not import from components/ — keep the two in lockstep. */
-export function effectiveDojRole(role: string | null | undefined): DojRole {
-  if (role === 'assistant_district_attorney' || role === 'district_attorney' || role === 'prosecutor') return 'prosecutor'
-  if (role === 'attorney_general' || role === 'judge') return role
-  return null
 }
 
 /** The signals `capsFrom` derives from — kept minimal and serializable so the
@@ -121,51 +108,20 @@ export function capsFrom(input: CapsInput): Caps {
   return { ready, dashboards, detective, commandScope, isOwner, sib, doj, submitter: false }
 }
 
-/* Module-wide cache like legalShared's justiceRoleCache — one read per
- * signed-in session, shared by every consumer; realtime refreshes it. */
-let dojRoleCache: { key: string; value: DojRole } | null = null
-
-/** The live capability model for the signed-in account. The DOJ role needs a
- *  small own read: the auth context's justice identity lacks `expires_at`
- *  (temporary dual memberships expire automatically), so this mirrors
- *  components/justice/legalShared.tsx `useMyJusticeRole` — same query, same
- *  expiry rule, same cache pattern; keep them in lockstep. Non-justice users
- *  skip the read entirely, and the server re-checks on every RPC. */
+/** The live capability model for the signed-in account. The DOJ role is
+ *  the server's answer (`my_permissions().doj_role`, expiry-aware through
+ *  private.justice_role_effective) — no own justice_memberships read, no
+ *  fallback: until the permissions RPC settles the DOJ dashboard is simply
+ *  absent, and an RPC error keeps it absent (NO_ACCESS). */
 export function useCapabilities(): Caps {
   const auth = useAuth()
   const siu = useSiu()
-  const key = auth.justiceRole ? auth.profile?.id ?? null : null
-  const v = useTableVersion('justice_memberships')
-  // Seed from the session cache ONLY — auth.justiceRole lacks `expires_at`,
-  // so seeding from it would advertise the DOJ dashboard for an expired
-  // temporary membership until the read settles (security review W2).
-  // Unknown = no DOJ until the expiry-aware read below confirms it.
-  const [dojRole, setDojRole] = useState<DojRole>(
-    () => (key && dojRoleCache?.key === key ? dojRoleCache.value : null),
-  )
-  useEffect(() => {
-    if (!key) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const rows = await list('justice_memberships', {
-          select: 'justice_role,active,expires_at', eq: { user_id: key },
-        })
-        const m = rows[0]
-        const live = !!m && m.active && (!m.expires_at || Date.parse(m.expires_at) > Date.now())
-        const value = live ? effectiveDojRole(m.justice_role) : null
-        dojRoleCache = { key, value }
-        if (!cancelled) setDojRole(value)
-      } catch { /* transient — keep the cache-seeded value (or none); the server re-checks */ }
-    })()
-    return () => { cancelled = true }
-  }, [key, v])
-
+  const permissions = usePermissions()
   return capsFrom({
     state: auth.state,
     profile: auth.profile,
     sib: { access: siu.canAccess, agent: siu.isAgent, command: siu.isCommand, standing: siu.standing },
-    dojRole: key ? dojRole : null,
-    ready: auth.state !== 'loading' && !siu.loading,
+    dojRole: permissions.perms.doj_role,
+    ready: auth.state !== 'loading' && !siu.loading && permissions.ready,
   })
 }

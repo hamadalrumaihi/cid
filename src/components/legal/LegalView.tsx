@@ -19,7 +19,8 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
-import { useSiu } from '@/lib/useSiu'
+import { useMyJusticeRole } from '@/lib/permissions'
+import { useSiu } from '@/lib/permissions'
 import { timeAgo } from '@/lib/format'
 import { useSavedViews, type SavedViewsApi } from '@/lib/savedViews'
 import { toast } from '@/lib/toast'
@@ -41,7 +42,7 @@ import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components
 import { LegalRequestDetail } from '@/components/justice/LegalRequestDetail'
 import { LegalRequestCard } from '@/components/justice/LegalRequestCard'
 import {
-  CardQueueSection, buildLegalViewer, useLegalRequests, useMyJusticeRole, useMyProsecutorBureaus,
+  CardQueueSection, buildLegalViewer, useLegalRequests, useMyProsecutorBureaus,
 } from '@/components/justice/legalShared'
 import { DojWorkspace, deriveDojLists, dojViewsForRole, type DojViewId } from '@/components/doj/DojWorkspace'
 import { LegalCreateWizard, type LegalWizardEntry } from './LegalCreateWizard'

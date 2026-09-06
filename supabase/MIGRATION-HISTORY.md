@@ -530,3 +530,59 @@ watch, compartment) refused. See `docs/AUTHORIZATION.md` §4f.
 | Version (live) | Name | Repo file |
 |---|---|---|
 | applied via MCP (`director_oversight_standing`, `director_oversight_standing_surfaces`) | director_oversight_standing | `20261010120000_director_oversight_standing.sql` |
+
+**P1-05 record_versions, history and restore.**
+`20261011120000_record_versions.sql`: the `record_versions` table (RLS:
+`private.version_visible`, SECURITY INVOKER — the parent's SELECT policy),
+`private.version_row()` AFTER UPDATE trigger with five-minute same-actor
+coalescing on cases, persons, vehicles, gangs, places, accounts, narcotics,
+evidence, reports (`report` mode: sealed never versions), legal_requests
+(`legal_draft` mode: draft columns only) and field_submissions;
+`public.record_history`, `public.restore_version` (edit authority + reason,
+protected columns never written, `RECORD_VERSION_RESTORED`), the prune
+(latest 5 kept, 2 years, open cases and legal holds protected) and the
+daily `record-versions-prune` cron. Verified at apply time in a rolled-back
+transaction: a two-edit burst coalesced into one version with both fields,
+a reverted field dropped from the list, a noise-only update versioning
+nothing, a second version after the window, a stranger reading zero rows,
+restore refused without a reason / for legal / for a stranger and landing
+as a `restore` version, prune keeping the latest 5.
+
+**P1-06 Case access grant expiry.**
+`20261012120000_case_access_grant_expiry.sql`: `expires_at` (default 30
+days, CHECK ≤ 90 days), `renewed_at`, `reminder_sent_at`,
+`expired_notified_at`; UPDATE revoked; ACCESS_GRANTED / ACCESS_REVOKED
+audit trigger; `private.can_access_case` and `private.can_access_case_row`
+re-emitted together with `expires_at > now()`; `public.case_access_renew`;
+the hourly `access-grant-expiry-sweep` (reminders three days out,
+ACCESS_EXPIRED + removal on lapse); `public.my_permissions()` expiries.
+Verified at apply time in a rolled-back transaction with a cross-bureau
+grantee: the default 30 days, direct UPDATE `42501`, renew by the Owner ok
+/ by a stranger denied / 91 days `bad_request`, access true while live and
+false (row hidden) once lapsed, the sweep reminding once and then
+expiring the grant with the audit row, notifications and the row removed.
+
+**P1-07 Generalised permanent deletion.**
+`20261013120000_permanent_delete_record.sql` (applied as
+`permanent_delete_record`, then `permanent_delete_record_preview_fix` —
+`array_append` in the preview's ineligibility list): `deleted_record_ledger`,
+`deletion_tokens.target_kind`, the four private helpers (label, dependant
+walk, assets, apply), `permanent_delete_record_preview` / `_arm` /
+`_execute`, `case_permanent_delete` as a wrapper, `private.perm_dispatch`
+re-emitted (`read_history`, `restore_version`, generic `permanent_delete`),
+four catalog rows. Verified at apply time in a rolled-back transaction: a
+live person ineligible, a trashed person with a live photo blocked
+(`media.person_id`), preview / arm / execute Owner-only, arm refused
+without a fresh session (the member protocol's rule, unreachable from an
+impersonated session), the apply destroying the person and its batch link
+while the shared vehicle survived, the Owner-only ledger row, the case
+wrapper refusing a live report and destroying a trashed case with its
+batch. Storage: the database may not delete storage objects ("Direct
+deletion from storage tables is not allowed") — they are enumerated in the
+ledger and in the execute result for the client to remove.
+
+| Version (live) | Name | Repo file |
+|---|---|---|
+| applied via MCP (`record_versions`) | record_versions | `20261011120000_record_versions.sql` |
+| applied via MCP (`case_access_grant_expiry`) | case_access_grant_expiry | `20261012120000_case_access_grant_expiry.sql` |
+| applied via MCP (`permanent_delete_record`, `permanent_delete_record_preview_fix`) | permanent_delete_record | `20261013120000_permanent_delete_record.sql` |

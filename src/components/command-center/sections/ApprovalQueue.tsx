@@ -23,7 +23,7 @@ import { AGENCY_LABEL, justiceRoleLabel, type JusticeAgency } from '@/lib/justic
 import { useJusticeRoster } from '@/lib/justiceRoster'
 import { useFieldStanding } from '@/lib/fieldStanding'
 import { useTableVersion } from '@/lib/realtime'
-import { PERMANENT_BUREAUS, ROLE_LABEL, ROLE_ORDER, bureauLabel, bureauShort, canApproveRequestedRole, roleLabel, type RoleParty } from '@/lib/roles'
+import { PERMANENT_BUREAUS, ROLE_LABEL, ROLE_ORDER, bureauLabel, bureauShort, roleLabel, type RoleParty } from '@/lib/roles'
 import { signoffLabel, signoffTint } from '@/lib/signoff'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
@@ -35,6 +35,7 @@ import { ListSkeleton } from '@/components/ui/Skeleton'
 import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTimeline'
 import { canReviewCase } from '../lib/approvals'
 import { pendingMembership } from '../lib/membershipPending'
+import { canApproveRequestedRole } from '@/lib/permissions'
 
 type CaseRow = Tables<'cases'>
 type RequestRow = Tables<'membership_requests'>

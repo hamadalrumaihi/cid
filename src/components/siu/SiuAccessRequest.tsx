@@ -24,17 +24,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { rpc, withRetry } from '@/lib/db'
-import { useSiu } from '@/lib/useSiu'
-import {
-  fetchMySiuAccessRequests, siuAccessStatusLabel, siuAccessStatusTint,
-  siuMayRequestAccess, type SiuMyAccessRequest,
-} from '@/lib/siu'
+import { useSiu } from '@/lib/permissions'
+import { fetchMySiuAccessRequests, siuAccessStatusLabel, siuAccessStatusTint, type SiuMyAccessRequest } from '@/lib/siu'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/PageHeader'
 import { Field, Input, Textarea } from '@/components/ui/Field'
+import { siuMayRequestAccess } from '@/lib/permissions'
 
 const fmtWhen = (v?: string | null) =>
   v ? new Date(v).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'

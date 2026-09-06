@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { list, rpc, withRetry } from '@/lib/db'
-import { useSiu } from '@/lib/useSiu'
+import { useSiu } from '@/lib/permissions'
 import {
   SIU_CASE_CATEGORIES, SIU_CLASSIFICATIONS, SIU_CLASSIFICATION_HINT,
   SIU_CLOSURE_REASONS, SIU_STAGE_HINT, isPreliminaryInquiry, siuCaseCategoryLabel,

@@ -12,7 +12,7 @@ import { justiceRoleLabel } from '@/lib/justice'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
-import { effectiveJusticeRole } from '@/components/justice/legalShared'
+import { effectiveDojRole } from '@/lib/permissions'
 
 interface DirectoryEntry {
   user_id: string
@@ -56,7 +56,7 @@ export function JusticePickerModal({
   const q = query.trim().toLowerCase()
   const options = (pool ?? []).filter((p) =>
     p.active
-    && effectiveJusticeRole(p.justice_role) === seat
+    && effectiveDojRole(p.justice_role) === seat
     && !excludeIds.includes(p.user_id)
     && (!q || p.display_name.toLowerCase().includes(q)))
 

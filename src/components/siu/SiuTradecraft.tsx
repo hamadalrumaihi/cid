@@ -17,15 +17,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
 import { list, rpc, withRetry } from '@/lib/db'
-import { useSiu } from '@/lib/useSiu'
+import { useSiu } from '@/lib/permissions'
 import { SiuOversightSupplementCard } from './SiuCommand'
-import {
-  SIU_EXPORT_SCOPES, fetchSiuExports, fetchSiuOversightReport,
-  siuAllegationLabel, siuExportScopeLabel, siuReliabilityLabel,
-  siuReviewStatusLabel, siuSourceStatusLabel, siuUndercoverStatusLabel,
-  siuWithheldLabel, type SiuExportRow, type SiuOversightReport,
-  isOversightStanding,
-} from '@/lib/siu'
+import { SIU_EXPORT_SCOPES, fetchSiuExports, fetchSiuOversightReport, siuAllegationLabel, siuExportScopeLabel, siuReliabilityLabel, siuReviewStatusLabel, siuSourceStatusLabel, siuUndercoverStatusLabel, siuWithheldLabel, type SiuExportRow, type SiuOversightReport } from '@/lib/siu'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -34,6 +28,7 @@ import { SectionHeader } from '@/components/ui/PageHeader'
 import { SectionTabs } from '@/components/ui/SectionTabs'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { MetricStrip } from '@/components/ui/MetricStrip'
+import { isOversightStanding } from '@/lib/permissions'
 
 type SourceRow = Tables<'siu_sources'>
 type UcRow = Tables<'siu_undercover_operations'>

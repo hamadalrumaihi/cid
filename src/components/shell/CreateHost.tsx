@@ -16,7 +16,7 @@ import { useAuth } from '@/lib/auth'
 import { caseLink } from '@/lib/caseLinks'
 import { list } from '@/lib/db'
 import type { OpViewer } from '@/lib/opsJoint'
-import { useSiu } from '@/lib/useSiu'
+import { useSiu } from '@/lib/permissions'
 import { KindIcon, PlusIcon } from '@/components/shell/icons'
 import { useToolNav } from '@/components/tools/useToolNav'
 

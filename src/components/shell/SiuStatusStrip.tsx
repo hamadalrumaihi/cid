@@ -9,7 +9,7 @@
  *  the workspace-level layer, deliberately one quiet line, not a purple wash.
  *  It renders nothing for viewers without SIU standing, and nothing while the
  *  viewer is in the CID workspace: the strip marks context, it never leaks it. */
-import { useSiu } from '@/lib/useSiu'
+import { useSiu } from '@/lib/permissions'
 import { siuRoleLabel, siuCallsign } from '@/lib/siu'
 import { LockIcon } from './icons'
 

@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { list, rpc } from '@/lib/db'
 import { useTableVersion } from '@/lib/realtime'
 import { useAuth } from '@/lib/auth'
+import { effectiveDojRole, useMyJusticeRole } from '@/lib/permissions'
 import type { LegalViewer } from '@/lib/legalWorkflow'
 import { deadlineInfo, type LegalRequest } from '@/lib/justice'
 import { LEGAL_TONE_CLS, legalReviewTone, type LegalTone } from '@/lib/status'
@@ -205,48 +206,9 @@ export function useMyBureauScope(): BureauScope {
   return key ? scope : NO_SCOPE
 }
 
-/** Client mirror of private.justice_role_effective: legacy ADA/DA memberships
- *  act with the effective role 'prosecutor'; historical rows are never
- *  rewritten — only interpreted. */
-export function effectiveJusticeRole(role: string | null | undefined): 'prosecutor' | 'attorney_general' | 'judge' | null {
-  if (role === 'assistant_district_attorney' || role === 'district_attorney' || role === 'prosecutor') return 'prosecutor'
-  if (role === 'attorney_general' || role === 'judge') return role
-  return null
-}
-
-/** The signed-in viewer's EFFECTIVE justice role — read from their own
- *  justice_memberships row (self-select is always allowed) because the auth
- *  context doesn't carry `expires_at`: temporary dual memberships expire
- *  automatically (is_justice_active), so an expired row must read as null.
- *  Cached module-wide like the bureau read; realtime refreshes it. Non-justice
- *  users skip the read entirely. The server re-checks on every RPC. */
-let justiceRoleCache: { key: string; value: ReturnType<typeof effectiveJusticeRole> } | null = null
-export function useMyJusticeRole(): 'prosecutor' | 'attorney_general' | 'judge' | null {
-  const { profile, justiceRole } = useAuth()
-  const key = justiceRole ? profile?.id ?? null : null
-  const v = useTableVersion('justice_memberships')
-  const [role, setRole] = useState<ReturnType<typeof effectiveJusticeRole>>(
-    () => (key && justiceRoleCache?.key === key ? justiceRoleCache.value : effectiveJusticeRole(justiceRole)),
-  )
-  useEffect(() => {
-    if (!key) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const rows = await list('justice_memberships', {
-          select: 'justice_role,active,expires_at', eq: { user_id: key },
-        })
-        const m = rows[0]
-        const live = !!m && m.active && (!m.expires_at || Date.parse(m.expires_at) > Date.now())
-        const value = live ? effectiveJusticeRole(m.justice_role) : null
-        justiceRoleCache = { key, value }
-        if (!cancelled) setRole(value)
-      } catch { /* transient — keep the auth-derived value; the server re-checks */ }
-    })()
-    return () => { cancelled = true }
-  }, [key, v])
-  return key ? role : null
-}
+/* The effective-DOJ-role mirror and the viewer's own role hook live in
+ * @/lib/permissions now (effectiveDojRole / useMyJusticeRole): one source,
+ * server-first through my_permissions(). */
 
 /** Map the app's auth context → the workflow model's viewer. The model NEVER
  *  decides access (RLS + definer RPCs do); this only shapes what an authorised
@@ -271,7 +233,7 @@ export function buildLegalViewer(
     cidActive: p?.active ?? false,
     cidRole: p?.role ?? null,
     cidDivision: p?.division ?? null,
-    justiceRole: justiceRole !== undefined ? justiceRole : effectiveJusticeRole(auth.justiceRole),
+    justiceRole: justiceRole !== undefined ? justiceRole : effectiveDojRole(auth.justiceRole),
     isOwner: auth.isOwner,
     prosecutorBureaus,
     siuIsCommand,

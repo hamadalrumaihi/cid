@@ -478,23 +478,35 @@ export type Database = {
         Row: {
           case_id: string
           created_at: string
+          expired_notified_at: string | null
+          expires_at: string
           granted_by: string | null
           id: string
           officer_id: string
+          reminder_sent_at: string | null
+          renewed_at: string | null
         }
         Insert: {
           case_id: string
           created_at?: string
+          expired_notified_at?: string | null
+          expires_at?: string
           granted_by?: string | null
           id?: string
           officer_id: string
+          reminder_sent_at?: string | null
+          renewed_at?: string | null
         }
         Update: {
           case_id?: string
           created_at?: string
+          expired_notified_at?: string | null
+          expires_at?: string
           granted_by?: string | null
           id?: string
           officer_id?: string
+          reminder_sent_at?: string | null
+          renewed_at?: string | null
         }
         Relationships: [
           {
@@ -1718,6 +1730,57 @@ export type Database = {
           },
         ]
       }
+      deleted_record_ledger: {
+        Row: {
+          armed_at: string | null
+          deleted_by: string | null
+          destroyed: Json
+          executed_at: string
+          external_assets: Json
+          id: string
+          kind: string
+          label: string
+          reason: string
+          record_id: string
+          snapshot: Json
+          storage_objects: Json
+          table_name: string
+          unlinked: Json
+        }
+        Insert: {
+          armed_at?: string | null
+          deleted_by?: string | null
+          destroyed?: Json
+          executed_at?: string
+          external_assets?: Json
+          id?: string
+          kind: string
+          label: string
+          reason: string
+          record_id: string
+          snapshot: Json
+          storage_objects?: Json
+          table_name: string
+          unlinked?: Json
+        }
+        Update: {
+          armed_at?: string | null
+          deleted_by?: string | null
+          destroyed?: Json
+          executed_at?: string
+          external_assets?: Json
+          id?: string
+          kind?: string
+          label?: string
+          reason?: string
+          record_id?: string
+          snapshot?: Json
+          storage_objects?: Json
+          table_name?: string
+          unlinked?: Json
+        }
+        Relationships: []
+      }
       deletion_tokens: {
         Row: {
           created_at: string
@@ -1725,6 +1788,7 @@ export type Database = {
           expires_at: string
           id: string
           target_id: string
+          target_kind: string | null
           used_at: string | null
         }
         Insert: {
@@ -1733,6 +1797,7 @@ export type Database = {
           expires_at: string
           id?: string
           target_id: string
+          target_kind?: string | null
           used_at?: string | null
         }
         Update: {
@@ -1741,6 +1806,7 @@ export type Database = {
           expires_at?: string
           id?: string
           target_id?: string
+          target_kind?: string | null
           used_at?: string | null
         }
         Relationships: []
@@ -8934,6 +9000,51 @@ export type Database = {
           },
         ]
       }
+      record_versions: {
+        Row: {
+          actor_id: string | null
+          changed_fields: string[]
+          created_at: string
+          id: number
+          new: Json
+          old: Json
+          reason: string | null
+          record_id: string
+          source: string
+          table_name: string
+          updated_at: string
+          version_no: number
+        }
+        Insert: {
+          actor_id?: string | null
+          changed_fields: string[]
+          created_at?: string
+          id?: never
+          new: Json
+          old: Json
+          reason?: string | null
+          record_id: string
+          source?: string
+          table_name: string
+          updated_at?: string
+          version_no: number
+        }
+        Update: {
+          actor_id?: string | null
+          changed_fields?: string[]
+          created_at?: string
+          id?: never
+          new?: Json
+          old?: Json
+          reason?: string | null
+          record_id?: string
+          source?: string
+          table_name?: string
+          updated_at?: string
+          version_no?: number
+        }
+        Relationships: []
+      }
       report_versions: {
         Row: {
           created_at: string
@@ -11720,6 +11831,10 @@ export type Database = {
         Args: { p_action: string; p_id: string; p_kind: string }
         Returns: boolean
       }
+      case_access_renew: {
+        Args: { p_days?: number; p_grant: string }
+        Returns: Json
+      }
       claim_legal_request_as_judge: {
         Args: { p_request: string }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
@@ -12064,9 +12179,25 @@ export type Database = {
         Args: { p_action: string; p_id: string; p_kind: string; p_reason?: string }
         Returns: boolean
       }
+      permanent_delete_record_arm: {
+        Args: { p_id: string; p_kind: string; p_reason: string }
+        Returns: Json
+      }
+      permanent_delete_record_execute: {
+        Args: { p_confirm: string; p_token: string }
+        Returns: Json
+      }
+      permanent_delete_record_preview: {
+        Args: { p_id: string; p_kind: string }
+        Returns: Json
+      }
       reassign_legal_ada: {
         Args: { p_new_ada: string; p_reason?: string; p_request: string }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      record_history: {
+        Args: { p_id: string; p_kind: string }
+        Returns: Database["public"]["Tables"]["record_versions"]["Row"][]
       }
       record_subpoena_compliance: {
         Args: {
@@ -12116,6 +12247,10 @@ export type Database = {
       }
       restore_record: {
         Args: { p_id: string; p_kind: string; p_reason?: string }
+        Returns: Json
+      }
+      restore_version: {
+        Args: { p_id: string; p_kind: string; p_reason?: string; p_version_no: number }
         Returns: Json
       }
       review_justice_membership_request: {

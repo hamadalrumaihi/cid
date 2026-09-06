@@ -82,6 +82,8 @@ export type LegalReqLike = Pick<
    *  tell, and errs towards hiding rather than towards offering a button the
    *  server refuses. */
   case_bureau?: string | null
+  /** cases.case_authority — an SIB investigation is never a CID rank's to decide. */
+  case_authority?: string | null
 }
 
 const DECIDED = new Set(['approved', 'denied', 'withdrawn'])
@@ -325,6 +327,10 @@ function viewerOwnsAction(r: LegalReqLike, v: LegalViewer): boolean {
   if (s === 'cid_supervisor_review') {
     if (!v.cidActive || isCreator) return false
     if (v.isOwner) return true
+    // Case access is part of the server gate (private.can_approve_legal):
+    // a CID rank has none on an SIB-authority investigation, whatever the
+    // rank — the request routes through siu_command_review instead.
+    if (r.case_authority === 'siu') return false
     const role = v.cidRole ?? ''
     // Higher command decides any bureau's request, immediately -- no claim, no
     // waiting for the bureau's own lead to be marked unavailable.

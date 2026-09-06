@@ -22,7 +22,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { withRetry } from '@/lib/db'
-import { useSiu } from '@/lib/useSiu'
+import { useSiu } from '@/lib/permissions'
 import {
   compartmentTypeLabel, fetchCompartments, fetchReviewQueue,
   fetchVisibilityHistory, reasonIsUsable, resolveReview, restrictPreview,
