@@ -57,6 +57,10 @@ export type Database = {
           confirmed_by: string | null
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           notes: string | null
           ownership_confidence: string
@@ -71,6 +75,10 @@ export type Database = {
           confirmed_by?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           notes?: string | null
           ownership_confidence?: string
@@ -85,6 +93,10 @@ export type Database = {
           confirmed_by?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           notes?: string | null
           ownership_confidence?: string
@@ -129,6 +141,10 @@ export type Database = {
           category: string | null
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           display_name: string | null
           external_id: string | null
           handle: string
@@ -151,6 +167,10 @@ export type Database = {
           category?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           display_name?: string | null
           external_id?: string | null
           handle: string
@@ -171,6 +191,10 @@ export type Database = {
           category?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           display_name?: string | null
           external_id?: string | null
           handle?: string
@@ -3947,6 +3971,10 @@ export type Database = {
           confidence: string | null
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           felony_count: number | null
           gang_id: string
           id: string
@@ -3972,6 +4000,10 @@ export type Database = {
           confidence?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           felony_count?: number | null
           gang_id: string
           id?: string
@@ -3997,6 +4029,10 @@ export type Database = {
           confidence?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           felony_count?: number | null
           gang_id?: string
           id?: string
@@ -4141,6 +4177,10 @@ export type Database = {
           block: string
           confidence: string | null
           created_at: string
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           density: Database["public"]["Enums"]["density"]
           first_observed: string | null
           gang_id: string
@@ -4155,6 +4195,10 @@ export type Database = {
           block: string
           confidence?: string | null
           created_at?: string
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           density?: Database["public"]["Enums"]["density"]
           first_observed?: string | null
           gang_id: string
@@ -4169,6 +4213,10 @@ export type Database = {
           block?: string
           confidence?: string | null
           created_at?: string
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           density?: Database["public"]["Enums"]["density"]
           first_observed?: string | null
           gang_id?: string
@@ -4197,6 +4245,10 @@ export type Database = {
           confidence: string | null
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           intelligence_summary: Json
           lead_detective_id: string | null
@@ -4216,6 +4268,10 @@ export type Database = {
           confidence?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           intelligence_summary?: Json
           lead_detective_id?: string | null
@@ -4235,6 +4291,10 @@ export type Database = {
           confidence?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           intelligence_summary?: Json
           lead_detective_id?: string | null
@@ -4276,6 +4336,10 @@ export type Database = {
           case_id: string
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           kind: string
           note: string | null
@@ -4285,6 +4349,10 @@ export type Database = {
           case_id: string
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           kind?: string
           note?: string | null
@@ -4294,6 +4362,10 @@ export type Database = {
           case_id?: string
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           kind?: string
           note?: string | null
@@ -7231,6 +7303,10 @@ export type Database = {
           confidence: string | null
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           first_recorded_at: string | null
           icon: string | null
           id: string
@@ -7266,6 +7342,10 @@ export type Database = {
           confidence?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           first_recorded_at?: string | null
           icon?: string | null
           id?: string
@@ -7300,6 +7380,10 @@ export type Database = {
           confidence?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           first_recorded_at?: string | null
           icon?: string | null
           id?: string
@@ -7528,23 +7612,27 @@ export type Database = {
           after_action: string | null
           authority: string
           briefing: string | null
-          commander_id: string | null
-          legal_authority: string | null
-          objective: string | null
-          op_category: string | null
-          starts_at: string | null
           bureau: Database["public"]["Enums"]["bureau"] | null
+          commander_id: string | null
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           description: string | null
           id: string
           jtf_converted_at: string | null
           jtf_converted_by: string | null
           lead_bureau: Database["public"]["Enums"]["bureau"] | null
+          legal_authority: string | null
           name: string
+          objective: string | null
+          op_category: string | null
           op_type: string
           resolved_at: string | null
           resolved_by: string | null
+          starts_at: string | null
           status: string
           updated_at: string
         }
@@ -7552,23 +7640,27 @@ export type Database = {
           after_action?: string | null
           authority?: string
           briefing?: string | null
-          commander_id?: string | null
-          legal_authority?: string | null
-          objective?: string | null
-          op_category?: string | null
-          starts_at?: string | null
           bureau?: Database["public"]["Enums"]["bureau"] | null
+          commander_id?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           description?: string | null
           id?: string
           jtf_converted_at?: string | null
           jtf_converted_by?: string | null
           lead_bureau?: Database["public"]["Enums"]["bureau"] | null
+          legal_authority?: string | null
           name: string
+          objective?: string | null
+          op_category?: string | null
           op_type?: string
           resolved_at?: string | null
           resolved_by?: string | null
+          starts_at?: string | null
           status?: string
           updated_at?: string
         }
@@ -7576,23 +7668,27 @@ export type Database = {
           after_action?: string | null
           authority?: string
           briefing?: string | null
-          commander_id?: string | null
-          legal_authority?: string | null
-          objective?: string | null
-          op_category?: string | null
-          starts_at?: string | null
           bureau?: Database["public"]["Enums"]["bureau"] | null
+          commander_id?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           description?: string | null
           id?: string
           jtf_converted_at?: string | null
           jtf_converted_by?: string | null
           lead_bureau?: Database["public"]["Enums"]["bureau"] | null
+          legal_authority?: string | null
           name?: string
+          objective?: string | null
+          op_category?: string | null
           op_type?: string
           resolved_at?: string | null
           resolved_by?: string | null
+          starts_at?: string | null
           status?: string
           updated_at?: string
         }
@@ -7618,6 +7714,10 @@ export type Database = {
           confidence: string | null
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           first_observed: string | null
           id: string
           last_confirmed: string | null
@@ -7633,6 +7733,10 @@ export type Database = {
           confidence?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           first_observed?: string | null
           id?: string
           last_confirmed?: string | null
@@ -7648,6 +7752,10 @@ export type Database = {
           confidence?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           first_observed?: string | null
           id?: string
           last_confirmed?: string | null
@@ -7688,6 +7796,10 @@ export type Database = {
           confidence: string | null
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           first_observed: string | null
           id: string
           last_confirmed: string | null
@@ -7703,6 +7815,10 @@ export type Database = {
           confidence?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           first_observed?: string | null
           id?: string
           last_confirmed?: string | null
@@ -7718,6 +7834,10 @@ export type Database = {
           confidence?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           first_observed?: string | null
           id?: string
           last_confirmed?: string | null
@@ -7758,6 +7878,10 @@ export type Database = {
           confidence: string | null
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           first_observed: string | null
           id: string
           last_confirmed: string | null
@@ -7773,6 +7897,10 @@ export type Database = {
           confidence?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           first_observed?: string | null
           id?: string
           last_confirmed?: string | null
@@ -7788,6 +7916,10 @@ export type Database = {
           confidence?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           first_observed?: string | null
           id?: string
           last_confirmed?: string | null
@@ -8118,6 +8250,10 @@ export type Database = {
           confidence: string | null
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           dob: string | null
           felony_count: number | null
           gang_id: string | null
@@ -8156,6 +8292,10 @@ export type Database = {
           confidence?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           dob?: string | null
           felony_count?: number | null
           gang_id?: string | null
@@ -8194,6 +8334,10 @@ export type Database = {
           confidence?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           dob?: string | null
           felony_count?: number | null
           gang_id?: string | null
@@ -8305,6 +8449,10 @@ export type Database = {
           controlling_gang_id: string | null
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           name: string
           narcotic_id: string | null
@@ -8318,6 +8466,10 @@ export type Database = {
           controlling_gang_id?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           name: string
           narcotic_id?: string | null
@@ -8331,6 +8483,10 @@ export type Database = {
           controlling_gang_id?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           name?: string
           narcotic_id?: string | null
@@ -11109,6 +11265,10 @@ export type Database = {
           case_id: string | null
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           deputy_sig: string | null
           director_sig: string | null
           duration_hours: number
@@ -11125,6 +11285,10 @@ export type Database = {
           case_id?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           deputy_sig?: string | null
           director_sig?: string | null
           duration_hours?: number
@@ -11141,6 +11305,10 @@ export type Database = {
           case_id?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           deputy_sig?: string | null
           director_sig?: string | null
           duration_hours?: number
@@ -11187,6 +11355,10 @@ export type Database = {
           color: string | null
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           gang_id: string | null
           id: string
           model: string | null
@@ -11199,6 +11371,10 @@ export type Database = {
           color?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           gang_id?: string | null
           id?: string
           model?: string | null
@@ -11211,6 +11387,10 @@ export type Database = {
           color?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           gang_id?: string | null
           id?: string
           model?: string | null
@@ -11814,6 +11994,10 @@ export type Database = {
         }
         Returns: Database["public"]["Tables"]["cases"]["Row"]
       }
+      restore_record: {
+        Args: { p_id: string; p_kind: string; p_reason?: string }
+        Returns: Json
+      }
       review_justice_membership_request: {
         Args: {
           p_applicant_note?: string
@@ -11863,6 +12047,10 @@ export type Database = {
           p_signature?: string
         }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      soft_delete: {
+        Args: { p_id: string; p_kind: string; p_reason?: string }
+        Returns: Json
       }
       transfer_doj_activate: {
         Args: { p_reassignments?: Json; p_transfer: string }

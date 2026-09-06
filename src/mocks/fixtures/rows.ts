@@ -139,6 +139,10 @@ export function prosecutorCoverageRow(
 
 export function personRow(overrides: Partial<Tables<'persons'>> = {}): Tables<'persons'> {
   return {
+    delete_batch: null,
+    delete_reason: null,
+    deleted_at: null,
+    deleted_by: null,
     alias: null,
     bolo: false,
     bolo_case_id: null,

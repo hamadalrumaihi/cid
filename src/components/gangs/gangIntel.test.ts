@@ -13,6 +13,7 @@ const member = (over: Partial<MemberRow>): MemberRow => ({
   updated_at: '2026-01-01T00:00:00Z', rank: null, provenance: null,
   confidence: null, joined_at: null, left_at: null, note: null,
   created_by: null, reviewed_by: null, reviewed_at: null,
+  deleted_at: null, deleted_by: null, delete_reason: null, delete_batch: null,
   ...over,
 })
 
@@ -21,7 +22,8 @@ const gang = (over: Partial<GangRow>): GangRow => ({
   created_by: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
   aliases: null, classification: null, status: null, confidence: null,
   intelligence_summary: {}, reviewed_at: null, reviewed_by: null,
-  next_review_at: null, lead_detective_id: null, ...over,
+  next_review_at: null, lead_detective_id: null,
+  deleted_at: null, deleted_by: null, delete_reason: null, delete_batch: null, ...over,
 })
 
 describe('rankTier', () => {
