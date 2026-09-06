@@ -486,3 +486,20 @@ case, case restore bringing the batch back, `can_record('unarchive'|'restore',
 |---|---|---|
 | applied via MCP (`soft_delete_<table>` × 10) | soft_delete_cases … soft_delete_predicate_acts | `20261008120001_soft_delete_cases.sql` … `20261008120010_soft_delete_predicate_acts.sql` |
 | applied via MCP (`soft_delete_case_rpcs`) | soft_delete_case_rpcs | `20261008120100_soft_delete_case_rpcs.sql` |
+
+**P1-03c Version-table immutability — documents_versions.**
+`20261009120000_documents_versions_immutable.sql`: `private.block_version_immutable()`
+(non-definer `BEFORE UPDATE OR DELETE`, `P0403` for client roles) attached as
+`documents_versions_immutable`; policies `documents_versions_ins` /
+`documents_versions_del` dropped; `INSERT`, `UPDATE`, `DELETE` revoked from
+`authenticated` and `anon`. Verified at apply time in a rolled-back
+transaction as the Owner: version INSERT / UPDATE / DELETE refused (`42501`),
+`document_save` still versioning, a document DELETE still cascading to its
+versions (cascaded row triggers run as the table owner — the assumption in
+`20260715010000_report_versions.sql` that they run as the caller is wrong;
+`report_versions` needs no change and was left as is). See
+`docs/AUTHORIZATION.md` §4b.
+
+| Version (live) | Name | Repo file |
+|---|---|---|
+| applied via MCP (`documents_versions_immutable`) | documents_versions_immutable | `20261009120000_documents_versions_immutable.sql` |

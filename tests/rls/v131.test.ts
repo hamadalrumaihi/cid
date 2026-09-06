@@ -7,7 +7,10 @@
  *     and appears only to edit/approval authority;
  *   - versions inherit the parent document's visibility, and version INSERT
  *     now requires parent edit authority (pre-v131 any active member could
- *     fabricate history — regression pin);
+ *     fabricate history — regression pin); since 20261009120000 (P1-03c)
+ *     versions are immutable to every client: INSERT/UPDATE/DELETE are
+ *     42501 for the director and the Owner alike, writes go through the
+ *     definer RPCs only, and a document delete still cascades;
  *   - workflow RPC authority + transitions (submit→approve→publish), reason
  *     required for reject, guard trigger silently keeps direct status writes
  *     inert (RPC-only columns);
@@ -161,6 +164,36 @@ describe.skipIf(!enabled)('v1.31 — document governance (live)', () => {
       .insert({ document_id: docs.internal, name: 'forged', kind: 'doc', content: { body: 'x' } })
       .select('id')
     expect(forged.error).not.toBeNull()
+  })
+
+  it('versions are immutable (P1-03c): no client INSERT / UPDATE / DELETE, even with edit + delete authority', async () => {
+    // migration 20261009120000 — the legal_request_versions bar. The director
+    // has edit authority on docs.internal AND can_delete(); the Owner is the
+    // Owner. Every write is a grant refusal (42501): the policies are gone and
+    // the privileges revoked; the immutability trigger sits behind them.
+    const v = await director.from('documents_versions').select('id').eq('document_id', docs.internal).limit(1).single()
+    expect(v.error).toBeNull()
+    for (const [name, c] of [['director', director], ['owner', owner]] as const) {
+      const ins = await c.from('documents_versions')
+        .insert({ document_id: docs.internal, name: 'forged', kind: 'doc', content: { body: 'x' } })
+        .select('id')
+      expect(ins.error?.code, `${name} insert`).toBe('42501')
+      const upd = await c.from('documents_versions').update({ change_summary: 'tamper' }).eq('id', v.data!.id)
+      expect(upd.error?.code, `${name} update`).toBe('42501')
+      const del = await c.from('documents_versions').delete().eq('id', v.data!.id)
+      expect(del.error?.code, `${name} delete`).toBe('42501')
+    }
+    const still = await director.from('documents_versions').select('id, change_summary').eq('id', v.data!.id).single()
+    expect(still.error).toBeNull()
+    expect(still.data!.change_summary).not.toBe('tamper')
+    // The RPC path still writes: document_save lands a new version.
+    const save = await director.rpc('document_save', {
+      p_document: docs.internal, p_name: N('internal'), p_body: '# internal\n\nP1-03c body.',
+      p_change_type: 'editorial', p_change_summary: '[rls-test] v131 immutability', p_requires_reack: false,
+    })
+    expect(save.error).toBeNull()
+    // (afterAll deletes the fixture documents as the director: the FK cascade
+    //  still removes their versions — cascaded row triggers run as the owner.)
   })
 
   /* ── workflow + guard ── */
