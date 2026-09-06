@@ -10,7 +10,8 @@
 import { useState } from 'react'
 import { bureauShort } from '@/lib/roles'
 import { useRouter } from 'next/navigation'
-import { ilikeAny, insert, list, remove, rpc } from '@/lib/db'
+import { insert, list, remove, rpc } from '@/lib/db'
+import { searchCaseHits } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
 import { fmtDate } from '@/lib/format'
 import { officerName } from '@/lib/profiles'
@@ -412,20 +413,10 @@ export function CasesSection({ data, canEdit, onAttach, onRefresh }: {
   )
 }
 
-interface CaseOption { id: string; case_number: string; title: string | null }
-
-/** Bounded, RLS-scoped case search for the attach modals (ilikeAny + limit 20
- *  — the IntelTab LinkForm pattern; '' returns the most recently updated). */
-export async function searchCaseOptions(q: string): Promise<PickedRecord[]> {
-  const or = ilikeAny(['case_number', 'title'], q)
-  const rows = await list('cases', { select: 'id,case_number,title', order: 'updated_at', ascending: false, limit: 20, ...(or ? { or } : {}) })
-    .then((r) => r as unknown as CaseOption[]).catch(() => [] as CaseOption[])
-  return rows.map((c) => ({ id: c.id, label: c.case_number, ...(c.title ? { sublabel: c.title } : {}) }))
-}
-
 /** Durable attach-to-case — mirrors AttachGangModal but for kind='person'.
- *  The case picker is a bounded server-backed search (never a whole-table
- *  load); the unique (case_id, kind, ref_id) key backs the duplicate check. */
+ *  The case picker is the shared entity_suggest arm (bounded, RLS-scoped —
+ *  never a whole-table load); the unique (case_id, kind, ref_id) key backs
+ *  the duplicate check. */
 export function AttachPersonModal({ person, onClose, onSaved }: { person: PersonRow; onClose: () => void; onSaved: () => void }) {
   const [picked, setPicked] = useState<PickedRecord | null>(null)
   const [role, setRole] = useState('Subject')
@@ -459,7 +450,7 @@ export function AttachPersonModal({ person, onClose, onSaved }: { person: Person
             placeholder="Search case number or title…"
             value={picked}
             onChange={setPicked}
-            search={searchCaseOptions}
+            search={searchCaseHits}
           />
           <Field label="Role in the case">{(id) => <Input id={id} value={role} onChange={(e) => setRole(e.target.value)} placeholder="Subject, suspect, witness…" />}</Field>
           <Field label="Note (optional)">{(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} />}</Field>

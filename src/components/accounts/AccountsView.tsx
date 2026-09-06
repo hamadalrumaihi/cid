@@ -13,8 +13,8 @@
  *  platforms only (Birdy / InstaPic). */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
-import { countRows, ilikeAny, insert, list, remove, rpc, update } from '@/lib/db'
-import { searchPersonHits, type EntityHit } from '@/lib/entitySearch'
+import { countRows, insert, list, remove, rpc, update } from '@/lib/db'
+import { searchEntities, searchPersonHits, searchPlaceHits, type EntityHit } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { officerName } from '@/lib/profiles'
@@ -218,37 +218,25 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
 
   const kindLabel = SUBJECT_KINDS.find((k) => k.id === linkKind)?.label ?? 'Subject'
 
-  // Bounded, RLS-scoped search per subject kind — reuses the same registry
-  // lookups the case-intel picker uses. Business is sourced from front_business
-  // places (the app has no separate business registry).
+  // Bounded, RLS-scoped search per subject kind through the shared
+  // entity_suggest arms (the same registry lookups the case-intel picker
+  // uses). Business is sourced from front_business places (the app has no
+  // separate business registry): the place arm finds candidates, ONE bounded
+  // in:{id} read keeps only the front-business rows.
   const searchSubjects = useCallback(async (query: string): Promise<PickedRecord[]> => {
+    const exclude = new Set([...linked].filter((k) => k.startsWith(`${linkKind}:`)).map((k) => k.slice(linkKind.length + 1)))
     let rows: PickedRecord[]
-    if (linkKind === 'person') {
-      const or = ilikeAny(['name', 'alias'], query)
-      const r = (await list('persons', { select: 'id,name,alias', order: 'name', limit: 20, ...(or ? { or } : {}) })) as unknown as { id: string; name: string; alias: string | null }[]
-      rows = r.map((p) => ({ id: p.id, label: p.name || 'Person', ...(p.alias ? { sublabel: `“${p.alias}”` } : {}) }))
-    } else if (linkKind === 'gang') {
-      const or = ilikeAny(['name'], query)
-      const r = (await list('gangs', { select: 'id,name', order: 'name', limit: 20, ...(or ? { or } : {}) })) as unknown as { id: string; name: string }[]
-      rows = r.map((g) => ({ id: g.id, label: g.name }))
-    } else if (linkKind === 'business') {
-      const or = ilikeAny(['name', 'area'], query)
-      const r = (await list('places', { select: 'id,name,area', eq: { type: 'front_business' }, order: 'name', limit: 20, ...(or ? { or } : {}) })) as unknown as { id: string; name: string; area: string | null }[]
-      rows = r.map((p) => ({ id: p.id, label: p.name, ...(p.area ? { sublabel: p.area } : {}) }))
-    } else if (linkKind === 'case') {
-      const or = ilikeAny(['case_number', 'title'], query)
-      const r = (await list('cases', { select: 'id,case_number,title', order: 'updated_at', ascending: false, limit: 20, ...(or ? { or } : {}) })) as unknown as { id: string; case_number: string; title: string | null }[]
-      rows = r.map((c) => ({ id: c.id, label: c.case_number, ...(c.title ? { sublabel: c.title } : {}) }))
-    } else if (linkKind === 'vehicle') {
-      const or = ilikeAny(['plate', 'model'], query)
-      const r = (await list('vehicles', { select: 'id,plate,model', order: 'plate', limit: 20, ...(or ? { or } : {}) })) as unknown as { id: string; plate: string; model: string | null }[]
-      rows = r.map((v) => ({ id: v.id, label: v.plate, ...(v.model ? { sublabel: v.model } : {}) }))
+    if (linkKind === 'business') {
+      const hits = await searchPlaceHits(query, { exclude })
+      const fronts = hits.length
+        ? await list('places', { select: 'id', eq: { type: 'front_business' }, in: { id: hits.map((h) => h.id) } })
+            .then((r) => new Set((r as unknown as { id: string }[]).map((p) => p.id))).catch(() => new Set<string>())
+        : new Set<string>()
+      rows = hits.filter((h) => fronts.has(h.id))
     } else {
-      const or = ilikeAny(['name', 'area'], query)
-      const r = (await list('places', { select: 'id,name,area', order: 'name', limit: 20, ...(or ? { or } : {}) })) as unknown as { id: string; name: string; area: string | null }[]
-      rows = r.map((p) => ({ id: p.id, label: p.name, ...(p.area ? { sublabel: p.area } : {}) }))
+      rows = await searchEntities(linkKind, query, { exclude })
     }
-    return rows.filter((o) => !linked.has(`${linkKind}:${o.id}`))
+    return rows.map((o) => ({ id: o.id, label: o.label, ...(o.sublabel ? { sublabel: o.sublabel } : {}) }))
   }, [linkKind, linked])
 
   const addLink = async () => {

@@ -8,14 +8,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
-import { deleteWithUndo, ilikeAny, insert, list, update, withRetry } from '@/lib/db'
-import { normPlate, searchGangHits, searchPersonHits, type EntityHit } from '@/lib/entitySearch'
+import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
+import { findDuplicates } from '@/lib/entity'
+import { searchGangHits, searchPersonHits, type EntityHit } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
-import { AlertIcon, GangIcon, PersonIcon, RadioIcon, VehicleIcon, XMarkIcon } from '@/components/shell/icons'
-import { Badge } from '@/components/ui/Badge'
+import { GangIcon, PersonIcon, XMarkIcon } from '@/components/shell/icons'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
@@ -25,7 +25,8 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { inputCls, labelCls } from '@/components/ui/Field'
 import { WatchButton } from '@/components/cases/WatchButton'
-import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
+import { CrossrefList } from '@/components/shared/CrossrefList'
+import { DuplicateMatchNotice, duplicateMatches, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import { useToolNav } from '@/components/tools/useToolNav'
 import { VehicleProfile } from './VehicleProfile'
@@ -33,7 +34,6 @@ import { VehicleProfile } from './VehicleProfile'
 type VehicleRow = Tables<'vehicles'>
 interface PersonOption { id: string; name: string }
 interface GangOption { id: string; name: string }
-interface CaseOption { id: string; case_number: string }
 
 export function VehiclesView() {
   const { state, canEdit, canDelete } = useAuth()
@@ -50,6 +50,8 @@ export function VehiclesView() {
   // `?vehicle=` drills into the profile view (mirrors cases' `?case=`).
   const vehicleId = sp.get('vehicle')
   const [editor, setEditor] = useState<{ record: VehicleRow | null } | null>(null)
+  // Per-plate cross-reference (entity_crossref, P2-06) — opened from a row.
+  const [xref, setXref] = useState<VehicleRow | null>(null)
   const vVehicles = useTableVersion('vehicles')
 
   const refresh = useCallback(async () => {
@@ -116,6 +118,7 @@ export function VehiclesView() {
     <span className="flex flex-shrink-0 items-center gap-2">
       <WatchButton type="vehicle" id={v.id} label={v.plate} compact />
       <button onClick={() => openProfile(v)} className={`-my-1 ${actionBtn}`}>Profile</button>
+      <button onClick={() => setXref(v)} className={`-my-1 ${actionBtn}`} aria-label={`Cross-reference ${v.plate} across cases`}>Cross-ref</button>
       {canEdit && <button onClick={() => setEditor({ record: v })} className={`-my-1 ${actionBtn}`}>Edit</button>}
       {canDelete && <button onClick={() => void onDelete(v)} aria-label={`Delete vehicle ${v.plate}`} className="-my-1 min-h-[44px] min-w-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10 sm:min-h-0 sm:min-w-0"><XMarkIcon size={14} className="mx-auto" /></button>}
     </span>
@@ -214,8 +217,6 @@ export function VehiclesView() {
         }
       />
 
-      <CrossrefPanel vehicles={vehicles} ownerName={ownerName} />
-
       {loading ? (
         <CardGridSkeleton cols="sm:grid-cols-2 xl:grid-cols-3" />
       ) : err ? (
@@ -248,6 +249,20 @@ export function VehiclesView() {
           onClose={() => setEditor(null)}
           onSaved={() => { setEditor(null); void refresh() }}
         />
+      )}
+      {xref && (
+        <Modal open onClose={() => setXref(null)}>
+          <ModalHeader title={`Cross-reference · ${xref.plate}`} onClose={() => setXref(null)} />
+          <p className="mb-3 text-sm text-slate-400">
+            Every case this plate touches that you can read — intel links, surveillance sightings, report mentions and MDT bulletins. Bounded and answered server-side.
+          </p>
+          <CrossrefList
+            kind="vehicle"
+            id={xref.id}
+            emptyTitle="No cross-case matches"
+            emptyHint="Cases appear here when this plate is linked, sighted or mentioned in a report you can read."
+          />
+        </Modal>
       )}
     </div>
   )
@@ -296,30 +311,25 @@ export function VehicleModal({ record, onClose, onSaved }: {
     return () => { live = false }
   }, [record])
 
-  // Duplicate hint at create time — an exact normalized-plate match ('AB-123'
-  // hints against a stored 'AB123'): probe a bounded candidate set on the
-  // normalized prefix, then compare normPlate equality (the DB's own unique
-  // key is upper(plate), so punctuation variants slip past a raw compare).
+  // Duplicate hint at create time — entity_duplicates on the typed plate
+  // (P2-08): the server's norm_plate arm makes 'AB-123' hit a stored 'AB123'
+  // (strong ⇒ "Use existing"), a trigram near-miss is a soft notice.
   // Advisory only (the UNIQUE plate key still guards).
+  const nav = useToolNav()
   const [dupes, setDupes] = useState<DuplicateMatch[]>([])
   useEffect(() => {
     if (record) return
-    const np = normPlate(plate)
+    const p = plate.trim()
     let live = true
     const t = window.setTimeout(async () => {
-      if (!np || np.length < 2) { if (live) setDupes([]); return }
-      const or = ilikeAny(['plate'], np.slice(0, 2))
-      if (!or) { if (live) setDupes([]); return }
-      const rows = await list('vehicles', { select: 'id,plate', or, limit: 25 })
-        .then((r) => r as unknown as { id: string; plate: string }[]).catch(() => [])
+      if (p.length < 2) { if (live) setDupes([]); return }
+      const rows = await findDuplicates('vehicle', { plate: p })
       if (!live) return
-      setDupes(rows
-        .filter((v) => normPlate(v.plate) === np)
-        .slice(0, 3)
-        .map((v) => ({ type: 'vehicle', id: v.id, label: v.plate })))
+      setDupes(duplicateMatches('vehicle', rows))
     }, 400)
     return () => { live = false; window.clearTimeout(t) }
   }, [plate, record])
+  const useExisting = (m: DuplicateMatch) => { nav.openHref(`/vehicles?vehicle=${encodeURIComponent(m.id)}`); onClose() }
 
   const dirty = () =>
     plate !== (record?.plate ?? '') || model !== (record?.model ?? '') || color !== (record?.color ?? '') ||
@@ -347,7 +357,7 @@ export function VehicleModal({ record, onClose, onSaved }: {
         <div>
           <label htmlFor="vehicle-plate" className={labelCls}>Plate *</label>
           <input id="vehicle-plate" value={plate} onChange={(e) => setPlate(e.target.value)} className={`${inputCls} font-mono uppercase tracking-widest`} />
-          {!record && <DuplicateMatchNotice matches={dupes} />}
+          {!record && <DuplicateMatchNotice matches={dupes} onUseExisting={useExisting} />}
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -387,148 +397,5 @@ export function VehicleModal({ record, onClose, onSaved }: {
         </Button>
       </div>
     </Modal>
-  )
-}
-
-/* ---- Cross-reference engine ----------------------------------------------
-   Scans every report the viewer can see (RLS-scoped) and raises an alert when
-   the same phone number, registered plate, or linked person appears in two or
-   more different cases. A failed scan shows a Retry banner — it must never
-   masquerade as an authoritative "no matches" (dangerous false negative). */
-
-interface CrossrefAlert { icon: React.ReactNode; label: string; kind: string; cases: string[] }
-
-function CrossrefPanel({ vehicles, ownerName }: {
-  vehicles: VehicleRow[]
-  ownerName: (id: string | null) => string | null
-}) {
-  const { state } = useAuth()
-  const [scan, setScan] = useState<'loading' | 'failed' | 'done'>('loading')
-  const [alerts, setAlerts] = useState<CrossrefAlert[]>([])
-  const [caseNums, setCaseNums] = useState<Record<string, string>>({})
-  const [retry, setRetry] = useState(0)
-  const router = useRouter()
-
-  useEffect(() => {
-    if (state !== 'in') return
-    let cancelled = false
-    const t = window.setTimeout(async () => {
-      setScan('loading')
-      // Deconfliction must see EVERY (RLS-visible) row or it under-reports —
-      // so no limit here; the selects are narrowed to just the columns the
-      // scan reads, which is the whole payload win on the big tables.
-      let reports: Pick<Tables<'reports'>, 'case_id' | 'fields'>[] = []
-      let links: Pick<Tables<'case_intel_links'>, 'kind' | 'ref_id' | 'case_id'>[] = []
-      let cases: CaseOption[] = []
-      let failed = false
-      try {
-        ;[reports, links, cases] = await Promise.all([
-          list('reports', { select: 'case_id,fields' }) as unknown as Promise<Pick<Tables<'reports'>, 'case_id' | 'fields'>[]>,
-          list('case_intel_links', { select: 'kind,ref_id,case_id' }) as unknown as Promise<Pick<Tables<'case_intel_links'>, 'kind' | 'ref_id' | 'case_id'>[]>,
-          list('cases', { select: 'id,case_number' }) as unknown as Promise<CaseOption[]>,
-        ])
-      } catch { failed = true }
-      if (cancelled) return
-      if (failed) { setScan('failed'); return }
-      setCaseNums(Object.fromEntries(cases.map((c) => [c.id, c.case_number])))
-
-      // Flatten each case's report fields into one searchable text blob.
-      const textByCase: Record<string, string> = {}
-      for (const r of reports) {
-        if (r.case_id) textByCase[r.case_id] = (textByCase[r.case_id] || '') + ' ' + JSON.stringify(r.fields ?? {})
-      }
-      const caseIds = Object.keys(textByCase)
-      const found: CrossrefAlert[] = []
-
-      // Phones: (###) ###-#### appearing in 2+ cases.
-      const phoneCases: Record<string, Set<string>> = {}
-      for (const cid of caseIds) {
-        const m = textByCase[cid].match(/\(\d{3}\)\s?\d{3}[- ]?\d{4}/g) ?? []
-        for (const ph of new Set(m)) (phoneCases[ph] = phoneCases[ph] ?? new Set()).add(cid)
-      }
-      for (const [ph, s] of Object.entries(phoneCases)) {
-        if (s.size >= 2) found.push({ icon: <RadioIcon size={13} className="inline align-[-2px]" />, label: ph, kind: 'Phone number', cases: [...s] })
-      }
-
-      // Registered plates mentioned in 2+ cases' reports.
-      for (const v of vehicles) {
-        if (!v.plate || v.plate.length < 5) continue
-        const re = new RegExp('\\b' + v.plate.toUpperCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b')
-        const hits = caseIds.filter((cid) => re.test(textByCase[cid].toUpperCase()))
-        if (hits.length >= 2) {
-          const owner = ownerName(v.owner_id)
-          found.push({ icon: <VehicleIcon size={13} className="inline align-[-2px]" />, label: v.plate + (owner ? ` — ${owner}` : ''), kind: 'Registered plate', cases: hits })
-        }
-      }
-
-      // Persons linked (Intel tab) to 2+ cases. Names resolve via one bounded
-      // in:{id} lookup on just the flagged ids — best-effort, never the
-      // whole registry.
-      const personCases: Record<string, Set<string>> = {}
-      for (const l of links) {
-        if (l.kind === 'person') (personCases[l.ref_id] = personCases[l.ref_id] ?? new Set()).add(l.case_id)
-      }
-      const flagged = Object.entries(personCases).filter(([, s]) => s.size >= 2)
-      const personNames = new Map<string, string>()
-      if (flagged.length) {
-        const rows = (await list('persons', { select: 'id,name', in: { id: flagged.map(([pid]) => pid) } })
-          .catch(() => [])) as unknown as PersonOption[]
-        for (const r of rows) personNames.set(r.id, r.name)
-      }
-      if (cancelled) return
-      for (const [pid, s] of flagged) {
-        found.push({ icon: <PersonIcon size={13} className="inline align-[-2px]" />, label: personNames.get(pid) ?? 'Linked person', kind: 'Person in multiple cases', cases: [...s] })
-      }
-
-      setAlerts(found)
-      setScan('done')
-    }, 0)
-    return () => { cancelled = true; window.clearTimeout(t) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- rescan when data or retry changes
-  }, [state, vehicles, retry])
-
-  if (state !== 'in') return null
-  if (scan === 'loading') return <p className="mb-6 text-sm text-slate-400">Scanning for cross-case matches…</p>
-  if (scan === 'failed') {
-    return (
-      <div className="mb-6 rounded-lg border border-amber-500/20 bg-amber-500/5 p-5 text-sm text-amber-200">
-        <AlertIcon size={14} className="inline align-[-2px]" /> Could not scan for cross-case matches (connection issue).{' '}
-        <button onClick={() => setRetry((n) => n + 1)} className="underline">Retry</button>
-      </div>
-    )
-  }
-  if (!alerts.length) {
-    return (
-      <EmptyState
-        title="No cross-case matches yet"
-        hint="Alerts appear here when the same phone, plate, or person surfaces in two or more cases."
-        className="mb-6"
-      />
-    )
-  }
-  return (
-    <div className="mb-6">
-      <p className="mb-2 text-[13px] font-semibold text-white"><AlertIcon size={13} className="inline align-[-2px] text-amber-300" /> Cross-reference alerts ({alerts.length})</p>
-      <div className="space-y-2">
-        {alerts.map((a, i) => (
-          <div key={`${a.kind}:${a.label}:${i}`} className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
-            <p className="text-sm font-semibold text-white">
-              {a.icon} {a.label} <Badge tone="neutral" className="ml-1 font-medium text-slate-400">{a.kind}</Badge>
-            </p>
-            <p className="mt-1 text-xs text-slate-300">
-              Appears in {a.cases.length} cases:{' '}
-              {a.cases.map((cid, j) => (
-                <span key={cid}>
-                  {j > 0 && ' · '}
-                  <button onClick={() => router.push(`/cases?case=${cid}`)} className="font-mono text-blue-300 hover:underline">
-                    {caseNums[cid] ?? 'a case'}
-                  </button>
-                </span>
-              ))}
-            </p>
-          </div>
-        ))}
-      </div>
-    </div>
   )
 }

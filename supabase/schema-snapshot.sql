@@ -402,7 +402,7 @@ create table public.case_intel_links (
   delete_reason text,
   delete_batch uuid
 );
-alter table public.case_intel_links add constraint case_intel_links_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'gang'::text, 'place'::text, 'narcotic'::text, 'account'::text])));
+alter table public.case_intel_links add constraint case_intel_links_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'gang'::text, 'place'::text, 'narcotic'::text, 'account'::text, 'vehicle'::text])));
 alter table public.case_intel_links add constraint case_intel_links_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
 alter table public.case_intel_links add constraint case_intel_links_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
 alter table public.case_intel_links add constraint case_intel_links_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
@@ -921,6 +921,73 @@ alter table public.documents_versions add constraint documents_versions_saved_by
 alter table public.documents_versions add constraint documents_versions_pkey PRIMARY KEY (id);
 alter table public.documents_versions enable row level security;
 
+create table public.entity_field_observations (
+  id uuid not null default gen_random_uuid(),
+  kind text not null,
+  ref_id uuid not null,
+  case_id uuid not null,
+  field text not null,
+  value text not null,
+  note text,
+  source_kind text not null default 'manual'::text,
+  source_id uuid,
+  recorded_by uuid,
+  created_at timestamp with time zone not null default now(),
+  promoted_at timestamp with time zone,
+  promoted_by uuid
+);
+alter table public.entity_field_observations add constraint entity_field_observations_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'vehicle'::text, 'gang'::text, 'place'::text, 'account'::text, 'narcotic'::text])));
+alter table public.entity_field_observations add constraint entity_field_observations_source_kind_check CHECK ((source_kind = ANY (ARRAY['manual'::text, 'report'::text, 'field_submission'::text, 'legal'::text, 'surveillance'::text])));
+alter table public.entity_field_observations add constraint entity_field_observations_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
+alter table public.entity_field_observations add constraint entity_field_observations_promoted_by_fkey FOREIGN KEY (promoted_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.entity_field_observations add constraint entity_field_observations_recorded_by_fkey FOREIGN KEY (recorded_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.entity_field_observations add constraint entity_field_observations_pkey PRIMARY KEY (id);
+alter table public.entity_field_observations enable row level security;
+
+create table public.entity_merges (
+  id uuid not null default gen_random_uuid(),
+  kind text not null,
+  survivor_id uuid not null,
+  victim_ids uuid[] not null,
+  manifest jsonb not null default '{}'::jsonb,
+  victim_snapshots jsonb not null default '[]'::jsonb,
+  actor_id uuid,
+  reason text not null,
+  created_at timestamp with time zone not null default now(),
+  reversed_at timestamp with time zone,
+  reversed_by uuid,
+  reverse_reason text
+);
+alter table public.entity_merges add constraint entity_merges_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'vehicle'::text, 'gang'::text, 'place'::text, 'account'::text, 'narcotic'::text])));
+alter table public.entity_merges add constraint entity_merges_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.entity_merges add constraint entity_merges_reversed_by_fkey FOREIGN KEY (reversed_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.entity_merges add constraint entity_merges_pkey PRIMARY KEY (id);
+alter table public.entity_merges enable row level security;
+
+create table public.entity_update_suggestions (
+  id uuid not null default gen_random_uuid(),
+  kind text not null,
+  ref_id uuid not null,
+  field text not null,
+  proposed_value text,
+  current_value text,
+  reason text not null,
+  proposed_by uuid,
+  created_at timestamp with time zone not null default now(),
+  status text not null default 'pending'::text,
+  decided_by uuid,
+  decided_at timestamp with time zone,
+  decision_note text,
+  source_observation_id uuid
+);
+alter table public.entity_update_suggestions add constraint entity_update_suggestions_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'vehicle'::text, 'gang'::text, 'place'::text, 'account'::text, 'narcotic'::text])));
+alter table public.entity_update_suggestions add constraint entity_update_suggestions_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'accepted'::text, 'declined'::text, 'withdrawn'::text])));
+alter table public.entity_update_suggestions add constraint entity_update_suggestions_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.entity_update_suggestions add constraint entity_update_suggestions_proposed_by_fkey FOREIGN KEY (proposed_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.entity_update_suggestions add constraint entity_update_suggestions_source_observation_id_fkey FOREIGN KEY (source_observation_id) REFERENCES entity_field_observations(id) ON DELETE SET NULL;
+alter table public.entity_update_suggestions add constraint entity_update_suggestions_pkey PRIMARY KEY (id);
+alter table public.entity_update_suggestions enable row level security;
+
 create table public.evidence (
   id uuid not null default gen_random_uuid(),
   case_id uuid,
@@ -1429,7 +1496,8 @@ create table public.field_submission_persons (
   reason text,
   basis text not null default 'unknown'::text,
   note text,
-  created_at timestamp with time zone not null default now()
+  created_at timestamp with time zone not null default now(),
+  phone_normalized text generated always as (private.norm_phone(phone)) stored
 );
 alter table public.field_submission_persons add constraint field_submission_persons_basis_check CHECK ((basis = ANY (ARRAY['observed'::text, 'reported'::text, 'unknown'::text])));
 alter table public.field_submission_persons add constraint field_submission_persons_org_role_check CHECK (((org_role IS NULL) OR (org_role = ANY (ARRAY['member'::text, 'associate'::text, 'prospect'::text, 'leadership'::text, 'unknown'::text]))));
@@ -1673,7 +1741,9 @@ create table public.gangs (
   deleted_at timestamp with time zone,
   deleted_by uuid,
   delete_reason text,
-  delete_batch uuid
+  delete_batch uuid,
+  siu_hidden_flag boolean not null default false,
+  merged_into uuid
 );
 alter table public.gangs add constraint gangs_classification_check CHECK (((classification IS NULL) OR (classification = ANY (ARRAY['street_gang'::text, 'organized_crime'::text, 'motorcycle_club'::text, 'faction'::text, 'cartel'::text, 'crew'::text, 'unknown'::text]))));
 alter table public.gangs add constraint gangs_confidence_check CHECK (((confidence IS NULL) OR (confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
@@ -1681,6 +1751,7 @@ alter table public.gangs add constraint gangs_status_check CHECK (((status IS NU
 alter table public.gangs add constraint gangs_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
 alter table public.gangs add constraint gangs_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.gangs add constraint gangs_lead_detective_id_fkey FOREIGN KEY (lead_detective_id) REFERENCES profiles(id);
+alter table public.gangs add constraint gangs_merged_into_fkey FOREIGN KEY (merged_into) REFERENCES gangs(id) ON DELETE SET NULL;
 alter table public.gangs add constraint gangs_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES profiles(id);
 alter table public.gangs add constraint gangs_pkey PRIMARY KEY (id);
 alter table public.gangs enable row level security;
@@ -1696,7 +1767,12 @@ create table public.indicators (
   deleted_at timestamp with time zone,
   deleted_by uuid,
   delete_reason text,
-  delete_batch uuid
+  delete_batch uuid,
+  value_normalized text generated always as (
+CASE
+    WHEN (kind = 'phone'::text) THEN private.norm_phone(value)
+    ELSE lower(btrim(value))
+END) stored
 );
 alter table public.indicators add constraint indicators_kind_check CHECK ((kind = ANY (ARRAY['phone'::text, 'account'::text, 'serial'::text, 'alias'::text, 'address'::text, 'email'::text, 'other'::text])));
 alter table public.indicators add constraint indicators_value_check CHECK ((length(btrim(value)) > 0));
@@ -2119,13 +2195,13 @@ alter table public.mdt_exports add constraint mdt_exports_kind_check CHECK ((kin
 alter table public.mdt_exports add constraint mdt_exports_risk_check CHECK (((risk_level IS NULL) OR (risk_level = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
 alter table public.mdt_exports add constraint mdt_exports_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'exported'::text, 'cleared'::text])));
 alter table public.mdt_exports add constraint mdt_exports_target_check CHECK ((((kind = ANY (ARRAY['person_bolo'::text, 'caution'::text, 'arrest_warrant'::text, 'person_record'::text])) AND (person_id IS NOT NULL) AND (vehicle_id IS NULL) AND (account_id IS NULL)) OR ((kind = ANY (ARRAY['vehicle_bolo'::text, 'vehicle_record'::text])) AND (vehicle_id IS NOT NULL) AND (person_id IS NULL) AND (account_id IS NULL)) OR ((kind = 'account'::text) AND (account_id IS NOT NULL) AND (person_id IS NULL) AND (vehicle_id IS NULL))));
-alter table public.mdt_exports add constraint mdt_exports_account_id_fkey FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE;
+alter table public.mdt_exports add constraint mdt_exports_account_id_fkey FOREIGN KEY (account_id) REFERENCES accounts(id);
 alter table public.mdt_exports add constraint mdt_exports_cleared_by_fkey FOREIGN KEY (cleared_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.mdt_exports add constraint mdt_exports_exported_by_fkey FOREIGN KEY (exported_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public.mdt_exports add constraint mdt_exports_person_id_fkey FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE;
+alter table public.mdt_exports add constraint mdt_exports_person_id_fkey FOREIGN KEY (person_id) REFERENCES persons(id);
 alter table public.mdt_exports add constraint mdt_exports_proposed_by_fkey FOREIGN KEY (proposed_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.mdt_exports add constraint mdt_exports_source_case_id_fkey FOREIGN KEY (source_case_id) REFERENCES cases(id) ON DELETE SET NULL;
-alter table public.mdt_exports add constraint mdt_exports_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE;
+alter table public.mdt_exports add constraint mdt_exports_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES vehicles(id);
 alter table public.mdt_exports add constraint mdt_exports_pkey PRIMARY KEY (id);
 alter table public.mdt_exports enable row level security;
 
@@ -3049,7 +3125,9 @@ create table public.persons (
   deleted_at timestamp with time zone,
   deleted_by uuid,
   delete_reason text,
-  delete_batch uuid
+  delete_batch uuid,
+  phone_normalized text generated always as (private.norm_phone(phone)) stored,
+  siu_hidden_flag boolean not null default false
 );
 alter table public.persons add constraint persons_bolo_risk_check CHECK (((bolo_risk IS NULL) OR (bolo_risk = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
 alter table public.persons add constraint persons_classification_check CHECK (((classification IS NULL) OR (classification = ANY (ARRAY['person_of_interest'::text, 'suspect'::text, 'witness'::text, 'victim'::text, 'informant'::text, 'associate'::text, 'other'::text]))));
@@ -3092,12 +3170,15 @@ create table public.places (
   deleted_at timestamp with time zone,
   deleted_by uuid,
   delete_reason text,
-  delete_batch uuid
+  delete_batch uuid,
+  siu_hidden_flag boolean not null default false,
+  merged_into uuid
 );
 alter table public.places add constraint places_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL;
 alter table public.places add constraint places_controlling_gang_id_fkey FOREIGN KEY (controlling_gang_id) REFERENCES gangs(id) ON DELETE SET NULL;
 alter table public.places add constraint places_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
 alter table public.places add constraint places_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
+alter table public.places add constraint places_merged_into_fkey FOREIGN KEY (merged_into) REFERENCES places(id) ON DELETE SET NULL;
 alter table public.places add constraint places_narcotic_fk FOREIGN KEY (narcotic_id) REFERENCES narcotics(id) ON DELETE SET NULL;
 alter table public.places add constraint places_pkey PRIMARY KEY (id);
 alter table public.places enable row level security;
@@ -3262,7 +3343,7 @@ create table public.record_versions (
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now()
 );
-alter table public.record_versions add constraint record_versions_source_check CHECK ((source = ANY (ARRAY['edit'::text, 'restore'::text])));
+alter table public.record_versions add constraint record_versions_source_check CHECK ((source = ANY (ARRAY['edit'::text, 'restore'::text, 'merge'::text, 'unmerge'::text, 'suggestion'::text, 'promotion'::text])));
 alter table public.record_versions add constraint record_versions_table_check CHECK ((table_name = ANY (ARRAY['cases'::text, 'persons'::text, 'vehicles'::text, 'gangs'::text, 'places'::text, 'accounts'::text, 'narcotics'::text, 'evidence'::text, 'reports'::text, 'legal_requests'::text, 'field_submissions'::text])));
 alter table public.record_versions add constraint record_versions_pkey PRIMARY KEY (id);
 alter table public.record_versions add constraint record_versions_version_key UNIQUE (table_name, record_id, version_no);
@@ -3708,6 +3789,27 @@ alter table public.siu_memberships add constraint siu_memberships_user_id_fkey F
 alter table public.siu_memberships add constraint siu_memberships_pkey PRIMARY KEY (id);
 alter table public.siu_memberships add constraint siu_memberships_user_id_key UNIQUE (user_id);
 alter table public.siu_memberships enable row level security;
+
+create table public.siu_reconcile_queue (
+  id uuid not null default gen_random_uuid(),
+  kind text not null,
+  cid_record_id uuid not null,
+  hidden_record_id uuid not null,
+  signal text not null,
+  cid_label text not null default ''::text,
+  hidden_label text not null default ''::text,
+  created_at timestamp with time zone not null default now(),
+  resolved_at timestamp with time zone,
+  resolved_by uuid,
+  resolution text,
+  note text
+);
+alter table public.siu_reconcile_queue add constraint siu_reconcile_queue_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'vehicle'::text, 'gang'::text, 'place'::text])));
+alter table public.siu_reconcile_queue add constraint siu_reconcile_queue_resolution_check CHECK (((resolution IS NULL) OR (resolution = ANY (ARRAY['link'::text, 'merge'::text, 'dismiss'::text]))));
+alter table public.siu_reconcile_queue add constraint siu_reconcile_queue_resolved_by_fkey FOREIGN KEY (resolved_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.siu_reconcile_queue add constraint siu_reconcile_queue_pkey PRIMARY KEY (id);
+alter table public.siu_reconcile_queue add constraint siu_reconcile_queue_kind_cid_record_id_hidden_record_id_key UNIQUE (kind, cid_record_id, hidden_record_id);
+alter table public.siu_reconcile_queue enable row level security;
 
 create table public.siu_referrals (
   id uuid not null default gen_random_uuid(),
@@ -4384,11 +4486,14 @@ create table public.vehicles (
   deleted_at timestamp with time zone,
   deleted_by uuid,
   delete_reason text,
-  delete_batch uuid
+  delete_batch uuid,
+  siu_hidden_flag boolean not null default false,
+  merged_into uuid
 );
 alter table public.vehicles add constraint vehicles_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
 alter table public.vehicles add constraint vehicles_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.vehicles add constraint vehicles_gang_id_fkey FOREIGN KEY (gang_id) REFERENCES gangs(id) ON DELETE SET NULL;
+alter table public.vehicles add constraint vehicles_merged_into_fkey FOREIGN KEY (merged_into) REFERENCES vehicles(id) ON DELETE SET NULL;
 alter table public.vehicles add constraint vehicles_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES persons(id) ON DELETE SET NULL;
 alter table public.vehicles add constraint vehicles_pkey PRIMARY KEY (id);
 alter table public.vehicles enable row level security;
@@ -4602,6 +4707,12 @@ CREATE INDEX documents_versions_doc_idx ON public.documents_versions USING btree
 CREATE UNIQUE INDEX documents_versions_number_key ON public.documents_versions USING btree (document_id, version_number) WHERE (version_number IS NOT NULL);
 CREATE INDEX documents_versions_restored_from_fkey_idx ON public.documents_versions USING btree (restored_from);
 CREATE INDEX documents_versions_saved_by_fkey_idx ON public.documents_versions USING btree (saved_by);
+CREATE INDEX entity_field_observations_case_idx ON public.entity_field_observations USING btree (case_id);
+CREATE INDEX entity_field_observations_ref_idx ON public.entity_field_observations USING btree (kind, ref_id, created_at DESC);
+CREATE INDEX entity_merges_survivor_idx ON public.entity_merges USING btree (kind, survivor_id, created_at DESC);
+CREATE INDEX entity_merges_victims_idx ON public.entity_merges USING gin (victim_ids);
+CREATE INDEX entity_update_suggestions_open_idx ON public.entity_update_suggestions USING btree (created_at DESC) WHERE (status = 'pending'::text);
+CREATE INDEX entity_update_suggestions_ref_idx ON public.entity_update_suggestions USING btree (kind, ref_id, created_at DESC);
 CREATE INDEX evidence_case_id_idx ON public.evidence USING btree (case_id);
 CREATE INDEX evidence_collected_by_fkey_idx ON public.evidence USING btree (collected_by);
 CREATE INDEX evidence_created_by_fkey_idx ON public.evidence USING btree (created_by);
@@ -4645,6 +4756,7 @@ CREATE INDEX field_submission_items_submission_idx ON public.field_submission_it
 CREATE INDEX field_submission_locations_submission_idx ON public.field_submission_locations USING btree (submission_id);
 CREATE INDEX field_submission_messages_submission_idx ON public.field_submission_messages USING btree (submission_id, created_at);
 CREATE INDEX field_submission_orgs_submission_idx ON public.field_submission_orgs USING btree (submission_id);
+CREATE INDEX field_submission_persons_phone_norm_idx ON public.field_submission_persons USING btree (phone_normalized) WHERE (phone_normalized IS NOT NULL);
 CREATE INDEX field_submission_persons_submission_idx ON public.field_submission_persons USING btree (submission_id);
 CREATE INDEX field_submission_reviews_submission_idx ON public.field_submission_reviews USING btree (submission_id, created_at DESC);
 CREATE INDEX field_submission_vehicles_submission_idx ON public.field_submission_vehicles USING btree (submission_id);
@@ -4672,6 +4784,7 @@ CREATE INDEX gang_ranks_gang_id_fkey_idx ON public.gang_ranks USING btree (gang_
 CREATE INDEX gang_turf_delete_batch_idx ON public.gang_turf USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
 CREATE INDEX gang_turf_deleted_at_idx ON public.gang_turf USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX gang_turf_gang_id_fkey_idx ON public.gang_turf USING btree (gang_id);
+CREATE INDEX gangs_aliases_trgm ON public.gangs USING gin (aliases gin_trgm_ops);
 CREATE INDEX gangs_colors_trgm ON public.gangs USING gin (colors gin_trgm_ops);
 CREATE INDEX gangs_created_by_fkey_idx ON public.gangs USING btree (created_by);
 CREATE INDEX gangs_delete_batch_idx ON public.gangs USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
@@ -4685,6 +4798,8 @@ CREATE INDEX indicators_created_by_fkey_idx ON public.indicators USING btree (cr
 CREATE INDEX indicators_delete_batch_idx ON public.indicators USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
 CREATE INDEX indicators_deleted_at_idx ON public.indicators USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX indicators_value_idx ON public.indicators USING btree (lower(btrim(value)));
+CREATE INDEX indicators_value_norm_idx ON public.indicators USING btree (kind, value_normalized);
+CREATE INDEX indicators_value_trgm ON public.indicators USING gin (value gin_trgm_ops);
 CREATE INDEX integration_events_entity_idx ON public.integration_events USING btree (entity_type, entity_id);
 CREATE INDEX integration_events_status_idx ON public.integration_events USING btree (status, received_at DESC);
 CREATE INDEX justice_membership_request_history_actor_id_idx ON public.justice_membership_request_history USING btree (actor_id);
@@ -4912,8 +5027,10 @@ CREATE INDEX persons_gang_fk_idx ON public.persons USING btree (gang_id);
 CREATE INDEX persons_lead_detective_id_fkey_idx ON public.persons USING btree (lead_detective_id);
 CREATE INDEX persons_lifecycle_idx ON public.persons USING btree (lifecycle);
 CREATE INDEX persons_merged_into_fkey_idx ON public.persons USING btree (merged_into);
+CREATE INDEX persons_name_dob_idx ON public.persons USING btree (lower(name), dob);
 CREATE INDEX persons_name_trgm ON public.persons USING gin (name gin_trgm_ops);
 CREATE INDEX persons_notes_trgm ON public.persons USING gin (notes gin_trgm_ops);
+CREATE INDEX persons_phone_norm_idx ON public.persons USING btree (phone_normalized) WHERE (phone_normalized IS NOT NULL);
 CREATE INDEX persons_phone_trgm ON public.persons USING gin (phone gin_trgm_ops);
 CREATE INDEX persons_reviewed_by_fkey_idx ON public.persons USING btree (reviewed_by);
 CREATE INDEX persons_status_trgm ON public.persons USING gin (status gin_trgm_ops);
@@ -4924,6 +5041,7 @@ CREATE INDEX places_controlling_gang_id_fkey_idx ON public.places USING btree (c
 CREATE INDEX places_created_by_fkey_idx ON public.places USING btree (created_by);
 CREATE INDEX places_delete_batch_idx ON public.places USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
 CREATE INDEX places_deleted_at_idx ON public.places USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+CREATE INDEX places_name_area_idx ON public.places USING btree (lower(name), lower(area));
 CREATE INDEX places_name_trgm ON public.places USING gin (name gin_trgm_ops);
 CREATE INDEX places_narcotic_fk_idx ON public.places USING btree (narcotic_id);
 CREATE INDEX predicate_acts_delete_batch_idx ON public.predicate_acts USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
@@ -5020,6 +5138,7 @@ CREATE INDEX siu_integrity_subject_idx ON public.siu_integrity_reviews USING btr
 CREATE UNIQUE INDEX siu_memberships_active_callsign_idx ON public.siu_memberships USING btree (upper(callsign)) WHERE (active AND (callsign IS NOT NULL));
 CREATE INDEX siu_memberships_appointed_by_fkey_idx ON public.siu_memberships USING btree (appointed_by);
 CREATE INDEX siu_memberships_ended_by_fkey_idx ON public.siu_memberships USING btree (ended_by);
+CREATE INDEX siu_reconcile_queue_open_idx ON public.siu_reconcile_queue USING btree (created_at DESC) WHERE (resolved_at IS NULL);
 CREATE INDEX siu_referrals_opened_case_idx ON public.siu_referrals USING btree (opened_case_id);
 CREATE INDEX siu_referrals_related_case_idx ON public.siu_referrals USING btree (related_case_id);
 CREATE INDEX siu_referrals_reviewed_by_fkey_idx ON public.siu_referrals USING btree (reviewed_by);
@@ -5140,7 +5259,8 @@ CREATE INDEX vehicles_gang_idx ON public.vehicles USING btree (gang_id);
 CREATE INDEX vehicles_model_trgm ON public.vehicles USING gin (model gin_trgm_ops);
 CREATE INDEX vehicles_notes_trgm ON public.vehicles USING gin (notes gin_trgm_ops);
 CREATE INDEX vehicles_owner_idx ON public.vehicles USING btree (owner_id);
-CREATE UNIQUE INDEX vehicles_plate_key ON public.vehicles USING btree (upper(plate));
+CREATE UNIQUE INDEX vehicles_plate_live_key ON public.vehicles USING btree (upper(plate)) WHERE ((deleted_at IS NULL) AND (NOT siu_hidden_flag));
+CREATE INDEX vehicles_plate_norm_idx ON public.vehicles USING btree (private.norm_plate(plate));
 CREATE INDEX vehicles_plate_trgm ON public.vehicles USING gin (plate gin_trgm_ops);
 CREATE INDEX watchlist_user_idx ON public.watchlist USING btree (user_id);
 
@@ -5156,106 +5276,12 @@ CREATE OR REPLACE FUNCTION public.account_merge(p_survivor uuid, p_victims uuid[
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare
-  v_uid uuid := (select auth.uid());
-  v_reason text := btrim(coalesce(p_reason, ''));
-  s public.accounts;
-  v public.accounts;
-  v_victim uuid;
-  n_links int; n_handles int; n_cil int;
+declare r jsonb;
 begin
-  if not (private.is_command() or private.can_delete()) then
-    raise exception 'account merge is restricted to command (Bureau Lead or higher)';
+  r := public.entity_merge('account', p_survivor, p_victims, p_reason);
+  if not coalesce((r ->> 'ok')::boolean, false) then
+    raise exception '%', coalesce(r ->> 'message', 'account merge refused');
   end if;
-  if v_reason = '' then
-    raise exception 'a reason is required to merge account records';
-  end if;
-  if p_victims is null or cardinality(p_victims) = 0 then
-    raise exception 'at least one merge victim is required';
-  end if;
-  if p_survivor = any (p_victims) then
-    raise exception 'the survivor cannot also be a merge victim';
-  end if;
-
-  select * into s from public.accounts where id = p_survivor for update;
-  if s.id is null then raise exception 'survivor account not found'; end if;
-  if s.lifecycle = 'merged' then
-    raise exception 'the survivor is already merged into another record — merge into its survivor instead';
-  end if;
-
-  foreach v_victim in array p_victims loop
-    select * into v from public.accounts where id = v_victim for update;
-    if v.id is null then raise exception 'merge victim % not found', v_victim; end if;
-    if v.lifecycle = 'merged' then
-      raise exception 'account % is already merged and cannot be merged again', v_victim;
-    end if;
-  end loop;
-
-  foreach v_victim in array p_victims loop
-    select * into v from public.accounts where id = v_victim;
-
-    delete from public.account_links l
-     where l.account_id = v_victim
-       and exists (select 1 from public.account_links d
-                    where d.account_id = p_survivor
-                      and d.subject_kind = l.subject_kind
-                      and d.subject_id = l.subject_id);
-    update public.account_links set account_id = p_survivor where account_id = v_victim;
-    get diagnostics n_links = row_count;
-
-    insert into public.account_handles (account_id, handle, is_current, observed_at, source)
-    select p_survivor, h.handle, false, h.observed_at, coalesce(h.source, 'merged')
-      from public.account_handles h where h.account_id = v_victim;
-    get diagnostics n_handles = row_count;
-
-    delete from public.case_intel_links l
-     where l.kind = 'account' and l.ref_id = v_victim
-       and exists (select 1 from public.case_intel_links d
-                    where d.case_id = l.case_id and d.kind = 'account' and d.ref_id = p_survivor);
-    update public.case_intel_links set ref_id = p_survivor
-     where kind = 'account' and ref_id = v_victim;
-    get diagnostics n_cil = row_count;
-
-    update public.accounts
-       set lifecycle = 'merged', merged_into = p_survivor
-     where id = v_victim;
-
-    if (s.display_name is null or btrim(s.display_name) = '')
-       and v.display_name is not null and btrim(v.display_name) <> '' then
-      update public.accounts set display_name = v.display_name where id = p_survivor;
-      s.display_name := v.display_name;
-    end if;
-    if (s.summary is null or btrim(s.summary) = '')
-       and v.summary is not null and btrim(v.summary) <> '' then
-      update public.accounts set summary = v.summary where id = p_survivor;
-      s.summary := v.summary;
-    end if;
-    if (v.operator_unknown and not s.operator_unknown)
-       or (v.is_impersonation and not s.is_impersonation)
-       or (v.is_compromised and not s.is_compromised) then
-      update public.accounts
-         set operator_unknown = s.operator_unknown or v.operator_unknown,
-             is_impersonation = s.is_impersonation or v.is_impersonation,
-             is_compromised = s.is_compromised or v.is_compromised
-       where id = p_survivor;
-      s.operator_unknown := s.operator_unknown or v.operator_unknown;
-      s.is_impersonation := s.is_impersonation or v.is_impersonation;
-      s.is_compromised := s.is_compromised or v.is_compromised;
-    end if;
-    if s.external_id is null and v.external_id is not null then
-      update public.accounts set external_id = v.external_id where id = p_survivor;
-      s.external_id := v.external_id;
-    end if;
-
-    insert into public.audit_log (actor_id, action, entity, entity_id, detail)
-    values (v_uid, 'ACCOUNT_MERGED', 'accounts', v_victim, jsonb_build_object(
-      'survivor_id', p_survivor, 'victim_id', v_victim,
-      'victim_platform', v.platform, 'victim_handle', v.handle,
-      'reason', left(v_reason, 500),
-      'repointed', jsonb_build_object(
-        'account_links', n_links, 'account_handles', n_handles,
-        'case_intel_links', n_cil)));
-  end loop;
 end $function$
 ;
 
@@ -8133,6 +8159,788 @@ begin
   insert into public.audit_log (actor_id, action, entity, entity_id, detail)
   values (v_actor, 'FIELD_OFFICER_ENDED', 'field_officers', v_id,
           jsonb_build_object('user_id', p_user, 'reason', btrim(p_reason)));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.entity_crossref(p_kind text, p_id uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 50, p_q text DEFAULT NULL::text)
+ RETURNS TABLE(case_id uuid, case_number text, title text, bureau text, via text, detail text, observed_at timestamp with time zone)
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO 'public', 'extensions'
+AS $function$
+declare
+  k text := lower(btrim(coalesce(p_kind, '')));
+  lim integer := least(greatest(coalesce(p_limit, 50), 1), 200);
+  v_plate text; v_name text; v_value text; v_kind text; v_phone text; v_re text;
+begin
+  if not private.is_active() then return; end if;
+
+  if k = 'vehicle' then
+    select private.norm_plate(v.plate) into v_plate from public.vehicles v where v.id = p_id;
+    if v_plate is null or length(v_plate) < 3 then return; end if;
+    select '\m' || string_agg(ch, '[^a-zA-Z0-9]{0,2}') || '\M' into v_re
+      from regexp_split_to_table(v_plate, '') ch;
+    return query
+      select x.case_id, c.case_number, c.title, c.bureau::text, x.via, x.detail, x.observed_at
+        from (
+          select l.case_id, 'link'::text as via, coalesce(l.role, 'linked') as detail, l.created_at as observed_at
+            from public.case_intel_links l where l.kind = 'vehicle' and l.ref_id = p_id and l.deleted_at is null
+          union all
+          select o.case_id, 'surveillance', coalesce(o.activity, 'observed'), o.observed_at
+            from public.surveillance_observations o where o.vehicle_id = p_id
+          union all
+          select r.case_id, 'report', r.template, r.created_at
+            from public.reports r
+           where r.deleted_at is null and r.fields::text ~* v_re
+          union all
+          select e.source_case_id, 'mdt', coalesce(e.kind, 'bulletin'), e.proposed_at
+            from public.mdt_exports e where e.vehicle_id = p_id and e.source_case_id is not null
+        ) x
+        join public.cases c on c.id = x.case_id and c.deleted_at is null
+       order by x.observed_at desc nulls last
+       limit lim;
+  elsif k = 'person' then
+    select p.name into v_name from public.persons p where p.id = p_id;
+    if v_name is null then return; end if;
+    return query
+      select x.case_id, c.case_number, c.title, c.bureau::text, x.via, x.detail, x.observed_at
+        from (
+          select l.case_id, 'link'::text as via, coalesce(l.role, 'linked') as detail, l.created_at as observed_at
+            from public.case_intel_links l where l.kind = 'person' and l.ref_id = p_id and l.deleted_at is null
+          union all
+          select o.case_id, 'surveillance', coalesce(o.activity, 'observed'), o.observed_at
+            from public.surveillance_observations o where o.person_id = p_id
+          union all
+          select lr.case_id, 'legal', lr.request_number, lr.created_at
+            from public.legal_requests lr where lr.person_id = p_id and lr.case_id is not null
+          union all
+          select m.case_id, 'media', coalesce(m.title, 'media'), m.created_at
+            from public.media m where m.person_id = p_id and m.case_id is not null and m.deleted_at is null
+          union all
+          select r.case_id, 'report', r.template, r.created_at
+            from public.reports r
+           where r.deleted_at is null and length(v_name) >= 3 and r.fields::text ilike '%' || v_name || '%'
+          union all
+          select e.source_case_id, 'mdt', coalesce(e.kind, 'bulletin'), e.proposed_at
+            from public.mdt_exports e where e.person_id = p_id and e.source_case_id is not null
+        ) x
+        join public.cases c on c.id = x.case_id and c.deleted_at is null
+       order by x.observed_at desc nulls last
+       limit lim;
+  elsif k = 'indicator' then
+    select i.kind, i.value_normalized into v_kind, v_value from public.indicators i where i.id = p_id;
+    if v_value is null then return; end if;
+    return query
+      select x.case_id, c.case_number, c.title, c.bureau::text, x.via, x.detail, x.observed_at
+        from (
+          select i.case_id, 'indicator'::text as via, i.kind || ' · ' || i.value as detail, i.created_at as observed_at
+            from public.indicators i
+           where i.kind = v_kind and i.value_normalized = v_value and i.id <> p_id and i.deleted_at is null
+          union all
+          select r.case_id, 'report', r.template, r.created_at
+            from public.reports r
+           where r.deleted_at is null and length(v_value) >= 3 and r.fields::text ilike '%' || v_value || '%'
+        ) x
+        join public.cases c on c.id = x.case_id and c.deleted_at is null
+       order by x.observed_at desc nulls last
+       limit lim;
+  elsif k = 'phone' then
+    v_phone := private.norm_phone(p_q);
+    if v_phone is null or length(v_phone) < 6 then return; end if;
+    select '(?<![0-9])' || string_agg(ch, '[^0-9]{0,3}') || '(?![0-9])' into v_re
+      from regexp_split_to_table(v_phone, '') ch;
+    return query
+      select x.case_id, c.case_number, c.title, c.bureau::text, x.via, x.detail, x.observed_at
+        from (
+          select i.case_id, 'indicator'::text as via, i.value as detail, i.created_at as observed_at
+            from public.indicators i where i.kind = 'phone' and i.value_normalized = v_phone and i.deleted_at is null
+          union all
+          select l.case_id, 'person', p.name, l.created_at
+            from public.persons p
+            join public.case_intel_links l on l.kind = 'person' and l.ref_id = p.id and l.deleted_at is null
+           where p.phone_normalized = v_phone and p.lifecycle is distinct from 'merged'
+          union all
+          select r.case_id, 'report', r.template, r.created_at
+            from public.reports r
+           where r.deleted_at is null and r.fields::text ~ v_re
+        ) x
+        join public.cases c on c.id = x.case_id and c.deleted_at is null
+       order by x.observed_at desc nulls last
+       limit lim;
+  elsif k in ('gang', 'place', 'account', 'narcotic') then
+    return query
+      select x.case_id, c.case_number, c.title, c.bureau::text, x.via, x.detail, x.observed_at
+        from (
+          select l.case_id, 'link'::text as via, coalesce(l.role, 'linked') as detail, l.created_at as observed_at
+            from public.case_intel_links l where l.kind = k and l.ref_id = p_id and l.deleted_at is null
+          union all
+          select o.case_id, 'surveillance', coalesce(o.activity, 'observed'), o.observed_at
+            from public.surveillance_observations o where k = 'place' and o.place_id = p_id
+          union all
+          select m.case_id, 'media', coalesce(m.title, 'media'), m.created_at
+            from public.media m
+           where m.case_id is not null and m.deleted_at is null
+             and ((k = 'gang' and m.gang_id = p_id) or (k = 'place' and m.place_id = p_id) or (k = 'narcotic' and m.narcotic_id = p_id))
+          union all
+          select e.source_case_id, 'mdt', coalesce(e.kind, 'bulletin'), e.proposed_at
+            from public.mdt_exports e where k = 'account' and e.account_id = p_id and e.source_case_id is not null
+        ) x
+        join public.cases c on c.id = x.case_id and c.deleted_at is null
+       order by x.observed_at desc nulls last
+       limit lim;
+  else
+    return;
+  end if;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.entity_duplicates(p_kind text, p_payload jsonb)
+ RETURNS TABLE(id uuid, label text, sublabel text, signal text, strength text, score real)
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO 'public', 'extensions'
+AS $function$
+declare
+  j jsonb := coalesce(p_payload, '{}'::jsonb);
+  v_name text := lower(btrim(coalesce(j ->> 'name', '')));
+  v_alias text := lower(btrim(coalesce(j ->> 'alias', '')));
+  v_dob date := nullif(j ->> 'dob', '')::date;
+  v_phone text := private.norm_phone(j ->> 'phone');
+  v_plate text := private.norm_plate(j ->> 'plate');
+  v_area text := lower(btrim(coalesce(j ->> 'area', '')));
+  v_platform text := lower(btrim(coalesce(j ->> 'platform', '')));
+  v_handle text := nullif(lower(btrim(regexp_replace(coalesce(j ->> 'handle', ''), '^@+', ''))), '');
+  v_ikind text := lower(btrim(coalesce(j ->> 'kind', '')));
+  v_value text := lower(btrim(coalesce(j ->> 'value', '')));
+  v_case text := upper(btrim(coalesce(j ->> 'case_number', '')));
+  v_title text := lower(btrim(coalesce(j ->> 'title', '')));
+  v_exclude uuid := nullif(j ->> 'exclude_id', '')::uuid;
+  v_org text := private.norm_org(j ->> 'name');
+begin
+  perform set_config('pg_trgm.word_similarity_threshold', '0.3', true);
+  case lower(btrim(coalesce(p_kind, '')))
+  when 'person' then
+    return query
+      select distinct on (x.id) x.id, x.label, x.sublabel, x.signal, x.strength, x.score from (
+        select p.id, p.name as label, nullif(concat_ws(' · ', p.alias, p.dob::text, p.phone), '') as sublabel,
+               'phone'::text as signal, 'strong'::text as strength, 1.0::real as score
+          from public.persons p
+         where v_phone is not null and p.phone_normalized = v_phone and p.lifecycle is distinct from 'merged'
+        union all
+        select p.id, p.name, nullif(concat_ws(' · ', p.alias, p.dob::text, p.phone), ''),
+               case when v_dob is not null and p.dob = v_dob then 'name+dob' else 'name' end, 'strong', 1.0
+          from public.persons p
+         where v_name <> '' and lower(p.name) = v_name and (v_dob is null or p.dob is null or p.dob = v_dob)
+           and p.lifecycle is distinct from 'merged'
+        union all
+        select p.id, p.name, nullif(concat_ws(' · ', p.alias, p.dob::text, p.phone), ''),
+               'alias', 'strong', 0.9
+          from public.persons p
+         where v_alias <> '' and (lower(coalesce(p.alias, '')) = v_alias or lower(p.name) = v_alias)
+           and p.lifecycle is distinct from 'merged'
+        union all
+        select p.id, p.name, nullif(concat_ws(' · ', p.alias, p.dob::text, p.phone), ''),
+               'name~', 'soft', word_similarity(v_name, lower(p.name))::real
+          from public.persons p
+         where v_name <> '' and v_name <% p.name and word_similarity(v_name, lower(p.name)) >= 0.6
+           and lower(p.name) <> v_name and p.lifecycle is distinct from 'merged') x
+       where v_exclude is null or x.id <> v_exclude
+       order by x.id, case x.strength when 'strong' then 0 else 1 end, x.score desc
+       limit 20;
+  when 'vehicle' then
+    return query
+      select distinct on (x.id) x.id, x.label, x.sublabel, x.signal, x.strength, x.score from (
+        select v.id, v.plate as label, nullif(concat_ws(' · ', v.model, v.color), '') as sublabel,
+               'plate'::text as signal, 'strong'::text as strength, 1.0::real as score
+          from public.vehicles v where v_plate is not null and private.norm_plate(v.plate) = v_plate
+        union all
+        select v.id, v.plate, nullif(concat_ws(' · ', v.model, v.color), ''),
+               'plate~', 'soft', similarity(lower(v.plate), lower(coalesce(j ->> 'plate', '')))::real
+          from public.vehicles v
+         where v_plate is not null and lower(coalesce(j ->> 'plate', '')) <% v.plate
+           and similarity(lower(v.plate), lower(coalesce(j ->> 'plate', ''))) >= 0.6
+           and private.norm_plate(v.plate) <> v_plate) x
+       where v_exclude is null or x.id <> v_exclude
+       order by x.id, case x.strength when 'strong' then 0 else 1 end, x.score desc
+       limit 20;
+  when 'gang' then
+    return query
+      select distinct on (x.id) x.id, x.label, x.sublabel, x.signal, x.strength, x.score from (
+        select g.id, g.name as label, g.aliases as sublabel, 'name'::text as signal, 'strong'::text as strength, 1.0::real as score
+          from public.gangs g where v_org is not null and private.norm_org(g.name) = v_org
+        union all
+        select g.id, g.name, g.aliases, 'name~', 'soft', word_similarity(v_name, lower(g.name))::real
+          from public.gangs g
+         where v_name <> '' and (v_name <% g.name or v_name <% coalesce(g.aliases, ''))
+           and greatest(word_similarity(v_name, lower(g.name)), word_similarity(v_name, lower(coalesce(g.aliases, '')))) >= 0.6
+           and (v_org is null or private.norm_org(g.name) <> v_org)) x
+       where v_exclude is null or x.id <> v_exclude
+       order by x.id, case x.strength when 'strong' then 0 else 1 end, x.score desc
+       limit 20;
+  when 'place' then
+    return query
+      select distinct on (x.id) x.id, x.label, x.sublabel, x.signal, x.strength, x.score from (
+        select pl.id, pl.name as label, nullif(concat_ws(' · ', pl.type::text, pl.area), '') as sublabel,
+               case when v_area <> '' and lower(coalesce(pl.area, '')) = v_area then 'name+area' else 'name' end::text as signal,
+               'strong'::text as strength, 1.0::real as score
+          from public.places pl
+         where v_name <> '' and lower(pl.name) = v_name and (v_area = '' or pl.area is null or lower(pl.area) = v_area)
+        union all
+        select pl.id, pl.name, nullif(concat_ws(' · ', pl.type::text, pl.area), ''), 'name~', 'soft',
+               word_similarity(v_name, lower(pl.name))::real
+          from public.places pl
+         where v_name <> '' and v_name <% pl.name and word_similarity(v_name, lower(pl.name)) >= 0.6
+           and lower(pl.name) <> v_name) x
+       where v_exclude is null or x.id <> v_exclude
+       order by x.id, case x.strength when 'strong' then 0 else 1 end, x.score desc
+       limit 20;
+  when 'account' then
+    return query
+      select distinct on (x.id) x.id, x.label, x.sublabel, x.signal, x.strength, x.score from (
+        select a.id, '@' || a.handle as label, nullif(concat_ws(' · ', a.platform, a.display_name), '') as sublabel,
+               'handle'::text as signal, 'strong'::text as strength, 1.0::real as score
+          from public.accounts a
+         where v_handle is not null and a.handle_normalized = v_handle
+           and (v_platform = '' or lower(a.platform) = v_platform) and a.lifecycle is distinct from 'merged'
+        union all
+        select a.id, '@' || a.handle, nullif(concat_ws(' · ', a.platform, a.display_name), ''), 'handle~', 'soft',
+               similarity(a.handle_normalized, v_handle)::real
+          from public.accounts a
+         where v_handle is not null and v_handle <% a.handle and similarity(a.handle_normalized, v_handle) >= 0.6
+           and a.handle_normalized <> v_handle and a.lifecycle is distinct from 'merged') x
+       where v_exclude is null or x.id <> v_exclude
+       order by x.id, case x.strength when 'strong' then 0 else 1 end, x.score desc
+       limit 20;
+  when 'narcotic' then
+    return query
+      select distinct on (x.id) x.id, x.label, x.sublabel, x.signal, x.strength, x.score from (
+        select n.id, n.name as label, nullif(concat_ws(' · ', n.category, n.status), '') as sublabel,
+               'name'::text as signal, 'strong'::text as strength, 1.0::real as score
+          from public.narcotics n
+         where v_name <> '' and n.merged_into is null and n.status is distinct from 'merged'
+           and (lower(n.name) = v_name
+                or exists (select 1 from public.narcotic_aliases al where al.narcotic_id = n.id and lower(al.alias) = v_name))
+        union all
+        select n.id, n.name, nullif(concat_ws(' · ', n.category, n.status), ''), 'name~', 'soft',
+               word_similarity(v_name, lower(n.name))::real
+          from public.narcotics n
+         where v_name <> '' and n.merged_into is null and n.status is distinct from 'merged'
+           and v_name <% n.name and word_similarity(v_name, lower(n.name)) >= 0.6 and lower(n.name) <> v_name) x
+       where v_exclude is null or x.id <> v_exclude
+       order by x.id, case x.strength when 'strong' then 0 else 1 end, x.score desc
+       limit 20;
+  when 'indicator' then
+    return query
+      select i.id, i.value, nullif(concat_ws(' · ', i.kind, (select c.case_number from public.cases c where c.id = i.case_id)), ''),
+             'value'::text, 'strong'::text, 1.0::real
+        from public.indicators i
+       where v_value <> '' and (v_ikind = '' or i.kind = v_ikind)
+         and i.value_normalized = case when i.kind = 'phone' then coalesce(private.norm_phone(j ->> 'value'), v_value) else v_value end
+         and (v_exclude is null or i.id <> v_exclude)
+       limit 20;
+  when 'case' then
+    return query
+      select distinct on (x.id) x.id, x.label, x.sublabel, x.signal, x.strength, x.score from (
+        select c.id, c.case_number as label, c.title as sublabel, 'case_number'::text as signal, 'strong'::text as strength, 1.0::real as score
+          from public.cases c where v_case <> '' and upper(c.case_number) = v_case
+        union all
+        select c.id, c.case_number, c.title, 'title~', 'soft', word_similarity(v_title, lower(coalesce(c.title, '')))::real
+          from public.cases c
+         where v_title <> '' and v_title <% coalesce(c.title, '')
+           and word_similarity(v_title, lower(coalesce(c.title, ''))) >= 0.6) x
+       where v_exclude is null or x.id <> v_exclude
+       order by x.id, case x.strength when 'strong' then 0 else 1 end, x.score desc
+       limit 20;
+  else
+    return;
+  end case;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.entity_merge(p_kind text, p_survivor uuid, p_victims uuid[], p_reason text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_kind text := lower(btrim(coalesce(p_kind, '')));
+  v_table text := private.entity_merge_table(lower(btrim(coalesce(p_kind, ''))));
+  v_refusal jsonb;
+  v_id uuid := gen_random_uuid();
+  v_snap jsonb := '[]'::jsonb;
+  v_victim uuid;
+  v_row jsonb;
+  v_manifest jsonb;
+begin
+  v_refusal := private.entity_merge_check(v_kind, p_survivor, p_victims, p_reason, true);
+  if v_refusal is not null then
+    if v_refusal ->> 'code' in ('denied', 'not_found') then
+      perform private.perm_deny('merge', coalesce(v_kind, 'unknown'), p_survivor, v_refusal ->> 'code');
+    end if;
+    return v_refusal;
+  end if;
+
+  execute format('select to_jsonb(t) from public.%I t where t.id = $1 for update', v_table) into v_row using p_survivor;
+  foreach v_victim in array p_victims loop
+    execute format('select to_jsonb(t) from public.%I t where t.id = $1 for update', v_table) into v_row using v_victim;
+    v_snap := v_snap || v_row;
+  end loop;
+
+  v_manifest := private.entity_merge_apply(v_kind, p_survivor, p_victims, btrim(p_reason), false, v_id);
+
+  insert into public.entity_merges (id, kind, survivor_id, victim_ids, manifest, victim_snapshots, actor_id, reason)
+  values (v_id, v_kind, p_survivor, p_victims, v_manifest, v_snap, v_uid, left(btrim(p_reason), 500));
+
+  return jsonb_build_object('ok', true, 'merge_id', v_id, 'kind', v_kind, 'survivor_id', p_survivor,
+                            'victim_ids', to_jsonb(p_victims), 'manifest', v_manifest);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.entity_merge_preview(p_kind text, p_survivor uuid, p_victims uuid[])
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_kind text := lower(btrim(coalesce(p_kind, '')));
+  v_refusal jsonb;
+begin
+  v_refusal := private.entity_merge_check(v_kind, p_survivor, p_victims, null, false);
+  if v_refusal is not null then return v_refusal; end if;
+  return jsonb_build_object('ok', true, 'kind', v_kind,
+                            'manifest', private.entity_merge_apply(v_kind, p_survivor, p_victims, null, true, null));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.entity_suggest(p_kind text, p_q text, p_limit integer DEFAULT 20)
+ RETURNS TABLE(id uuid, kind text, label text, sublabel text, score real, exact boolean)
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO 'public', 'extensions'
+AS $function$
+declare
+  lq text := lower(btrim(coalesce(p_q, '')));
+  lk text;
+  np text := private.norm_phone(p_q);
+  npl text := private.norm_plate(p_q);
+  nh text := nullif(lower(btrim(regexp_replace(coalesce(p_q, ''), '^@+', ''))), '');
+  nor text := private.norm_org(p_q);
+  uq text := upper(btrim(coalesce(p_q, '')));
+  lim integer := least(greatest(coalesce(p_limit, 20), 1), 50);
+begin
+  if length(lq) < 2 then return; end if;
+  -- Transaction-local trgm threshold for `<%` (a function-level SET is
+  -- refused for this extension GUC on Supabase; set_config is not).
+  perform set_config('pg_trgm.word_similarity_threshold', '0.3', true);
+  lk := '%' || lq || '%';
+
+  case lower(btrim(coalesce(p_kind, '')))
+  when 'person' then
+    return query
+      select p.id, 'person'::text, p.name,
+             nullif(concat_ws(' · ', p.alias, p.status), ''),
+             greatest(word_similarity(lq, lower(p.name)), word_similarity(lq, lower(coalesce(p.alias, ''))),
+                      case when np is not null and p.phone_normalized = np then 1.0 else 0 end)::real,
+             (lower(p.name) = lq or lower(coalesce(p.alias, '')) = lq or (np is not null and p.phone_normalized = np))
+        from public.persons p
+       where p.lifecycle is distinct from 'merged'
+         and (p.name ilike lk or p.alias ilike lk or lq <% p.name or lq <% coalesce(p.alias, '')
+              or (np is not null and p.phone_normalized = np))
+       order by 6 desc, 5 desc, p.name
+       limit lim;
+  when 'vehicle' then
+    return query
+      select v.id, 'vehicle'::text, v.plate,
+             nullif(concat_ws(' · ', v.model, v.color), ''),
+             greatest(word_similarity(lq, lower(v.plate)), word_similarity(lq, lower(coalesce(v.model, ''))),
+                      case when npl is not null and private.norm_plate(v.plate) = npl then 1.0 else 0 end)::real,
+             (npl is not null and private.norm_plate(v.plate) = npl)
+        from public.vehicles v
+       where (npl is not null and private.norm_plate(v.plate) = npl)
+          or v.plate ilike lk or v.model ilike lk or v.color ilike lk or lq <% v.plate
+       order by 6 desc, 5 desc, v.plate
+       limit lim;
+  when 'phone' then
+    if np is null then return; end if;
+    return query
+      select x.id, x.kind, x.label, x.sublabel, x.score, x.exact from (
+        select p.id, 'person'::text as kind, p.name as label,
+               nullif(concat_ws(' · ', p.phone, p.alias), '') as sublabel,
+               case when p.phone_normalized = np then 1.0 else 0.6 end::real as score,
+               (p.phone_normalized = np) as exact
+          from public.persons p
+         where p.lifecycle is distinct from 'merged' and p.phone_normalized like np || '%'
+        union all
+        select i.id, 'indicator'::text, i.value,
+               nullif(concat_ws(' · ', 'Indicator', (select c.case_number from public.cases c where c.id = i.case_id)), ''),
+               case when i.value_normalized = np then 1.0 else 0.6 end::real,
+               (i.value_normalized = np)
+          from public.indicators i
+         where i.kind = 'phone' and i.value_normalized like np || '%') x
+       order by x.exact desc, x.score desc, x.label
+       limit lim;
+  when 'gang' then
+    return query
+      select g.id, 'gang'::text, g.name,
+             nullif(concat_ws(' · ', case when g.aliases is not null then 'aka ' || g.aliases end, g.status), ''),
+             greatest(word_similarity(lq, lower(g.name)), word_similarity(lq, lower(coalesce(g.aliases, ''))),
+                      case when nor is not null and private.norm_org(g.name) = nor then 1.0 else 0 end)::real,
+             (lower(g.name) = lq or (nor is not null and private.norm_org(g.name) = nor))
+        from public.gangs g
+       where g.name ilike lk or g.aliases ilike lk or lq <% g.name or lq <% coalesce(g.aliases, '')
+          or (nor is not null and private.norm_org(g.name) = nor)
+       order by 6 desc, 5 desc, g.name
+       limit lim;
+  when 'place' then
+    return query
+      select pl.id, 'place'::text, pl.name,
+             nullif(concat_ws(' · ', pl.type::text, pl.area), ''),
+             greatest(word_similarity(lq, lower(pl.name)), word_similarity(lq, lower(coalesce(pl.area, ''))))::real,
+             (lower(pl.name) = lq)
+        from public.places pl
+       where pl.name ilike lk or pl.area ilike lk or lq <% pl.name
+       order by 6 desc, 5 desc, pl.name
+       limit lim;
+  when 'narcotic' then
+    return query
+      select n.id, 'narcotic'::text, n.name,
+             nullif(concat_ws(' · ', n.category, n.status), ''),
+             word_similarity(lq, lower(n.name))::real,
+             (lower(n.name) = lq)
+        from public.narcotics n
+       where n.merged_into is null and n.status is distinct from 'merged'
+         and (n.name ilike lk or lq <% n.name)
+       order by 6 desc, 5 desc, n.name
+       limit lim;
+  when 'case' then
+    return query
+      select c.id, 'case'::text, c.case_number, c.title,
+             greatest(word_similarity(lq, lower(c.case_number)), word_similarity(lq, lower(coalesce(c.title, ''))))::real,
+             (upper(c.case_number) = uq)
+        from public.cases c
+       where c.case_number ilike lk or c.title ilike lk or lq <% coalesce(c.title, '')
+       order by 6 desc, 5 desc, c.case_number
+       limit lim;
+  when 'indicator' then
+    return query
+      select i.id, 'indicator'::text, i.value,
+             nullif(concat_ws(' · ', i.kind, (select c.case_number from public.cases c where c.id = i.case_id)), ''),
+             greatest(word_similarity(lq, lower(i.value)),
+                      case when i.value_normalized = lq or (np is not null and i.kind = 'phone' and i.value_normalized = np) then 1.0 else 0 end)::real,
+             (i.value_normalized = lq or (np is not null and i.kind = 'phone' and i.value_normalized = np))
+        from public.indicators i
+       where i.value ilike lk or lq <% i.value or i.value_normalized = lq
+          or (np is not null and i.kind = 'phone' and i.value_normalized = np)
+       order by 6 desc, 5 desc, i.value
+       limit lim;
+  when 'account' then
+    return query
+      select a.id, 'account'::text, '@' || a.handle,
+             nullif(concat_ws(' · ', a.platform, a.display_name), ''),
+             greatest(word_similarity(lq, lower(a.handle)), word_similarity(lq, lower(coalesce(a.display_name, ''))),
+                      case when nh is not null and a.handle_normalized = nh then 1.0 else 0 end)::real,
+             (nh is not null and a.handle_normalized = nh)
+        from public.accounts a
+       where a.lifecycle is distinct from 'merged'
+         and (a.handle ilike lk or a.display_name ilike lk or lq <% a.handle
+              or (nh is not null and a.handle_normalized = nh))
+       order by 6 desc, 5 desc, a.handle
+       limit lim;
+  else
+    return;
+  end case;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.entity_suggest_update(p_kind text, p_id uuid, p_field text, p_value text, p_reason text, p_expected_current text DEFAULT NULL::text, p_observation_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_kind text := lower(btrim(coalesce(p_kind, '')));
+  v_field text := lower(btrim(coalesce(p_field, '')));
+  v_value text := nullif(btrim(coalesce(p_value, '')), '');
+  v_reason text := left(nullif(btrim(coalesce(p_reason, '')), ''), 500);
+  v_table text := private.entity_merge_table(lower(btrim(coalesce(p_kind, ''))));
+  v_cur text; v_res jsonb; v_id uuid; v_label text;
+begin
+  if v_table is null or not (v_field = any (private.entity_editable_fields(v_kind))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'that field cannot be updated this way');
+  end if;
+  if v_uid is null or not private.is_active() or not private.perm_registry_edit(v_kind, p_id) then
+    perform private.perm_deny('suggest_update', v_kind, p_id, 'no_edit_authority');
+    return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'you cannot edit this record');
+  end if;
+  if v_reason is null then
+    return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'say why the record should change');
+  end if;
+  execute format('select (t.%I)::text from public.%I t where t.id = $1', v_field, v_table) into v_cur using p_id;
+  if p_expected_current is not null and v_cur is distinct from nullif(p_expected_current, '') then
+    return jsonb_build_object('ok', false, 'code', 'stale', 'current', v_cur, 'message', 'the record changed since you looked — review the current value');
+  end if;
+  if v_cur is not distinct from v_value then
+    return jsonb_build_object('ok', false, 'code', 'no_change', 'current', v_cur, 'message', 'the record already carries that value');
+  end if;
+
+  if private.is_senior_or_above() then
+    v_res := private.entity_apply_field(v_kind, p_id, v_field, v_value, 'suggestion', v_reason,
+                                        jsonb_build_object('observation_id', p_observation_id));
+    if not coalesce((v_res ->> 'ok')::boolean, false) then return v_res; end if;
+    insert into public.entity_update_suggestions (kind, ref_id, field, proposed_value, current_value, reason, proposed_by, status, decided_by, decided_at, source_observation_id)
+    values (v_kind, p_id, v_field, v_value, v_cur, v_reason, v_uid, 'accepted', v_uid, now(), p_observation_id)
+    returning id into v_id;
+    return jsonb_build_object('ok', true, 'applied', true, 'suggestion_id', v_id, 'from', v_cur, 'to', v_value);
+  end if;
+
+  insert into public.entity_update_suggestions (kind, ref_id, field, proposed_value, current_value, reason, proposed_by, source_observation_id)
+  values (v_kind, p_id, v_field, v_value, v_cur, v_reason, v_uid, p_observation_id)
+  returning id into v_id;
+  v_label := private.entity_merge_label(v_kind, p_id);
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'ENTITY_SUGGESTION_QUEUED', v_table, p_id,
+          jsonb_build_object('kind', v_kind, 'field', v_field, 'from', v_cur, 'to', v_value, 'suggestion_id', v_id, 'reason', v_reason));
+  if not coalesce((select p.is_test from public.profiles p where p.id = v_uid), false) then
+    insert into public.notifications (user_id, type, payload)
+    select r, 'entity_update_suggested',
+           jsonb_build_object('suggestion_id', v_id, 'kind', v_kind, 'ref_id', p_id, 'label', v_label,
+                              'field', v_field, 'proposed_value', v_value, 'current_value', v_cur, 'proposed_by', v_uid)
+      from private.entity_suggestion_reviewers(v_uid) r;
+  end if;
+  return jsonb_build_object('ok', true, 'applied', false, 'suggestion_id', v_id, 'from', v_cur, 'to', v_value);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.entity_suggestion_decide(p_id uuid, p_accept boolean, p_note text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  s public.entity_update_suggestions;
+  v_note text := left(nullif(btrim(coalesce(p_note, '')), ''), 500);
+  v_res jsonb; v_table text;
+begin
+  select * into s from public.entity_update_suggestions where id = p_id for update;
+  if s.id is null then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'suggestion not found');
+  end if;
+  v_table := private.entity_merge_table(s.kind);
+  if v_uid is null or not private.is_senior_or_above() or not private.perm_registry_edit(s.kind, s.ref_id) then
+    perform private.perm_deny('decide_suggestion', s.kind, s.ref_id, 'not_senior');
+    return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'a Senior Detective or higher with edit authority decides suggestions');
+  end if;
+  if s.status <> 'pending' then
+    return jsonb_build_object('ok', false, 'code', 'already_decided', 'message', 'this suggestion was already ' || s.status);
+  end if;
+  if p_accept then
+    v_res := private.entity_apply_field(s.kind, s.ref_id, s.field, s.proposed_value, 'suggestion', s.reason,
+                                        jsonb_build_object('suggestion_id', s.id, 'proposed_by', s.proposed_by, 'observation_id', s.source_observation_id));
+    if not coalesce((v_res ->> 'ok')::boolean, false) then return v_res; end if;
+    if s.source_observation_id is not null then
+      update public.entity_field_observations set promoted_at = now(), promoted_by = v_uid
+       where id = s.source_observation_id and promoted_at is null;
+    end if;
+  end if;
+  update public.entity_update_suggestions
+     set status = case when p_accept then 'accepted' else 'declined' end, decided_by = v_uid, decided_at = now(), decision_note = v_note
+   where id = p_id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'ENTITY_SUGGESTION_DECIDED', v_table, s.ref_id,
+          jsonb_build_object('kind', s.kind, 'suggestion_id', s.id, 'field', s.field, 'accepted', p_accept,
+                             'from', s.current_value, 'to', s.proposed_value, 'note', v_note, 'proposed_by', s.proposed_by));
+  if s.proposed_by is not null and s.proposed_by <> v_uid then
+    insert into public.notifications (user_id, type, payload)
+    values (s.proposed_by, 'entity_suggestion_decided',
+            jsonb_build_object('suggestion_id', s.id, 'kind', s.kind, 'ref_id', s.ref_id,
+                               'label', private.entity_merge_label(s.kind, s.ref_id), 'field', s.field,
+                               'accepted', p_accept, 'note', v_note, 'decided_by', v_uid));
+  end if;
+  return jsonb_build_object('ok', true, 'id', p_id, 'accepted', p_accept, 'changed', coalesce((v_res ->> 'changed')::boolean, false));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.entity_suggestion_withdraw(p_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); s public.entity_update_suggestions;
+begin
+  select * into s from public.entity_update_suggestions where id = p_id for update;
+  if s.id is null then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'suggestion not found');
+  end if;
+  if v_uid is null or s.proposed_by is distinct from v_uid then
+    return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'only the proposer withdraws a suggestion');
+  end if;
+  if s.status <> 'pending' then
+    return jsonb_build_object('ok', false, 'code', 'already_decided', 'message', 'this suggestion was already ' || s.status);
+  end if;
+  update public.entity_update_suggestions set status = 'withdrawn', decided_by = v_uid, decided_at = now() where id = p_id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'ENTITY_SUGGESTION_WITHDRAWN', private.entity_merge_table(s.kind), s.ref_id,
+          jsonb_build_object('kind', s.kind, 'suggestion_id', s.id, 'field', s.field));
+  return jsonb_build_object('ok', true, 'id', p_id);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.entity_unmerge(p_merge_id uuid, p_reason text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  m public.entity_merges;
+  v_table text;
+  v_reason text := left(nullif(btrim(coalesce(p_reason, '')), ''), 500);
+  vj jsonb; snap jsonb; e record; d jsonb; f record;
+  v_victim uuid; v_col text; v_tbl text; v_ids uuid[];
+  v_cur text; v_cols text;
+  v_merged boolean; v_exists boolean;
+  v_hold_cases uuid[];
+  v_restored int := 0;
+  v_survivor_name text;
+begin
+  select * into m from public.entity_merges where id = p_merge_id for update;
+  if m.id is null then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'merge not found');
+  end if;
+  v_table := private.entity_merge_table(m.kind);
+  if v_uid is null or not private.is_active()
+     or not (case when m.kind = 'narcotic' then private.can_manage_narcotics() else private.can_delete() or private.siu_is_command() end)
+     or not private.perm_registry_visible(m.kind, m.survivor_id) then
+    perform private.perm_deny('unmerge', m.kind, m.survivor_id, 'not_command');
+    return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'unmerge is restricted to command (Bureau Lead or higher)');
+  end if;
+  if v_reason is null then
+    return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'a reason is required to unmerge');
+  end if;
+  if m.reversed_at is not null then
+    return jsonb_build_object('ok', false, 'code', 'already_reversed', 'message', 'this merge was already reversed');
+  end if;
+  if m.created_at < now() - interval '30 days' then
+    return jsonb_build_object('ok', false, 'code', 'window_closed', 'message', 'a merge can only be reversed within 30 days');
+  end if;
+  execute format('select (t.merged_into is not null or %s), t.deleted_at is not null from public.%I t where t.id = $1',
+                 case m.kind when 'person' then 't.lifecycle = ''merged''' when 'account' then 't.lifecycle = ''merged'''
+                             when 'narcotic' then 't.status = ''merged''' else 'false' end, v_table)
+    into v_merged, v_exists using m.survivor_id;
+  if v_merged is null then
+    return jsonb_build_object('ok', false, 'code', 'survivor_gone', 'message', 'the survivor no longer exists');
+  end if;
+  if v_merged then
+    return jsonb_build_object('ok', false, 'code', 'survivor_merged', 'message', 'the survivor has since been merged itself — reverse that merge first');
+  end if;
+  select coalesce(array_agg(distinct l.case_id), '{}'::uuid[]) into v_hold_cases
+    from public.case_intel_links l
+   where l.kind = m.kind and (l.ref_id = m.survivor_id or l.ref_id = any (m.victim_ids))
+     and private.case_has_active_hold(l.case_id);
+  if cardinality(v_hold_cases) > 0 then
+    return jsonb_build_object('ok', false, 'code', 'held', 'hold_cases', to_jsonb(v_hold_cases),
+      'message', 'a linked case is under an active legal hold — its intelligence links cannot be re-pointed until the hold is lifted');
+  end if;
+  execute format('select to_jsonb(t) from public.%I t where t.id = $1 for update', v_table) into snap using m.survivor_id;
+  v_survivor_name := snap ->> 'name';
+
+  perform set_config('cid.version_source', 'unmerge', true);
+  perform set_config('cid.version_reason', v_reason, true);
+
+  for vj in select x from jsonb_array_elements(m.manifest -> 'victims') x loop
+    v_victim := (vj ->> 'id')::uuid;
+    select x into snap from jsonb_array_elements(m.victim_snapshots) x where x ->> 'id' = v_victim::text limit 1;
+    execute format('select exists (select 1 from public.%I where id = $1)', v_table) into v_exists using v_victim;
+    if not v_exists or snap is null then
+      continue;
+    end if;
+
+    if m.kind = 'person' then
+      update public.persons p
+         set lifecycle = coalesce(snap ->> 'lifecycle', 'active'), merged_into = null,
+             bolo = coalesce((snap ->> 'bolo')::boolean, false),
+             gang_id = nullif(snap ->> 'gang_id', '')::uuid
+       where p.id = v_victim;
+    elsif m.kind = 'account' then
+      update public.accounts set lifecycle = coalesce(snap ->> 'lifecycle', 'active'), merged_into = null where id = v_victim;
+    elsif m.kind = 'narcotic' then
+      update public.narcotics set status = coalesce(snap ->> 'status', 'reported'), merged_into = null where id = v_victim;
+    else
+      execute format('update public.%I set merged_into = null, deleted_at = null, deleted_by = null, delete_reason = null, delete_batch = null where id = $1 and delete_batch = $2', v_table)
+        using v_victim, m.id;
+    end if;
+
+    for e in select key, value from jsonb_each(coalesce(vj -> 'repointed_ids', '{}'::jsonb)) loop
+      v_tbl := split_part(e.key, '.', 1); v_col := split_part(e.key, '.', 2);
+      if to_regclass('public.' || v_tbl) is null then continue; end if;
+      select array_agg((x #>> '{}')::uuid) into v_ids from jsonb_array_elements(e.value) x;
+      execute format('update public.%I set %I = $1 where id = any ($2) and %I = $3', v_tbl, v_col, v_col)
+        using v_victim, v_ids, m.survivor_id;
+    end loop;
+    if m.kind = 'person' and vj -> 'repointed_ids' ? 'mdt_wanted_projections.person_id' then
+      update public.mdt_wanted_projections w set person_name_snapshot = snap ->> 'name'
+       where w.person_id = v_victim
+         and w.id in (select (x #>> '{}')::uuid from jsonb_array_elements(vj -> 'repointed_ids' -> 'mdt_wanted_projections.person_id') x);
+    end if;
+
+    for d in select x from jsonb_array_elements(coalesce(vj -> 'dropped', '[]'::jsonb)) x loop
+      v_tbl := d ->> 'table';
+      if to_regclass('public.' || v_tbl) is null then continue; end if;
+      v_cols := private.entity_merge_columns(v_tbl);
+      begin
+        execute format('insert into public.%I (%s) select %s from jsonb_populate_record(null::public.%I, $1) on conflict do nothing', v_tbl, v_cols, v_cols, v_tbl)
+          using d -> 'row';
+      exception when others then
+        null;
+      end;
+    end loop;
+
+    for f in select key, value from jsonb_each(coalesce(vj -> 'scalar_fill', '{}'::jsonb)) loop
+      execute format('select (t.%I)::text from public.%I t where t.id = $1', f.key, v_table) into v_cur using m.survivor_id;
+      if f.key = 'bolo' then
+        if coalesce(v_cur::boolean, false) then
+          update public.persons set bolo = false, bolo_reason = null, bolo_risk = null, bolo_instructions = null,
+                 bolo_issued_by = null, bolo_issued_at = null, bolo_expires_at = null, bolo_case_id = null
+           where id = m.survivor_id;
+        end if;
+      elsif f.key in ('operator_unknown', 'is_impersonation', 'is_compromised') then
+        execute format('update public.accounts set %I = false where id = $1', f.key) using m.survivor_id;
+      elsif v_cur is not distinct from (f.value ->> 'to') or (v_cur is null and f.value -> 'to' = 'null'::jsonb) then
+        execute format('update public.%I t set %I = (select x.%I from jsonb_populate_record(null::public.%I, $1) x) where t.id = $2', v_table, f.key, f.key, v_table)
+          using jsonb_build_object(f.key, f.value -> 'from'), m.survivor_id;
+      end if;
+    end loop;
+    if vj ? 'notes_from' and snap ? 'notes' and nullif(btrim(coalesce(snap ->> 'notes', '')), '') is not null then
+      execute format('update public.%I set notes = $1 where id = $2 and position($3 in coalesce(notes, '''')) > 0', v_table)
+        using vj ->> 'notes_from', m.survivor_id, '── merged from ' || (vj ->> 'label') || ' ──';
+    end if;
+
+    insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+    values (v_uid, 'ENTITY_UNMERGED', v_table, v_victim,
+            jsonb_build_object('merge_id', m.id, 'kind', m.kind, 'survivor_id', m.survivor_id, 'victim_id', v_victim, 'reason', v_reason));
+    v_restored := v_restored + 1;
+  end loop;
+
+  if m.kind = 'narcotic' then
+    delete from public.narcotic_aliases a
+     where a.id in (select (x #>> '{}')::uuid from jsonb_array_elements(coalesce(m.manifest -> 'added_aliases', '[]'::jsonb)) x
+                     where jsonb_typeof(x) = 'string' and (x #>> '{}') ~ '^[0-9a-f-]{36}$');
+  end if;
+
+  perform set_config('cid.version_source', '', true);
+  perform set_config('cid.version_reason', '', true);
+
+  update public.entity_merges set reversed_at = now(), reversed_by = v_uid, reverse_reason = v_reason where id = m.id;
+  return jsonb_build_object('ok', true, 'merge_id', m.id, 'kind', m.kind, 'survivor_id', m.survivor_id, 'restored', v_restored);
 end $function$
 ;
 
@@ -11615,130 +12423,18 @@ CREATE OR REPLACE FUNCTION public.merge_narcotics(p_survivor uuid, p_merged uuid
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare
-  v_uid uuid := (select auth.uid());
-  v_reason text := btrim(coalesce(p_reason, ''));
-  s public.narcotics;
-  m public.narcotics;
-  n_alias int; n_pl int; n_pe int; n_ga int; n_ve int; n_sz int;
-  n_media int; n_hot int; n_pre int; n_plc int; n_cil int;
+declare r jsonb; s public.narcotics;
 begin
-  if not private.can_manage_narcotics() then
-    raise exception 'narcotic merge is restricted to Bureau Lead or higher';
-  end if;
-  if v_reason = '' then
-    raise exception 'a reason is required to merge narcotic records';
-  end if;
   if p_survivor is null or p_merged is null then
     raise exception 'both the survivor and the merged record are required';
   end if;
   if p_survivor = p_merged then
     raise exception 'a record cannot be merged into itself';
   end if;
-
-  select * into s from public.narcotics where id = p_survivor for update;
-  if s.id is null then raise exception 'survivor narcotic not found'; end if;
-  if s.status = 'merged' then
-    raise exception 'the survivor is already merged into another record — merge into its survivor instead';
+  r := public.entity_merge('narcotic', p_survivor, array[p_merged], p_reason);
+  if not coalesce((r ->> 'ok')::boolean, false) then
+    raise exception '%', coalesce(r ->> 'message', 'narcotic merge refused');
   end if;
-  select * into m from public.narcotics where id = p_merged for update;
-  if m.id is null then raise exception 'merged narcotic not found'; end if;
-  if m.status = 'merged' then
-    raise exception 'narcotic % is already merged and cannot be merged again', p_merged;
-  end if;
-
-  -- aliases: UNIQUE(narcotic_id, lower(alias)) — drop would-be collisions,
-  -- repoint the rest.
-  delete from public.narcotic_aliases a
-   where a.narcotic_id = p_merged
-     and exists (select 1 from public.narcotic_aliases d
-                  where d.narcotic_id = p_survivor and lower(d.alias) = lower(a.alias));
-  update public.narcotic_aliases set narcotic_id = p_survivor where narcotic_id = p_merged;
-  get diagnostics n_alias = row_count;
-
-  -- narcotic_places: UNIQUE(narcotic_id, place_id, role).
-  delete from public.narcotic_places l
-   where l.narcotic_id = p_merged
-     and exists (select 1 from public.narcotic_places d
-                  where d.narcotic_id = p_survivor and d.place_id = l.place_id and d.role = l.role);
-  update public.narcotic_places set narcotic_id = p_survivor where narcotic_id = p_merged;
-  get diagnostics n_pl = row_count;
-
-  -- narcotic_persons: UNIQUE(narcotic_id, person_id, role).
-  delete from public.narcotic_persons l
-   where l.narcotic_id = p_merged
-     and exists (select 1 from public.narcotic_persons d
-                  where d.narcotic_id = p_survivor and d.person_id = l.person_id and d.role = l.role);
-  update public.narcotic_persons set narcotic_id = p_survivor where narcotic_id = p_merged;
-  get diagnostics n_pe = row_count;
-
-  -- narcotic_gangs: UNIQUE(narcotic_id, gang_id, role).
-  delete from public.narcotic_gangs l
-   where l.narcotic_id = p_merged
-     and exists (select 1 from public.narcotic_gangs d
-                  where d.narcotic_id = p_survivor and d.gang_id = l.gang_id and d.role = l.role);
-  update public.narcotic_gangs set narcotic_id = p_survivor where narcotic_id = p_merged;
-  get diagnostics n_ga = row_count;
-
-  -- narcotic_vehicles: UNIQUE(narcotic_id, vehicle_id, role).
-  delete from public.narcotic_vehicles l
-   where l.narcotic_id = p_merged
-     and exists (select 1 from public.narcotic_vehicles d
-                  where d.narcotic_id = p_survivor and d.vehicle_id = l.vehicle_id and d.role = l.role);
-  update public.narcotic_vehicles set narcotic_id = p_survivor where narcotic_id = p_merged;
-  get diagnostics n_ve = row_count;
-
-  -- Plain repoints (no UNIQUE constraints involve narcotic_id here).
-  update public.narcotic_seizures set narcotic_id = p_survivor where narcotic_id = p_merged;
-  get diagnostics n_sz = row_count;
-  update public.media set narcotic_id = p_survivor where narcotic_id = p_merged;
-  get diagnostics n_media = row_count;
-  update public.narcotic_hotspots set narcotic_id = p_survivor where narcotic_id = p_merged;
-  get diagnostics n_hot = row_count;
-  update public.narcotic_precursors set narcotic_id = p_survivor where narcotic_id = p_merged;
-  get diagnostics n_pre = row_count;
-  update public.places set narcotic_id = p_survivor where narcotic_id = p_merged;
-  get diagnostics n_plc = row_count;
-  update public.narcotic_sale_series set narcotic_id = p_survivor where narcotic_id = p_merged;
-  update public.narcotic_sale_observations set narcotic_id = p_survivor where narcotic_id = p_merged;
-
-  -- case_intel_links: UNIQUE(case_id, kind, ref_id) — drop the merged-side
-  -- link where the survivor is already linked to the same case, repoint the
-  -- rest.
-  delete from public.case_intel_links l
-   where l.kind = 'narcotic' and l.ref_id = p_merged
-     and exists (select 1 from public.case_intel_links d
-                  where d.case_id = l.case_id and d.kind = 'narcotic' and d.ref_id = p_survivor);
-  update public.case_intel_links set ref_id = p_survivor
-   where kind = 'narcotic' and ref_id = p_merged;
-  get diagnostics n_cil = row_count;
-
-  -- Keep the merged record's name findable on the survivor.
-  if btrim(m.name) <> '' and not exists (
-       select 1 from public.narcotic_aliases d
-        where d.narcotic_id = p_survivor
-          and lower(d.alias) = lower(left(btrim(m.name), 120))) then
-    insert into public.narcotic_aliases (narcotic_id, alias, alias_type, created_by)
-    values (p_survivor, left(btrim(m.name), 120), 'variant', v_uid);
-  end if;
-
-  -- Tombstone the merged row (kept, never deleted).
-  update public.narcotics
-     set status = 'merged', merged_into = p_survivor
-   where id = p_merged;
-
-  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
-  values (v_uid, 'NARCOTIC_MERGED', 'narcotics', p_merged, jsonb_build_object(
-    'survivor_id', p_survivor, 'merged_id', p_merged, 'merged_name', m.name,
-    'reason', left(v_reason, 500),
-    'repointed', jsonb_build_object(
-      'narcotic_aliases', n_alias, 'narcotic_places', n_pl,
-      'narcotic_persons', n_pe, 'narcotic_gangs', n_ga,
-      'narcotic_vehicles', n_ve, 'narcotic_seizures', n_sz,
-      'media', n_media, 'narcotic_hotspots', n_hot,
-      'narcotic_precursors', n_pre, 'places', n_plc,
-      'case_intel_links', n_cil)));
-
   select * into s from public.narcotics where id = p_survivor;
   return s;
 end $function$
@@ -12848,162 +13544,51 @@ CREATE OR REPLACE FUNCTION public.person_merge(p_survivor uuid, p_victims uuid[]
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
+declare r jsonb;
+begin
+  r := public.entity_merge('person', p_survivor, p_victims, p_reason);
+  if not coalesce((r ->> 'ok')::boolean, false) then
+    raise exception '%', coalesce(r ->> 'message', 'person merge refused');
+  end if;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.promote_observation(p_id uuid, p_reason text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
 declare
   v_uid uuid := (select auth.uid());
-  v_reason text := btrim(coalesce(p_reason, ''));
-  s public.persons;
-  v public.persons;
-  v_victim uuid;
-  n_gm int; n_media int; n_legal int; n_mdt int; n_veh int;
-  n_cil int; n_pp int; n_pv int; n_rel_a int; n_rel_b int; n_wl int;
+  o public.entity_field_observations;
+  v_reason text := left(nullif(btrim(coalesce(p_reason, '')), ''), 500);
+  v_res jsonb;
 begin
-  if not private.can_delete() then
-    raise exception 'person merge is restricted to command (Bureau Lead or higher)';
+  select * into o from public.entity_field_observations where id = p_id for update;
+  if o.id is null then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'observation not found');
   end if;
-  if v_reason = '' then
-    raise exception 'a reason is required to merge person records';
+  if v_uid is null or not private.is_active() or not private.can_read_case(o.case_id) or not private.perm_registry_edit(o.kind, o.ref_id) then
+    perform private.perm_deny('promote_observation', o.kind, o.ref_id, 'no_edit_authority');
+    return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'you cannot promote this observation');
   end if;
-  if p_victims is null or cardinality(p_victims) = 0 then
-    raise exception 'at least one merge victim is required';
+  if o.promoted_at is not null then
+    return jsonb_build_object('ok', false, 'code', 'already_promoted', 'message', 'this observation was already promoted');
   end if;
-  if p_survivor = any (p_victims) then
-    raise exception 'the survivor cannot also be a merge victim';
+  if v_reason is null then
+    return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'say why the master record should carry this value');
   end if;
-
-  select * into s from public.persons where id = p_survivor for update;
-  if s.id is null then raise exception 'survivor person not found'; end if;
-  if s.lifecycle = 'merged' then
-    raise exception 'the survivor is already merged into another record — merge into its survivor instead';
-  end if;
-
-  -- Lock and validate every victim before mutating anything.
-  foreach v_victim in array p_victims loop
-    select * into v from public.persons where id = v_victim for update;
-    if v.id is null then raise exception 'merge victim % not found', v_victim; end if;
-    if v.lifecycle = 'merged' then
-      raise exception 'person % is already merged and cannot be merged again', v_victim;
-    end if;
-  end loop;
-
-  foreach v_victim in array p_victims loop
-    select * into v from public.persons where id = v_victim;
-
-    -- Plain repoints (no UNIQUE constraints involve person_id here).
-    update public.gang_members set person_id = p_survivor where person_id = v_victim;
-    get diagnostics n_gm = row_count;
-    update public.media set person_id = p_survivor where person_id = v_victim;
-    get diagnostics n_media = row_count;
-    update public.legal_requests set person_id = p_survivor where person_id = v_victim;
-    get diagnostics n_legal = row_count;
-    update public.mdt_wanted_projections set person_id = p_survivor where person_id = v_victim;
-    get diagnostics n_mdt = row_count;
-    update public.vehicles set owner_id = p_survivor where owner_id = v_victim;
-    get diagnostics n_veh = row_count;
-
-    -- case_intel_links: UNIQUE(case_id, kind, ref_id) — drop the victim link
-    -- where the survivor is already linked to the same case, repoint the rest.
-    delete from public.case_intel_links l
-     where l.kind = 'person' and l.ref_id = v_victim
-       and exists (select 1 from public.case_intel_links d
-                    where d.case_id = l.case_id and d.kind = 'person' and d.ref_id = p_survivor);
-    update public.case_intel_links set ref_id = p_survivor
-     where kind = 'person' and ref_id = v_victim;
-    get diagnostics n_cil = row_count;
-
-    -- person_places: UNIQUE(person_id, place_id).
-    delete from public.person_places l
-     where l.person_id = v_victim
-       and exists (select 1 from public.person_places d
-                    where d.person_id = p_survivor and d.place_id = l.place_id);
-    update public.person_places set person_id = p_survivor where person_id = v_victim;
-    get diagnostics n_pp = row_count;
-
-    -- person_vehicles: UNIQUE(person_id, vehicle_id).
-    delete from public.person_vehicles l
-     where l.person_id = v_victim
-       and exists (select 1 from public.person_vehicles d
-                    where d.person_id = p_survivor and d.vehicle_id = l.vehicle_id);
-    update public.person_vehicles set person_id = p_survivor where person_id = v_victim;
-    get diagnostics n_pv = row_count;
-
-    -- person_relationships: drop rows a repoint would turn into self-links,
-    -- drop rows whose canonical pair (least, greatest, relationship) would
-    -- collide with an existing survivor-side row, then repoint the rest.
-    delete from public.person_relationships r
-     where (r.person_a = v_victim and r.person_b = p_survivor)
-        or (r.person_b = v_victim and r.person_a = p_survivor);
-    delete from public.person_relationships r
-     where r.person_a = v_victim
-       and exists (select 1 from public.person_relationships d
-                    where d.id <> r.id and d.relationship = r.relationship
-                      and least(d.person_a, d.person_b) = least(p_survivor, r.person_b)
-                      and greatest(d.person_a, d.person_b) = greatest(p_survivor, r.person_b));
-    delete from public.person_relationships r
-     where r.person_b = v_victim
-       and exists (select 1 from public.person_relationships d
-                    where d.id <> r.id and d.relationship = r.relationship
-                      and least(d.person_a, d.person_b) = least(r.person_a, p_survivor)
-                      and greatest(d.person_a, d.person_b) = greatest(r.person_a, p_survivor));
-    update public.person_relationships set person_a = p_survivor where person_a = v_victim;
-    get diagnostics n_rel_a = row_count;
-    update public.person_relationships set person_b = p_survivor where person_b = v_victim;
-    get diagnostics n_rel_b = row_count;
-
-    -- watchlist: UNIQUE(user_id, target_type, target_id).
-    delete from public.watchlist w
-     where w.target_type = 'person' and w.target_id = v_victim
-       and exists (select 1 from public.watchlist d
-                    where d.user_id = w.user_id and d.target_type = 'person'
-                      and d.target_id = p_survivor);
-    delete from public.narcotic_persons np
-     where np.person_id = v_victim
-       and exists (select 1 from public.narcotic_persons keep
-                   where keep.narcotic_id = np.narcotic_id and keep.person_id = p_survivor
-                     and keep.role is not distinct from np.role);
-    update public.narcotic_persons set person_id = p_survivor where person_id = v_victim;
-
-    update public.watchlist set target_id = p_survivor
-     where target_type = 'person' and target_id = v_victim;
-    get diagnostics n_wl = row_count;
-
-    -- Conservative scalar merge: the survivor keeps its own values.
-    if (s.alias is null or btrim(s.alias) = '')
-       and v.alias is not null and btrim(v.alias) <> '' then
-      update public.persons set alias = v.alias where id = p_survivor;
-      s.alias := v.alias;
-    end if;
-    if v.notes is not null and btrim(v.notes) <> '' then
-      update public.persons
-         set notes = case when notes is null or btrim(notes) = '' then '' else notes || e'\n\n' end
-                     || '── merged from ' || v.name || ' ──' || e'\n' || v.notes
-       where id = p_survivor;
-    end if;
-    if v.bolo and not s.bolo then
-      update public.persons
-         set bolo = true, bolo_reason = v.bolo_reason, bolo_risk = v.bolo_risk,
-             bolo_instructions = v.bolo_instructions, bolo_issued_by = v.bolo_issued_by,
-             bolo_issued_at = v.bolo_issued_at, bolo_expires_at = v.bolo_expires_at,
-             bolo_case_id = v.bolo_case_id
-       where id = p_survivor;
-      s.bolo := true;
-    end if;
-
-    -- Tombstone the victim (kept, never deleted).
-    update public.persons
-       set lifecycle = 'merged', merged_into = p_survivor, bolo = false, gang_id = null
-     where id = v_victim;
-
+  v_res := public.entity_suggest_update(o.kind, o.ref_id, o.field, o.value, v_reason, null, o.id);
+  if not coalesce((v_res ->> 'ok')::boolean, false) then return v_res; end if;
+  if coalesce((v_res ->> 'applied')::boolean, false) then
+    update public.entity_field_observations set promoted_at = now(), promoted_by = v_uid where id = p_id;
     insert into public.audit_log (actor_id, action, entity, entity_id, detail)
-    values (v_uid, 'PERSON_MERGED', 'persons', v_victim, jsonb_build_object(
-      'survivor_id', p_survivor, 'victim_id', v_victim, 'victim_name', v.name,
-      'reason', left(v_reason, 500),
-      'repointed', jsonb_build_object(
-        'gang_members', n_gm, 'media', n_media, 'legal_requests', n_legal,
-        'mdt_wanted_projections', n_mdt, 'vehicles', n_veh,
-        'case_intel_links', n_cil, 'person_places', n_pp,
-        'person_vehicles', n_pv, 'person_relationships', n_rel_a + n_rel_b,
-        'watchlist', n_wl)));
-  end loop;
+    values (v_uid, 'ENTITY_OBSERVATION_PROMOTED', private.entity_merge_table(o.kind), o.ref_id,
+            jsonb_build_object('kind', o.kind, 'observation_id', o.id, 'case_id', o.case_id, 'field', o.field,
+                               'value', o.value, 'reason', v_reason));
+  end if;
+  return v_res || jsonb_build_object('observation_id', o.id);
 end $function$
 ;
 
@@ -15037,6 +15622,22 @@ begin
     where created_by = any(ids) or handler_id = any(ids);
   delete from public.siu_case_notes where created_by = any(ids);
   delete from public.siu_targets where created_by = any(ids);
+
+  -- P2 entity layer (20261020120000): ledger, queue, suggestion and observation
+  -- rows a fixture created or decided; the queue rows of fixture-created records.
+  delete from public.entity_update_suggestions where proposed_by = any(ids) or decided_by = any(ids);
+  delete from public.entity_field_observations where recorded_by = any(ids) or case_id = any(case_ids);
+  delete from public.entity_merges where actor_id = any(ids) or reversed_by = any(ids);
+  delete from public.siu_reconcile_queue q
+   where q.resolved_by = any(ids)
+      or q.cid_record_id in (select id from public.persons where created_by = any(ids)
+                             union all select id from public.vehicles where created_by = any(ids)
+                             union all select id from public.gangs where created_by = any(ids)
+                             union all select id from public.places where created_by = any(ids))
+      or q.hidden_record_id in (select id from public.persons where created_by = any(ids)
+                                union all select id from public.vehicles where created_by = any(ids)
+                                union all select id from public.gangs where created_by = any(ids)
+                                union all select id from public.places where created_by = any(ids));
 
   delete from public.case_messages where case_id = any(case_ids);
   delete from public.case_tasks where case_id = any(case_ids);
@@ -17583,6 +18184,58 @@ begin
   update public.cases set siu_stage = 'investigation' where id = p_case;
   perform private.siu_audit('SIU_INQUIRY_PROMOTED', p_case, jsonb_build_object(
     'reason', btrim(p_reason), 'promoted_by', v_actor));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.siu_reconcile_resolve(p_id uuid, p_resolution text, p_note text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_res text := lower(btrim(coalesce(p_resolution, '')));
+  v_note text := left(nullif(btrim(coalesce(p_note, '')), ''), 500);
+  q public.siu_reconcile_queue;
+  v_merge jsonb;
+begin
+  if v_uid is null or not private.siu_is_agent() then
+    perform private.perm_deny('siu_reconcile_resolve', 'siu_reconcile', p_id, 'not_sib');
+    return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'only SIB agents resolve the reconcile queue');
+  end if;
+  if v_res not in ('link', 'merge', 'dismiss') then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'resolution must be link, merge or dismiss');
+  end if;
+  select * into q from public.siu_reconcile_queue where id = p_id for update;
+  if q.id is null then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'queue item not found');
+  end if;
+  if q.resolved_at is not null then
+    return jsonb_build_object('ok', false, 'code', 'already_resolved', 'message', 'this item is already resolved');
+  end if;
+  if v_res = 'merge' then
+    if not private.siu_is_command() then
+      perform private.perm_deny('siu_reconcile_merge', 'siu_reconcile', p_id, 'not_command');
+      return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'merging into a compartmented record is an SIB command decision');
+    end if;
+    if v_note is null then
+      return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'a reason is required to merge');
+    end if;
+    v_merge := public.entity_merge(q.kind, q.hidden_record_id, array[q.cid_record_id], v_note);
+    if not coalesce((v_merge ->> 'ok')::boolean, false) then
+      return v_merge;
+    end if;
+  end if;
+
+  update public.siu_reconcile_queue
+     set resolved_at = now(), resolved_by = v_uid, resolution = v_res, note = v_note
+   where id = p_id;
+  perform private.siu_audit('SIU_RECONCILE_RESOLVED', p_id,
+    jsonb_build_object('kind', q.kind, 'resolution', v_res, 'note', v_note,
+                       'cid_record_id', q.cid_record_id, 'hidden_record_id', q.hidden_record_id,
+                       'merge_id', v_merge ->> 'merge_id'));
+  return jsonb_build_object('ok', true, 'id', p_id, 'resolution', v_res, 'merge_id', v_merge ->> 'merge_id');
 end $function$
 ;
 
@@ -20587,6 +21240,20 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.block_direct_observation_promote()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if current_user not in ('authenticated', 'anon') then return new; end if;
+  if new.promoted_at is distinct from old.promoted_at or new.promoted_by is distinct from old.promoted_by then
+    raise exception 'an observation is promoted through promote_observation()' using errcode = 'P0403';
+  end if;
+  return new;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.block_direct_operation_authority()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -20699,6 +21366,26 @@ begin
         raise exception 'SIB case lifecycle fields are set only by the SIB lifecycle RPCs';
       end if;
     end if;
+  end if;
+  return new;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.block_direct_siu_hidden_flag()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if current_user not in ('authenticated', 'anon') then return new; end if;
+  if tg_op = 'INSERT' then
+    if new.siu_hidden_flag then
+      raise exception 'siu_hidden_flag is maintained by the SIB visibility layer' using errcode = 'P0403';
+    end if;
+    return new;
+  end if;
+  if new.siu_hidden_flag is distinct from old.siu_hidden_flag then
+    raise exception 'siu_hidden_flag is maintained by the SIB visibility layer' using errcode = 'P0403';
   end if;
   return new;
 end $function$
@@ -22238,6 +22925,521 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.entity_apply_field(p_kind text, p_id uuid, p_field text, p_value text, p_source text, p_reason text, p_detail jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_table text := private.entity_merge_table(p_kind);
+  v_from text; v_deleted boolean; v_merged boolean;
+begin
+  if v_table is null or not (p_field = any (private.entity_editable_fields(p_kind))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'that field cannot be updated this way');
+  end if;
+  execute format('select (t.%I)::text, t.deleted_at is not null, (t.merged_into is not null or %s) from public.%I t where t.id = $1',
+                 p_field,
+                 case p_kind when 'person' then 't.lifecycle = ''merged''' when 'account' then 't.lifecycle = ''merged'''
+                             when 'narcotic' then 't.status = ''merged''' else 'false' end, v_table)
+    into v_from, v_deleted, v_merged using p_id;
+  if v_deleted is null then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'record not found');
+  end if;
+  if v_deleted or v_merged then
+    return jsonb_build_object('ok', false, 'code', 'not_editable', 'message', 'a merged or trashed record is not edited');
+  end if;
+  if v_from is not distinct from p_value then
+    return jsonb_build_object('ok', true, 'from', v_from, 'to', p_value, 'changed', false);
+  end if;
+  perform set_config('cid.version_source', p_source, true);
+  perform set_config('cid.version_reason', left(coalesce(p_reason, ''), 500), true);
+  execute format('update public.%I t set %I = (select x.%I from jsonb_populate_record(null::public.%I, $1) x) where t.id = $2',
+                 v_table, p_field, p_field, v_table)
+    using jsonb_build_object(p_field, p_value), p_id;
+  perform set_config('cid.version_source', '', true);
+  perform set_config('cid.version_reason', '', true);
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'ENTITY_FIELD_UPDATED', v_table, p_id,
+          jsonb_build_object('kind', p_kind, 'field', p_field, 'from', v_from, 'to', p_value,
+                             'source', p_source, 'reason', left(coalesce(p_reason, ''), 500)) || coalesce(p_detail, '{}'::jsonb));
+  return jsonb_build_object('ok', true, 'from', v_from, 'to', p_value, 'changed', true);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.entity_editable_fields(p_kind text)
+ RETURNS text[]
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  select case p_kind
+    when 'person'   then array['name', 'alias', 'dob', 'phone', 'status', 'classification', 'confidence', 'priority', 'mugshot_url', 'notes']
+    when 'vehicle'  then array['plate', 'model', 'color', 'notes']
+    when 'gang'     then array['name', 'aliases', 'colors', 'classification', 'status', 'confidence', 'notes']
+    when 'place'    then array['name', 'area', 'notes']
+    when 'account'  then array['handle', 'display_name', 'summary', 'category', 'profile_url']
+    when 'narcotic' then array['name', 'classification', 'summary', 'appearance', 'packaging', 'scene_indicators', 'officer_safety']
+    else '{}'::text[] end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.entity_merge_apply(p_kind text, p_survivor uuid, p_victims uuid[], p_reason text, p_dry boolean, p_merge_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_table text := private.entity_merge_table(p_kind);
+  v_plan jsonb := private.entity_merge_plan(p_kind);
+  v_out jsonb;
+  v_victims jsonb := '[]'::jsonb;
+  v_aliases jsonb := '[]'::jsonb;
+  s jsonb; v jsonb;
+  v_victim uuid;
+  e jsonb; u jsonb;
+  r record;
+  n int;
+  v_rep jsonb; v_rep_ids jsonb; v_dropped jsonb; v_fill jsonb;
+  v_drop boolean; v_why text;
+  v_row_re jsonb;
+  v_keys text[]; v_pred_ok boolean; v_hit boolean;
+  v_sib text;
+  v_exprs text; v_pred text;
+  v_fill_cols text[];
+  v_sets text[]; v_col text; v_sval text; v_vval text;
+  v_notes_from text;
+  v_now timestamptz := now();
+  v_label text;
+begin
+  execute format('select to_jsonb(t) from public.%I t where t.id = $1', v_table) into s using p_survivor;
+
+  v_fill_cols := case p_kind
+    when 'person'   then array['alias', 'dob', 'phone', 'status', 'classification', 'confidence', 'priority', 'mugshot_url', 'lead_detective_id']
+    when 'vehicle'  then array['model', 'color', 'owner_id', 'gang_id']
+    when 'gang'     then array['colors', 'classification', 'status', 'confidence', 'lead_detective_id']
+    when 'place'    then array['area', 'controlling_gang_id', 'case_id', 'narcotic_id']
+    when 'account'  then array['display_name', 'summary', 'external_id', 'profile_url', 'category']
+    when 'narcotic' then array['classification', 'icon', 'summary', 'appearance', 'packaging', 'scene_indicators',
+                               'officer_safety', 'intelligence_gaps', 'in_city_significance', 'street_price',
+                               'wholesale_price', 'confidence', 'provenance', 'source_case_id', 'source_evidence_id',
+                               'representative_media_id']
+    end;
+
+  if not p_dry then
+    perform set_config('cid.version_source', 'merge', true);
+    perform set_config('cid.version_reason', left(coalesce(p_reason, ''), 500), true);
+  end if;
+
+  foreach v_victim in array p_victims loop
+    execute format('select to_jsonb(t) from public.%I t where t.id = $1', v_table) into v using v_victim;
+    v_label := private.entity_merge_label(p_kind, v_victim);
+    v_rep := '{}'::jsonb; v_rep_ids := '{}'::jsonb; v_dropped := '[]'::jsonb; v_fill := '{}'::jsonb; v_notes_from := null;
+
+    for e in select * from jsonb_array_elements(v_plan) loop
+      if not (e ->> 'has_id')::boolean then
+        if not p_dry then
+          execute format('update public.%I set %I = $1 where %I = $2 %s', e ->> 'table', e ->> 'column', e ->> 'column',
+                         case when e ->> 'disc_col' is not null then format('and %I = %L', e ->> 'disc_col', e ->> 'disc_val') else '' end)
+            using p_survivor, v_victim;
+          get diagnostics n = row_count;
+        else
+          execute format('select count(*) from public.%I where %I = $1 %s', e ->> 'table', e ->> 'column',
+                         case when e ->> 'disc_col' is not null then format('and %I = %L', e ->> 'disc_col', e ->> 'disc_val') else '' end)
+            into n using v_victim;
+        end if;
+        if n > 0 then v_rep := v_rep || jsonb_build_object((e ->> 'table') || '.' || (e ->> 'column'), n); end if;
+        continue;
+      end if;
+
+      for r in execute format('select t.id, to_jsonb(t) as rj from public.%I t where t.%I = $1 %s order by t.id',
+                              e ->> 'table', e ->> 'column',
+                              case when e ->> 'disc_col' is not null then format('and t.%I = %L', e ->> 'disc_col', e ->> 'disc_val') else '' end)
+               using v_victim
+      loop
+        v_drop := false; v_why := null;
+        v_row_re := r.rj || jsonb_build_object(e ->> 'column', p_survivor);
+
+        if e ->> 'table' = 'person_relationships' then
+          for v_sib in select x ->> 'column' from jsonb_array_elements(v_plan) x
+                        where x ->> 'table' = e ->> 'table' and x ->> 'column' <> e ->> 'column'
+          loop
+            if (r.rj ->> v_sib) = p_survivor::text then v_drop := true; v_why := 'self_link'; end if;
+          end loop;
+        end if;
+
+        if not v_drop then
+          for u in select * from jsonb_array_elements(e -> 'uniques') loop
+            select string_agg(format('(%s)::text', x), ', ') into v_exprs from jsonb_array_elements_text(u -> 'exprs') x;
+            v_pred := coalesce(u ->> 'pred', 'true');
+            execute format('select array[%s], (%s) from jsonb_populate_record(null::public.%I, $1) x', v_exprs, v_pred, e ->> 'table')
+              into v_keys, v_pred_ok using v_row_re;
+            if coalesce(v_pred_ok, false) and array_position(v_keys, null) is null then
+              execute format('select exists (select 1 from public.%I d where d.id <> $1 and array[%s] = $2 and (%s))',
+                             e ->> 'table', v_exprs, v_pred)
+                into v_hit using r.id, v_keys;
+              if v_hit then v_drop := true; v_why := 'unique:' || (u ->> 'name'); exit; end if;
+            end if;
+          end loop;
+        end if;
+
+        if v_drop then
+          v_dropped := v_dropped || jsonb_build_object('table', e ->> 'table', 'why', v_why, 'row', r.rj);
+          if not p_dry then
+            execute format('delete from public.%I where id = $1', e ->> 'table') using r.id;
+          end if;
+        else
+          if not p_dry then
+            execute format('update public.%I set %I = $1 where id = $2', e ->> 'table', e ->> 'column') using p_survivor, r.id;
+          end if;
+          v_col := (e ->> 'table') || '.' || (e ->> 'column');
+          v_rep := v_rep || jsonb_build_object(v_col, coalesce((v_rep ->> v_col)::int, 0) + 1);
+          v_rep_ids := v_rep_ids || jsonb_build_object(v_col, coalesce(v_rep_ids -> v_col, '[]'::jsonb) || to_jsonb(r.id));
+        end if;
+      end loop;
+    end loop;
+
+    if p_kind = 'person' and not p_dry and v_rep_ids ? 'mdt_wanted_projections.person_id' then
+      update public.mdt_wanted_projections w
+         set person_name_snapshot = s ->> 'name'
+       where w.person_id = p_survivor
+         and w.id in (select (x #>> '{}')::uuid from jsonb_array_elements(v_rep_ids -> 'mdt_wanted_projections.person_id') x);
+    end if;
+
+    if not p_dry then
+      if p_kind = 'person' then
+        update public.persons set lifecycle = 'merged', merged_into = p_survivor, bolo = false, gang_id = null where id = v_victim;
+      elsif p_kind = 'account' then
+        update public.accounts set lifecycle = 'merged', merged_into = p_survivor where id = v_victim;
+      elsif p_kind = 'narcotic' then
+        update public.narcotics set status = 'merged', merged_into = p_survivor where id = v_victim;
+      else
+        execute format('update public.%I set merged_into = $1, deleted_at = $2, deleted_by = $3, delete_reason = $4, delete_batch = $5 where id = $6', v_table)
+          using p_survivor, v_now, v_uid, left('merged into ' || private.entity_merge_label(p_kind, p_survivor), 500), p_merge_id, v_victim;
+      end if;
+    end if;
+
+    v_sets := '{}'::text[];
+    foreach v_col in array v_fill_cols loop
+      if s ? v_col then
+        v_sval := nullif(btrim(coalesce(s ->> v_col, '')), '');
+        v_vval := nullif(btrim(coalesce(v ->> v_col, '')), '');
+        if v_sval is null and v_vval is not null then
+          v_sets := array_append(v_sets, format('%I = (select x.%I from jsonb_populate_record(null::public.%I, %L::jsonb) x)', v_col, v_col, v_table, v));
+          v_fill := v_fill || jsonb_build_object(v_col, jsonb_build_object('from', s -> v_col, 'to', v -> v_col));
+          s := s || jsonb_build_object(v_col, v -> v_col);
+        end if;
+      end if;
+    end loop;
+    if s ? 'notes' and nullif(btrim(coalesce(v ->> 'notes', '')), '') is not null then
+      v_notes_from := s ->> 'notes';
+      v_sets := array_append(v_sets, format('notes = %L', case when nullif(btrim(coalesce(s ->> 'notes', '')), '') is null then '' else (s ->> 'notes') || e'\n\n' end
+                                                          || '── merged from ' || v_label || ' ──' || e'\n' || (v ->> 'notes')));
+      s := s || jsonb_build_object('notes', case when nullif(btrim(coalesce(s ->> 'notes', '')), '') is null then '' else (s ->> 'notes') || e'\n\n' end
+                                                || '── merged from ' || v_label || ' ──' || e'\n' || (v ->> 'notes'));
+    end if;
+    if p_kind = 'person' and coalesce((v ->> 'bolo')::boolean, false) and not coalesce((s ->> 'bolo')::boolean, false) then
+      v_sets := v_sets || array[
+        'bolo = true',
+        format('bolo_reason = %L', v ->> 'bolo_reason'), format('bolo_risk = %L', v ->> 'bolo_risk'),
+        format('bolo_instructions = %L', v ->> 'bolo_instructions'), format('bolo_issued_by = %L', v ->> 'bolo_issued_by'),
+        format('bolo_issued_at = %L', v ->> 'bolo_issued_at'), format('bolo_expires_at = %L', v ->> 'bolo_expires_at'),
+        format('bolo_case_id = %L', v ->> 'bolo_case_id')];
+      v_fill := v_fill || jsonb_build_object('bolo', jsonb_build_object('from', false, 'to', true));
+      s := s || jsonb_build_object('bolo', true);
+    end if;
+    if p_kind = 'account' then
+      if coalesce((v ->> 'operator_unknown')::boolean, false) and not coalesce((s ->> 'operator_unknown')::boolean, false) then
+        v_sets := array_append(v_sets, 'operator_unknown = true'); v_fill := v_fill || jsonb_build_object('operator_unknown', jsonb_build_object('from', false, 'to', true)); s := s || '{"operator_unknown": true}'::jsonb;
+      end if;
+      if coalesce((v ->> 'is_impersonation')::boolean, false) and not coalesce((s ->> 'is_impersonation')::boolean, false) then
+        v_sets := array_append(v_sets, 'is_impersonation = true'); v_fill := v_fill || jsonb_build_object('is_impersonation', jsonb_build_object('from', false, 'to', true)); s := s || '{"is_impersonation": true}'::jsonb;
+      end if;
+      if coalesce((v ->> 'is_compromised')::boolean, false) and not coalesce((s ->> 'is_compromised')::boolean, false) then
+        v_sets := array_append(v_sets, 'is_compromised = true'); v_fill := v_fill || jsonb_build_object('is_compromised', jsonb_build_object('from', false, 'to', true)); s := s || '{"is_compromised": true}'::jsonb;
+      end if;
+    end if;
+    if p_kind = 'gang' and nullif(btrim(coalesce(v ->> 'name', '')), '') is not null
+       and position(lower(v ->> 'name') in lower(coalesce(s ->> 'aliases', '') || ' ' || coalesce(s ->> 'name', ''))) = 0 then
+      v_sets := array_append(v_sets, format('aliases = %L', concat_ws(', ', nullif(btrim(coalesce(s ->> 'aliases', '')), ''), v ->> 'name', nullif(btrim(coalesce(v ->> 'aliases', '')), ''))));
+      v_fill := v_fill || jsonb_build_object('aliases', jsonb_build_object('from', s -> 'aliases', 'to', to_jsonb(concat_ws(', ', nullif(btrim(coalesce(s ->> 'aliases', '')), ''), v ->> 'name', nullif(btrim(coalesce(v ->> 'aliases', '')), '')))));
+      s := s || jsonb_build_object('aliases', concat_ws(', ', nullif(btrim(coalesce(s ->> 'aliases', '')), ''), v ->> 'name', nullif(btrim(coalesce(v ->> 'aliases', '')), '')));
+    end if;
+    if cardinality(v_sets) > 0 and not p_dry then
+      execute format('update public.%I set %s where id = $1', v_table, array_to_string(v_sets, ', ')) using p_survivor;
+    end if;
+
+    if p_kind = 'narcotic' and btrim(coalesce(v ->> 'name', '')) <> '' and not exists (
+         select 1 from public.narcotic_aliases d
+          where d.narcotic_id = p_survivor and lower(d.alias) = lower(left(btrim(v ->> 'name'), 120))) then
+      if not p_dry then
+        insert into public.narcotic_aliases (narcotic_id, alias, alias_type, created_by)
+        values (p_survivor, left(btrim(v ->> 'name'), 120), 'variant', v_uid)
+        returning id into v_col;
+        v_aliases := v_aliases || to_jsonb(v_col::uuid);
+      else
+        v_aliases := v_aliases || to_jsonb(left(btrim(v ->> 'name'), 120));
+      end if;
+    end if;
+
+    if not p_dry then
+      insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+      values (v_uid,
+              case p_kind when 'person' then 'PERSON_MERGED' when 'account' then 'ACCOUNT_MERGED'
+                          when 'narcotic' then 'NARCOTIC_MERGED' else 'ENTITY_MERGED' end,
+              v_table, v_victim,
+              jsonb_build_object('survivor_id', p_survivor, 'victim_id', v_victim, 'merge_id', p_merge_id,
+                                 'kind', p_kind, 'reason', left(coalesce(p_reason, ''), 500), 'repointed', v_rep)
+              || case p_kind
+                   when 'person' then jsonb_build_object('victim_name', v ->> 'name')
+                   when 'account' then jsonb_build_object('victim_platform', v ->> 'platform', 'victim_handle', v ->> 'handle')
+                   when 'narcotic' then jsonb_build_object('merged_id', v_victim, 'merged_name', v ->> 'name')
+                   else jsonb_build_object('victim_label', v_label) end);
+    end if;
+
+    v_victims := v_victims || jsonb_build_object(
+      'id', v_victim, 'label', v_label, 'repointed', v_rep, 'repointed_ids', v_rep_ids,
+      'dropped', v_dropped, 'scalar_fill', v_fill, 'notes_from', v_notes_from,
+      'tombstone', case p_kind when 'person' then 'lifecycle' when 'account' then 'lifecycle'
+                               when 'narcotic' then 'status' else 'soft_delete' end);
+  end loop;
+
+  if not p_dry then
+    perform set_config('cid.version_source', '', true);
+    perform set_config('cid.version_reason', '', true);
+  end if;
+
+  v_out := jsonb_build_object(
+    'survivor', jsonb_build_object('id', p_survivor, 'label', private.entity_merge_label(p_kind, p_survivor)),
+    'victims', v_victims, 'added_aliases', v_aliases);
+  return v_out;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.entity_merge_check(p_kind text, p_survivor uuid, p_victims uuid[], p_reason text, p_need_reason boolean)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_table text := private.entity_merge_table(p_kind);
+  v_victim uuid;
+  v_merged boolean; v_deleted boolean; v_exists boolean;
+  v_hold_cases uuid[];
+begin
+  if v_table is null then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'unknown record kind');
+  end if;
+  if v_uid is null or not private.is_active() then
+    return jsonb_build_object('ok', false, 'code', 'denied',
+      'message', case when p_kind = 'narcotic' then 'narcotic merge is restricted to Bureau Lead or higher'
+                      else format('%s merge is restricted to command (Bureau Lead or higher)', p_kind) end);
+  end if;
+  if p_kind = 'narcotic' then
+    if not private.can_manage_narcotics() then
+      return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'narcotic merge is restricted to Bureau Lead or higher');
+    end if;
+  elsif not (private.can_delete() or private.siu_is_command()) then
+    return jsonb_build_object('ok', false, 'code', 'denied',
+      'message', format('%s merge is restricted to command (Bureau Lead or higher)', p_kind));
+  end if;
+  if p_need_reason and nullif(btrim(coalesce(p_reason, '')), '') is null then
+    return jsonb_build_object('ok', false, 'code', 'reason_required',
+      'message', format('a reason is required to merge %s records', p_kind));
+  end if;
+  if p_survivor is null or p_victims is null or cardinality(array_remove(p_victims, null)) = 0 then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'both the survivor and at least one merge victim are required');
+  end if;
+  if p_survivor = any (p_victims) then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'the survivor cannot also be a merge victim');
+  end if;
+  if (select count(distinct x) from unnest(p_victims) x) <> cardinality(p_victims) then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'a merge victim is listed twice');
+  end if;
+
+  if not private.perm_registry_visible(p_kind, p_survivor) then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', format('survivor %s not found', p_kind));
+  end if;
+  execute format('select (t.merged_into is not null or %s), t.deleted_at is not null from public.%I t where t.id = $1',
+                 case p_kind when 'person' then 't.lifecycle = ''merged''' when 'account' then 't.lifecycle = ''merged'''
+                             when 'narcotic' then 't.status = ''merged''' else 'false' end, v_table)
+    into v_merged, v_deleted using p_survivor;
+  if v_merged then
+    return jsonb_build_object('ok', false, 'code', 'already_merged', 'message', 'the survivor is already merged into another record — merge into its survivor instead');
+  end if;
+  if v_deleted then
+    return jsonb_build_object('ok', false, 'code', 'deleted', 'message', 'the survivor is in the Trash — restore it before merging');
+  end if;
+
+  foreach v_victim in array p_victims loop
+    if not private.perm_registry_visible(p_kind, v_victim) then
+      return jsonb_build_object('ok', false, 'code', 'not_found', 'message', format('merge victim %s not found', v_victim));
+    end if;
+    execute format('select (t.merged_into is not null or %s), t.deleted_at is not null from public.%I t where t.id = $1',
+                   case p_kind when 'person' then 't.lifecycle = ''merged''' when 'account' then 't.lifecycle = ''merged'''
+                               when 'narcotic' then 't.status = ''merged''' else 'false' end, v_table)
+      into v_merged, v_deleted using v_victim;
+    if v_merged then
+      return jsonb_build_object('ok', false, 'code', 'already_merged', 'message', format('%s %s is already merged and cannot be merged again', p_kind, v_victim));
+    end if;
+    if v_deleted then
+      return jsonb_build_object('ok', false, 'code', 'deleted', 'message', format('%s %s is in the Trash — restore it before merging', p_kind, v_victim));
+    end if;
+  end loop;
+
+  select coalesce(array_agg(distinct l.case_id), '{}'::uuid[]) into v_hold_cases
+    from public.case_intel_links l
+   where l.kind = p_kind and (l.ref_id = p_survivor or l.ref_id = any (p_victims))
+     and private.case_has_active_hold(l.case_id);
+  if cardinality(v_hold_cases) > 0 then
+    return jsonb_build_object('ok', false, 'code', 'held', 'hold_cases', to_jsonb(v_hold_cases),
+      'message', 'a linked case is under an active legal hold — its intelligence links are preserved and cannot be re-pointed (including by a merge) until the hold is lifted');
+  end if;
+  return null;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.entity_merge_columns(p_table text)
+ RETURNS text
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select string_agg(quote_ident(a.attname), ', ' order by a.attnum)
+    from pg_attribute a
+   where a.attrelid = ('public.' || quote_ident(p_table))::regclass
+     and a.attnum > 0 and not a.attisdropped and a.attgenerated = ''
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.entity_merge_label(p_kind text, p_id uuid)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce(case p_kind
+    when 'person'   then (select concat_ws(' · ', p.name, p.alias) from public.persons p where p.id = p_id)
+    when 'vehicle'  then (select concat_ws(' · ', v.plate, v.model, v.color) from public.vehicles v where v.id = p_id)
+    when 'gang'     then (select g.name from public.gangs g where g.id = p_id)
+    when 'place'    then (select concat_ws(' · ', pl.name, pl.area) from public.places pl where pl.id = p_id)
+    when 'account'  then (select concat_ws(' · ', '@' || a.handle, a.platform) from public.accounts a where a.id = p_id)
+    when 'narcotic' then (select n.name from public.narcotics n where n.id = p_id)
+    end, '')
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.entity_merge_plan(p_kind text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO ''
+AS $function$
+declare
+  v_table text := private.entity_merge_table(p_kind);
+  v_rel regclass;
+  v_out jsonb := '[]'::jsonb;
+  e record;
+  v_poly jsonb;
+begin
+  if v_table is null then return v_out; end if;
+  v_rel := ('public.' || quote_ident(v_table))::regclass;
+
+  v_poly := jsonb_build_array(
+    jsonb_build_object('table', 'case_intel_links', 'column', 'ref_id', 'disc_col', 'kind', 'disc_val', p_kind),
+    jsonb_build_object('table', 'watchlist', 'column', 'target_id', 'disc_col', 'target_type', 'disc_val', p_kind),
+    jsonb_build_object('table', 'account_links', 'column', 'subject_id', 'disc_col', 'subject_kind', 'disc_val', p_kind),
+    jsonb_build_object('table', 'entity_field_observations', 'column', 'ref_id', 'disc_col', 'kind', 'disc_val', p_kind),
+    jsonb_build_object('table', 'entity_update_suggestions', 'column', 'ref_id', 'disc_col', 'kind', 'disc_val', p_kind));
+
+  for e in
+    select x.rel, x.col, x.disc_col, x.disc_val
+      from (
+        select cls.relname as rel, a.attname as col, null::text as disc_col, null::text as disc_val
+          from pg_constraint c
+          join pg_class cls on cls.oid = c.conrelid
+          join pg_namespace ns on ns.oid = cls.relnamespace
+          join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+         where c.contype = 'f' and c.confrelid = v_rel and array_length(c.conkey, 1) = 1
+           and ns.nspname = 'public'
+           and not (cls.oid = v_rel and a.attname = 'merged_into')
+        union all
+        select p ->> 'table', p ->> 'column', p ->> 'disc_col', p ->> 'disc_val'
+          from jsonb_array_elements(v_poly) p
+         where to_regclass('public.' || (p ->> 'table')) is not null
+           and exists (select 1 from pg_attribute a where a.attrelid = to_regclass('public.' || (p ->> 'table'))
+                         and a.attname = (p ->> 'disc_col') and not a.attisdropped)
+      ) x
+     order by x.rel, x.col
+  loop
+    v_out := v_out || jsonb_build_object(
+      'table', e.rel, 'column', e.col, 'disc_col', e.disc_col, 'disc_val', e.disc_val,
+      'has_id', exists (select 1 from pg_attribute a where a.attrelid = ('public.' || quote_ident(e.rel))::regclass
+                          and a.attname = 'id' and not a.attisdropped),
+      'uniques', coalesce((
+        select jsonb_agg(jsonb_build_object(
+                 'name', ic.relname,
+                 'exprs', (select jsonb_agg(pg_get_indexdef(ix.indexrelid, k, true) order by k)
+                             from generate_series(1, ix.indnkeyatts) k),
+                 'pred', pg_get_expr(ix.indpred, ix.indrelid)))
+          from pg_index ix
+          join pg_class ic on ic.oid = ix.indexrelid
+          join pg_attribute a on a.attrelid = ix.indrelid and a.attname = e.col
+         where ix.indrelid = ('public.' || quote_ident(e.rel))::regclass
+           and ix.indisunique and not ix.indisprimary and ix.indisvalid
+           and (a.attnum = any (ix.indkey::int2[])
+                or pg_get_indexdef(ix.indexrelid) ~ ('\m' || e.col || '\M'))), '[]'::jsonb));
+  end loop;
+  return v_out;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.entity_merge_table(p_kind text)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  select case p_kind when 'person' then 'persons' when 'vehicle' then 'vehicles' when 'gang' then 'gangs'
+                     when 'place' then 'places' when 'account' then 'accounts' when 'narcotic' then 'narcotics' end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.entity_merge_visible(p_kind text, p_survivor uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.is_owner() or (private.is_active() and private.perm_registry_visible(p_kind, p_survivor))
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.entity_suggestion_reviewers(p_proposer uuid)
+ RETURNS SETOF uuid
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  with div as (select division from public.profiles where id = p_proposer),
+       same as (
+         select p.id from public.profiles p, div
+          where p.active and p.removed_at is null and p.id <> p_proposer
+            and p.division is not distinct from div.division
+            and (p.role in ('senior_detective', 'bureau_lead', 'deputy_director', 'director') or p.is_owner))
+  select id from same
+  union
+  select p.id from public.profiles p
+   where not exists (select 1 from same) and p.active and p.removed_at is null and p.id <> p_proposer
+     and p.role in ('bureau_lead', 'deputy_director', 'director')
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.field_access_request_before_insert()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -23135,6 +24337,16 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.is_senior_or_above()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.can_edit_narcotics_intel()
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.is_siu_case(p_cid uuid)
  RETURNS boolean
  LANGUAGE sql
@@ -23708,6 +24920,21 @@ AS $function$
         '[^a-z0-9]', '', 'g'),
       's$', '', 'g'),
     '')
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.norm_phone(p text)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  -- Digits only. A leading country code 1 on an 11-digit number is dropped so
+  -- "+1 (555) 010-2233", "1-555-010-2233" and "555.010.2233" are one key.
+  select case when x.d = '' then null
+              when length(x.d) = 11 and left(x.d, 1) = '1' then substr(x.d, 2)
+              else x.d end
+    from (select regexp_replace(coalesce(p, ''), '[^0-9]', '', 'g') as d) x
 $function$
 ;
 
@@ -24995,6 +26222,235 @@ CREATE OR REPLACE FUNCTION private.siu_oversight_read()
 AS $function$ select coalesce(private.siu_is_agent(), false) $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.siu_reconcile_check(p_kind text, p_id uuid)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare r record; n integer := 0;
+begin
+  if p_kind = 'person' then
+    for r in
+      select h.id, case when c.phone_normalized is not null and h.phone_normalized = c.phone_normalized then 'phone'
+                        when lower(c.name) = lower(h.name) then 'name' else 'alias' end as signal
+        from public.persons c
+        join public.persons h on h.id <> c.id and h.siu_hidden_flag and h.deleted_at is null
+                             and h.lifecycle is distinct from 'merged'
+                             and ((c.phone_normalized is not null and h.phone_normalized = c.phone_normalized)
+                                  or lower(h.name) = lower(c.name)
+                                  or (c.alias is not null and btrim(c.alias) <> '' and lower(h.name) = lower(c.alias))
+                                  or (h.alias is not null and btrim(h.alias) <> '' and lower(h.alias) = lower(c.name)))
+       where c.id = p_id and not c.siu_hidden_flag and c.deleted_at is null and c.lifecycle is distinct from 'merged'
+    loop
+      if private.siu_reconcile_enqueue('person', p_id, r.id, r.signal) then n := n + 1; end if;
+    end loop;
+  elsif p_kind = 'vehicle' then
+    for r in
+      select h.id from public.vehicles c
+        join public.vehicles h on h.id <> c.id and h.siu_hidden_flag and h.deleted_at is null
+                              and private.norm_plate(h.plate) = private.norm_plate(c.plate)
+       where c.id = p_id and not c.siu_hidden_flag and c.deleted_at is null
+    loop
+      if private.siu_reconcile_enqueue('vehicle', p_id, r.id, 'plate') then n := n + 1; end if;
+    end loop;
+  elsif p_kind = 'gang' then
+    for r in
+      select h.id from public.gangs c
+        join public.gangs h on h.id <> c.id and h.siu_hidden_flag and h.deleted_at is null
+                           and private.norm_org(h.name) is not null
+                           and private.norm_org(h.name) = private.norm_org(c.name)
+       where c.id = p_id and not c.siu_hidden_flag and c.deleted_at is null
+    loop
+      if private.siu_reconcile_enqueue('gang', p_id, r.id, 'name') then n := n + 1; end if;
+    end loop;
+  elsif p_kind = 'place' then
+    for r in
+      select h.id from public.places c
+        join public.places h on h.id <> c.id and h.siu_hidden_flag and h.deleted_at is null
+                            and lower(h.name) = lower(c.name)
+                            and lower(coalesce(h.area, '')) = lower(coalesce(c.area, ''))
+       where c.id = p_id and not c.siu_hidden_flag and c.deleted_at is null
+    loop
+      if private.siu_reconcile_enqueue('place', p_id, r.id, 'name+area') then n := n + 1; end if;
+    end loop;
+  end if;
+  return n;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.siu_reconcile_enqueue(p_kind text, p_cid uuid, p_hidden uuid, p_signal text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_id uuid; v_creator uuid; v_test boolean := false;
+begin
+  if p_cid is null or p_hidden is null or p_cid = p_hidden then return false; end if;
+  insert into public.siu_reconcile_queue (kind, cid_record_id, hidden_record_id, signal, cid_label, hidden_label)
+  values (p_kind, p_cid, p_hidden, p_signal,
+          private.siu_reconcile_label(p_kind, p_cid), private.siu_reconcile_label(p_kind, p_hidden))
+  on conflict (kind, cid_record_id, hidden_record_id) do nothing
+  returning id into v_id;
+  if v_id is null then return false; end if;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (null, 'SIU_RECONCILE_QUEUED', 'siu', v_id,
+          jsonb_build_object('kind', p_kind, 'signal', p_signal,
+                             'cid_record_id', p_cid, 'hidden_record_id', p_hidden));
+
+  execute format('select created_by from public.%I where id = $1',
+                 case p_kind when 'person' then 'persons' when 'vehicle' then 'vehicles' when 'gang' then 'gangs' else 'places' end)
+    into v_creator using p_cid;
+  if v_creator is not null then
+    select coalesce(p.is_test, false) into v_test from public.profiles p where p.id = v_creator;
+  end if;
+  if v_test then return true; end if;
+
+  insert into public.notifications (user_id, type, payload)
+  select m.user_id, 'siu_reconcile',
+         jsonb_build_object('queue_id', v_id, 'kind', p_kind, 'signal', p_signal,
+                            'hidden_record_id', p_hidden)
+    from public.siu_memberships m
+    join public.profiles p on p.id = m.user_id
+   where m.active and not m.oversight_only and p.active and p.removed_at is null
+     and m.siu_role in ('special_agent_in_charge', 'senior_special_agent', 'special_agent')
+     and not exists (
+       select 1 from public.notifications n
+        where n.user_id = m.user_id and n.type = 'siu_reconcile'
+          and n.payload ->> 'hidden_record_id' = p_hidden::text
+          and n.created_at > now() - interval '1 hour');
+  return true;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.siu_reconcile_label(p_kind text, p_id uuid)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce(case p_kind
+    when 'person'  then (select concat_ws(' · ', p.name, p.alias) from public.persons p where p.id = p_id)
+    when 'vehicle' then (select concat_ws(' · ', v.plate, v.model, v.color) from public.vehicles v where v.id = p_id)
+    when 'gang'    then (select g.name from public.gangs g where g.id = p_id)
+    when 'place'   then (select concat_ws(' · ', pl.name, pl.area) from public.places pl where pl.id = p_id)
+    end, '')
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.siu_reconcile_probe()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  if new.deleted_at is not null then return null; end if;
+  begin
+    if private.siu_reconcile_sync_flag(tg_argv[0], new.id) then return null; end if;
+    perform private.siu_reconcile_check(tg_argv[0], new.id);
+  exception when others then
+    null;
+  end;
+  return null;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.siu_reconcile_scan()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare r record; n_person int := 0; n_vehicle int := 0; n_gang int := 0; n_place int := 0;
+begin
+  if not exists (select 1 from public.siu_visibility v where v.scope = 'record' and v.state in ('siu_only', 'revealed')
+                    and v.entity_type in ('person', 'vehicle', 'gang', 'place')) then
+    return jsonb_build_object('person', 0, 'vehicle', 0, 'gang', 0, 'place', 0, 'skipped', true);
+  end if;
+  for r in select c.id from public.persons c where not c.siu_hidden_flag and c.deleted_at is null and c.lifecycle is distinct from 'merged'
+              and exists (select 1 from public.persons h where h.siu_hidden_flag and h.deleted_at is null and h.lifecycle is distinct from 'merged'
+                            and ((c.phone_normalized is not null and h.phone_normalized = c.phone_normalized)
+                                 or lower(h.name) = lower(c.name)
+                                 or (c.alias is not null and lower(h.name) = lower(c.alias))
+                                 or (h.alias is not null and lower(h.alias) = lower(c.name))))
+  loop n_person := n_person + private.siu_reconcile_check('person', r.id); end loop;
+  for r in select c.id from public.vehicles c where not c.siu_hidden_flag and c.deleted_at is null
+              and exists (select 1 from public.vehicles h where h.siu_hidden_flag and h.deleted_at is null
+                            and private.norm_plate(h.plate) = private.norm_plate(c.plate))
+  loop n_vehicle := n_vehicle + private.siu_reconcile_check('vehicle', r.id); end loop;
+  for r in select c.id from public.gangs c where not c.siu_hidden_flag and c.deleted_at is null
+              and exists (select 1 from public.gangs h where h.siu_hidden_flag and h.deleted_at is null
+                            and private.norm_org(h.name) is not null and private.norm_org(h.name) = private.norm_org(c.name))
+  loop n_gang := n_gang + private.siu_reconcile_check('gang', r.id); end loop;
+  for r in select c.id from public.places c where not c.siu_hidden_flag and c.deleted_at is null
+              and exists (select 1 from public.places h where h.siu_hidden_flag and h.deleted_at is null
+                            and lower(h.name) = lower(c.name) and lower(coalesce(h.area, '')) = lower(coalesce(c.area, '')))
+  loop n_place := n_place + private.siu_reconcile_check('place', r.id); end loop;
+  return jsonb_build_object('person', n_person, 'vehicle', n_vehicle, 'gang', n_gang, 'place', n_place);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.siu_reconcile_scan_job()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_run bigint; v_out jsonb;
+begin
+  v_run := private.job_begin('siu_reconcile_scan');
+  begin
+    v_out := private.siu_reconcile_scan();
+    perform private.job_end(v_run, 'succeeded', v_out);
+  exception when others then
+    perform private.job_end(v_run, 'failed', jsonb_build_object('error', sqlerrm));
+    raise;
+  end;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.siu_reconcile_sync_flag(p_type text, p_id uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_flag boolean;
+  v_table text := case p_type when 'person' then 'persons' when 'vehicle' then 'vehicles'
+                              when 'gang' then 'gangs' when 'place' then 'places' end;
+begin
+  if v_table is null or p_id is null then return false; end if;
+  v_flag := exists (
+    select 1 from public.siu_visibility v
+     where v.entity_type = p_type and v.entity_id = p_id
+       and v.scope = 'record' and v.state in ('siu_only', 'revealed'));
+  execute format('update public.%I set siu_hidden_flag = $1 where id = $2 and siu_hidden_flag is distinct from $1', v_table)
+    using v_flag, p_id;
+  return v_flag;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.siu_reconcile_visibility_changed()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  if tg_op in ('UPDATE', 'DELETE') then
+    perform private.siu_reconcile_sync_flag(old.entity_type, old.entity_id);
+  end if;
+  if tg_op in ('INSERT', 'UPDATE') then
+    perform private.siu_reconcile_sync_flag(new.entity_type, new.entity_id);
+  end if;
+  return null;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.siu_recused(p_cid uuid, p_user uuid DEFAULT NULL::uuid)
  RETURNS boolean
  LANGUAGE sql
@@ -25609,7 +27065,9 @@ AS $function$
 declare
   v_mode text := coalesce(tg_argv[0], 'full');
   v_noise text[] := array['updated_at', 'last_stale_notified_at', 'deleted_at', 'deleted_by',
-                          'delete_reason', 'delete_batch', 'current_version_id'];
+                          'delete_reason', 'delete_batch', 'current_version_id',
+                          -- P2-03: an SIB flag flip and the derived columns never version.
+                          'siu_hidden_flag', 'phone_normalized', 'value_normalized'];
   v_draft text[] := array['title', 'priority', 'form_data', 'narrative', 'person_id',
                           'person_name_snapshot', 'recipient_type', 'recipient_name', 'classification'];
   v_old jsonb := to_jsonb(old);
@@ -25770,6 +27228,7 @@ CREATE TRIGGER documents_touch BEFORE UPDATE ON public.documents FOR EACH ROW EX
 CREATE TRIGGER trg_document_initial_version AFTER INSERT ON public.documents FOR EACH ROW EXECUTE FUNCTION private.document_initial_version();
 CREATE TRIGGER trg_guard_document BEFORE INSERT OR UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION private.guard_document();
 CREATE TRIGGER documents_versions_immutable BEFORE DELETE OR UPDATE ON public.documents_versions FOR EACH ROW EXECUTE FUNCTION private.block_version_immutable();
+CREATE TRIGGER entity_field_observations_block_promote BEFORE UPDATE ON public.entity_field_observations FOR EACH ROW EXECUTE FUNCTION private.block_direct_observation_promote();
 CREATE TRIGGER evidence_audit AFTER INSERT OR DELETE OR UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER evidence_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER evidence_touch BEFORE UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -25814,7 +27273,9 @@ CREATE TRIGGER gang_turf_audit AFTER INSERT OR DELETE OR UPDATE ON public.gang_t
 CREATE TRIGGER gang_turf_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.gang_turf FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER gang_turf_touch BEFORE UPDATE ON public.gang_turf FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER gangs_audit AFTER INSERT OR DELETE OR UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER gangs_block_direct_siu_hidden_flag BEFORE INSERT OR UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.block_direct_siu_hidden_flag();
 CREATE TRIGGER gangs_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
+CREATE TRIGGER gangs_siu_reconcile AFTER INSERT OR UPDATE OF name ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.siu_reconcile_probe('gang');
 CREATE TRIGGER gangs_touch BEFORE UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER gangs_version AFTER UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER gangs_visibility_forget AFTER DELETE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.siu_visibility_forget('gang');
@@ -25875,12 +27336,16 @@ CREATE TRIGGER person_vehicles_audit AFTER INSERT OR DELETE OR UPDATE ON public.
 CREATE TRIGGER person_vehicles_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.person_vehicles FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER person_vehicles_touch BEFORE UPDATE ON public.person_vehicles FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER persons_audit AFTER INSERT OR DELETE OR UPDATE ON public.persons FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER persons_block_direct_siu_hidden_flag BEFORE INSERT OR UPDATE ON public.persons FOR EACH ROW EXECUTE FUNCTION private.block_direct_siu_hidden_flag();
 CREATE TRIGGER persons_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.persons FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
+CREATE TRIGGER persons_siu_reconcile AFTER INSERT OR UPDATE OF name, alias, phone ON public.persons FOR EACH ROW EXECUTE FUNCTION private.siu_reconcile_probe('person');
 CREATE TRIGGER persons_touch BEFORE UPDATE ON public.persons FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER persons_version AFTER UPDATE ON public.persons FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER persons_visibility_forget AFTER DELETE ON public.persons FOR EACH ROW EXECUTE FUNCTION private.siu_visibility_forget('person');
 CREATE TRIGGER places_audit AFTER INSERT OR DELETE OR UPDATE ON public.places FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER places_block_direct_siu_hidden_flag BEFORE INSERT OR UPDATE ON public.places FOR EACH ROW EXECUTE FUNCTION private.block_direct_siu_hidden_flag();
 CREATE TRIGGER places_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.places FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
+CREATE TRIGGER places_siu_reconcile AFTER INSERT OR UPDATE OF name, area ON public.places FOR EACH ROW EXECUTE FUNCTION private.siu_reconcile_probe('place');
 CREATE TRIGGER places_touch BEFORE UPDATE ON public.places FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER places_version AFTER UPDATE ON public.places FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER places_visibility_forget AFTER DELETE ON public.places FOR EACH ROW EXECUTE FUNCTION private.siu_visibility_forget('place');
@@ -25915,6 +27380,7 @@ CREATE TRIGGER siu_sources_touch BEFORE UPDATE ON public.siu_sources FOR EACH RO
 CREATE TRIGGER siu_targets_touch BEFORE UPDATE ON public.siu_targets FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER siu_temp_access_touch BEFORE UPDATE ON public.siu_temporary_access FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER siu_uc_touch BEFORE UPDATE ON public.siu_undercover_operations FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER siu_visibility_hidden_flag AFTER INSERT OR DELETE OR UPDATE ON public.siu_visibility FOR EACH ROW EXECUTE FUNCTION private.siu_reconcile_visibility_changed();
 CREATE TRIGGER siu_watchlist_touch BEFORE UPDATE ON public.siu_watchlist FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER surveillance_association_events_touch BEFORE UPDATE ON public.surveillance_association_events FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_guard_surveillance_event BEFORE INSERT OR UPDATE ON public.surveillance_association_events FOR EACH ROW EXECUTE FUNCTION private.guard_surveillance_event();
@@ -25932,7 +27398,9 @@ CREATE TRIGGER trg_touch_transfer_requests BEFORE UPDATE ON public.transfer_requ
 CREATE TRIGGER user_drafts_touch BEFORE UPDATE ON public.user_drafts FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER user_prefs_touch BEFORE UPDATE ON public.user_prefs FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER vehicles_audit AFTER INSERT OR DELETE OR UPDATE ON public.vehicles FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER vehicles_block_direct_siu_hidden_flag BEFORE INSERT OR UPDATE ON public.vehicles FOR EACH ROW EXECUTE FUNCTION private.block_direct_siu_hidden_flag();
 CREATE TRIGGER vehicles_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.vehicles FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
+CREATE TRIGGER vehicles_siu_reconcile AFTER INSERT OR UPDATE OF plate ON public.vehicles FOR EACH ROW EXECUTE FUNCTION private.siu_reconcile_probe('vehicle');
 CREATE TRIGGER vehicles_touch BEFORE UPDATE ON public.vehicles FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER vehicles_version AFTER UPDATE ON public.vehicles FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER vehicles_visibility_forget AFTER DELETE ON public.vehicles FOR EACH ROW EXECUTE FUNCTION private.siu_visibility_forget('vehicle');
@@ -26347,6 +27815,31 @@ create policy documents_versions_sel on public.documents_versions
   using ((EXISTS ( SELECT 1
    FROM documents d
   WHERE (d.id = documents_versions.document_id))));
+
+create policy entity_field_observations_del on public.entity_field_observations
+  as permissive for delete to authenticated
+  using ((private.can_access_case(case_id) AND ((recorded_by = ( SELECT auth.uid() AS uid)) OR private.is_command())));
+
+create policy entity_field_observations_ins on public.entity_field_observations
+  as permissive for insert to authenticated
+  with check ((private.can_access_case(case_id) AND private.perm_registry_visible(kind, ref_id) AND (recorded_by = ( SELECT auth.uid() AS uid)) AND (promoted_at IS NULL) AND (promoted_by IS NULL)));
+
+create policy entity_field_observations_sel on public.entity_field_observations
+  as permissive for select to authenticated
+  using ((private.can_read_case(case_id) AND private.perm_registry_visible(kind, ref_id)));
+
+create policy entity_field_observations_upd on public.entity_field_observations
+  as permissive for update to authenticated
+  using ((private.can_access_case(case_id) AND ((recorded_by = ( SELECT auth.uid() AS uid)) OR private.is_command())))
+  with check ((private.can_access_case(case_id) AND ((recorded_by = ( SELECT auth.uid() AS uid)) OR private.is_command())));
+
+create policy entity_merges_sel on public.entity_merges
+  as permissive for select to authenticated
+  using (private.entity_merge_visible(kind, survivor_id));
+
+create policy entity_update_suggestions_sel on public.entity_update_suggestions
+  as permissive for select to authenticated
+  using ((private.is_active() AND private.perm_registry_visible(kind, ref_id)));
 
 create policy evidence_ins on public.evidence
   as permissive for insert to authenticated
@@ -27541,6 +29034,10 @@ create policy siu_memberships_sel on public.siu_memberships
   as permissive for select to authenticated
   using (private.siu_operates());
 
+create policy siu_reconcile_queue_sel on public.siu_reconcile_queue
+  as permissive for select to authenticated
+  using (private.siu_is_agent());
+
 create policy siu_referrals_sel on public.siu_referrals
   as permissive for select to authenticated
   using (private.siu_is_agent());
@@ -27966,6 +29463,9 @@ create policy wl_sel on public.watchlist
 --   document_user_state -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   documents -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   documents_versions -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   entity_field_observations -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   entity_merges -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   entity_update_suggestions -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   evidence -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   external_links -> service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   external_media_refs -> service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -28078,6 +29578,7 @@ create policy wl_sel on public.watchlist
 --   siu_financial_intel -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   siu_integrity_reviews -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   siu_memberships -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   siu_reconcile_queue -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   siu_referrals -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   siu_settings -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   siu_sources -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -28215,11 +29716,13 @@ create policy wl_sel on public.watchlist
 --   private.block_direct_case_bureau(): default (PUBLIC)
 --   private.block_direct_case_stage(): default (PUBLIC)
 --   private.block_direct_login_denied(): default (PUBLIC)
+--   private.block_direct_observation_promote(): {postgres=X/postgres}
 --   private.block_direct_operation_authority(): default (PUBLIC)
 --   private.block_direct_privileged_profile(): default (PUBLIC)
 --   private.block_direct_report_finalize(): default (PUBLIC)
 --   private.block_direct_signoff(): default (PUBLIC)
 --   private.block_direct_siu_case_cols(): default (PUBLIC)
+--   private.block_direct_siu_hidden_flag(): {postgres=X/postgres}
 --   private.block_direct_siu_note_grading(): default (PUBLIC)
 --   private.block_direct_soft_delete(): {postgres=X/postgres}
 --   private.block_intel_link_change_under_hold(): {postgres=X/postgres}
@@ -28289,6 +29792,16 @@ create policy wl_sel on public.watchlist
 --   private.document_campaign_recipients(p_document uuid, p_audience text, p_targets jsonb, p_creator uuid): default (PUBLIC)
 --   private.document_initial_version(): default (PUBLIC)
 --   private.document_suggestion_managers(p_document uuid): {postgres=X/postgres}
+--   private.entity_apply_field(p_kind text, p_id uuid, p_field text, p_value text, p_source text, p_reason text, p_detail jsonb): {postgres=X/postgres}
+--   private.entity_editable_fields(p_kind text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.entity_merge_apply(p_kind text, p_survivor uuid, p_victims uuid[], p_reason text, p_dry boolean, p_merge_id uuid): {postgres=X/postgres}
+--   private.entity_merge_check(p_kind text, p_survivor uuid, p_victims uuid[], p_reason text, p_need_reason boolean): {postgres=X/postgres}
+--   private.entity_merge_columns(p_table text): {postgres=X/postgres}
+--   private.entity_merge_label(p_kind text, p_id uuid): {postgres=X/postgres}
+--   private.entity_merge_plan(p_kind text): {postgres=X/postgres}
+--   private.entity_merge_table(p_kind text): {postgres=X/postgres}
+--   private.entity_merge_visible(p_kind text, p_survivor uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.entity_suggestion_reviewers(p_proposer uuid): {postgres=X/postgres}
 --   private.field_access_request_before_insert(): default (PUBLIC)
 --   private.field_case_visible(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.field_evidence_before_insert(): default (PUBLIC)
@@ -28329,6 +29842,7 @@ create policy wl_sel on public.watchlist
 --   private.is_live(p_deleted_at timestamp with time zone, p_archived_at timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.is_owner(): {postgres=X/postgres,authenticated=X/postgres}
 --   private.is_owner_maintenance(): default (PUBLIC)
+--   private.is_senior_or_above(): {postgres=X/postgres}
 --   private.is_siu_case(p_cid uuid): {postgres=X/postgres}
 --   private.is_siu_department(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.is_test_user(p_user uuid): default (PUBLIC)
@@ -28358,6 +29872,7 @@ create policy wl_sel on public.watchlist
 --   private.next_field_submission_no(): {postgres=X/postgres}
 --   private.next_legal_request_number(): default (PUBLIC)
 --   private.norm_org(p text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.norm_phone(p text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.norm_plate(p text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.notify_owners_client_error(): {postgres=X/postgres}
 --   private.op_has_bureau(p_op uuid, p_bureau bureau): {postgres=X/postgres}
@@ -28426,6 +29941,14 @@ create policy wl_sel on public.watchlist
 --   private.siu_membership_role(p_user uuid): {postgres=X/postgres}
 --   private.siu_operates(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.siu_oversight_read(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.siu_reconcile_check(p_kind text, p_id uuid): {postgres=X/postgres}
+--   private.siu_reconcile_enqueue(p_kind text, p_cid uuid, p_hidden uuid, p_signal text): {postgres=X/postgres}
+--   private.siu_reconcile_label(p_kind text, p_id uuid): {postgres=X/postgres}
+--   private.siu_reconcile_probe(): {postgres=X/postgres}
+--   private.siu_reconcile_scan(): {postgres=X/postgres}
+--   private.siu_reconcile_scan_job(): {postgres=X/postgres}
+--   private.siu_reconcile_sync_flag(p_type text, p_id uuid): {postgres=X/postgres}
+--   private.siu_reconcile_visibility_changed(): {postgres=X/postgres}
 --   private.siu_recused(p_cid uuid, p_user uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.siu_release_open(): {postgres=X/postgres}
 --   private.siu_sees_compartmented(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -28517,6 +30040,15 @@ create policy wl_sel on public.watchlist
 --   public.doj_bureau_coverage(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.end_ada_bureau_assignment(p_assignment uuid, p_note text): {postgres=X/postgres,service_role=X/postgres}
 --   public.end_field_officer(p_user uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.entity_crossref(p_kind text, p_id uuid, p_limit integer, p_q text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.entity_duplicates(p_kind text, p_payload jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.entity_merge(p_kind text, p_survivor uuid, p_victims uuid[], p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.entity_merge_preview(p_kind text, p_survivor uuid, p_victims uuid[]): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.entity_suggest(p_kind text, p_q text, p_limit integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.entity_suggest_update(p_kind text, p_id uuid, p_field text, p_value text, p_reason text, p_expected_current text, p_observation_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.entity_suggestion_decide(p_id uuid, p_accept boolean, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.entity_suggestion_withdraw(p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.entity_unmerge(p_merge_id uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.extraction_add_fact(p_extraction uuid, p_fact_type text, p_value text, p_source_location text, p_platform text, p_owner_person uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.field_access_decide(p_request uuid, p_approve boolean, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.field_access_roster(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -28632,6 +30164,7 @@ create policy wl_sel on public.watchlist
 --   public.permanent_delete_record_execute(p_token uuid, p_confirm text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.permanent_delete_record_preview(p_kind text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.person_merge(p_survivor uuid, p_victims uuid[], p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.promote_observation(p_id uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.publish_announcement(p_title text, p_body text, p_audience text, p_mentions jsonb, p_links jsonb, p_pinned boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.publish_reading_campaign(p_document uuid, p_audience text, p_targets jsonb, p_deadline timestamp with time zone, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.reassign_legal_ada(p_request uuid, p_new_ada uuid, p_reason text): {postgres=X/postgres,service_role=X/postgres}
@@ -28716,6 +30249,7 @@ create policy wl_sel on public.watchlist
 --   public.siu_overview(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.siu_person_dossier(p_person uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.siu_promote_inquiry(p_case uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.siu_reconcile_resolve(p_id uuid, p_resolution text, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.siu_record_intelligence(p_case uuid, p_note_type text, p_body text, p_severity text, p_siu_case uuid, p_subject_person uuid, p_source_type text, p_source_reliability text, p_info_credibility text, p_review_days integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.siu_registry_search(p_entity_type text, p_q text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.siu_release_control(p_case uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}

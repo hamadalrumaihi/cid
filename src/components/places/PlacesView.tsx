@@ -32,7 +32,6 @@ import { EntityLegalLine, fetchEntityLegalRefs, type EntityLegalRef } from '@/co
 import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
-import { searchCaseOptions } from '@/components/persons/ProfileRelations'
 
 type PlaceRow = Tables<'places'>
 type LocationType = Database['public']['Enums']['location_type']
@@ -775,7 +774,7 @@ function AttachPlaceModal({ place, onClose }: { place: PlaceRow; onClose: () => 
           placeholder="Search case number or title…"
           value={picked}
           onChange={setPicked}
-          search={searchCaseOptions}
+          search={searchCaseHits}
         />
         <Button variant="primary" className="mt-4 w-full" onAction={go} disabled={!picked}>
           Attach to case

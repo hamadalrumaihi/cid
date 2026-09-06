@@ -3,14 +3,12 @@
 /** Vehicle profile — panelled drill-down for a single plate (`?vehicle=`).
  *  Left: identity card (round icon tile, model, mono plate) over a labelled
  *  key-value list, then notes. Right: the structured Legal section (RLS-safe
- *  legal_request_exhibits vehicle targets — EntityLegalPanel) and derived
- *  linked cases — there is no vehicle↔case join, so the panel scans RLS-scoped
- *  report fields for the plate string (CrossrefPanel's approach) and folds in
- *  cases linked to the registered owner via case_intel_links. Both fail
+ *  legal_request_exhibits vehicle targets — EntityLegalPanel) and the linked
+ *  cases answered by entity_crossref (case_intel_links kind='vehicle',
+ *  surveillance, report mentions, MDT — bounded, RLS-scoped). Both fail
  *  CLOSED: any query error shows a Retry banner, never a false "nothing". */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
 import { insert, list, remove, rpc, withRetry } from '@/lib/db'
 import { caseLink } from '@/lib/caseLinks'
@@ -20,7 +18,7 @@ import { pushRecent } from '@/lib/recents'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { copyText, fmtDate, timeAgo } from '@/lib/format'
-import { AlertIcon, FileTypeIcon, GangIcon, PersonIcon, VehicleIcon } from '@/components/shell/icons'
+import { FileTypeIcon, GangIcon, PersonIcon, VehicleIcon } from '@/components/shell/icons'
 import { Badge } from '@/components/ui/Badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Button } from '@/components/ui/Button'
@@ -38,6 +36,7 @@ import { ObservationHistory } from '@/components/shared/ObservationHistory'
 import { LinkEditPopover, LinkStatusBadge } from '@/components/shared/LinkEditPopover'
 import { PinButton } from '@/components/shared/PinButton'
 import { RecordPeekButton } from '@/components/shared/RecordPeekButton'
+import { CrossrefList } from '@/components/shared/CrossrefList'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
 import { useToolNav } from '@/components/tools/useToolNav'
 import {
@@ -80,115 +79,23 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   )
 }
 
-/* ---- derived linked-cases panel ------------------------------------------
-   (a) plate string appearing in reports.fields JSON (word-boundary match,
-       same escaping as CrossrefPanel), (b) cases linked to the OWNER person
-       via case_intel_links kind='person'. Deduped by case id; both reasons
-       shown when a case matches twice. All inputs RLS-scoped. */
+/* ---- linked-cases panel (entity_crossref, P2-06) --------------------------
+   The cases this plate touches — durable case_intel_links kind='vehicle',
+   surveillance sightings, report mentions (word-boundary plate match done
+   server-side), MDT bulletins — bounded and RLS-scoped in one RPC. Replaces
+   the browser-side scan of the newest 500 reports. */
 
-type MatchReason = 'plate mentioned' | 'owner linked'
-interface CaseMeta { id: string; case_number: string; title: string | null }
-interface LinkedCase { id: string; reasons: MatchReason[]; meta: CaseMeta | null }
-
-function LinkedCasesPanel({ plate, ownerId }: { plate: string; ownerId: string | null }) {
-  const router = useRouter()
-  const [scan, setScan] = useState<'loading' | 'failed' | 'done'>('loading')
-  const [rows, setRows] = useState<LinkedCase[]>([])
-  const [retry, setRetry] = useState(0)
-
-  useEffect(() => {
-    let cancelled = false
-    const t = window.setTimeout(async () => {
-      setScan('loading')
-      try {
-        // Fail-closed: no per-query .catch(() => []) here — a degraded leg
-        // would masquerade as an authoritative "no linked cases".
-        const [reports, links] = await Promise.all([
-          // Bounded scan: the plate match only needs case_id + fields, and the
-          // reports table grows without bound — read the newest 500 rows
-          // instead of every column of every report the viewer can see.
-          list('reports', { select: 'case_id,fields', order: 'created_at', ascending: false, limit: 500 })
-            .then((r) => r as unknown as Pick<Tables<'reports'>, 'case_id' | 'fields'>[]),
-          ownerId
-            ? list('case_intel_links', { select: 'case_id', eq: { kind: 'person', ref_id: ownerId } })
-                .then((r) => r as unknown as { case_id: string }[])
-            : Promise.resolve([] as { case_id: string }[]),
-        ])
-        const reasons = new Map<string, Set<MatchReason>>()
-        const add = (cid: string, why: MatchReason) => {
-          const s = reasons.get(cid) ?? new Set<MatchReason>()
-          s.add(why)
-          reasons.set(cid, s)
-        }
-        const re = new RegExp('\\b' + plate.toUpperCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b')
-        for (const r of reports) {
-          if (r.case_id && re.test(JSON.stringify(r.fields ?? {}).toUpperCase())) add(r.case_id, 'plate mentioned')
-        }
-        for (const l of links) add(l.case_id, 'owner linked')
-        const ids = [...reasons.keys()]
-        const cases = ids.length
-          ? ((await list('cases', { select: 'id,case_number,title', in: { id: ids } })) as unknown as CaseMeta[])
-          : []
-        if (cancelled) return
-        const byId = new Map(cases.map((c) => [c.id, c]))
-        const out: LinkedCase[] = ids.map((id) => ({ id, reasons: [...(reasons.get(id) ?? [])], meta: byId.get(id) ?? null }))
-        out.sort((a, b) => (a.meta?.case_number ?? '').localeCompare(b.meta?.case_number ?? ''))
-        setRows(out)
-        setScan('done')
-      } catch {
-        if (!cancelled) setScan('failed')
-      }
-    }, 0)
-    return () => { cancelled = true; window.clearTimeout(t) }
-  }, [plate, ownerId, retry])
-
+function LinkedCasesPanel({ vehicleId }: { vehicleId: string }) {
   return (
     <Card>
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className={PANEL_TITLE}>Linked cases</h3>
-        {scan === 'done' && rows.length > 0 && <span className="text-[11px] text-slate-400">{rows.length}</span>}
       </div>
-      {scan === 'loading' ? (
-        <div role="status" aria-busy="true" className="space-y-2">
-          <span className="sr-only">Scanning case reports…</span>
-          <Skeleton className="h-11 w-full" />
-          <Skeleton className="h-11 w-full" />
-        </div>
-      ) : scan === 'failed' ? (
-        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-200">
-          <AlertIcon size={14} className="inline align-[-2px]" /> Could not scan case reports for this plate (connection issue).{' '}
-          <button onClick={() => setRetry((n) => n + 1)} className="rounded p-1 font-semibold underline">Retry</button>
-        </div>
-      ) : !rows.length ? (
-        <EmptyState
-          title="No linked cases"
-          hint="Cases appear here when a report mentions this plate or the registered owner is linked to a case."
-        />
-      ) : (
-        <div className="space-y-2">
-          {rows.map((r) =>
-            r.meta ? (
-              <button
-                key={r.id}
-                onClick={() => router.push(`/cases?case=${r.id}`)}
-                className="flex min-h-[44px] w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-white/5 bg-ink-900 px-3 py-2.5 text-left text-sm transition hover:bg-white/5"
-              >
-                <span className="font-mono text-blue-300">{r.meta.case_number}</span>
-                <span className="min-w-0 flex-1 truncate text-slate-200">{r.meta.title || 'Untitled case'}</span>
-                {r.reasons.map((why) => (
-                  <Badge key={why} tone={why === 'plate mentioned' ? 'warn' : 'accent'}>{why}</Badge>
-                ))}
-              </button>
-            ) : (
-              // Belt-and-braces: an id from an RLS-visible report whose case
-              // row still isn't readable renders as a restricted stub.
-              <div key={r.id} className="rounded-lg border border-white/5 bg-ink-900 px-3 py-2.5 text-sm text-slate-400">
-                Linked case — access restricted (other bureau).
-              </div>
-            ),
-          )}
-        </div>
-      )}
+      <CrossrefList
+        kind="vehicle"
+        id={vehicleId}
+        emptyHint="Cases appear here when this plate is linked to a case, sighted on surveillance, or mentioned in a report you can read."
+      />
     </Card>
   )
 }
@@ -647,7 +554,7 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
             <VehiclePersonsPanel vehicleId={id} canEdit={canEdit} />
             <VehiclePhotosPanel vehicleId={id} />
             <EntityLegalPanel exhibitType="vehicle" sourceId={id} noun="vehicle" />
-            <LinkedCasesPanel plate={v.plate} ownerId={v.owner_id} />
+            <LinkedCasesPanel vehicleId={v.id} />
             {/* Verified-observation history (RLS-trimmed — restricted or
                 out-of-scope rows simply never arrive). */}
             <Card>

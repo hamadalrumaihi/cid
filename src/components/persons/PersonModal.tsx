@@ -14,10 +14,11 @@
  *  Mounted fresh per open. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Json, Tables, TablesInsert } from '@/lib/database.types'
-import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
+import { deleteWithUndo, insert, list, update } from '@/lib/db'
+import { findDuplicates } from '@/lib/entity'
 import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
 import { useAuth } from '@/lib/auth'
-import { searchGangHits, searchMemberHits, type EntityHit } from '@/lib/entitySearch'
+import { normPhone, searchGangHits, searchMemberHits, type EntityHit } from '@/lib/entitySearch'
 import { useProfilesStore } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
 import { useSiu } from '@/lib/permissions'
@@ -29,8 +30,9 @@ import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { HelpTip } from '@/components/ui/HelpTip'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { SaveState } from '@/components/ui/SaveState'
-import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
+import { DuplicateMatchNotice, duplicateMatches, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
+import { useToolNav } from '@/components/tools/useToolNav'
 import {
   CONFIDENCE_LEVELS, PERSON_CLASSIFICATIONS, PERSON_LIFECYCLES, PERSON_PRIORITIES,
   classificationLabel, confidenceLabel, lifecycleLabel, parsePersonIdentity, priorityLabel,
@@ -256,30 +258,26 @@ export function PersonModal({ record, prefillName, onCreated, onClose, onSaved }
     return { id: leadId, label: p?.display_name || '(current lead)', thumbUrl: p?.avatar_url ?? null }
   }, [leadId, rosterProfiles])
 
-  // Duplicate hint at create time — debounced name search through the indexed,
-  // RLS-safe `search_persons` RPC (the LinkAssociateModal pattern). Purely
-  // advisory: it never blocks Save; the merge flow handles real duplicates.
+  // Duplicate hint at create time — entity_duplicates on name / alias / dob /
+  // phone (P2-08): a strong hit (same normalized phone, same name+dob, same
+  // alias) offers "Use existing"; a soft hit (similar name) is a quieter
+  // notice. Purely advisory: it never blocks Save; the merge flow handles
+  // real duplicates.
+  const nav = useToolNav()
   const [dupes, setDupes] = useState<DuplicateMatch[]>([])
   useEffect(() => {
     if (record) return // edit mode — the record IS the existing one
     const q = name.trim()
     let live = true
     const t = window.setTimeout(async () => {
-      if (q.length < 2) { if (live) setDupes([]); return }
-      const res = await rpc('search_persons', { p_q: q, p_limit: 5 })
-      const hits = (res.data ?? []).map((h) => h.id)
-      if (!hits.length) { if (live) setDupes([]); return }
-      const rows = await list('persons', { select: 'id,name,alias,lifecycle', in: { id: hits } })
-        .then((r) => r as unknown as Pick<PersonRow, 'id' | 'name' | 'alias' | 'lifecycle'>[])
-        .catch(() => [] as Pick<PersonRow, 'id' | 'name' | 'alias' | 'lifecycle'>[])
+      if (q.length < 2 && !normPhone(phone)) { if (live) setDupes([]); return }
+      const rows = await findDuplicates('person', { name: q || null, alias: alias.trim() || null, dob: dob || null, phone: phone.trim() || null })
       if (!live) return
-      setDupes(rows
-        .filter((r) => r.lifecycle !== 'merged')
-        .slice(0, 3)
-        .map((r) => ({ type: 'person', id: r.id, label: r.name || 'Person', sublabel: r.alias ? `“${r.alias}”` : undefined })))
+      setDupes(duplicateMatches('person', rows))
     }, 400)
     return () => { live = false; window.clearTimeout(t) }
-  }, [name, record])
+  }, [name, alias, dob, phone, record])
+  const useExisting = (m: DuplicateMatch) => { nav.openHref(`/persons?person=${encodeURIComponent(m.id)}`); onClose() }
 
   const setProp = (i: number, patch: Partial<PersonProperty>) =>
     setProps((rows) => rows.map((r, x) => (x === i ? { ...r, ...patch } : r)))
@@ -398,7 +396,7 @@ export function PersonModal({ record, prefillName, onCreated, onClose, onSaved }
             {(id) => (
               <>
                 <Input id={id} value={name} onChange={(e) => setName(e.target.value)} />
-                {!record && <DuplicateMatchNotice matches={dupes} />}
+                {!record && <DuplicateMatchNotice matches={dupes} onUseExisting={useExisting} />}
               </>
             )}
           </Field>

@@ -581,8 +581,116 @@ batch. Storage: the database may not delete storage objects ("Direct
 deletion from storage tables is not allowed") — they are enumerated in the
 ledger and in the execute result for the client to remove.
 
+**P2-01 Normalized keys.**
+`20261014120000_entity_normalization.sql` (applied as `entity_normalization`,
+then `entity_normalization_phone_fix` — `norm_phone` became digits-only with a
+leading country-code 1 dropped on 11 digits, so `+1 (555) 010-2233`,
+`1-555-010-2233` and `555.010.2233` are one key; the generated columns were
+empty at the time): `private.norm_phone`, generated `persons.phone_normalized`,
+`indicators.value_normalized`, `field_submission_persons.phone_normalized`, and
+the btree / trgm indexes the suggest, duplicate and cross-reference paths read.
+
+**P2-02 entity_suggest / entity_duplicates.**
+`20261015120000_entity_suggest.sql` (applied as `entity_suggest`): the two
+SECURITY INVOKER RPCs. The trgm threshold is set per transaction with
+`set_config` inside the body — a function-level `SET
+pg_trgm.word_similarity_threshold` is refused on Supabase for this extension
+GUC. Verified at apply time in a rolled-back transaction as the active Owner:
+person by name / alias / phone (+1, bare and dotted forms all exact), vehicle
+by normalized plate, phone across persons and indicators, gang by
+`norm_org`, place, narcotic, case number, indicator value, account handle;
+duplicates strong on phone / name+dob / plate / org name / name+area /
+handle / narcotic name / indicator value / case number and soft on
+`word_similarity ≥ 0.6`, `exclude_id` honoured; a merged tombstone never
+returned; an inactive caller gets zero rows.
+
+**P2-03 SIB reconcile.**
+`20261016120000_siu_reconcile.sql` (applied as `siu_reconcile`):
+`siu_hidden_flag` on persons / vehicles / gangs / places maintained by
+`siu_visibility` triggers (client writes refused `P0403`), `vehicles_plate_key`
+replaced by the partial `vehicles_plate_live_key`, `siu_reconcile_queue`
+(SELECT for SIB agents), definer AFTER INSERT / UPDATE probes on the four
+tables, the 15-minute `siu-reconcile-scan` job, `siu_reconcile_resolve`
+(link / dismiss for agents, merge for SIB command through `entity_merge`),
+`private.version_row` re-emitted with the flag and the generated columns as
+noise, one catalog row. Verified at apply time in a rolled-back transaction:
+the flag follows the visibility row (set on insert, cleared on delete), a
+CID detective creating the hidden plate succeeds, the queue rows carry the
+signal and both labels, four SIB notifications and the audit row are
+written, the scan is idempotent, a Bureau Lead reads zero queue rows and is
+refused resolve, a direct flag write is refused, the Owner dismisses and a
+second resolve is `already_resolved`, no version row names the flag.
+
+**P2-04 Merge ledger.**
+`20261017120000_entity_merges.sql` (applied as `entity_merges`, then
+`entity_merges_version_source` — `record_versions.source` widened to merge /
+unmerge / suggestion / promotion — and `entity_merges_visible_grant` — the
+policy helper executable by authenticated, as every policy helper must be):
+`merged_into` on vehicles / gangs / places, the three `mdt_exports` FKs to NO
+ACTION, `entity_merges`, the pg_constraint dependant plan with unique-index
+collision evaluation, `entity_merge` / `entity_merge_preview` /
+`entity_unmerge`, and `person_merge` / `account_merge` / `merge_narcotics` as
+wrappers. Verified at apply time in rolled-back transactions: a detective
+refused (`denied`, the wrapper raising "restricted to command"), a blank
+reason, the preview writing nothing, a person merge repointing the vehicle
+owner and a place link while dropping five collisions (an intel link, a
+relationship collision, a self-link, a place link, a watchlist row) recorded
+in the manifest, the survivor filled (alias, phone, BOLO block, notes
+appended), the tombstone, `PERSON_MERGED` with `victim_name`, version rows
+with source `merge`; the unmerge restoring every row and value and a second
+unmerge `already_reversed`; an account merge refused under an active hold
+and succeeding after the lift with the intel link repointed; a narcotic
+merge keeping the merged name as a `variant` alias and its unmerge removing
+it; a vehicle merge soft-deleting the victim with `merged_into` and its
+unmerge restoring it.
+
+**P2-05 Observations and update suggestions.**
+`20261018120000_entity_observations.sql` (applied as `entity_observations`):
+the two tables, `private.entity_editable_fields`, `private.entity_apply_field`
+(the one writer: typed through `jsonb_populate_record`, versioned, audited),
+`entity_suggest_update` / `entity_suggestion_decide` /
+`entity_suggestion_withdraw` / `promote_observation`, three catalog rows.
+Verified at apply time in a rolled-back transaction: a detective recording
+an observation on their case, the promotion stamp frozen for the client,
+the detective's promotion queued (`applied:false`), a non-editable field
+`bad_request`, the detective refused to decide and able to withdraw, the
+director accepting (the phone applied with its normalized key and the
+observation stamped promoted), a stale `p_expected_current` refused, the
+director's direct update applied, version rows with source `suggestion`, a
+cross-bureau detective reading no observation.
+
+**P2-06 Vehicle link kind and cross-reference.**
+`20261019120000_entity_crossref.sql` (applied as `entity_crossref`):
+`case_intel_links.kind` + `vehicle`, the `(kind, ref_id)` index, the
+SECURITY INVOKER `entity_crossref`. Verified at apply time: a vehicle's
+linked case and a report naming its plate with separators, a phone found
+in a report's narrative, a cross-bureau detective seeing nothing.
+
+**P2 follow-ups — born-hidden records and test hygiene.**
+`20261020120000_entity_test_hygiene.sql` (applied as `entity_test_hygiene` —
+the four entity functions — and `entity_test_hygiene_cleanup` —
+`rls_test_cleanup` re-emitted through a `pg_get_functiondef` splice of the
+same block the repo file carries): the AFTER INSERT probe syncs
+`siu_hidden_flag` first, so a record whose visibility was reserved BEFORE
+the insert (v176's recipe) is flagged and never probed as a CID record;
+`siu_reconcile_enqueue` and `entity_suggest_update` skip the notification
+fan-out when the record's creator / the proposer is a test profile;
+`rls_test_cleanup` sweeps `entity_merges`, `siu_reconcile_queue`,
+`entity_update_suggestions` and `entity_field_observations`. Verified at
+apply time in a rolled-back transaction: a vehicle inserted after its
+visibility row carries the flag, a test-created twin is queued without a
+notification, a real-created twin is queued with the notifications, the
+cleanup body carries the sweep.
+
 | Version (live) | Name | Repo file |
 |---|---|---|
+| applied via MCP (`entity_normalization`, `entity_normalization_phone_fix`) | entity_normalization | `20261014120000_entity_normalization.sql` |
+| applied via MCP (`entity_suggest`) | entity_suggest | `20261015120000_entity_suggest.sql` |
+| applied via MCP (`siu_reconcile`) | siu_reconcile | `20261016120000_siu_reconcile.sql` |
+| applied via MCP (`entity_merges`, `entity_merges_version_source`, `entity_merges_visible_grant`) | entity_merges | `20261017120000_entity_merges.sql` |
+| applied via MCP (`entity_observations`) | entity_observations | `20261018120000_entity_observations.sql` |
+| applied via MCP (`entity_crossref`) | entity_crossref | `20261019120000_entity_crossref.sql` |
+| applied via MCP (`entity_test_hygiene`, `entity_test_hygiene_cleanup`) | entity_test_hygiene | `20261020120000_entity_test_hygiene.sql` |
 | applied via MCP (`record_versions`) | record_versions | `20261011120000_record_versions.sql` |
 | applied via MCP (`case_access_grant_expiry`) | case_access_grant_expiry | `20261012120000_case_access_grant_expiry.sql` |
 | applied via MCP (`permanent_delete_record`, `permanent_delete_record_preview_fix`) | permanent_delete_record | `20261013120000_permanent_delete_record.sql` |

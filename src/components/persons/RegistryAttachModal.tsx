@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/Button'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
-import { searchCaseOptions } from './ProfileRelations'
+import { searchCaseHits } from '@/lib/entitySearch'
 import { PERSON_CLASSIFICATIONS, classificationLabel } from './personIntel'
 import type { RegistryPerson } from './registryFilters'
 
@@ -95,7 +95,7 @@ export function RegistryAttachModal({ person, onClose }: { person: RegistryPerso
               placeholder="Search case number or title…"
               value={picked}
               onChange={setPicked}
-              search={searchCaseOptions}
+              search={searchCaseHits}
               emptyState="No cases match — you may not have access to the case you're looking for."
             />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

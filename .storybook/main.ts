@@ -26,6 +26,7 @@ const config: StorybookConfig = {
   stories: [
     '../src/components/ui/**/*.stories.@(ts|tsx)',
     '../src/components/dash/**/*.stories.@(ts|tsx)',
+    '../src/components/entity/**/*.stories.@(ts|tsx)',
   ],
   addons: [
     // Advisory only — parameters.a11y.test is 'todo' in preview.tsx, so

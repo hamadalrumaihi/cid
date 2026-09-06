@@ -24,7 +24,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { ScaleIcon } from '@/components/shell/icons'
 import type { Tables } from '@/lib/database.types'
-import { ilikeAny, list, rpc } from '@/lib/db'
+import { list, rpc } from '@/lib/db'
+import { suggestEntities } from '@/lib/entity'
+import { searchLegalRequestHits, searchPersonHits, searchPlaceHits, searchVehicleHits } from '@/lib/entitySearch'
 import { adoptLegacyDraft, clearDraft, saveDraft, type LoadedDraft } from '@/lib/userDrafts'
 import { timeAgo } from '@/lib/format'
 import {
@@ -342,13 +344,24 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     void saveDraft(`legal:edit:${editId}`, shape)
   }, [editId, seedJson, title, priority, narrative, classification, form])
 
-  /* ── Bounded server-backed pickers (ilike + limit 20; RLS scopes rows) ────── */
+  /* ── Bounded server-backed pickers (entity_suggest; RLS scopes rows) ──────── */
+  // Cases: the shared suggestion arm finds candidates (blank ⇒ the most
+  // recent), then ONE in:{id} hydration reads the routing columns the
+  // responsible-bureau chain needs. Server order is kept.
   const searchCases = useCallback(async (q: string): Promise<CasePick[]> => {
-    const or = ilikeAny(['case_number', 'title'], q)
-    const rows = (await list('cases', {
-      select: 'id,case_number,title,bureau,originating_bureau,lead_detective_id,created_by',
-      order: 'created_at', ascending: false, limit: 20, ...(or ? { or } : {}),
-    })) as unknown as Pick<Tables<'cases'>, 'id' | 'case_number' | 'title' | 'bureau' | 'originating_bureau' | 'lead_detective_id' | 'created_by'>[]
+    type Row = Pick<Tables<'cases'>, 'id' | 'case_number' | 'title' | 'bureau' | 'originating_bureau' | 'lead_detective_id' | 'created_by'>
+    const select = 'id,case_number,title,bureau,originating_bureau,lead_detective_id,created_by'
+    const term = q.trim()
+    let rows: Row[]
+    if (term.length < 2) {
+      rows = (await list('cases', { select, order: 'created_at', ascending: false, limit: 20 })) as unknown as Row[]
+    } else {
+      const hits = await suggestEntities('case', term, 20)
+      if (!hits.length) return []
+      const fetched = (await list('cases', { select, in: { id: hits.map((h) => h.id) } })) as unknown as Row[]
+      const byId = new Map(fetched.map((c) => [c.id, c]))
+      rows = hits.map((h) => byId.get(h.id)).filter((c): c is Row => !!c)
+    }
     return rows.map((c) => {
       // First pass on the fields already on the row (bureau → responsible
       // bureau → case-number prefix). An unresolved pick keeps routing: null
@@ -397,12 +410,12 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     })()
     return () => { cancelled = true }
   }, [isEdit, caseSel])
+  // Persons: the shared entity_suggest arm (name / alias / phone; merged
+  // tombstones never offered). Suggest rows carry no mugshot — the picker's
+  // thumb falls back to initials.
   const searchPersons = useCallback(async (q: string): Promise<ThumbPick[]> => {
-    const or = ilikeAny(['name', 'alias'], q)
-    const rows = (await list('persons', {
-      select: 'id,name,alias,mugshot_url', order: 'name', limit: 20, ...(or ? { or } : {}),
-    })) as unknown as Pick<Tables<'persons'>, 'id' | 'name' | 'alias' | 'mugshot_url'>[]
-    return rows.map((p) => ({ id: p.id, label: p.name, ...(p.alias ? { sublabel: `“${p.alias}”` } : {}), thumbUrl: p.mugshot_url }))
+    const hits = await searchPersonHits(q)
+    return hits.map((p) => ({ id: p.id, label: p.label, ...(p.sublabel ? { sublabel: p.sublabel } : {}), thumbUrl: p.thumbUrl ?? null }))
   }, [])
 
   /* ── Structured search-warrant targets ────────────────────────────────────── */
@@ -411,28 +424,20 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
   const [tRationale, setTRationale] = useState('')
   const targetSearch = useCallback(async (q: string): Promise<ThumbPick[]> => {
     if (tKind === 'person_record') return searchPersons(q)
-    if (tKind === 'vehicle') {
-      const or = ilikeAny(['plate', 'model'], q)
-      const rows = (await list('vehicles', {
-        select: 'id,plate,model,color', order: 'updated_at', ascending: false, limit: 20, ...(or ? { or } : {}),
-      })) as unknown as Pick<Tables<'vehicles'>, 'id' | 'plate' | 'model' | 'color'>[]
-      return rows.map((v) => ({ id: v.id, label: v.plate, sublabel: [v.model, v.color].filter(Boolean).join(' · ') || undefined }))
-    }
-    if (tKind === 'place') {
-      const or = ilikeAny(['name', 'area'], q)
-      const rows = (await list('places', {
-        select: 'id,name,area,type', order: 'updated_at', ascending: false, limit: 20, ...(or ? { or } : {}),
-      })) as unknown as Pick<Tables<'places'>, 'id' | 'name' | 'area' | 'type'>[]
-      return rows.map((p) => ({ id: p.id, label: p.name, sublabel: [humanize(p.type), p.area].filter(Boolean).join(' · ') || undefined }))
-    }
-    // prior_legal_request — RLS already scopes which requests come back.
-    const or = ilikeAny(['request_number', 'title'], q)
+    if (tKind === 'vehicle') return searchVehicleHits(q)
+    if (tKind === 'place') return searchPlaceHits(q)
+    // prior_legal_request — RLS already scopes which requests come back. The
+    // shared arm finds candidates; one in:{id} read fetches subtype and
+    // classification for the labels.
+    const hits = await searchLegalRequestHits(q, { exclude: editId ? new Set([editId]) : undefined })
+    if (!hits.length) return []
     const rows = (await list('legal_requests', {
-      select: 'id,request_number,title,request_type,subtype,classification',
-      order: 'created_at', ascending: false, limit: 20, ...(or ? { or } : {}),
-    })) as unknown as Pick<Tables<'legal_requests'>, 'id' | 'request_number' | 'title' | 'request_type' | 'subtype' | 'classification'>[]
-    return rows
-      .filter((r) => r.id !== editId)
+      select: 'id,request_number,title,subtype,classification', in: { id: hits.map((h) => h.id) },
+    })) as unknown as Pick<Tables<'legal_requests'>, 'id' | 'request_number' | 'title' | 'subtype' | 'classification'>[]
+    const byId = new Map(rows.map((r) => [r.id, r]))
+    return hits
+      .map((h) => byId.get(h.id))
+      .filter((r): r is NonNullable<typeof r> => !!r)
       // A sealed prior is labelled by its number alone — the new request's
       // audience is broader than the sealed one's, so its title never rides
       // along into chips or the mirrored search_targets text (same discipline

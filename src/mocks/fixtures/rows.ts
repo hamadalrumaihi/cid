@@ -155,6 +155,8 @@ export function prosecutorCoverageRow(
 
 export function personRow(overrides: Partial<Tables<'persons'>> = {}): Tables<'persons'> {
   return {
+    phone_normalized: null,
+    siu_hidden_flag: false,
     delete_batch: null,
     delete_reason: null,
     deleted_at: null,

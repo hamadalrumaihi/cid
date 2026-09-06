@@ -337,7 +337,10 @@ export const FORM_SCHEMAS: Record<string, FormSchema> = {
         { key: 'verified', label: 'Verified', type: 'select', opts: ['', 'Yes', 'No'] },
       ] },
       { id: 'entities', label: 'Relevant Persons / Vehicles', type: 'grid', cols: [
-        { key: 'name_or_plate', label: 'Name / Plate', type: 'text', person: true },
+        // Mixed name-OR-plate column: NOT a person field — a plate must never be
+        // routed through the Persons-registry picker / person_id capture
+        // (forms.test.ts pins this; P2-08).
+        { key: 'name_or_plate', label: 'Name / Plate', type: 'text' },
         { key: 'relevance', label: 'Relevance', type: 'text' },
       ] },
       { id: 'meetings', label: 'Notable Meetings & Patterns', type: 'textarea', key: 'meetings' },

@@ -32,10 +32,11 @@ import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import { useCreate } from '@/components/shell/CreateHost'
 import { type CaseRow, type IntelRow } from './shared'
 
-type LinkKind = 'person' | 'gang' | 'place' | 'narcotic'
+type LinkKind = 'person' | 'vehicle' | 'gang' | 'place' | 'narcotic'
 
 const KINDS: ReadonlyArray<{ id: LinkKind; label: string; section: string }> = [
   { id: 'person', label: 'Person', section: 'Persons' },
+  { id: 'vehicle', label: 'Vehicle', section: 'Vehicles' },
   { id: 'gang', label: 'Gang', section: 'Gangs' },
   { id: 'place', label: 'Place', section: 'Places' },
   { id: 'narcotic', label: 'Narcotic', section: 'Narcotics' },
@@ -48,6 +49,7 @@ const KINDS: ReadonlyArray<{ id: LinkKind; label: string; section: string }> = [
 const chipHref = (kind: string, id: string): string | null => {
   switch (kind) {
     case 'person': return `/persons?person=${encodeURIComponent(id)}`
+    case 'vehicle': return `/vehicles?vehicle=${encodeURIComponent(id)}`
     case 'gang': return `/gangs?gang=${encodeURIComponent(id)}`
     case 'place': return `/places?place=${encodeURIComponent(id)}`
     case 'narcotic': return `/narcotics?drug=${encodeURIComponent(id)}`
@@ -82,7 +84,14 @@ export function IntelTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boole
       ids.length
         ? ((await list(table, { select: 'id,name', in: { id: ids } }).catch(() => [])) as unknown as { id: string; name: string }[])
         : []
+    // Vehicles (P2-06: a link kind since 20261019120000) label by plate.
+    const vehicleIds = idsOf('vehicle')
+    const vehicles = vehicleIds.length
+      ? ((await list('vehicles', { select: 'id,plate', in: { id: vehicleIds } }).catch(() => [])) as unknown as { id: string; plate: string }[])
+          .map((r) => ({ id: r.id, name: r.plate }))
+      : []
     const found = await Promise.all([
+      Promise.resolve(vehicles),
       lookup('persons', idsOf('person')),
       lookup('gangs', idsOf('gang')),
       lookup('places', idsOf('place')),
@@ -202,7 +211,7 @@ function WorkingNotes({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boolean;
   )
 }
 
-/* ── Link form — shared entity search, all four link kinds, optional note ──── */
+/* ── Link form — shared entity search, all five link kinds, optional note ──── */
 function LinkForm({ caseId, links, onLinked }: { caseId: string; links: IntelRow[]; onLinked: () => void }) {
   const create = useCreate()
   const [kind, setKind] = useState<LinkKind>('person')

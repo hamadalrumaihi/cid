@@ -209,6 +209,33 @@ code — no third-party visual service.
 
 ---
 
+## Checking entity-layer query plans
+
+The suggest / duplicate / cross-reference RPCs (Phase 2, P2-01 … P2-06) are
+SECURITY INVOKER and lean on the normalized-key indexes
+(`persons_phone_norm_idx`, `persons_name_dob_idx`, `indicators_value_norm_idx`,
+`vehicles_plate_norm_idx`, `places_name_area_idx`, the trgm GINs on
+`gangs.aliases` / `indicators.value` / `persons.name`) plus
+`case_intel_links_ref_idx`. The acceptance bar is p95 < 150 ms on seeded
+data. To look at a plan from the SQL editor as an authenticated user:
+
+```sql
+begin;
+select set_config('request.jwt.claims', json_build_object('sub', '<profile uuid>', 'role', 'authenticated')::text, true);
+set local role authenticated;
+explain (analyze, buffers) select * from public.entity_suggest('person', 'john', 20);
+explain (analyze, buffers) select * from public.entity_duplicates('vehicle', '{"plate": "AB-123"}');
+explain (analyze, buffers) select * from public.entity_crossref('vehicle', '<vehicle uuid>', 50);
+rollback;
+```
+
+The trgm threshold is set inside each function with `set_config` (a
+function-level `SET` on that GUC is refused on Supabase), so the `<%`
+prefilter is index-backed at 0.3 without any session setup. A plan that
+sequential-scans `persons` on a phone query means the generated column is
+missing its index; one that scans `reports` on a cross-reference is expected
+(the report arm is the one bounded text scan left, under RLS and `limit`).
+
 ## Promoting advisory gates to blocking
 
 The `sast` and `perf` CI jobs are `continue-on-error: true` so an untuned rule

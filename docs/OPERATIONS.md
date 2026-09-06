@@ -209,6 +209,7 @@ to look when a sweep goes quiet.
 | `audit-chain-verify` | 03:15 daily | walks the audit hash chain; `audit_chain_mismatch` to the Owner on the first bad row |
 | `record-versions-prune` | 03:45 daily | `private.record_versions_prune()`: versions older than 2 years, keeping the latest 5 per record and every record on an open case or under a legal hold ([`20261011120000`](../supabase/migrations/20261011120000_record_versions.sql)) |
 | `access-grant-expiry-sweep` | :20 hourly | `private.access_grant_expiry_sweep()`: `access_expiring` reminders three days before a case access grant lapses; `ACCESS_EXPIRED` + `access_expired` + row removal on lapse ([`20261012120000`](../supabase/migrations/20261012120000_case_access_grant_expiry.sql)) |
+| `siu-reconcile-scan` | every 15 min | `private.siu_reconcile_scan()`: compares every CID-visible person / vehicle / gang / place against the SIB-hidden rows on their normalized keys (phone, name, alias, plate, org name, name+area) and queues late collisions (a record hidden AFTER its twin was created) into `siu_reconcile_queue`; `siu_reconcile` notifications to SIB agents, one per agent per hidden record per hour ([`20261016120000`](../supabase/migrations/20261016120000_siu_reconcile.sql)) |
 - The same rule extends to the append-only history tables the workflow RPCs
   write (`case_signoff_history`, membership/legal histories, `role_events`)
   and to sealed `report_versions` (client-immutable by trigger + revoked
