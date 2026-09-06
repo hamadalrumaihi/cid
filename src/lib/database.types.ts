@@ -660,6 +660,10 @@ export type Database = {
           case_id: string
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           legal_request_id: string | null
           owner_id: string | null
@@ -678,6 +682,10 @@ export type Database = {
           case_id: string
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           legal_request_id?: string | null
           owner_id?: string | null
@@ -696,6 +704,10 @@ export type Database = {
           case_id?: string
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           legal_request_id?: string | null
           owner_id?: string | null
@@ -951,6 +963,10 @@ export type Database = {
           case_id: string
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           kind: string
           note: string | null
@@ -961,6 +977,10 @@ export type Database = {
           case_id: string
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           kind: string
           note?: string | null
@@ -971,6 +991,10 @@ export type Database = {
           case_id?: string
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           kind?: string
           note?: string | null
@@ -1001,6 +1025,10 @@ export type Database = {
           body: string
           case_id: string
           created_at: string
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           links: Json
           mentions: Json
@@ -1011,6 +1039,10 @@ export type Database = {
           body: string
           case_id: string
           created_at?: string
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           links?: Json
           mentions?: Json
@@ -1021,6 +1053,10 @@ export type Database = {
           body?: string
           case_id?: string
           created_at?: string
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           links?: Json
           mentions?: Json
@@ -1105,6 +1141,10 @@ export type Database = {
           case_id: string
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           done: boolean
           due: string | null
           id: string
@@ -1117,6 +1157,10 @@ export type Database = {
           case_id: string
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           done?: boolean
           due?: string | null
           id?: string
@@ -1129,6 +1173,10 @@ export type Database = {
           case_id?: string
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           done?: boolean
           due?: string | null
           id?: string
@@ -1231,9 +1279,9 @@ export type Database = {
       }
       cases: {
         Row: {
-          area: string | null
           archived_at: string | null
           archived_by: string | null
+          area: string | null
           bureau: Database["public"]["Enums"]["bureau"]
           case_authority: string
           case_number: string
@@ -1241,6 +1289,10 @@ export type Database = {
           closed_at: string | null
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           follow_up_at: string | null
           id: string
           investigative_stage: string
@@ -1275,9 +1327,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          area?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          area?: string | null
           bureau?: Database["public"]["Enums"]["bureau"]
           case_authority?: string
           case_number: string
@@ -1285,6 +1337,10 @@ export type Database = {
           closed_at?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           follow_up_at?: string | null
           id?: string
           investigative_stage?: string
@@ -1319,9 +1375,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          area?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          area?: string | null
           bureau?: Database["public"]["Enums"]["bureau"]
           case_authority?: string
           case_number?: string
@@ -1329,6 +1385,10 @@ export type Database = {
           closed_at?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           follow_up_at?: string | null
           id?: string
           investigative_stage?: string
@@ -2416,6 +2476,10 @@ export type Database = {
           collected_by: string | null
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           description: string | null
           id: string
           item_code: string | null
@@ -2431,6 +2495,10 @@ export type Database = {
           collected_by?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           description?: string | null
           id?: string
           item_code?: string | null
@@ -2446,6 +2514,10 @@ export type Database = {
           collected_by?: string | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           description?: string | null
           id?: string
           item_code?: string | null
@@ -5801,6 +5873,10 @@ export type Database = {
           case_id: string | null
           category: string | null
           created_at: string
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           evidence_designated_at: string | null
           evidence_designated_by: string | null
           evidence_ref: string | null
@@ -5828,6 +5904,10 @@ export type Database = {
           case_id?: string | null
           category?: string | null
           created_at?: string
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           evidence_designated_at?: string | null
           evidence_designated_by?: string | null
           evidence_ref?: string | null
@@ -5855,6 +5935,10 @@ export type Database = {
           case_id?: string | null
           category?: string | null
           created_at?: string
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           evidence_designated_at?: string | null
           evidence_designated_by?: string | null
           evidence_ref?: string | null
@@ -8529,6 +8613,10 @@ export type Database = {
         Row: {
           act_date: string | null
           created_at: string
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           evidence_id: string | null
           evidence_ref: string | null
           id: string
@@ -8541,6 +8629,10 @@ export type Database = {
         Insert: {
           act_date?: string | null
           created_at?: string
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           evidence_id?: string | null
           evidence_ref?: string | null
           id?: string
@@ -8553,6 +8645,10 @@ export type Database = {
         Update: {
           act_date?: string | null
           created_at?: string
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           evidence_id?: string | null
           evidence_ref?: string | null
           id?: string
@@ -8888,6 +8984,10 @@ export type Database = {
           author_id: string | null
           case_id: string
           created_at: string
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           fields: Json
           finalized: boolean
           id: string
@@ -8902,6 +9002,10 @@ export type Database = {
           author_id?: string | null
           case_id: string
           created_at?: string
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           fields?: Json
           finalized?: boolean
           id?: string
@@ -8916,6 +9020,10 @@ export type Database = {
           author_id?: string | null
           case_id?: string
           created_at?: string
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           fields?: Json
           finalized?: boolean
           id?: string
@@ -9069,6 +9177,10 @@ export type Database = {
         Row: {
           case_id: string
           created_at: string
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           enterprise_gang_id: string | null
           id: string
           updated_at: string
@@ -9076,6 +9188,10 @@ export type Database = {
         Insert: {
           case_id: string
           created_at?: string
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           enterprise_gang_id?: string | null
           id?: string
           updated_at?: string
@@ -9083,6 +9199,10 @@ export type Database = {
         Update: {
           case_id?: string
           created_at?: string
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           enterprise_gang_id?: string | null
           id?: string
           updated_at?: string

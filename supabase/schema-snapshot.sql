@@ -298,12 +298,17 @@ create table public.case_blockers (
   resolved_at timestamp with time zone,
   created_by uuid default auth.uid(),
   created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now()
+  updated_at timestamp with time zone not null default now(),
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
 );
 alter table public.case_blockers add constraint case_blockers_status_check CHECK ((status = ANY (ARRAY['open'::text, 'resolved'::text])));
 alter table public.case_blockers add constraint case_blockers_type_check CHECK ((type = ANY (ARRAY['awaiting_evidence'::text, 'awaiting_report'::text, 'awaiting_legal_review'::text, 'awaiting_command_review'::text, 'awaiting_agency'::text, 'awaiting_suspect'::text, 'task_dependency'::text, 'resource'::text, 'other'::text])));
 alter table public.case_blockers add constraint case_blockers_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
 alter table public.case_blockers add constraint case_blockers_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
+alter table public.case_blockers add constraint case_blockers_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.case_blockers add constraint case_blockers_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES legal_requests(id) ON DELETE SET NULL;
 alter table public.case_blockers add constraint case_blockers_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES profiles(id);
 alter table public.case_blockers add constraint case_blockers_report_id_fkey FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE SET NULL;
@@ -386,11 +391,16 @@ create table public.case_intel_links (
   role text,
   note text,
   created_by uuid default auth.uid(),
-  created_at timestamp with time zone not null default now()
+  created_at timestamp with time zone not null default now(),
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
 );
 alter table public.case_intel_links add constraint case_intel_links_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'gang'::text, 'place'::text, 'narcotic'::text, 'account'::text])));
 alter table public.case_intel_links add constraint case_intel_links_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
 alter table public.case_intel_links add constraint case_intel_links_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
+alter table public.case_intel_links add constraint case_intel_links_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.case_intel_links add constraint case_intel_links_pkey PRIMARY KEY (id);
 alter table public.case_intel_links add constraint case_intel_links_case_id_kind_ref_id_key UNIQUE (case_id, kind, ref_id);
 alter table public.case_intel_links enable row level security;
@@ -403,10 +413,15 @@ create table public.case_messages (
   body text not null,
   mentions jsonb not null default '[]'::jsonb,
   links jsonb not null default '[]'::jsonb,
-  created_at timestamp with time zone not null default now()
+  created_at timestamp with time zone not null default now(),
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
 );
 alter table public.case_messages add constraint case_messages_author_id_fkey FOREIGN KEY (author_id) REFERENCES profiles(id);
 alter table public.case_messages add constraint case_messages_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
+alter table public.case_messages add constraint case_messages_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.case_messages add constraint case_messages_pkey PRIMARY KEY (id);
 alter table public.case_messages enable row level security;
 
@@ -438,11 +453,16 @@ create table public.case_tasks (
   created_by uuid default auth.uid(),
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
-  parent_id uuid
+  parent_id uuid,
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
 );
 alter table public.case_tasks add constraint case_tasks_assignee_fkey FOREIGN KEY (assignee) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.case_tasks add constraint case_tasks_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
 alter table public.case_tasks add constraint case_tasks_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
+alter table public.case_tasks add constraint case_tasks_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.case_tasks add constraint case_tasks_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES case_tasks(id) ON DELETE CASCADE;
 alter table public.case_tasks add constraint case_tasks_pkey PRIMARY KEY (id);
 alter table public.case_tasks enable row level security;
@@ -510,7 +530,11 @@ create table public.cases (
   siu_stage text,
   siu_category text,
   siu_closure_reason text,
-  siu_closure_note text
+  siu_closure_note text,
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
 );
 alter table public.cases add constraint cases_case_authority_check CHECK ((case_authority = ANY (ARRAY['cid'::text, 'siu'::text])));
 alter table public.cases add constraint cases_investigative_stage_check CHECK ((investigative_stage = ANY (ARRAY['intake'::text, 'active_investigation'::text, 'legal_process'::text, 'enforcement_ready'::text, 'pending_closure'::text, 'closed'::text])));
@@ -523,6 +547,7 @@ alter table public.cases add constraint cases_siu_closure_reason_check CHECK (((
 alter table public.cases add constraint cases_siu_stage_check CHECK (((siu_stage IS NULL) OR (siu_stage = ANY (ARRAY['preliminary_inquiry'::text, 'investigation'::text]))));
 alter table public.cases add constraint cases_archived_by_fkey FOREIGN KEY (archived_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.cases add constraint cases_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
+alter table public.cases add constraint cases_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.cases add constraint cases_joint_case_created_by_fkey FOREIGN KEY (joint_case_created_by) REFERENCES profiles(id);
 alter table public.cases add constraint cases_joint_case_ended_by_fkey FOREIGN KEY (joint_case_ended_by) REFERENCES profiles(id);
 alter table public.cases add constraint cases_lead_detective_id_fkey FOREIGN KEY (lead_detective_id) REFERENCES profiles(id);
@@ -884,11 +909,16 @@ create table public.evidence (
   notes text,
   created_by uuid default auth.uid(),
   created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now()
+  updated_at timestamp with time zone not null default now(),
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
 );
 alter table public.evidence add constraint evidence_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
 alter table public.evidence add constraint evidence_collected_by_fkey FOREIGN KEY (collected_by) REFERENCES profiles(id);
 alter table public.evidence add constraint evidence_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
+alter table public.evidence add constraint evidence_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.evidence add constraint evidence_pkey PRIMARY KEY (id);
 alter table public.evidence enable row level security;
 
@@ -2125,10 +2155,15 @@ create table public.media (
   observation_id uuid,
   evidence_ref text,
   evidence_designated_by uuid,
-  evidence_designated_at timestamp with time zone
+  evidence_designated_at timestamp with time zone,
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
 );
 alter table public.media add constraint media_category_check CHECK (((category IS NULL) OR (category = ANY (ARRAY['scene'::text, 'people'::text, 'vehicles'::text, 'places'::text, 'surveillance'::text, 'documents'::text, 'report_media'::text, 'other'::text]))));
 alter table public.media add constraint media_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL;
+alter table public.media add constraint media_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.media add constraint media_evidence_designated_by_fkey FOREIGN KEY (evidence_designated_by) REFERENCES profiles(id);
 alter table public.media add constraint media_gang_id_fkey FOREIGN KEY (gang_id) REFERENCES gangs(id) ON DELETE SET NULL;
 alter table public.media add constraint media_narcotic_id_fkey FOREIGN KEY (narcotic_id) REFERENCES narcotics(id) ON DELETE SET NULL;
@@ -3052,8 +3087,13 @@ create table public.predicate_acts (
   note text,
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
-  observation_id uuid
+  observation_id uuid,
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
 );
+alter table public.predicate_acts add constraint predicate_acts_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.predicate_acts add constraint predicate_acts_evidence_id_fkey FOREIGN KEY (evidence_id) REFERENCES evidence(id) ON DELETE SET NULL;
 alter table public.predicate_acts add constraint predicate_acts_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES surveillance_observations(id) ON DELETE SET NULL;
 alter table public.predicate_acts add constraint predicate_acts_rico_case_id_fkey FOREIGN KEY (rico_case_id) REFERENCES rico_cases(id) ON DELETE CASCADE;
@@ -3210,10 +3250,15 @@ create table public.reports (
   finalized boolean not null default false,
   signature jsonb,
   created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now()
+  updated_at timestamp with time zone not null default now(),
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
 );
 alter table public.reports add constraint reports_author_id_fkey FOREIGN KEY (author_id) REFERENCES profiles(id);
 alter table public.reports add constraint reports_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
+alter table public.reports add constraint reports_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.reports add constraint reports_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES reports(id);
 alter table public.reports add constraint reports_pkey PRIMARY KEY (id);
 alter table public.reports enable row level security;
@@ -3261,9 +3306,14 @@ create table public.rico_cases (
   case_id uuid not null,
   enterprise_gang_id uuid,
   created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now()
+  updated_at timestamp with time zone not null default now(),
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
 );
 alter table public.rico_cases add constraint rico_cases_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
+alter table public.rico_cases add constraint rico_cases_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.rico_cases add constraint rico_cases_enterprise_gang_id_fkey FOREIGN KEY (enterprise_gang_id) REFERENCES gangs(id) ON DELETE SET NULL;
 alter table public.rico_cases add constraint rico_cases_pkey PRIMARY KEY (id);
 alter table public.rico_cases add constraint rico_cases_case_id_key UNIQUE (case_id);
@@ -4403,6 +4453,8 @@ CREATE INDEX case_assignments_officer_id_fkey_idx ON public.case_assignments USI
 CREATE INDEX case_assignments_removed_by_idx ON public.case_assignments USING btree (removed_by);
 CREATE INDEX case_blockers_case_id_fkey_idx ON public.case_blockers USING btree (case_id);
 CREATE INDEX case_blockers_created_by_fkey_idx ON public.case_blockers USING btree (created_by);
+CREATE INDEX case_blockers_delete_batch_idx ON public.case_blockers USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
+CREATE INDEX case_blockers_deleted_at_idx ON public.case_blockers USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX case_blockers_legal_request_id_fkey_idx ON public.case_blockers USING btree (legal_request_id);
 CREATE INDEX case_blockers_owner_id_fkey_idx ON public.case_blockers USING btree (owner_id);
 CREATE INDEX case_blockers_report_id_fkey_idx ON public.case_blockers USING btree (report_id);
@@ -4421,14 +4473,20 @@ CREATE INDEX case_files_case_number_idx ON public.case_files USING btree (case_n
 CREATE UNIQUE INDEX case_files_unique_file_per_case ON public.case_files USING btree (case_number, drive_file_id);
 CREATE INDEX case_intel_links_case_idx ON public.case_intel_links USING btree (case_id);
 CREATE INDEX case_intel_links_created_by_fkey_idx ON public.case_intel_links USING btree (created_by);
+CREATE INDEX case_intel_links_delete_batch_idx ON public.case_intel_links USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
+CREATE INDEX case_intel_links_deleted_at_idx ON public.case_intel_links USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX case_intel_links_ref_idx ON public.case_intel_links USING btree (kind, ref_id);
 CREATE INDEX case_messages_author_id_fkey_idx ON public.case_messages USING btree (author_id);
+CREATE INDEX case_messages_delete_batch_idx ON public.case_messages USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
+CREATE INDEX case_messages_deleted_at_idx ON public.case_messages USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX idx_cm_case ON public.case_messages USING btree (case_id, created_at);
 CREATE INDEX case_signoff_history_actor_id_fkey_idx ON public.case_signoff_history USING btree (actor_id);
 CREATE INDEX case_signoff_history_case_id_fkey_idx ON public.case_signoff_history USING btree (case_id);
 CREATE INDEX case_tasks_assignee_idx ON public.case_tasks USING btree (assignee);
 CREATE INDEX case_tasks_case_idx ON public.case_tasks USING btree (case_id);
 CREATE INDEX case_tasks_created_by_idx ON public.case_tasks USING btree (created_by);
+CREATE INDEX case_tasks_delete_batch_idx ON public.case_tasks USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
+CREATE INDEX case_tasks_deleted_at_idx ON public.case_tasks USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX case_tasks_parent_id_idx ON public.case_tasks USING btree (parent_id);
 CREATE INDEX case_tasks_title_trgm ON public.case_tasks USING gin (title gin_trgm_ops);
 CREATE INDEX case_templates_created_by_fkey_idx ON public.case_templates USING btree (created_by);
@@ -4436,6 +4494,8 @@ CREATE INDEX cases_archived_by_idx ON public.cases USING btree (archived_by);
 CREATE INDEX cases_bureau_status_idx ON public.cases USING btree (bureau, status);
 CREATE INDEX cases_casenum_trgm ON public.cases USING gin (case_number gin_trgm_ops);
 CREATE INDEX cases_created_by_fkey_idx ON public.cases USING btree (created_by);
+CREATE INDEX cases_delete_batch_idx ON public.cases USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
+CREATE INDEX cases_deleted_at_idx ON public.cases USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX cases_joint_case_created_by_idx ON public.cases USING btree (joint_case_created_by);
 CREATE INDEX cases_joint_case_ended_by_idx ON public.cases USING btree (joint_case_ended_by);
 CREATE INDEX cases_lead_detective_id_fkey_idx ON public.cases USING btree (lead_detective_id);
@@ -4498,6 +4558,8 @@ CREATE INDEX documents_versions_saved_by_fkey_idx ON public.documents_versions U
 CREATE INDEX evidence_case_id_idx ON public.evidence USING btree (case_id);
 CREATE INDEX evidence_collected_by_fkey_idx ON public.evidence USING btree (collected_by);
 CREATE INDEX evidence_created_by_fkey_idx ON public.evidence USING btree (created_by);
+CREATE INDEX evidence_delete_batch_idx ON public.evidence USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
+CREATE INDEX evidence_deleted_at_idx ON public.evidence USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX evidence_description_trgm ON public.evidence USING gin (description gin_trgm_ops);
 CREATE INDEX evidence_item_code_trgm ON public.evidence USING gin (item_code gin_trgm_ops);
 CREATE INDEX evidence_location_trgm ON public.evidence USING gin (location gin_trgm_ops);
@@ -4654,6 +4716,8 @@ CREATE INDEX mdt_exports_vehicle_idx ON public.mdt_exports USING btree (vehicle_
 CREATE INDEX mdt_wanted_projections_person_id_idx ON public.mdt_wanted_projections USING btree (person_id);
 CREATE INDEX media_case_id_archived_at_idx ON public.media USING btree (case_id, archived_at);
 CREATE INDEX media_case_id_idx ON public.media USING btree (case_id);
+CREATE INDEX media_delete_batch_idx ON public.media USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
+CREATE INDEX media_deleted_at_idx ON public.media USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX media_evidence_designated_by_fkey_idx ON public.media USING btree (evidence_designated_by) WHERE (evidence_designated_by IS NOT NULL);
 CREATE INDEX media_gang_id_fkey_idx ON public.media USING btree (gang_id);
 CREATE INDEX media_narcotic_id_fkey_idx ON public.media USING btree (narcotic_id);
@@ -4815,6 +4879,8 @@ CREATE INDEX places_delete_batch_idx ON public.places USING btree (delete_batch)
 CREATE INDEX places_deleted_at_idx ON public.places USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX places_name_trgm ON public.places USING gin (name gin_trgm_ops);
 CREATE INDEX places_narcotic_fk_idx ON public.places USING btree (narcotic_id);
+CREATE INDEX predicate_acts_delete_batch_idx ON public.predicate_acts USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
+CREATE INDEX predicate_acts_deleted_at_idx ON public.predicate_acts USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX predicate_acts_evidence_id_fkey_idx ON public.predicate_acts USING btree (evidence_id);
 CREATE INDEX predicate_acts_observation_idx ON public.predicate_acts USING btree (observation_id);
 CREATE INDEX predicate_acts_rico_case_id_fkey_idx ON public.predicate_acts USING btree (rico_case_id);
@@ -4840,6 +4906,8 @@ CREATE INDEX report_versions_created_by_idx ON public.report_versions USING btre
 CREATE INDEX report_versions_report_idx ON public.report_versions USING btree (report_id);
 CREATE INDEX reports_author_id_fkey_idx ON public.reports USING btree (author_id);
 CREATE INDEX reports_case_id_idx ON public.reports USING btree (case_id);
+CREATE INDEX reports_delete_batch_idx ON public.reports USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
+CREATE INDEX reports_deleted_at_idx ON public.reports USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX reports_parent_id_fkey_idx ON public.reports USING btree (parent_id);
 CREATE INDEX restricted_access_grants_decided_by_idx ON public.restricted_access_grants USING btree (decided_by);
 CREATE INDEX restricted_access_grants_lookup ON public.restricted_access_grants USING btree (case_id, user_id, expires_at);
@@ -4848,6 +4916,8 @@ CREATE INDEX restricted_access_grants_revoked_by_idx ON public.restricted_access
 CREATE INDEX restricted_access_grants_user_id_idx ON public.restricted_access_grants USING btree (user_id);
 CREATE INDEX restricted_access_log_actor_idx ON public.restricted_access_log USING btree (actor_id);
 CREATE INDEX restricted_access_log_entity_idx ON public.restricted_access_log USING btree (entity_type, entity_id);
+CREATE INDEX rico_cases_delete_batch_idx ON public.rico_cases USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
+CREATE INDEX rico_cases_deleted_at_idx ON public.rico_cases USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX rico_cases_enterprise_gang_id_fkey_idx ON public.rico_cases USING btree (enterprise_gang_id);
 CREATE INDEX role_events_actor_id_idx ON public.role_events USING btree (actor_id);
 CREATE INDEX role_events_target_id_idx ON public.role_events USING btree (target_id);
@@ -13539,23 +13609,35 @@ begin
 
   for c in
     select * from (values
-      ('gang_member',         'gang_members',         'gang_id',    'gangs'),
-      ('gang_member',         'gang_members',         'person_id',  'persons'),
-      ('gang_turf',           'gang_turf',            'gang_id',    'gangs'),
-      ('person_place',        'person_places',        'person_id',  'persons'),
-      ('person_place',        'person_places',        'place_id',   'places'),
-      ('person_vehicle',      'person_vehicles',      'person_id',  'persons'),
-      ('person_vehicle',      'person_vehicles',      'vehicle_id', 'vehicles'),
-      ('person_relationship', 'person_relationships', 'person_a',   'persons'),
-      ('person_relationship', 'person_relationships', 'person_b',   'persons'),
-      ('account_link',        'account_links',        'account_id', 'accounts'),
-      ('account_link',        'account_links',        'person_id',  'persons')) as x(kind, tbl, col, parent)
+      ('gang_member',         'gang_members',         'gang_id',      'gangs'),
+      ('gang_member',         'gang_members',         'person_id',    'persons'),
+      ('gang_turf',           'gang_turf',            'gang_id',      'gangs'),
+      ('person_place',        'person_places',        'person_id',    'persons'),
+      ('person_place',        'person_places',        'place_id',     'places'),
+      ('person_vehicle',      'person_vehicles',      'person_id',    'persons'),
+      ('person_vehicle',      'person_vehicles',      'vehicle_id',   'vehicles'),
+      ('person_relationship', 'person_relationships', 'person_a',     'persons'),
+      ('person_relationship', 'person_relationships', 'person_b',     'persons'),
+      ('account_link',        'account_links',        'account_id',   'accounts'),
+      ('account_link',        'account_links',        'person_id',    'persons'),
+      ('report',              'reports',              'case_id',      'cases'),
+      ('media',               'media',                'case_id',      'cases'),
+      ('evidence',            'evidence',             'case_id',      'cases'),
+      ('case_task',           'case_tasks',           'case_id',      'cases'),
+      ('case_message',        'case_messages',        'case_id',      'cases'),
+      ('case_intel_link',     'case_intel_links',     'case_id',      'cases'),
+      ('case_blocker',        'case_blockers',        'case_id',      'cases'),
+      ('rico_case',           'rico_cases',           'case_id',      'cases'),
+      ('predicate_act',       'predicate_acts',       'rico_case_id', 'rico_cases')) as x(kind, tbl, col, parent)
     where x.kind = v_kind
   loop
-    execute format('select coalesce((select p.deleted_at is not null from public.%I p where p.id = (select l.%I from public.%I l where l.id = $1)), true)', c.parent, c.col, c.tbl)
+    execute format(
+      'select case when l.%2$I is null then false
+                   else coalesce((select p.deleted_at is not null from public.%1$I p where p.id = l.%2$I), true) end
+         from public.%3$I l where l.id = $1', c.parent, c.col, c.tbl)
       into v_parent_deleted using p_id;
-    if v_parent_deleted then
-      return jsonb_build_object('ok', false, 'code', 'parent_deleted', 'message', 'restore the record this link belongs to first');
+    if coalesce(v_parent_deleted, false) then
+      return jsonb_build_object('ok', false, 'code', 'parent_deleted', 'message', 'restore the record this belongs to first');
     end if;
   end loop;
 
@@ -13564,8 +13646,9 @@ begin
   get diagnostics n = row_count;
   v_restored := jsonb_build_object(v_table, n);
 
-  if st.p_batch is not null and v_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker') then
-    foreach t in array array['person_places', 'person_vehicles', 'person_relationships', 'account_links', 'gang_members', 'gang_turf'] loop
+  if st.p_batch is not null and v_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'case', 'report', 'media', 'evidence', 'rico_case') then
+    foreach t in array array['persons', 'vehicles', 'gangs', 'places', 'accounts', 'indicators', 'narcotics', 'operations', 'trackers', 'gang_members', 'gang_turf', 'person_places', 'person_vehicles', 'person_relationships', 'account_links', 'cases', 'reports', 'media', 'evidence', 'case_tasks', 'case_messages', 'case_intel_links', 'case_blockers', 'rico_cases', 'predicate_acts'] loop
+      if t = v_table then continue; end if;
       execute format('update public.%I set deleted_at = null, deleted_by = null, delete_reason = null, delete_batch = null where delete_batch = $1 and deleted_at is not null', t)
         using st.p_batch;
       get diagnostics n = row_count;
@@ -18622,7 +18705,7 @@ begin
     perform private.perm_deny('soft_delete', v_kind, p_id, 'not_permitted');
     return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'you may not delete this record');
   end if;
-  if v_reason is null and v_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker') then
+  if v_reason is null and v_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'case', 'report', 'media', 'evidence', 'rico_case') then
     return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'a reason is required to delete this record');
   end if;
   select * into st from private.soft_delete_state(v_kind, p_id);
@@ -18639,17 +18722,26 @@ begin
 
   for c in
     select * from (values
-      ('person',  'person_places',        'person_id'),
-      ('person',  'person_vehicles',      'person_id'),
-      ('person',  'person_relationships', 'person_a'),
-      ('person',  'person_relationships', 'person_b'),
-      ('person',  'account_links',        'person_id'),
-      ('person',  'gang_members',         'person_id'),
-      ('vehicle', 'person_vehicles',      'vehicle_id'),
-      ('gang',    'gang_members',         'gang_id'),
-      ('gang',    'gang_turf',            'gang_id'),
-      ('place',   'person_places',        'place_id'),
-      ('account', 'account_links',        'account_id')) as x(kind, tbl, col)
+      ('person',    'person_places',        'person_id'),
+      ('person',    'person_vehicles',      'person_id'),
+      ('person',    'person_relationships', 'person_a'),
+      ('person',    'person_relationships', 'person_b'),
+      ('person',    'account_links',        'person_id'),
+      ('person',    'gang_members',         'person_id'),
+      ('vehicle',   'person_vehicles',      'vehicle_id'),
+      ('gang',      'gang_members',         'gang_id'),
+      ('gang',      'gang_turf',            'gang_id'),
+      ('place',     'person_places',        'place_id'),
+      ('account',   'account_links',        'account_id'),
+      ('case',      'reports',              'case_id'),
+      ('case',      'media',                'case_id'),
+      ('case',      'evidence',             'case_id'),
+      ('case',      'case_tasks',           'case_id'),
+      ('case',      'case_messages',        'case_id'),
+      ('case',      'case_intel_links',     'case_id'),
+      ('case',      'case_blockers',        'case_id'),
+      ('case',      'rico_cases',           'case_id'),
+      ('rico_case', 'predicate_acts',       'rico_case_id')) as x(kind, tbl, col)
     where x.kind = v_kind
   loop
     execute format('update public.%I set deleted_at = $1, deleted_by = $2, delete_reason = $3, delete_batch = $4 where %I = $5 and deleted_at is null', c.tbl, c.col)
@@ -18659,6 +18751,14 @@ begin
       v_cascaded := v_cascaded || jsonb_build_object(c.tbl, coalesce((v_cascaded->>c.tbl)::int, 0) + n);
     end if;
   end loop;
+  if v_kind = 'case' then
+    update public.predicate_acts p
+       set deleted_at = v_now, deleted_by = v_uid, delete_reason = v_reason, delete_batch = v_batch
+     where p.deleted_at is null
+       and p.rico_case_id in (select r.id from public.rico_cases r where r.case_id = p_id);
+    get diagnostics n = row_count;
+    if n > 0 then v_cascaded := v_cascaded || jsonb_build_object('predicate_acts', n); end if;
+  end if;
 
   insert into public.audit_log (actor_id, action, entity, entity_id, detail)
   values (v_uid, 'RECORD_SOFT_DELETED', v_table, p_id,
@@ -21261,6 +21361,18 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.case_writable(p_case uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.can_access_case(p_case)
+     and exists (select 1 from public.cases c
+                  where c.id = p_case and c.archived_at is null and c.deleted_at is null)
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.cid_role_rank(p_role app_role)
  RETURNS integer
  LANGUAGE sql
@@ -23350,43 +23462,31 @@ CREATE OR REPLACE FUNCTION private.perm_dispatch(p_action text, p_kind text, p_i
  SET search_path TO ''
 AS $function$
   select coalesce(case
-    when p_kind = 'case' then case p_action
-      when 'read'         then private.can_read_case(p_id)
-      when 'access'       then private.can_access_case(p_id)
-      when 'edit'         then private.can_access_case(p_id)
-                               and exists (select 1 from public.cases c where c.id = p_id and c.archived_at is null)
-      when 'archive'      then private.is_command()
-                               and exists (select 1 from public.cases c where c.id = p_id and c.archived_at is null)
-                               and not private.case_has_active_hold(p_id)
-      when 'restore'      then private.is_command()
-                               and exists (select 1 from public.cases c where c.id = p_id and c.archived_at is not null)
-      when 'grant_access' then private.can_grant_case(p_id)
-                               and exists (select 1 from public.cases c where c.id = p_id)
-      when 'delete_child' then private.can_delete_case_child(p_id)
-      when 'permanent_delete' then private.is_owner()
-                               and exists (select 1 from public.cases c where c.id = p_id and c.archived_at is not null)
-      else false end
-    when p_kind = 'report' then case p_action
-      when 'read'   then (select private.can_read_case(r.case_id) from public.reports r where r.id = p_id)
-      when 'edit'   then (select private.can_access_case(r.case_id) from public.reports r where r.id = p_id)
-      when 'delete' then (select private.can_delete_case_child(r.case_id) from public.reports r where r.id = p_id)
-      else false end
-    when p_kind = 'evidence' then case p_action
-      when 'read'   then (select private.can_read_case(e.case_id) from public.evidence e where e.id = p_id)
-      when 'delete' then (select private.can_delete_case_child(e.case_id) from public.evidence e where e.id = p_id)
-      else false end
     when p_kind = 'legal' then case p_action
       when 'read'    then private.can_view_legal_request(p_id, (select auth.uid()))
       when 'edit'    then private.can_edit_legal_draft(p_id, (select auth.uid()))
       when 'approve' then private.can_approve_legal(p_id, (select auth.uid()))
       else false end
-    when p_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'gang_member', 'gang_turf', 'person_place', 'person_vehicle', 'person_relationship', 'account_link') then (
+    when p_kind = 'case' and p_action in ('access', 'archive', 'unarchive', 'grant_access', 'delete_child', 'permanent_delete') then case p_action
+      when 'access'       then private.can_access_case(p_id)
+      when 'archive'      then private.is_command()
+                               and exists (select 1 from public.cases c where c.id = p_id and c.archived_at is null and c.deleted_at is null)
+                               and not private.case_has_active_hold(p_id)
+      when 'unarchive'    then private.is_command()
+                               and exists (select 1 from public.cases c where c.id = p_id and c.archived_at is not null and c.deleted_at is null)
+      when 'grant_access' then private.can_grant_case(p_id)
+                               and exists (select 1 from public.cases c where c.id = p_id and c.deleted_at is null)
+      when 'delete_child' then private.can_delete_case_child(p_id)
+      when 'permanent_delete' then private.is_owner()
+                               and exists (select 1 from public.cases c where c.id = p_id and c.archived_at is not null)
+      else false end
+    when p_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'gang_member', 'gang_turf', 'person_place', 'person_vehicle', 'person_relationship', 'account_link', 'case', 'report', 'media', 'evidence', 'case_task', 'case_message', 'case_intel_link', 'case_blocker', 'rico_case', 'predicate_act') then (
       select case p_action
         when 'read' then st.p_exists and (st.p_deleted_at is null or private.is_owner())
                          and private.perm_registry_visible(p_kind, p_id)
         when 'edit' then st.p_exists and st.p_deleted_at is null
-                         and p_kind in ('person', 'vehicle', 'gang', 'place', 'account')
-                         and private.perm_registry_visible(p_kind, p_id)
+                         and (p_kind <> 'case' or exists (select 1 from public.cases c where c.id = p_id and c.archived_at is null))
+                         and private.perm_registry_edit(p_kind, p_id)
         when 'soft_delete' then st.p_exists and st.p_deleted_at is null and private.perm_registry_delete(p_kind, p_id)
         when 'delete'      then st.p_exists and st.p_deleted_at is null and private.perm_registry_delete(p_kind, p_id)
         when 'restore'     then st.p_exists and st.p_deleted_at is not null
@@ -23497,6 +23597,52 @@ AS $function$
     when 'person_vehicle' then exists (select 1 from public.person_vehicles l where l.id = p_id and (private.can_delete() or l.created_by = (select auth.uid())) and not private.siu_blocked('person', l.person_id, 'vehicles') and not private.siu_blocked('vehicle', l.vehicle_id, 'vehicles'))
     when 'person_relationship' then exists (select 1 from public.person_relationships l where l.id = p_id and (private.can_delete() or l.created_by = (select auth.uid())) and not private.siu_blocked('person', l.person_a, 'relationships') and not private.siu_blocked('person', l.person_b, 'relationships'))
     when 'account_link' then exists (select 1 from public.account_links l where l.id = p_id and private.is_active() and not private.siu_blocked('account', l.account_id, 'accounts') and not private.siu_blocked('person', l.person_id, 'accounts'))
+    when 'case' then exists (select 1 from public.cases c where c.id = p_id and private.can_delete() and private.can_access_case_row(c.bureau, c.lead_detective_id, c.created_by, c.id))
+    when 'report' then (select private.can_delete_case_child(r.case_id) and not private.case_has_active_hold(r.case_id) from public.reports r where r.id = p_id)
+    when 'media' then exists (select 1 from public.media m where m.id = p_id and private.can_delete_case_child(m.case_id) and (m.case_id is null or not private.case_has_active_hold(m.case_id)) and not private.siu_blocked('gang', m.gang_id, 'media') and not private.siu_blocked('person', m.person_id, 'media') and not private.siu_blocked('place', m.place_id, 'media') and not private.siu_blocked('vehicle', m.vehicle_id, 'media'))
+    when 'evidence' then (select private.can_delete_case_child(e.case_id) from public.evidence e where e.id = p_id)
+    when 'case_task' then (select (private.can_delete_case_child(t.case_id) or t.created_by = (select auth.uid())) and not private.case_has_active_hold(t.case_id) from public.case_tasks t where t.id = p_id)
+    when 'case_message' then (select (m.author_id = (select auth.uid()) or private.is_command()) and private.can_access_case(m.case_id) from public.case_messages m where m.id = p_id)
+    when 'case_intel_link' then (select private.can_access_case(l.case_id) from public.case_intel_links l where l.id = p_id)
+    when 'case_blocker' then (select private.can_delete_case_child(b.case_id) or b.created_by = (select auth.uid()) from public.case_blockers b where b.id = p_id)
+    when 'rico_case' then (select private.can_delete_case_child(r.case_id) from public.rico_cases r where r.id = p_id)
+    when 'predicate_act' then exists (select 1 from public.predicate_acts p join public.rico_cases r on r.id = p.rico_case_id where p.id = p_id and private.can_delete_case_child(r.case_id))
+    else false end, false)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.perm_registry_edit(p_kind text, p_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce(case p_kind
+    when 'person' then private.is_active() and not private.siu_hidden('person', p_id)
+    when 'vehicle' then private.is_active() and not private.siu_hidden('vehicle', p_id)
+    when 'gang' then private.is_active() and not private.siu_hidden('gang', p_id)
+    when 'place' then private.is_active() and not private.siu_hidden('place', p_id)
+    when 'account' then private.is_active() and not private.siu_blocked('account', p_id, null)
+    when 'indicator' then private.is_active() and not private.siu_blocked('indicator', p_id, null)
+    when 'narcotic' then exists (select 1 from public.narcotics n where n.id = p_id and (private.can_edit_narcotics_intel() or (private.is_active() and n.created_by = (select auth.uid()) and n.status in ('unidentified', 'suspected'))))
+    when 'operation' then exists (select 1 from public.operations o where o.id = p_id and case when o.authority = 'siu' then private.siu_is_command() else private.can_manage_operation(o.id) end)
+    when 'tracker' then private.can_delete() and exists (select 1 from public.trackers t where t.id = p_id)
+    when 'gang_member' then exists (select 1 from public.gang_members m where m.id = p_id and private.is_active() and not private.siu_blocked('gang', m.gang_id, 'gang_membership') and not private.siu_blocked('person', m.person_id, 'gang_membership'))
+    when 'gang_turf' then exists (select 1 from public.gang_turf g where g.id = p_id and private.is_active() and not private.siu_blocked('gang', g.gang_id, 'gang_turf'))
+    when 'person_place' then exists (select 1 from public.person_places l where l.id = p_id and private.is_active() and not private.siu_blocked('person', l.person_id, 'addresses') and not private.siu_blocked('place', l.place_id, 'addresses'))
+    when 'person_vehicle' then exists (select 1 from public.person_vehicles l where l.id = p_id and private.is_active() and not private.siu_blocked('person', l.person_id, 'vehicles') and not private.siu_blocked('vehicle', l.vehicle_id, 'vehicles'))
+    when 'person_relationship' then exists (select 1 from public.person_relationships l where l.id = p_id and private.is_active() and not private.siu_blocked('person', l.person_a, 'relationships') and not private.siu_blocked('person', l.person_b, 'relationships'))
+    when 'account_link' then exists (select 1 from public.account_links l where l.id = p_id and private.is_active() and not private.siu_blocked('account', l.account_id, 'accounts') and not private.siu_blocked('person', l.person_id, 'accounts'))
+    when 'case' then exists (select 1 from public.cases c where c.id = p_id and private.can_access_case_row(c.bureau, c.lead_detective_id, c.created_by, c.id))
+    when 'report' then (select private.can_access_case(r.case_id) from public.reports r where r.id = p_id)
+    when 'media' then exists (select 1 from public.media m where m.id = p_id and private.is_active() and (m.case_id is null or private.can_access_case(m.case_id)) and (not m.restricted or private.can_edit_narcotics_intel()) and not private.siu_blocked('gang', m.gang_id, 'media') and not private.siu_blocked('person', m.person_id, 'media') and not private.siu_blocked('place', m.place_id, 'media') and not private.siu_blocked('vehicle', m.vehicle_id, 'media'))
+    when 'evidence' then (select private.can_access_case(e.case_id) from public.evidence e where e.id = p_id)
+    when 'case_task' then (select private.can_access_case(t.case_id) from public.case_tasks t where t.id = p_id)
+    when 'case_message' then (select (m.author_id = (select auth.uid()) or private.is_command()) and private.can_access_case(m.case_id) from public.case_messages m where m.id = p_id)
+    when 'case_intel_link' then (select private.can_access_case(l.case_id) from public.case_intel_links l where l.id = p_id)
+    when 'case_blocker' then (select private.can_access_case(b.case_id) from public.case_blockers b where b.id = p_id)
+    when 'rico_case' then (select private.can_access_case(r.case_id) from public.rico_cases r where r.id = p_id)
+    when 'predicate_act' then exists (select 1 from public.predicate_acts p join public.rico_cases r on r.id = p.rico_case_id where p.id = p_id and private.can_access_case(r.case_id))
     else false end, false)
 $function$
 ;
@@ -23523,6 +23669,16 @@ AS $function$
     when 'person_vehicle' then exists (select 1 from public.person_vehicles l where l.id = p_id and private.is_active() and not private.siu_blocked('person', l.person_id, 'vehicles') and not private.siu_blocked('vehicle', l.vehicle_id, 'vehicles'))
     when 'person_relationship' then exists (select 1 from public.person_relationships l where l.id = p_id and private.is_active() and not private.siu_blocked('person', l.person_a, 'relationships') and not private.siu_blocked('person', l.person_b, 'relationships'))
     when 'account_link' then exists (select 1 from public.account_links l where l.id = p_id and private.is_active() and not private.siu_blocked('account', l.account_id, 'accounts') and not private.siu_blocked('person', l.person_id, 'accounts'))
+    when 'case' then exists (select 1 from public.cases c where c.id = p_id and private.can_read_case_row(c.bureau, c.lead_detective_id, c.created_by, c.id))
+    when 'report' then (select private.can_read_case(r.case_id) from public.reports r where r.id = p_id)
+    when 'media' then exists (select 1 from public.media m where m.id = p_id and private.is_active() and (m.case_id is null or private.can_read_case(m.case_id)) and (not m.restricted or private.can_edit_narcotics_intel() or private.has_media_break_glass(m.case_id, (select auth.uid()))) and not private.siu_blocked('gang', m.gang_id, 'media') and not private.siu_blocked('person', m.person_id, 'media') and not private.siu_blocked('place', m.place_id, 'media') and not private.siu_blocked('vehicle', m.vehicle_id, 'media'))
+    when 'evidence' then (select private.can_read_case(e.case_id) from public.evidence e where e.id = p_id)
+    when 'case_task' then (select private.can_read_case(t.case_id) from public.case_tasks t where t.id = p_id)
+    when 'case_message' then (select private.can_access_case(m.case_id) from public.case_messages m where m.id = p_id)
+    when 'case_intel_link' then (select private.can_read_case(l.case_id) from public.case_intel_links l where l.id = p_id)
+    when 'case_blocker' then (select private.can_read_case(b.case_id) from public.case_blockers b where b.id = p_id)
+    when 'rico_case' then (select private.can_read_case(r.case_id) from public.rico_cases r where r.id = p_id)
+    when 'predicate_act' then exists (select 1 from public.predicate_acts p join public.rico_cases r on r.id = p.rico_case_id where p.id = p_id and private.can_read_case(r.case_id))
     else false end, false)
 $function$
 ;
@@ -24345,12 +24501,29 @@ CREATE OR REPLACE FUNCTION private.soft_delete_state(p_kind text, p_id uuid, OUT
  STABLE SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare t text := private.soft_delete_table(p_kind);
+declare
+  t text := private.soft_delete_table(p_kind);
+  v_case_expr text;
 begin
   p_exists := false;
   if t is null or p_id is null then return; end if;
-  execute format('select true, deleted_at, delete_batch, %s from public.%I where id = $1',
-                 case when t in ('places', 'indicators', 'trackers', 'gang_members') then 'case_id' else 'null::uuid' end, t)
+  v_case_expr := case t
+    when 'places' then 'case_id'
+    when 'indicators' then 'case_id'
+    when 'trackers' then 'case_id'
+    when 'gang_members' then 'case_id'
+    when 'cases' then 'id'
+    when 'reports' then 'case_id'
+    when 'media' then 'case_id'
+    when 'evidence' then 'case_id'
+    when 'case_tasks' then 'case_id'
+    when 'case_messages' then 'case_id'
+    when 'case_intel_links' then 'case_id'
+    when 'case_blockers' then 'case_id'
+    when 'rico_cases' then 'case_id'
+    when 'predicate_acts' then '(select r.case_id from public.rico_cases r where r.id = rico_case_id)'
+    else 'null::uuid' end;
+  execute format('select true, deleted_at, delete_batch, %s from public.%I where id = $1', v_case_expr, t)
     into p_exists, p_deleted_at, p_batch, p_case using p_id;
   p_exists := coalesce(p_exists, false);
 end $function$
@@ -24378,6 +24551,16 @@ AS $function$
     when 'person_vehicle' then 'person_vehicles'
     when 'person_relationship' then 'person_relationships'
     when 'account_link' then 'account_links'
+    when 'case' then 'cases'
+    when 'report' then 'reports'
+    when 'media' then 'media'
+    when 'evidence' then 'evidence'
+    when 'case_task' then 'case_tasks'
+    when 'case_message' then 'case_messages'
+    when 'case_intel_link' then 'case_intel_links'
+    when 'case_blocker' then 'case_blockers'
+    when 'rico_case' then 'rico_cases'
+    when 'predicate_act' then 'predicate_acts'
   end
 $function$
 ;
@@ -24725,18 +24908,23 @@ CREATE TRIGGER ballistics_benches_touch BEFORE UPDATE ON public.ballistics_bench
 CREATE TRIGGER audit_car AFTER INSERT OR DELETE OR UPDATE ON public.case_access_requests FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER case_assignments_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_assignments FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER case_blockers_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_blockers FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER case_blockers_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.case_blockers FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER case_blockers_touch BEFORE UPDATE ON public.case_blockers FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER case_charges_before_insert BEFORE INSERT ON public.case_charges FOR EACH ROW EXECUTE FUNCTION private.case_charge_before_insert();
 CREATE TRIGGER case_charges_before_update BEFORE UPDATE ON public.case_charges FOR EACH ROW EXECUTE FUNCTION private.case_charge_before_update();
 CREATE TRIGGER case_intel_links_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_intel_links FOR EACH ROW EXECUTE FUNCTION private.audit_detail();
 CREATE TRIGGER case_intel_links_block_change_under_hold BEFORE DELETE OR UPDATE ON public.case_intel_links FOR EACH ROW EXECUTE FUNCTION private.block_intel_link_change_under_hold();
+CREATE TRIGGER case_intel_links_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.case_intel_links FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
+CREATE TRIGGER case_messages_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.case_messages FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER trg_stamp_author BEFORE INSERT ON public.case_messages FOR EACH ROW EXECUTE FUNCTION stamp_author_identity();
 CREATE TRIGGER case_tasks_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_tasks FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER case_tasks_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.case_tasks FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER case_tasks_touch BEFORE UPDATE ON public.case_tasks FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER case_templates_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_templates FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER case_templates_touch BEFORE UPDATE ON public.case_templates FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER cases_audit AFTER INSERT OR DELETE OR UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER cases_block_archive_cols BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_archive();
+CREATE TRIGGER cases_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER cases_touch BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.touch_cases();
 CREATE TRIGGER trg_block_direct_case_bureau BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_bureau();
 CREATE TRIGGER trg_block_direct_case_stage BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_stage();
@@ -24758,6 +24946,7 @@ CREATE TRIGGER documents_touch BEFORE UPDATE ON public.documents FOR EACH ROW EX
 CREATE TRIGGER trg_document_initial_version AFTER INSERT ON public.documents FOR EACH ROW EXECUTE FUNCTION private.document_initial_version();
 CREATE TRIGGER trg_guard_document BEFORE INSERT OR UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION private.guard_document();
 CREATE TRIGGER evidence_audit AFTER INSERT OR DELETE OR UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER evidence_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER evidence_touch BEFORE UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER external_links_touch BEFORE UPDATE ON public.external_links FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER external_media_refs_touch BEFORE UPDATE ON public.external_media_refs FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -24812,6 +25001,7 @@ CREATE TRIGGER legal_versions_immutable BEFORE DELETE OR UPDATE ON public.legal_
 CREATE TRIGGER trg_touch_legal_requests BEFORE UPDATE ON public.legal_requests FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_touch_mdt_projections BEFORE UPDATE ON public.mdt_wanted_projections FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER media_audit AFTER INSERT OR DELETE OR UPDATE ON public.media FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER media_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.media FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER media_touch BEFORE UPDATE ON public.media FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_guard_membership_request BEFORE UPDATE ON public.membership_requests FOR EACH ROW EXECUTE FUNCTION private.guard_membership_request();
 CREATE TRIGGER trg_touch_membership_requests BEFORE UPDATE ON public.membership_requests FOR EACH ROW EXECUTE FUNCTION private.touch_membership_requests();
@@ -24863,6 +25053,7 @@ CREATE TRIGGER places_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public
 CREATE TRIGGER places_touch BEFORE UPDATE ON public.places FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER places_visibility_forget AFTER DELETE ON public.places FOR EACH ROW EXECUTE FUNCTION private.siu_visibility_forget('place');
 CREATE TRIGGER predicate_acts_audit AFTER INSERT OR DELETE OR UPDATE ON public.predicate_acts FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER predicate_acts_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.predicate_acts FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER predicate_acts_touch BEFORE UPDATE ON public.predicate_acts FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER profiles_block_login_denied BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.block_direct_login_denied();
 CREATE TRIGGER profiles_block_privileged BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.block_direct_privileged_profile();
@@ -24872,9 +25063,11 @@ CREATE TRIGGER raid_compensations_audit AFTER INSERT OR DELETE OR UPDATE ON publ
 CREATE TRIGGER raid_compensations_touch BEFORE UPDATE ON public.raid_compensations FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER report_versions_immutable BEFORE UPDATE ON public.report_versions FOR EACH ROW EXECUTE FUNCTION private.block_report_version_update();
 CREATE TRIGGER reports_audit AFTER INSERT OR DELETE OR UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER reports_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER reports_touch BEFORE UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_block_direct_report_finalize BEFORE UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION private.block_direct_report_finalize();
 CREATE TRIGGER rico_cases_audit AFTER INSERT OR DELETE OR UPDATE ON public.rico_cases FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER rico_cases_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.rico_cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER rico_cases_touch BEFORE UPDATE ON public.rico_cases FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_shift_reports_touch BEFORE UPDATE ON public.shift_reports FOR EACH ROW EXECUTE FUNCTION cid_touch_updated_at();
 CREATE TRIGGER siu_access_requests_touch BEFORE UPDATE ON public.siu_access_requests FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -25049,22 +25242,18 @@ create policy case_assignments_upd on public.case_assignments
   using ((private.can_access_case(case_id) AND (assignment_source = 'standard'::text)))
   with check ((private.can_access_case(case_id) AND (assignment_source = 'standard'::text)));
 
-create policy case_blockers_del on public.case_blockers
-  as permissive for delete to authenticated
-  using ((private.can_delete_case_child(case_id) OR (created_by = ( SELECT auth.uid() AS uid))));
-
 create policy case_blockers_ins on public.case_blockers
   as permissive for insert to authenticated
   with check (private.can_access_case(case_id));
 
 create policy case_blockers_sel on public.case_blockers
   as permissive for select to authenticated
-  using (private.can_read_case(case_id));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_read_case(case_id)));
 
 create policy case_blockers_upd on public.case_blockers
   as permissive for update to authenticated
-  using (private.can_access_case(case_id))
-  with check (private.can_access_case(case_id));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)));
 
 create policy case_charges_ins on public.case_charges
   as permissive for insert to public
@@ -25090,26 +25279,18 @@ create policy cf_read on public.case_files
   as permissive for select to authenticated
   using (private.can_read_case_number(case_number));
 
-create policy case_intel_links_del on public.case_intel_links
-  as permissive for delete to authenticated
-  using (private.can_access_case(case_id));
-
 create policy case_intel_links_ins on public.case_intel_links
   as permissive for insert to authenticated
   with check (private.can_access_case(case_id));
 
 create policy case_intel_links_sel on public.case_intel_links
   as permissive for select to authenticated
-  using (private.can_read_case(case_id));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_read_case(case_id)));
 
 create policy case_intel_links_upd on public.case_intel_links
   as permissive for update to authenticated
-  using (private.can_access_case(case_id))
-  with check (private.can_access_case(case_id));
-
-create policy cm_del on public.case_messages
-  as permissive for delete to authenticated
-  using ((((author_id = ( SELECT auth.uid() AS uid)) OR ( SELECT private.is_command() AS is_command)) AND ( SELECT private.can_access_case(case_messages.case_id) AS can_access_case)));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)));
 
 create policy cm_ins on public.case_messages
   as permissive for insert to authenticated
@@ -25117,20 +25298,16 @@ create policy cm_ins on public.case_messages
 
 create policy cm_sel on public.case_messages
   as permissive for select to authenticated
-  using (private.can_access_case(case_id));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)));
 
 create policy cm_upd on public.case_messages
   as permissive for update to authenticated
-  using ((((author_id = ( SELECT auth.uid() AS uid)) OR ( SELECT private.is_command() AS is_command)) AND ( SELECT private.can_access_case(case_messages.case_id) AS can_access_case)))
-  with check ((((author_id = ( SELECT auth.uid() AS uid)) OR ( SELECT private.is_command() AS is_command)) AND ( SELECT private.can_access_case(case_messages.case_id) AS can_access_case)));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND (((author_id = ( SELECT auth.uid() AS uid)) OR ( SELECT private.is_command() AS is_command)) AND ( SELECT private.can_access_case(case_messages.case_id) AS can_access_case))))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND (((author_id = ( SELECT auth.uid() AS uid)) OR ( SELECT private.is_command() AS is_command)) AND ( SELECT private.can_access_case(case_messages.case_id) AS can_access_case))));
 
 create policy csh_sel on public.case_signoff_history
   as permissive for select to authenticated
   using (private.can_read_case(case_id));
-
-create policy case_tasks_del on public.case_tasks
-  as permissive for delete to authenticated
-  using (((private.can_delete_case_child(case_id) OR (created_by = ( SELECT auth.uid() AS uid))) AND (NOT private.case_has_active_hold(case_id))));
 
 create policy case_tasks_ins on public.case_tasks
   as permissive for insert to authenticated
@@ -25138,12 +25315,12 @@ create policy case_tasks_ins on public.case_tasks
 
 create policy case_tasks_sel on public.case_tasks
   as permissive for select to authenticated
-  using (private.can_read_case(case_id));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_read_case(case_id)));
 
 create policy case_tasks_upd on public.case_tasks
   as permissive for update to authenticated
-  using (private.can_access_case(case_id))
-  with check (private.can_access_case(case_id));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)));
 
 create policy case_templates_del on public.case_templates
   as permissive for delete to authenticated
@@ -25162,22 +25339,18 @@ create policy case_templates_upd on public.case_templates
   using (( SELECT private.is_command() AS is_command))
   with check (( SELECT private.is_command() AS is_command));
 
-create policy cases_del on public.cases
-  as permissive for delete to authenticated
-  using ((private.can_delete() AND private.can_access_case_row(bureau, lead_detective_id, created_by, id)));
-
 create policy cases_ins on public.cases
   as permissive for insert to authenticated
   with check (private.can_create_case(bureau));
 
 create policy cases_sel on public.cases
   as permissive for select to authenticated
-  using (private.can_read_case_row(bureau, lead_detective_id, created_by, id));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_read_case_row(bureau, lead_detective_id, created_by, id)));
 
 create policy cases_upd on public.cases
   as permissive for update to authenticated
-  using (private.can_access_case_row(bureau, lead_detective_id, created_by, id))
-  with check (private.can_access_case_row(bureau, lead_detective_id, created_by, id));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case_row(bureau, lead_detective_id, created_by, id)))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case_row(bureau, lead_detective_id, created_by, id)));
 
 create policy cid_delete on public.cid_records
   as permissive for delete to authenticated
@@ -25347,22 +25520,18 @@ create policy documents_versions_sel on public.documents_versions
    FROM documents d
   WHERE (d.id = documents_versions.document_id))));
 
-create policy evidence_del on public.evidence
-  as permissive for delete to authenticated
-  using (private.can_delete_case_child(case_id));
-
 create policy evidence_ins on public.evidence
   as permissive for insert to authenticated
   with check (private.can_access_case(case_id));
 
 create policy evidence_sel on public.evidence
   as permissive for select to authenticated
-  using (private.can_read_case(case_id));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_read_case(case_id)));
 
 create policy evidence_upd on public.evidence
   as permissive for update to authenticated
-  using (private.can_access_case(case_id))
-  with check (private.can_access_case(case_id));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)));
 
 create policy feedback_delete_own on public.feedback
   as permissive for delete to authenticated
@@ -25779,22 +25948,18 @@ create policy mdt_sel on public.mdt_wanted_projections
   as permissive for select to authenticated
   using ((private.is_active() OR (private.justice_role() IS NOT NULL) OR private.owner_flag(( SELECT auth.uid() AS uid))));
 
-create policy media_del on public.media
-  as permissive for delete to authenticated
-  using ((private.can_delete_case_child(case_id) AND ((case_id IS NULL) OR (NOT private.case_has_active_hold(case_id))) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text))));
-
 create policy media_ins on public.media
   as permissive for insert to authenticated
   with check ((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text))));
 
 create policy media_sel on public.media
   as permissive for select to authenticated
-  using ((private.is_active() AND ((case_id IS NULL) OR private.can_read_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel() OR private.has_media_break_glass(case_id, ( SELECT auth.uid() AS uid))) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text))));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND (private.is_active() AND ((case_id IS NULL) OR private.can_read_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel() OR private.has_media_break_glass(case_id, ( SELECT auth.uid() AS uid))) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text)))));
 
 create policy media_upd on public.media
   as permissive for update to authenticated
-  using ((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text))))
-  with check ((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text))));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND (private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text)))))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND (private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text)))));
 
 create policy member_transfers_sel on public.member_transfers
   as permissive for select to authenticated
@@ -26300,12 +26465,6 @@ create policy places_upd on public.places
   using (((private.is_live(deleted_at) OR private.is_owner()) AND (private.is_active() AND (NOT private.siu_hidden('place'::text, id)))))
   with check (((private.is_live(deleted_at) OR private.is_owner()) AND (private.is_active() AND (NOT private.siu_hidden('place'::text, id)))));
 
-create policy predicate_acts_del on public.predicate_acts
-  as permissive for delete to authenticated
-  using ((EXISTS ( SELECT 1
-   FROM rico_cases r
-  WHERE ((r.id = predicate_acts.rico_case_id) AND private.can_delete_case_child(r.case_id)))));
-
 create policy predicate_acts_ins on public.predicate_acts
   as permissive for insert to authenticated
   with check ((EXISTS ( SELECT 1
@@ -26314,18 +26473,18 @@ create policy predicate_acts_ins on public.predicate_acts
 
 create policy predicate_acts_sel on public.predicate_acts
   as permissive for select to authenticated
-  using ((EXISTS ( SELECT 1
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND (EXISTS ( SELECT 1
    FROM rico_cases r
-  WHERE ((r.id = predicate_acts.rico_case_id) AND private.can_read_case(r.case_id)))));
+  WHERE ((r.id = predicate_acts.rico_case_id) AND private.can_read_case(r.case_id))))));
 
 create policy predicate_acts_upd on public.predicate_acts
   as permissive for update to authenticated
-  using ((EXISTS ( SELECT 1
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND (EXISTS ( SELECT 1
    FROM rico_cases r
-  WHERE ((r.id = predicate_acts.rico_case_id) AND private.can_access_case(r.case_id)))))
-  with check ((EXISTS ( SELECT 1
+  WHERE ((r.id = predicate_acts.rico_case_id) AND private.can_access_case(r.case_id))))))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND (EXISTS ( SELECT 1
    FROM rico_cases r
-  WHERE ((r.id = predicate_acts.rico_case_id) AND private.can_access_case(r.case_id)))));
+  WHERE ((r.id = predicate_acts.rico_case_id) AND private.can_access_case(r.case_id))))));
 
 create policy profiles_command on public.profiles
   as permissive for update to authenticated
@@ -26395,22 +26554,18 @@ create policy report_versions_sel on public.report_versions
    FROM reports r
   WHERE ((r.id = report_versions.report_id) AND private.can_read_case(r.case_id)))));
 
-create policy reports_del on public.reports
-  as permissive for delete to authenticated
-  using ((private.can_delete_case_child(case_id) AND (NOT private.case_has_active_hold(case_id))));
-
 create policy reports_ins on public.reports
   as permissive for insert to authenticated
   with check (private.can_access_case(case_id));
 
 create policy reports_sel on public.reports
   as permissive for select to authenticated
-  using (private.can_read_case(case_id));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_read_case(case_id)));
 
 create policy reports_upd on public.reports
   as permissive for update to authenticated
-  using (private.can_access_case(case_id))
-  with check (private.can_access_case(case_id));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)));
 
 create policy rag_sel on public.restricted_access_grants
   as permissive for select to authenticated
@@ -26420,22 +26575,18 @@ create policy ral_sel on public.restricted_access_log
   as permissive for select to authenticated
   using (private.is_command());
 
-create policy rico_cases_del on public.rico_cases
-  as permissive for delete to authenticated
-  using (private.can_delete_case_child(case_id));
-
 create policy rico_cases_ins on public.rico_cases
   as permissive for insert to authenticated
   with check (private.can_access_case(case_id));
 
 create policy rico_cases_sel on public.rico_cases
   as permissive for select to authenticated
-  using (private.can_read_case(case_id));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_read_case(case_id)));
 
 create policy rico_cases_upd on public.rico_cases
   as permissive for update to authenticated
-  using (private.can_access_case(case_id))
-  with check (private.can_access_case(case_id));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)));
 
 create policy role_events_sel on public.role_events
   as permissive for select to authenticated
@@ -26957,15 +27108,15 @@ create policy wl_sel on public.watchlist
 --   case_access_grants -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_access_requests -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_assignments -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_blockers -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_blockers -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_charges -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_files -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_intel_links -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_messages -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_intel_links -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_messages -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_signoff_history -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_tasks -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_tasks -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_templates -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   cases -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   cases -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   cid_records -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   client_errors -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   commendations -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -27029,7 +27180,7 @@ create policy wl_sel on public.watchlist
 --   legal_seized_items -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   mdt_exports -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   mdt_wanted_projections -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   media -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   media -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   member_transfers -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   membership_history -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   membership_request_history -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -27066,7 +27217,7 @@ create policy wl_sel on public.watchlist
 --   persons -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   place_process_steps -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   places -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   predicate_acts -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   predicate_acts -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   profiles -> authenticated: DELETE, INSERT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   prosecutor_bureau_assignments -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   prosecutor_coverage -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -27074,10 +27225,10 @@ create policy wl_sel on public.watchlist
 --   record_extraction_facts -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   record_extractions -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   report_versions -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   reports -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   reports -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   restricted_access_grants -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   restricted_access_log -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   rico_cases -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   rico_cases -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   role_events -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   scheduled_job_runs -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   security_test_runs -> service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -27289,6 +27440,7 @@ create policy wl_sel on public.watchlist
 --   private.case_has_active_hold(p_case uuid): default (PUBLIC)
 --   private.case_number_base(p_bureau text): default (PUBLIC)
 --   private.case_service_notify(p_recipient uuid, p_type text, p_payload jsonb): {postgres=X/postgres,service_role=X/postgres}
+--   private.case_writable(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.cid_role_rank(p_role app_role): default (PUBLIC)
 --   private.city2_reset(p_confirm text): {postgres=X/postgres}
 --   private.city2_reset_preview(): {postgres=X/postgres}
@@ -27389,6 +27541,7 @@ create policy wl_sel on public.watchlist
 --   private.perm_raise(p_action text, p_kind text, p_id uuid, p_reason text, p_message text): {postgres=X/postgres,service_role=X/postgres}
 --   private.perm_rank(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.perm_registry_delete(p_kind text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.perm_registry_edit(p_kind text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.perm_registry_visible(p_kind text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.perm_siu_standing(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.permanent_delete_active_filter(p_ref text): default (PUBLIC)

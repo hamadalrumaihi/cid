@@ -49,20 +49,28 @@ export interface ListOptions<T extends TableName> {
   includeDeleted?: boolean
 }
 
-/** Tables that soft-delete (migration 20261007120000 …120100): the value is
+/** Tables that soft-delete (migrations 20261007120000 …120100 for the
+ *  registries, 20261008120001 …120100 for the case tables): the value is
  *  the `kind` the soft_delete / restore_record RPCs take. list() filters
  *  these to live rows, remove() / deleteWithUndo() route their deletes to
  *  the RPC (a client DELETE is refused by grants), and the Undo toast calls
- *  restore_record. Extend here when P1-03b adds the case tables. */
+ *  restore_record. */
 export const SOFT_DELETE_KIND = {
   persons: 'person', vehicles: 'vehicle', gangs: 'gang', places: 'place', accounts: 'account',
   indicators: 'indicator', narcotics: 'narcotic', operations: 'operation', trackers: 'tracker',
   gang_members: 'gang_member', gang_turf: 'gang_turf', person_places: 'person_place',
   person_vehicles: 'person_vehicle', person_relationships: 'person_relationship', account_links: 'account_link',
+  cases: 'case', reports: 'report', media: 'media', evidence: 'evidence', case_tasks: 'case_task',
+  case_messages: 'case_message', case_intel_links: 'case_intel_link', case_blockers: 'case_blocker',
+  rico_cases: 'rico_case', predicate_acts: 'predicate_act',
 } as const satisfies Partial<Record<TableName, string>>
 export type SoftDeleteTable = keyof typeof SOFT_DELETE_KIND
-/** Kinds whose soft_delete requires a reason (the parent records; link rows do not). */
-const REASON_REQUIRED: ReadonlySet<string> = new Set(['person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker'])
+/** Kinds whose soft_delete requires a reason (the parent records and the
+ *  case artefacts; link rows, tasks, messages and blockers do not). */
+const REASON_REQUIRED: ReadonlySet<string> = new Set([
+  'person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker',
+  'case', 'report', 'media', 'evidence', 'rico_case',
+])
 const softKindOf = (table: string): string | null => (SOFT_DELETE_KIND as Record<string, string>)[table] ?? null
 
 /** Build a PostgREST `or()` disjunction of contains-matches over `cols`

@@ -11,8 +11,9 @@
  *  Plus the RLS read wall (silent filtering, never an error) and the RLS
  *  insert violation (loud 403 — inserts are the one RLS write that errors). */
 import { describe, expect, it } from 'vitest'
-import { insert, list, remove, update, updateWhere } from '@/lib/db'
-import { readRows } from '@/mocks/store'
+import { insert, list, remove, SOFT_DELETE_KIND, update, updateWhere } from '@/lib/db'
+import { SOFT_DELETE_TABLE } from '@/mocks/handlers/rpc'
+import { mockId, readRows, seedRows } from '@/mocks/store'
 import { emptyCase, permissionDenied, rlsRestricted } from '@/mocks/scenarios'
 
 describe('zero-row update = RLS-blocked write (the silent wall)', () => {
@@ -39,12 +40,28 @@ describe('zero-row update = RLS-blocked write (the silent wall)', () => {
     expect(race.data).toEqual([]) // …the loser sees the zero-row shape
   })
 
-  it('RLS-filtered DELETE silently removes nothing', async () => {
+  it('RLS-filtered DELETE silently removes nothing (hard-deletable table)', async () => {
+    const { caseRecord } = emptyCase()
+    const [note] = seedRows('notifications', [{
+      created_at: new Date().toISOString(), id: mockId(), payload: { case_id: caseRecord.id }, read: false, type: 'case_assigned', user_id: mockId(),
+    }])
+    rlsRestricted('notifications')
+    const res = await remove('notifications', note.id)
+    expect(res.error).toBeNull()
+    expect(readRows('notifications')).toHaveLength(1)
+  })
+
+  it('a soft-deletable table never hard-deletes: remove() goes through soft_delete, which REFUSES loudly', async () => {
     const { caseRecord } = emptyCase()
     rlsRestricted('cases')
     const res = await remove('cases', caseRecord.id)
-    expect(res.error).toBeNull()
-    expect(readRows('cases')).toHaveLength(1)
+    expect(res.error?.code).toBe('denied') // {ok:false, code} on the wire → { error } to the caller
+    expect(readRows('cases')[0].deleted_at).toBeNull()
+  })
+
+  it('the mock soft_delete vocabulary is the inverse of db.ts SOFT_DELETE_KIND', () => {
+    const inverse = Object.fromEntries(Object.entries(SOFT_DELETE_KIND).map(([table, kind]) => [kind, table]))
+    expect(SOFT_DELETE_TABLE).toEqual(inverse)
   })
 
   it('RLS INSERT is the loud exception: 403 row-level security violation', async () => {
