@@ -610,6 +610,21 @@ One server interface for every permission question, without rewriting any of the
 | `private.perm_raise(action, kind, id, reason, message)` | Raises the refusal with SQLSTATE **`P0403`** and the `{action, kind, id, reason}` in the error DETAIL. | definer RPCs only |
 | `public.perm_denied_ack(action, kind, id, reason)` | The client's self-attributed acknowledgement of a `P0403` refusal: writes the same row with actor = `auth.uid()` and `source = 'client_ack'`; deduplicated per actor/action/kind/id per minute; `false` for an account without a profile row. | `authenticated` |
 
+## 7. Audit ledger integrity ([`20261006120000_audit_chain.sql`](../supabase/migrations/20261006120000_audit_chain.sql))
+
+`audit_log` is append-only **in SQL**, for every role:
+
+| Object | What it does | Who |
+|---|---|---|
+| `audit_log.prev_hash`, `audit_log.row_hash` | `row_hash = sha256(prev_hash ‖ canonical row)` — id, actor, action, entity, entity_id, detail (canonical jsonb text), created_at (UTC, µs). `prev_hash` is the previous row's `row_hash` (null on the first row). Stamped by the `BEFORE INSERT` trigger `private.audit_chain_stamp()` under a transaction-scoped advisory lock, so concurrent writers queue and id order is chain order; caller-supplied values are overwritten. | every writer of `audit_log` |
+| `private.audit_chain_block()` | `BEFORE UPDATE OR DELETE` (row) and `BEFORE TRUNCATE` (statement): raises `P0403` unless `current_setting('cid.audit_maintenance') = 'on'` for the transaction. Non-definer (freeze-trigger convention). `UPDATE`/`DELETE`/`TRUNCATE` are additionally revoked from `authenticated` and `anon`, so a client attempt is `42501`, not a silent zero-row update. | all roles |
+| `private.audit_chain_verify()` | Walks the chain in id order, recomputing every hash and checking every link → `{ok, checked, head_id, head_hash}` or `{ok:false, first_bad_id, reason}`. | job + Owner status |
+| `private.audit_chain_job()` / cron `audit-chain-verify` (daily 03:15 UTC) | Wraps the verify in `job_begin`/`job_end` (`scheduled_job_runs`); on a mismatch notifies every active Owner (`audit_chain_mismatch`, one unread per Owner per 24 h). | pg_cron |
+| `public.audit_chain_status()` | The verify result plus the last scheduled run, on demand. Refuses a non-Owner via `private.perm_raise` (`P0403`). | Owner |
+| `private.city2_reset()` | The one maintenance path allowed to clear the ledger: sets the GUC for its own transaction; the `CITY2_RESET` row it appends starts the new chain. | Owner / maintenance role |
+
+`audit_log.actor_id` no longer has a foreign key to `profiles`: permanent member deletion re-pointed it to the tombstone profile because the FK required it, which is precisely the rewrite the chain forbids. A deleted member's uuid stays on their rows; `deleted_member_ledger` holds the identity snapshot for that uuid, and the deletion refmap no longer lists `audit_log`. Pinned by `v182`.
+
 **The refusal convention (transaction note).** PostgREST runs each RPC in one transaction and Postgres has no autonomous transactions, so an audit row inserted by an RPC that then *raises* is rolled back with everything else. Two patterns therefore exist, and every RPC touched by the Portal Improvements plan uses one of them:
 
 1. RPCs that refuse by **returning** a denial (`jsonb {ok:false, code:'denied'}` — the soft-delete / restore / Trash family) call `perform private.perm_deny(...)` and return; the row commits.

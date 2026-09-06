@@ -160,9 +160,10 @@ create table public.audit_log (
   entity text not null,
   entity_id uuid,
   detail jsonb,
-  created_at timestamp with time zone not null default now()
+  created_at timestamp with time zone not null default now(),
+  prev_hash bytea,
+  row_hash bytea
 );
-alter table public.audit_log add constraint audit_log_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES profiles(id);
 alter table public.audit_log add constraint audit_log_pkey PRIMARY KEY (id);
 alter table public.audit_log enable row level security;
 
@@ -5690,6 +5691,26 @@ begin
         'Auto-reconciled: member activated directly via assign_member.', true);
     end if;
   end if;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.audit_chain_status()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  if not private.is_owner() then
+    perform private.perm_raise('read', 'audit_chain', null, 'not_owner', 'audit chain status is Owner-only');
+  end if;
+  return jsonb_build_object(
+    'verify', private.audit_chain_verify(),
+    'last_run', (select to_jsonb(j) from (
+                   select r.id, r.started_at, r.finished_at, r.status, r.detail
+                     from public.scheduled_job_runs r
+                    where r.job = 'audit-chain-verify'
+                    order by r.started_at desc limit 1) j));
 end $function$
 ;
 
@@ -19609,6 +19630,111 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.audit_chain_block()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if coalesce(current_setting('cid.audit_maintenance', true), '') = 'on' then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+  raise exception 'audit_log is append-only: % refused', tg_op
+    using errcode = 'P0403',
+          detail = jsonb_build_object('action', lower(tg_op), 'kind', 'audit_log', 'reason', 'append_only')::text;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.audit_chain_hash(p_prev bytea, p_id bigint, p_actor uuid, p_action text, p_entity text, p_entity_id uuid, p_detail jsonb, p_created timestamp with time zone)
+ RETURNS bytea
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select sha256(coalesce(p_prev, '\x'::bytea)
+                || private.audit_row_canonical(p_id, p_actor, p_action, p_entity, p_entity_id, p_detail, p_created))
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.audit_chain_job()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_run bigint; v_res jsonb; o record;
+begin
+  v_run := private.job_begin('audit-chain-verify');
+  begin
+    v_res := private.audit_chain_verify();
+  exception when others then
+    perform private.job_end(v_run, 'failed', jsonb_build_object('error', left(sqlerrm, 300)));
+    return;
+  end;
+  if coalesce((v_res->>'ok')::boolean, false) then
+    perform private.job_end(v_run, 'succeeded', v_res);
+    return;
+  end if;
+  perform private.job_end(v_run, 'failed', v_res);
+  for o in select p.id from public.profiles p where p.is_owner and p.active and p.removed_at is null loop
+    if not exists (select 1 from public.notifications n
+                    where n.user_id = o.id and n.type = 'audit_chain_mismatch'
+                      and n.read = false and n.created_at > now() - interval '24 hours') then
+      insert into public.notifications (user_id, type, payload)
+      values (o.id, 'audit_chain_mismatch', jsonb_build_object(
+        'title', 'Audit chain verification failed',
+        'reason', v_res->>'reason',
+        'first_bad_id', v_res->'first_bad_id',
+        'checked', v_res->'checked',
+        'run_id', v_run));
+    end if;
+  end loop;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.audit_chain_stamp()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_prev bytea;
+begin
+  perform pg_advisory_xact_lock(hashtext('cid.audit_chain'));
+  select a.row_hash into v_prev from public.audit_log a order by a.id desc limit 1;
+  new.prev_hash := v_prev;
+  new.row_hash := private.audit_chain_hash(v_prev, new.id, new.actor_id, new.action, new.entity, new.entity_id, new.detail, new.created_at);
+  return new;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.audit_chain_verify()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare r record; v_prev bytea; v_expect bytea; n bigint := 0; v_head bigint;
+begin
+  for r in select id, actor_id, action, entity, entity_id, detail, created_at, prev_hash, row_hash
+             from public.audit_log order by id loop
+    if r.prev_hash is distinct from v_prev then
+      return jsonb_build_object('ok', false, 'checked', n, 'first_bad_id', r.id,
+                                'reason', 'prev_hash does not link to the preceding row', 'verified_at', now());
+    end if;
+    v_expect := private.audit_chain_hash(v_prev, r.id, r.actor_id, r.action, r.entity, r.entity_id, r.detail, r.created_at);
+    if r.row_hash is distinct from v_expect then
+      return jsonb_build_object('ok', false, 'checked', n, 'first_bad_id', r.id,
+                                'reason', 'row_hash does not match the row contents', 'verified_at', now());
+    end if;
+    v_prev := r.row_hash; n := n + 1; v_head := r.id;
+  end loop;
+  return jsonb_build_object('ok', true, 'checked', n, 'head_id', v_head,
+                            'head_hash', encode(v_prev, 'hex'), 'verified_at', now());
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.audit_detail()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -19650,6 +19776,19 @@ begin
   end if;
   return null;
 end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.audit_row_canonical(p_id bigint, p_actor uuid, p_action text, p_entity text, p_entity_id uuid, p_detail jsonb, p_created timestamp with time zone)
+ RETURNS bytea
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select convert_to(concat_ws('|',
+    p_id::text, coalesce(p_actor::text, ''), p_action, p_entity,
+    coalesce(p_entity_id::text, ''), coalesce(p_detail::text, ''),
+    to_char(p_created at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS.US')), 'UTF8')
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION private.block_direct_case_archive()
@@ -20904,6 +21043,10 @@ begin
     raise exception 'city2_reset: not armed (insert app_secrets key city2_reset_armed first; see migration 20261003120000)';
   end if;
 
+  -- The audit ledger is append-only (20261006120000); the reset is the one
+  -- maintenance path allowed to clear it, and only for this transaction.
+  perform set_config('cid.audit_maintenance', 'on', true);
+
   update public.legal_requests set current_version_id = null
    where current_version_id is not null;
 
@@ -20935,6 +21078,8 @@ begin
 
   delete from public.app_secrets where key = 'city2_reset_armed';
 
+  perform set_config('cid.audit_maintenance', 'off', true);
+
   v_report := jsonb_build_object(
     'reset', 'CITY2_FRESH_START_KEEP_ROSTER',
     'finished_at', now(),
@@ -20950,6 +21095,7 @@ begin
     'verification', private.city2_verify()
   );
 
+  -- The first row of the new chain (prev_hash null).
   insert into public.audit_log (actor_id, action, entity, detail)
   values ((select auth.uid()), 'CITY2_RESET', 'system',
           v_report - 'verification');
@@ -24223,6 +24369,9 @@ CREATE TRIGGER accounts_freeze_identity BEFORE UPDATE ON public.accounts FOR EAC
 CREATE TRIGGER accounts_track_handle AFTER INSERT OR UPDATE ON public.accounts FOR EACH ROW EXECUTE FUNCTION private.account_track_handle();
 CREATE TRIGGER touch_announcements BEFORE UPDATE ON public.announcements FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_stamp_author_ann BEFORE INSERT ON public.announcements FOR EACH ROW EXECUTE FUNCTION stamp_author_identity();
+CREATE TRIGGER audit_log_chain_stamp BEFORE INSERT ON public.audit_log FOR EACH ROW EXECUTE FUNCTION private.audit_chain_stamp();
+CREATE TRIGGER audit_log_immutable BEFORE DELETE OR UPDATE ON public.audit_log FOR EACH ROW EXECUTE FUNCTION private.audit_chain_block();
+CREATE TRIGGER audit_log_no_truncate BEFORE TRUNCATE ON public.audit_log FOR EACH STATEMENT EXECUTE FUNCTION private.audit_chain_block();
 CREATE TRIGGER ballistic_footprints_touch BEFORE UPDATE ON public.ballistic_footprints FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER ballistics_benches_touch BEFORE UPDATE ON public.ballistics_benches FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER audit_car AFTER INSERT OR DELETE OR UPDATE ON public.case_access_requests FOR EACH ROW EXECUTE FUNCTION private.audit();
@@ -26504,7 +26653,7 @@ create policy wl_sel on public.watchlist
 --   accounts -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   announcements -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   app_secrets -> service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   audit_log -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   audit_log -> authenticated: INSERT, SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   ballistic_footprints -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   ballistics_benches -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   bridge_ingestion_events -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -26769,8 +26918,14 @@ create policy wl_sel on public.watchlist
 --   private.announcement_recipients(p_audience text, p_mentions jsonb, p_author uuid): default (PUBLIC)
 --   private.assert_fresh_session(): default (PUBLIC)
 --   private.audit(): {=X/postgres,postgres=X/postgres,authenticated=X/postgres}
+--   private.audit_chain_block(): {postgres=X/postgres}
+--   private.audit_chain_hash(p_prev bytea, p_id bigint, p_actor uuid, p_action text, p_entity text, p_entity_id uuid, p_detail jsonb, p_created timestamp with time zone): {postgres=X/postgres}
+--   private.audit_chain_job(): {postgres=X/postgres}
+--   private.audit_chain_stamp(): {postgres=X/postgres}
+--   private.audit_chain_verify(): {postgres=X/postgres}
 --   private.audit_detail(): {postgres=X/postgres}
 --   private.audit_operation_status(): default (PUBLIC)
+--   private.audit_row_canonical(p_id bigint, p_actor uuid, p_action text, p_entity text, p_entity_id uuid, p_detail jsonb, p_created timestamp with time zone): {postgres=X/postgres}
 --   private.block_direct_case_archive(): default (PUBLIC)
 --   private.block_direct_case_bureau(): default (PUBLIC)
 --   private.block_direct_case_stage(): default (PUBLIC)
@@ -27010,6 +27165,7 @@ create policy wl_sel on public.watchlist
 --   public.assign_field_officer(p_user uuid, p_agency text, p_callsign text, p_rank text, p_unit text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.assign_judge(p_request uuid, p_judge uuid): {postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}
 --   public.assign_member(target uuid, set_active boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.audit_chain_status(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.bridge_ingest_event(p_source text, p_event_type text, p_source_event_id text, p_event_time timestamp with time zone, p_payload jsonb): {postgres=X/postgres,service_role=X/postgres}
 --   public.can_record(p_action text, p_kind text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.cancel_transfer(p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}

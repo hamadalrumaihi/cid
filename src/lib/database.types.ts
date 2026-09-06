@@ -281,6 +281,8 @@ export type Database = {
           entity: string
           entity_id: string | null
           id: number
+          prev_hash: string | null
+          row_hash: string | null
         }
         Insert: {
           action: string
@@ -290,6 +292,8 @@ export type Database = {
           entity: string
           entity_id?: string | null
           id?: never
+          prev_hash?: string | null
+          row_hash?: string | null
         }
         Update: {
           action?: string
@@ -299,16 +303,10 @@ export type Database = {
           entity?: string
           entity_id?: string | null
           id?: never
+          prev_hash?: string | null
+          row_hash?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "audit_log_actor_id_fkey"
-            columns: ["actor_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       ballistic_footprints: {
         Row: {
@@ -11413,6 +11411,10 @@ export type Database = {
       assign_judge: {
         Args: { p_judge: string; p_request: string }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      audit_chain_status: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
       }
       can_record: {
         Args: { p_action: string; p_id: string; p_kind: string }

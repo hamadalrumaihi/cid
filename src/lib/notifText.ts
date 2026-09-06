@@ -38,6 +38,7 @@ export const NOTIF_LABEL: Record<string, string> = {
   membership_request: 'Membership request awaiting review',
   membership_update: 'Membership request update',
   joint_case_added: 'Added to a joint case',
+  audit_chain_mismatch: 'Audit chain verification failed',
   joint_case_removed: 'Joint-case access removed',
   joint_case_ended: 'Joint case ended',
   op_joint_linked: 'Case joined a Joint Operation',
@@ -145,5 +146,7 @@ export function notifHref(n: NotificationRow, opts: { command?: boolean } = {}):
   // Caseless mentions come from announcement fan-outs (announce_id payload).
   if (t === 'announcement' || t === 'mention') return '/announce'
   if (t === 'client_error') return '/owner'
+  // The Owner's daily audit-chain verify (20261006120000) — open the Audit Log.
+  if (t === 'audit_chain_mismatch') return '/audit'
   return null
 }

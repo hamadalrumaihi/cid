@@ -423,3 +423,21 @@ existing predicate, policy or RPC is changed. See `docs/AUTHORIZATION.md` §6.
 |---|---|---|
 | applied via MCP (`permission_module`) | permission_module | `20261005120000_permission_module.sql` |
 | applied via MCP (`permission_module_ack_profile_guard`) | permission_module_ack_profile_guard | folded into the same repo file (`perm_denied_ack` profile-row guard, applied minutes later) |
+
+**P1-02 Audit ledger integrity.** `20261006120000_audit_chain.sql` adds
+`prev_hash`/`row_hash` to `audit_log`, the `BEFORE INSERT` stamping trigger,
+the `BEFORE UPDATE OR DELETE` / `BEFORE TRUNCATE` block trigger (maintenance
+GUC `cid.audit_maintenance`), revokes `UPDATE`/`DELETE`/`TRUNCATE` from the
+client roles, seeds the chain over the existing rows, declares the daily
+`audit-chain-verify` job (`private.audit_chain_job` → `scheduled_job_runs`,
+Owner notification on mismatch), adds `public.audit_chain_status()` and
+re-emits `private.city2_reset()` with the GUC. The `audit_log.actor_id`
+foreign key is dropped (see `docs/AUTHORIZATION.md` §7). Verified at apply
+time: chain valid over 10 rows; a row rewritten under the GUC inside a
+rolled-back transaction was reported as `first_bad_id` by the verifier;
+`UPDATE`/`DELETE`/`TRUNCATE` refused for `postgres` without the GUC and
+`42501` for `authenticated`.
+
+| Version (live) | Name | Repo file |
+|---|---|---|
+| applied via MCP (`audit_chain`) | audit_chain | `20261006120000_audit_chain.sql` |
