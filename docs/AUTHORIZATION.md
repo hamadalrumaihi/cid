@@ -222,6 +222,7 @@ SIB is **not** a CID rank and **not** a badge attached to a detective; although 
 | `senior_special_agent` | Senior field tier — reaches `siu_restricted` only when assigned, never `siu_command` | ✅ | ✅ | ❌ |
 | `special_agent` | Field agent (X-2, X-3, … — callsigns are free-form) | ✅ | ✅ | ❌ |
 | `oversight` | Attorney General / oversight-only appointee | ❌ | ❌ | ✅ |
+| `director_oversight` | Director of CID, ex officio ([`20261010120000`](../supabase/migrations/20261010120000_director_oversight_standing.sql), decision P1b) — a strict **read** subset of `oversight`: standard investigations and the oversight totals, never the unit's own intelligence layer | ❌ | ❌ | ❌ |
 | `NULL` | **Everyone else, including the entire CID hierarchy, prosecutors and judges** | ❌ | ❌ | ❌ |
 
 **Membership is appointment-only.** There is no request table, no queue, no signup option, no promotion path, and no self-service surface anywhere in the product — `siu_appoint` is the only way in and `siu_remove` the only way out. An X-Ray 1 appointment is **Owner-only**; only the Owner or the Attorney General may end one; nobody removes their own membership. Removal revokes live access immediately and releases assignments and compartment rows while **preserving** reports, evidence, authorship, assignment history and audit.
@@ -280,7 +281,22 @@ The Portal Owner sits above all of it during the build phase and has no operatio
 - **On a CID case the SIB-only layer stays field-agent only** (`siu_oversight_read()` = `siu_is_agent()`), because an oversight holder is a plausible *subject* of an integrity flag.
 - **The escape hatch is intact.** Oversight reads only the base `siu` level, and never a preliminary inquiry. An investigation *into* the Attorney General or X-1 remains possible by classifying above `siu` — or by keeping it an inquiry while the unit is still deciding.
 
-> **Operational consequence.** A standard `siu` investigation is readable by the **Attorney General**. Any investigation concerning the AG must be opened at `siu_restricted` or higher — `siu_compartmented` if it also concerns X-1. The Director of CID reads no SIB **case** material at any level; their only windows are a per-case access request approved by X-1 (`siu_access_requests`) and the registry-compartmentation authority below.
+> **Operational consequence.** A standard `siu` investigation is readable by the **Attorney General** and, since [`20261010120000`](../supabase/migrations/20261010120000_director_oversight_standing.sql), by the **Director of CID** (below). Any investigation concerning either must be opened at `siu_restricted` or higher — `siu_compartmented` if it also concerns X-1 — or kept a preliminary inquiry while the unit decides. Beyond that read the Director's windows remain a per-case access request approved by X-1 (`siu_access_requests`) and the registry-compartmentation authority below.
+
+### The Director of CID — read-only oversight, its own standing ([`20261010120000`](../supabase/migrations/20261010120000_director_oversight_standing.sql), P1-04 / decision P1b)
+
+The confirmed organisational model is narrower than either the SOP reading (`20260823120000`, Director = `oversight`) or its reversal (`20260902120000`, Director = nothing): the Director of CID **supervises SIB the way the Attorney General does on the read side and holds none of the personnel or release powers**. That is implemented as a separate value of `private.siu_standing()`, `director_oversight` (active, non-fixture `role = 'director'`; an appointed Director resolves through the membership branch first), so that every predicate which grants a power keeps enumerating the standings it admits and this one is never among them.
+
+| | `director_oversight` | `oversight` (AG) |
+|---|---|---|
+| Standard `siu` investigation, not a preliminary inquiry, not recused — the case row and its CID-side material via `private.siu_case_read()` → `can_read_case` / `can_read_case_row` (reports, evidence, media, tasks, blockers, assignments, disclosures, exports, audit feed) | ✅ | ✅ |
+| Oversight surfaces keyed on `siu_operates()`: `siu_oversight_report`, `siu_oversight_supplement`, `siu_overview` totals, `siu_roster`, `siu_audit_feed`, `siu_memberships` / `siu_settings` reads, the SIB SOP, department switch (`may_switch`, `sib_may_switch`) | ✅ | ✅ |
+| The unit's own intelligence layer — `siu_case_notes`, `siu_targets` (now read through **`private.siu_unit_read(case)`** = `siu_case_read` **and** standing ≠ `director_oversight`; `siu_targets_sel` re-emitted; `siu_overview` target counts follow it) | ❌ zero rows | ✅ |
+| `siu_sources` (handler access), `siu_watchlist`, `siu_referrals` (`siu_is_agent`), financial / comms / undercover / integrity tables (`siu_case_access`) | ❌ | ❌ |
+| Appoint / remove (`siu_can_appoint`, `siu_remove`), open / assign / classify, author intelligence, designate targets, release (`siu_share`), export, supporting access, compartments, conflicts — every predicate enumerates field / command / `'oversight'` by name | ❌ | appoint/remove only |
+| Preliminary inquiries; `siu_restricted` / `siu_command` / `siu_compartmented` | ❌ | ❌ |
+
+`siu_may_control_visibility()` (registry compartmentation control) and `siu_may_request_access()` keep their own `profiles.role` tests and are untouched. The fixture exclusion holds: `rls-test-director` keeps `NULL` standing, so `v179b` pins the denials and the fixture exclusion while the positive read was verified live at apply time against a real Director profile in a rolled-back transaction. Client mirror: `siuStanding()` in `src/lib/siu.ts` returns `director_oversight`; `isOversightStanding()` / `siuStandingLabel()` serve the read-only UI notes.
 
 ### Registry compartmentation — restrict, reveal, and who may ([`20260928120000`](../supabase/migrations/20260928120000_siu_compartmentation.sql) → [`20260930120000`](../supabase/migrations/20260930120000_siu_context_may_control_visibility.sql))
 

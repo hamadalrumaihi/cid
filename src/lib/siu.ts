@@ -365,14 +365,32 @@ export const siuWithheldLabel = (c?: string | null) =>
  *                            authority) — but NOT a compartment key.
  *  'special_agent_in_charge' X-Ray 1, the operational head of SIU.
  *  'special_agent'           Field agent.
- *  'oversight'               Director of CID, Attorney General, or an
- *                            oversight-only appointee. Departmental oversight
- *                            (roster, appointments, audit) plus STANDARD
+ *  'oversight'               Attorney General, or an oversight-only
+ *                            appointee. Departmental oversight (roster,
+ *                            appointments, audit) plus STANDARD
  *                            investigations — never restricted, command or
  *                            compartmented ones, and never field authority.
+ *  'director_oversight'      Director of CID, ex officio (migration
+ *                            20261010120000, decision P1b). A strict READ
+ *                            subset of 'oversight': standard investigations
+ *                            and the oversight totals — never appointment,
+ *                            removal, release, export, nor the unit's own
+ *                            intelligence layer (notes, targets, sources,
+ *                            watchlist, referrals).
  *  null                      SIU does not exist for this account.
  */
-export type SiuStanding = 'owner' | SiuRole | 'oversight'
+export type SiuStanding = 'owner' | SiuRole | 'oversight' | 'director_oversight'
+
+/** Either oversight standing — the read-only supervisors of the unit. */
+export const isOversightStanding = (s: SiuStanding | null | undefined): boolean =>
+  s === 'oversight' || s === 'director_oversight'
+
+/** Human label for a standing (the UI badge / status strip). */
+export const siuStandingLabel = (s: SiuStanding | null | undefined, roleLabel: (r: string | null | undefined) => string): string =>
+  s === 'owner' ? 'Portal Owner'
+    : s === 'oversight' ? 'SIB Oversight'
+    : s === 'director_oversight' ? 'CID Director — oversight'
+    : roleLabel(s)
 
 export interface SiuMembership {
   user_id: string
@@ -412,13 +430,15 @@ export function siuStanding(ctx: SiuContext): SiuStanding | null {
   // standing from siu_department_context() anyway.
   // The Attorney General is SIU's reporting line, so oversight is ex officio.
   if (ctx.justiceRole === 'attorney_general') return 'oversight'
-  // NOTE: there is deliberately NO branch for `p.role === 'director'`.
-  // CID command is powerful inside CID and does not command SIU. Oversight
-  // standing carries appointment authority (siuCanAppoint) and siu_remove()
-  // lets it end an X-1's membership — so a CID Director holding it could
-  // dissolve the unit investigating CID. Removed in migration 20260902120000.
-  // A Director who is genuinely appointed to SIU still holds standing through
-  // the membership branch above; the CID role alone confers nothing.
+  // The Director of CID holds READ-ONLY oversight ex officio (20261010120000,
+  // decision P1b) — its own standing, never 'oversight', so that every power
+  // predicate (siuCanAppoint, siuIsAgent, siuIsCommand, siuCanRemove) keeps
+  // enumerating the standings it admits and this one is never among them.
+  // The 20260902120000 lesson stands: 'oversight' carries appointment and
+  // removal authority, and a Director holding THAT could dissolve the unit
+  // investigating CID. A Director who is genuinely appointed to SIU resolves
+  // through the membership branch above.
+  if (p.role === 'director') return 'director_oversight'
   return null
 }
 
@@ -442,7 +462,7 @@ export const siuOperates = (ctx: SiuContext) => siuStanding(ctx) !== null
  *  own — RLS and the SIU RPCs stay the authority (§23). */
 export const maySwitchDepartment = (ctx: SiuContext) => {
   const s = siuStanding(ctx)
-  return s === 'owner' || s === 'oversight'
+  return s === 'owner' || isOversightStanding(s)
 }
 
 /** Field standing: may run investigations. Oversight-only is excluded — legal
@@ -525,12 +545,12 @@ export function siuCaseAccess(
         || !!facts.inCompartment
     default:
       // Standard investigations are visible to field agents AND to oversight
-      // authority (Director of CID, Attorney General) per the SOP — except
+      // authority (Attorney General; Director of CID read-only) — except
       // while the case is a PRELIMINARY INQUIRY (§15), which oversight cannot
       // see at any classification. Field access is unaffected.
       if (command || s === 'special_agent' || s === 'senior_special_agent') return true
       if (facts.inCompartment) return true
-      return s === 'oversight' && caseRow.siu_stage !== 'preliminary_inquiry'
+      return isOversightStanding(s) && caseRow.siu_stage !== 'preliminary_inquiry'
   }
 }
 
@@ -574,7 +594,7 @@ export function siuCaseReadOnly(
   if (caseDepartment(caseRow) === 'cid') return false
   // An SIU investigation is still read-only for oversight: they read the
   // unit's work and do none of it.
-  return viewer.standing === 'oversight'
+  return isOversightStanding(viewer.standing)
 }
 
 

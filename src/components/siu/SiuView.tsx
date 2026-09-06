@@ -49,6 +49,7 @@ import {
   siuReferralCategoryLabel,
   type SiuAccessRequest, type SiuCommandDashboard, type SiuDisclosure,
   type SiuIntelQuality, type SiuReferral,
+  siuStandingLabel,
 } from '@/lib/siu'
 import { SiuCompartmentsSection } from './SiuCompartments'
 import { SiuDisclosuresSection } from './SiuDisclosures'
@@ -165,9 +166,7 @@ export function SiuView() {
           actions={
             <div className="flex items-center gap-2">
               <Badge tint="bg-violet-500/15 text-violet-300">
-                {siu.standing === 'owner' ? 'Portal Owner'
-                  : siu.standing === 'oversight' ? 'SIB Oversight'
-                  : siuRoleLabel(siu.standing)}
+                {siuStandingLabel(siu.standing, siuRoleLabel)}
               </Badge>
               {siu.membership?.callsign && (
                 <Badge tone="neutral" title="Callsign">{siuCallsign(siu.membership.callsign)}</Badge>

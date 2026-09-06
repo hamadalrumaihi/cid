@@ -24,6 +24,7 @@ import {
   siuAllegationLabel, siuExportScopeLabel, siuReliabilityLabel,
   siuReviewStatusLabel, siuSourceStatusLabel, siuUndercoverStatusLabel,
   siuWithheldLabel, type SiuExportRow, type SiuOversightReport,
+  isOversightStanding,
 } from '@/lib/siu'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
@@ -431,7 +432,7 @@ export function SiuOversightSection() {
             { label: 'Exports (30d)', value: g(data.exports, 'last_30_days') },
           ]}
         />
-        {siu.standing === 'oversight' && (
+        {isOversightStanding(siu.standing) && (
           <p className="mt-3 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-[11px] text-slate-400">
             You hold oversight standing. You supervise the unit through these totals and through
             standard investigations; source identities, cover identities and intercept content are

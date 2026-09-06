@@ -15,7 +15,7 @@ import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { countRows, list, rpc, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useSiu } from '@/lib/useSiu'
-import { caseDepartment, siuClassificationLabel, siuClassificationTint, termsFor } from '@/lib/siu'
+import { caseDepartment, isOversightStanding, siuClassificationLabel, siuClassificationTint, termsFor } from '@/lib/siu'
 import { ReleasedIntelligence } from './ReleasedIntelligence'
 import { SiuCaseLifecycle, SiuControlBar } from './SiuControlBar'
 import { Badge } from '@/components/ui/Badge'
@@ -530,7 +530,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
           {/* Oversight authority (Director of CID, Attorney General) reads the
               unit's standard investigations but works none of them — say so,
               rather than letting an edit control imply otherwise. */}
-          {siu.standing === 'oversight' && (
+          {isOversightStanding(siu.standing) && (
             <span className="text-xs text-slate-300">
               Viewing under oversight authority — read-only. You are not assigned to this investigation.
             </span>

@@ -503,3 +503,30 @@ versions (cascaded row triggers run as the table owner — the assumption in
 | Version (live) | Name | Repo file |
 |---|---|---|
 | applied via MCP (`documents_versions_immutable`) | documents_versions_immutable | `20261009120000_documents_versions_immutable.sql` |
+
+**P1-04 Director of CID — read-only SIB oversight standing.**
+`20261010120000_director_oversight_standing.sql`: `private.siu_standing()`
+gains `director_oversight` (active, non-fixture `role = 'director'` without
+an appointment); `private.siu_case_read()` admits it to standard, non-inquiry
+investigations exactly as the AG; NEW `private.siu_unit_read(case)` (=
+`siu_case_read` and standing ≠ `director_oversight`) carries
+`private.siu_can_read_case_note` and the re-emitted `siu_targets_sel`, so
+notes and targets stay zero rows for the Director; `siu_overview` target
+counts, `siu_department_context.may_switch` and
+`my_permissions.sib_may_switch` re-emitted. Every write / appoint / remove /
+release / export predicate already enumerates its standings by name and
+refuses the new one without change. Applied live in two parts
+(`director_oversight_standing`: sections 1–5; `director_oversight_standing_surfaces`:
+sections 6–8). Verified at apply time in a rolled-back transaction as a
+real Director profile: standing `director_oversight`, a standard SIB case
+and its report readable, a preliminary inquiry and a restricted case
+invisible, zero rows from `siu_targets` / `siu_case_notes` /
+`siu_watchlist` / `siu_referrals`, `siu_oversight_report` and
+`siu_overview` answering `access: true`, and fourteen SIB RPCs (appoint,
+remove, create, assign, classify, record intelligence, designate target,
+share, export, grant supporting access, review referral, resolve conflict,
+watch, compartment) refused. See `docs/AUTHORIZATION.md` §4f.
+
+| Version (live) | Name | Repo file |
+|---|---|---|
+| applied via MCP (`director_oversight_standing`, `director_oversight_standing_surfaces`) | director_oversight_standing | `20261010120000_director_oversight_standing.sql` |

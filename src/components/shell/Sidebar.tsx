@@ -12,7 +12,7 @@ import { useCapabilities } from '@/lib/capabilities'
 import { useSiu } from '@/lib/useSiu'
 import { NAV_CATEGORIES, SIU_NAV_CATEGORIES, SIU_TAB_LABEL, TAB_LABEL } from '@/lib/nav'
 import { bureauShort, roleLabel } from '@/lib/roles'
-import { DEPARTMENT_LABEL, siuCallsign, siuRoleLabel } from '@/lib/siu'
+import { DEPARTMENT_LABEL, siuCallsign, siuRoleLabel, siuStandingLabel } from '@/lib/siu'
 import { safeUrl } from '@/lib/safeUrl'
 import { Store } from '@/lib/store'
 import { CategoryIcon, ChevronIcon, CloseIcon, EyeIcon, ScaleIcon, SettingsIcon, ShieldIcon, SlidersIcon, SwapIcon } from './icons'
@@ -62,9 +62,7 @@ function OfficerCard() {
             siu.inSiu ? 'text-violet-300/80' : 'text-blue-300/80'
           }`}>
             {siu.inSiu
-              ? (siu.standing === 'owner' ? 'Portal Owner'
-                 : siu.standing === 'oversight' ? 'SIB Oversight'
-                 : siuRoleLabel(siu.membership?.siu_role))
+              ? siuStandingLabel(siu.standing, () => siuRoleLabel(siu.membership?.siu_role))
               : roleLabel(profile?.role)}
           </p>
         </div>

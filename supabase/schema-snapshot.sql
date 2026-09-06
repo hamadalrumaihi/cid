@@ -11757,7 +11757,7 @@ AS $function$
       'loa', coalesce((select loa from me), false),
       'removed', coalesce((select removed_at is not null from me), false),
       'sib_release_open', private.siu_release_open(),
-      'sib_may_switch', coalesce(d.sib_standing in ('owner', 'oversight'), false),
+      'sib_may_switch', coalesce(d.sib_standing in ('owner', 'oversight', 'director_oversight'), false),
       'sib_may_control_visibility', private.siu_may_control_visibility()),
     'generated_at', now())
   end
@@ -16473,7 +16473,7 @@ AS $function$
     'siu_available', private.siu_operates(),
     'siu_standing', private.siu_standing(),
     'release_open', private.siu_release_open(),
-    'may_switch', coalesce(private.siu_standing() in ('owner', 'oversight'), false),
+    'may_switch', coalesce(private.siu_standing() in ('owner', 'oversight', 'director_oversight'), false),
     'callsign', (select m.callsign from public.siu_memberships m
                   where m.user_id = (select auth.uid()) and m.active),
     'siu_role', private.siu_membership_role((select auth.uid())),
@@ -17069,9 +17069,9 @@ AS $function$
     'priority_targets', (select count(*) from public.siu_targets t
                           where t.cleared_at is null
                             and t.designation in ('target', 'priority_target', 'fugitive')
-                            and private.siu_case_read(t.case_id)),
+                            and private.siu_unit_read(t.case_id)),
     'active_targets', (select count(*) from public.siu_targets t
-                        where t.cleared_at is null and private.siu_case_read(t.case_id)),
+                        where t.cleared_at is null and private.siu_unit_read(t.case_id)),
     'active_operations', (select count(*) from public.operations o
                            where o.authority = 'siu'
                              and o.status in ('active', 'planning', 'authorized')),
@@ -24069,7 +24069,7 @@ CREATE OR REPLACE FUNCTION private.siu_can_read_case_note(p_case uuid)
 AS $function$
   select coalesce(
     case when private.is_siu_case(p_case)
-         then private.siu_case_read(p_case)
+         then private.siu_unit_read(p_case)
          else private.siu_oversight_read() end,
     false)
 $function$
@@ -24159,7 +24159,7 @@ AS $function$
         and coalesce(private.siu_case_classification(p_cid), 'siu') = 'siu'
         and coalesce((select c.siu_stage from public.cases c where c.id = p_cid),
                      'investigation') <> 'preliminary_inquiry'
-        and private.siu_standing() = 'oversight'),
+        and private.siu_standing() in ('oversight', 'director_oversight')),
     false)
 $function$
 ;
@@ -24459,6 +24459,15 @@ AS $function$
     when coalesce((select private.justice_role_effective((select uid from u))) = 'attorney_general', false)
      and not (select is_fixture from f)
       then 'oversight'
+    -- Director of CID — EX OFFICIO, READ-ONLY oversight (P1-04, decision P1b).
+    -- A strict read subset of 'oversight': standard investigations and the
+    -- oversight totals, never appoint / remove / release / export, never
+    -- the unit's own intelligence layer. Never a fixture (20260829120000).
+    -- An appointed Director resolves through the membership branch above.
+    when coalesce((select p.role = 'director' and p.active and p.removed_at is null
+                     from public.profiles p, u where p.id = u.uid), false)
+     and not (select is_fixture from f)
+      then 'director_oversight'
     else null
   end
 $function$
@@ -24479,6 +24488,19 @@ AS $function$
     and exists (select 1 from public.siu_temporary_access t, u
                  where t.case_id = p_cid and t.user_id = u.uid
                    and t.revoked_at is null and t.expires_at > now()),
+    false)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.siu_unit_read(p_cid uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce(
+    private.siu_case_read(p_cid)
+    and coalesce(private.siu_standing(), '') <> 'director_oversight',
     false)
 $function$
 ;
@@ -26749,7 +26771,7 @@ create policy siu_targets_ins on public.siu_targets
 
 create policy siu_targets_sel on public.siu_targets
   as permissive for select to authenticated
-  using (private.siu_case_read(case_id));
+  using (private.siu_unit_read(case_id));
 
 create policy siu_targets_upd on public.siu_targets
   as permissive for update to authenticated
@@ -27594,6 +27616,7 @@ create policy wl_sel on public.watchlist
 --   private.siu_side_attached(p_type text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.siu_standing(p_user uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.siu_temp_access(p_cid uuid, p_user uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.siu_unit_read(p_cid uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.siu_visibility_forget(): default (PUBLIC)
 --   private.siu_watch_live(p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.soft_delete_state(p_kind text, p_id uuid, OUT p_exists boolean, OUT p_deleted_at timestamp with time zone, OUT p_batch uuid, OUT p_case uuid): {postgres=X/postgres}
