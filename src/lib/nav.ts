@@ -67,6 +67,10 @@ export const PAGE_META: Record<string, PageMeta> = {
   // workspace (§toolsModel). The old tab ids above stay registered so deep
   // links keep resolving; their routes redirect into /tools.
   tools:      { title: 'Investigative Tools', sub: 'Intelligence records, operational boards & analysis — one workspace' },
+  // The unified workspace (plan §5.5): cases, records and tools side by side
+  // in one tab strip. `/tools` renders the same view (its URL is rewritten
+  // here) so the tools-era bookmarks keep landing.
+  workspace:  { title: 'Workspace', sub: 'Open cases, records and tools side by side — one tab strip' },
   // The CID-facing door into SIU intake (§14). Deliberately NOT named after
   // SIU: a route labelled for the unit would disclose it to every detective,
   // and to the subjects of its investigations. See ConcernView.
@@ -88,10 +92,10 @@ export const NAV_CATEGORIES: NavCategory[] = [
   // opens there. Division Overview (the shared dashboard) follows it.
   { id: 'command',   label: 'Command',      tabs: ['inbox', 'action', 'command', 'analytics', 'announce', 'heatmap', 'personnel'] },
   { id: 'cases',     label: 'Cases',        tabs: ['cases', 'operations', 'legal', 'case-files', 'rico'] },
-  // The 14 intelligence tabs now live INSIDE the Investigative Tools
-  // workspace (/tools) — the old leaf routes still resolve and redirect there,
-  // so nothing is lost; the category is just one nav item now.
-  { id: 'intel',     label: 'Investigative Tools', tabs: ['tools'] },
+  // The 14 intelligence tabs now live INSIDE the unified workspace
+  // (/workspace) — the old leaf routes (and /tools) still resolve and land
+  // there, so nothing is lost; the category is just one nav item now.
+  { id: 'intel',     label: 'Investigative Tools', tabs: ['workspace'] },
   { id: 'reference', label: 'Reference',    tabs: ['penal', 'sops', 'guide', 'devdocs'] },
   { id: 'oversight', label: 'Oversight',    tabs: ['calendar', 'shifts', 'audit'] },
 ]
@@ -131,7 +135,7 @@ export const SIU_NAV_CATEGORIES: NavCategory[] = [
   { id: 'siu-unit',      label: 'Bureau',       tabs: ['siu'] },
   { id: 'siu-command',   label: 'Command',      tabs: ['inbox', 'action', 'command', 'analytics', 'announce', 'heatmap', 'personnel'] },
   { id: 'siu-cases',     label: 'Cases',        tabs: ['cases', 'operations', 'legal', 'case-files', 'rico'] },
-  { id: 'siu-intel',     label: 'Investigative Tools', tabs: ['tools'] },
+  { id: 'siu-intel',     label: 'Investigative Tools', tabs: ['workspace'] },
   { id: 'siu-ref',       label: 'Reference',    tabs: ['penal', 'sops', 'guide', 'devdocs'] },
   { id: 'siu-oversight', label: 'Oversight',    tabs: ['calendar', 'shifts', 'audit'] },
 ]
@@ -151,7 +155,7 @@ export const TAB_LABEL: Record<string, string> = {
   persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', accounts: 'Accounts', indicators: 'Indicators', 'field-review': 'Intelligence',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
   media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide', devdocs: 'Developer Handbook',
-  tools: 'Investigative Tools',
+  tools: 'Investigative Tools', workspace: 'Workspace',
   inbox: 'My Dashboard', action: 'Action Center', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', owner: 'Owner Console', profile: 'My Profile', 'command-center': 'Command Center', siu: 'Special Investigations Bureau',
 }
 
@@ -173,6 +177,8 @@ export const SUBTAB_GROUPS: Record<string, { label: string; tabs: string[] }[]> 
  *  Before this, anything absent from the map fell back to 'command' in
  *  useNav and mislit the Command strip. */
 export const TAB_CATEGORY: Record<string, string | null> = {
+  // The tools-era route renders the workspace; it lights the same category.
+  tools: 'intel',
   profile: null,
   owner: null,
   'command-center': null,

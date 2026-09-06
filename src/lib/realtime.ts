@@ -8,22 +8,37 @@
  *  rt_cases double-subscribe bug). Instead of callbacks, every change bumps a
  *  per-table version counter in a zustand store; components subscribe with
  *  useTableVersion(table) and refetch when it moves. Teardown happens on
- *  sign-out via supabase.removeAllChannels() (auth.tsx) + resetRealtime(). */
+ *  sign-out via supabase.removeAllChannels() (auth.tsx) + resetRealtime().
+ *
+ *  Case-scoped channels (P3-08): a case view that subscribed to fourteen
+ *  whole tables refetched its snapshot whenever ANY case changed. The
+ *  `rt_<table>_<caseId>` channels below carry a `case_id=eq.<id>` filter so
+ *  only the open case's own rows move its counters; if the server refuses
+ *  the filtered subscription (CHANNEL_ERROR / TIMED_OUT — an unpublished
+ *  table, a filter the realtime tier does not accept) the table falls back
+ *  to the whole-table channel and its scoped counter follows that one. */
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import { isConfigured, supabase } from './supabase'
 
 interface RtState {
   versions: Record<string, number>
-  bump: (table: string) => void
+  bump: (key: string) => void
 }
 
 export const useRealtimeStore = create<RtState>((set) => ({
   versions: {},
-  bump: (table) => set((s) => ({ versions: { ...s.versions, [table]: (s.versions[table] ?? 0) + 1 } })),
+  bump: (key) => set((s) => ({ versions: { ...s.versions, [key]: (s.versions[key] ?? 0) + 1 } })),
 }))
 
 const registered = new Set<string>()
+/** Case-scoped channels that fell back to the whole-table channel, per
+ *  table: their scoped counters are bumped from the table-wide events. */
+const fallbackCases = new Map<string, Set<string>>()
+const warnedTables = new Set<string>()
+
+/** Store key for a (table, caseId) counter — exported for the unit test. */
+export const caseVersionKey = (table: string, caseId: string): string => `${table}:${caseId}`
 
 /** Per-table leading+trailing debounce for the version bumps. Contract: the
  *  FIRST event of a burst bumps immediately (a lone change stays prompt); any
@@ -47,7 +62,18 @@ export function createDebouncedBump(bump: (table: string) => void, waitMs = 300)
   }
 }
 
-const debouncedBump = createDebouncedBump((table) => useRealtimeStore.getState().bump(table))
+/** A whole-table event bumps the table counter AND every scoped counter
+ *  whose filtered channel fell back to this table. */
+const bumpTable = (table: string): void => {
+  const { bump } = useRealtimeStore.getState()
+  bump(table)
+  for (const caseId of fallbackCases.get(table) ?? []) bump(caseVersionKey(table, caseId))
+}
+
+const debouncedBump = createDebouncedBump((key) => {
+  if (key.includes(':')) useRealtimeStore.getState().bump(key)
+  else bumpTable(key)
+})
 
 /** Subscribe (once per session) to postgres_changes for a table. Safe to call
  *  from every mount — repeat calls are no-ops. */
@@ -66,10 +92,49 @@ export function subscribeTable(table: string): void {
   }
 }
 
+/** Subscribe (once per session) to one case's rows of a table. The channel
+ *  is `rt_<table>_<caseId>` with a `case_id=eq.<caseId>` filter; only that
+ *  case's changes bump `caseVersionKey(table, caseId)`. A refused filtered
+ *  subscription falls back to the whole-table channel (logged once per
+ *  table) so the view still refreshes — just less selectively. */
+export function subscribeCaseTable(table: string, caseId: string): void {
+  const key = caseVersionKey(table, caseId)
+  if (!isConfigured || typeof window === 'undefined' || !caseId || registered.has(key)) return
+  registered.add(key)
+  const fallBack = (status: string) => {
+    if (!fallbackCases.has(table)) fallbackCases.set(table, new Set())
+    fallbackCases.get(table)!.add(caseId)
+    if (!warnedTables.has(table)) {
+      warnedTables.add(table)
+      console.warn(`[realtime] filtered channel for ${table} refused (${status}); falling back to the whole-table channel`)
+    }
+    subscribeTable(table)
+  }
+  try {
+    const client = supabase()
+    const channel = client
+      .channel(`rt_${table}_${caseId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table, filter: `case_id=eq.${caseId}` }, () => {
+        debouncedBump(key)
+      })
+    let fellBack = false
+    channel.subscribe((status) => {
+      if (fellBack || (status !== 'CHANNEL_ERROR' && status !== 'TIMED_OUT')) return
+      fellBack = true
+      void client.removeChannel(channel)
+      fallBack(status)
+    })
+  } catch {
+    registered.delete(key) // allow a later retry if channel setup failed
+  }
+}
+
 /** Forget local registrations after sign-out — the channels themselves are
  *  torn down by removeAllChannels() in the auth layer. */
 export function resetRealtime(): void {
   registered.clear()
+  fallbackCases.clear()
+  warnedTables.clear()
 }
 
 /** Version counter for a table — changes whenever any row changes. Also
@@ -77,4 +142,13 @@ export function resetRealtime(): void {
 export function useTableVersion(table: string): number {
   useEffect(() => { subscribeTable(table) }, [table])
   return useRealtimeStore((s) => s.versions[table] ?? 0)
+}
+
+/** Version counter for one case's rows of a table (P3-08). Registers the
+ *  filtered subscription on first mount; moves only for that case (or, after
+ *  a fallback, with the whole table). */
+export function useCaseTableVersion(table: string, caseId: string): number {
+  useEffect(() => { subscribeCaseTable(table, caseId) }, [table, caseId])
+  const key = caseVersionKey(table, caseId)
+  return useRealtimeStore((s) => s.versions[key] ?? 0)
 }

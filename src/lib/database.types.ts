@@ -1030,6 +1030,48 @@ export type Database = {
           },
         ]
       }
+      case_links: {
+        Row: {
+          case_id: string
+          created_at: string
+          created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          id: string
+          kind: string
+          note: string | null
+          related_case_id: string
+        }
+        Insert: {
+          case_id: string
+          created_at?: string
+          created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          kind?: string
+          note?: string | null
+          related_case_id: string
+        }
+        Update: {
+          case_id?: string
+          created_at?: string
+          created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          kind?: string
+          note?: string | null
+          related_case_id?: string
+        }
+        Relationships: []
+      }
       case_messages: {
         Row: {
           author_id: string | null
@@ -1089,6 +1131,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      case_notes: {
+        Row: {
+          author_id: string | null
+          body_md: string
+          case_id: string
+          created_at: string
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          id: string
+          pinned: boolean
+          restricted_to_command: boolean
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          author_id?: string | null
+          body_md: string
+          case_id: string
+          created_at?: string
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          pinned?: boolean
+          restricted_to_command?: boolean
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string | null
+          body_md?: string
+          case_id?: string
+          created_at?: string
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          pinned?: boolean
+          restricted_to_command?: boolean
+          source?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       case_signoff_history: {
         Row: {
@@ -14370,6 +14460,25 @@ export type Database = {
       }
       siu_reconcile_resolve: {
         Args: { p_id: string; p_note?: string; p_resolution: string }
+        Returns: Json
+      }
+      case_audit_feed: {
+        Args: { p_before?: string; p_case: string; p_limit?: number }
+        Returns: {
+          action: string
+          actor_id: string | null
+          at: string
+          changed_fields: string[] | null
+          detail: Json | null
+          entity: string
+          entity_id: string | null
+          id: number
+          kind: string
+          label: string | null
+        }[]
+      }
+      case_note_mention: {
+        Args: { p_note: string; p_user_ids: string[] }
         Returns: Json
       }
     }

@@ -40,6 +40,8 @@ import { signoffLabel } from '@/lib/signoff'
 import { Store } from '@/lib/store'
 import { humanizeError, toast } from '@/lib/toast'
 import { isToolTab, type ToolId } from '@/lib/toolsModel'
+import { readMirror } from '@/lib/workspace/storage'
+import { workspaceCaseHref } from '@/lib/workspace/model'
 import { markWatchSeen, type WatchType } from '@/lib/watchlist'
 import { listCaseHealth } from '@/lib/caseHealth'
 import { fetchWatchTargets, type WatchTarget } from './watchItems'
@@ -94,32 +96,26 @@ function jsonHasId(v: Json, id: string): boolean {
   return false
 }
 
-/* ── open Investigative Tools tabs (sessionStorage, ids only) ─────────────
- * Same key/shape ToolsView persists ({tabs:[{toolId,recordId?}],activeKey}).
- * Read directly — tools/ readStored is module-private and this must not
- * import from tools/ views. IDS ONLY: list tabs label via TAB_LABEL; record
- * tabs render as "<tool label> record" WITHOUT fetching titles (no reads,
- * nothing leaked — the workspace re-verifies titles through RLS on open). */
+/* ── open workspace tabs (sessionStorage mirror, ids only) ────────────────
+ * The unified workspace's per-user mirror (lib/workspace/storage readMirror;
+ * `{tabs:[{kind,id,toolId?,section?}],active}`). IDS ONLY: list tabs label
+ * via TAB_LABEL; record and case tabs render as "<tool label> record" /
+ * "Case" WITHOUT fetching titles (no reads, nothing leaked — the workspace
+ * re-verifies titles through RLS on open and closes what it cannot see). */
 
-interface OpenToolTab { toolId: ToolId; recordId?: string }
+interface OpenToolTab { toolId?: ToolId; recordId?: string; caseId?: string }
 
 function readToolTabs(uid: string | null): OpenToolTab[] {
   if (!uid || typeof window === 'undefined') return []
-  try {
-    const raw = window.sessionStorage.getItem(`cid-tools-workspace:${uid}`)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as { tabs?: Array<{ toolId?: unknown; recordId?: unknown }> }
-    if (!Array.isArray(parsed?.tabs)) return []
-    const out: OpenToolTab[] = []
-    for (const t of parsed.tabs) {
-      if (typeof t?.toolId === 'string' && isToolTab(t.toolId)) {
-        out.push(typeof t.recordId === 'string' && t.recordId
-          ? { toolId: t.toolId, recordId: t.recordId }
-          : { toolId: t.toolId })
-      }
-    }
-    return out
-  } catch { return [] }
+  const stored = readMirror(uid)
+  if (!stored) return []
+  const out: OpenToolTab[] = []
+  for (const t of stored.tabs) {
+    if (t.kind === 'case') out.push({ caseId: t.id })
+    else if (t.kind === 'record' && t.toolId && isToolTab(t.toolId)) out.push({ toolId: t.toolId, recordId: t.id })
+    else if (t.kind === 'tool' && isToolTab(t.id)) out.push({ toolId: t.id })
+  }
+  return out
 }
 
 interface ActivityRow { key: string; ts: string; title: string; why: string; href: string }
@@ -409,21 +405,25 @@ export function InboxView() {
         <JumpBack />
 
         <DashPanel
-          title="Open investigative tabs"
+          title="Open workspace tabs"
           count={openTabs.length}
-          hint="Tabs still open in your Investigative Tools workspace this session."
+          hint="Tabs still open in your workspace."
           empty={openTabs.length === 0}
         >
           {openTabs.map((t, i) => (
             <DashRow
-              key={`${t.toolId}:${t.recordId ?? i}`}
-              title={t.recordId ? `${TAB_LABEL[t.toolId] ?? t.toolId} record` : TAB_LABEL[t.toolId] ?? t.toolId}
-              why={t.recordId
-                ? 'An open record tab — its title reloads when you return'
-                : 'An open tool tab in your workspace'}
-              onClick={() => openHref(t.recordId
-                ? `/tools?tool=${t.toolId}&record=${encodeURIComponent(t.recordId)}`
-                : `/tools?tool=${t.toolId}`)}
+              key={`${t.caseId ?? t.toolId}:${t.recordId ?? i}`}
+              title={t.caseId ? 'Case' : t.recordId ? `${TAB_LABEL[t.toolId ?? ''] ?? t.toolId} record` : TAB_LABEL[t.toolId ?? ''] ?? t.toolId}
+              why={t.caseId
+                ? 'An open case tab — its number reloads when you return'
+                : t.recordId
+                  ? 'An open record tab — its title reloads when you return'
+                  : 'An open tool tab in your workspace'}
+              onClick={() => openHref(t.caseId
+                ? workspaceCaseHref(t.caseId)
+                : t.recordId
+                  ? `/workspace?tool=${t.toolId}&record=${encodeURIComponent(t.recordId)}`
+                  : `/workspace?tool=${t.toolId}`)}
             />
           ))}
         </DashPanel>

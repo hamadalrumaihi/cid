@@ -27,6 +27,8 @@ const config: StorybookConfig = {
     '../src/components/ui/**/*.stories.@(ts|tsx)',
     '../src/components/dash/**/*.stories.@(ts|tsx)',
     '../src/components/entity/**/*.stories.@(ts|tsx)',
+    // Workspace chrome (tab strip) — presentational, provider-free.
+    '../src/components/workspace/**/*.stories.@(ts|tsx)',
   ],
   addons: [
     // Advisory only — parameters.a11y.test is 'todo' in preview.tsx, so

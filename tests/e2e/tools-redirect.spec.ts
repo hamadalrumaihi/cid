@@ -1,13 +1,15 @@
-/** Investigative Tools workspace — the navigation contract, functional E2E
- *  against the LIVE project as the LSB detective fixture (any active member;
- *  the workspace itself is not role-gated — each tool inside stays RLS-scoped
- *  exactly as before).
+/** Investigative Tools inside the unified workspace — the navigation
+ *  contract, functional E2E against the LIVE project as the LSB detective
+ *  fixture (any active member; the workspace itself is not role-gated — each
+ *  tool inside stays RLS-scoped exactly as before).
  *
- *  Pins the consolidation's promises:
- *   - /tools with no params shows the tool DIRECTORY (all 14 tools, grouped);
+ *  Pins the consolidation's promises (now at /workspace — plan §5.5):
+ *   - /workspace (and the tools-era /tools) with no params shows the tool
+ *     DIRECTORY (all 14 tools, grouped);
  *   - every legacy Intelligence route redirects into the workspace
  *     (ToolTabRedirect) with its query params carried over, so old bookmarks,
- *     notifications and cross-links keep resolving;
+ *     notifications and cross-links keep resolving; `/tools?tool=…` lands
+ *     on the same tab and is rewritten to `/workspace?tool=…`;
  *   - opening a tool creates a tab in the strip and mirrors ?tool= into the
  *     URL; the Directory chip returns home WITHOUT closing the tab.
  *
@@ -37,11 +39,11 @@ async function signIn(page: Page) {
 test.describe(run ? 'investigative tools workspace' : 'investigative tools workspace (skipped — no fixture pw)', () => {
   test.skip(!run, 'RLS_TEST_PASSWORD_LSB not set — see tests/rls/README.md')
 
-  test('/tools shows the directory: all 14 tools present, grouped', async ({ page }) => {
+  test('/workspace shows the directory: all 14 tools present, grouped', async ({ page }) => {
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 1280, height: 900 })
     await signIn(page)
-    await page.goto('/tools')
+    await page.goto('/workspace')
 
     await expect(page.getByRole('heading', { name: 'Investigative Tools', level: 1 })).toBeVisible({ timeout: 30_000 })
     // The three directory groups (lib/toolsModel TOOL_GROUPS).
@@ -60,8 +62,18 @@ test.describe(run ? 'investigative tools workspace' : 'investigative tools works
     // A representative sample across the groups — the shim is one code path.
     for (const tool of ['ballistics', 'bolo', 'indicators']) {
       await page.goto(`/${tool}`)
-      await expect(page).toHaveURL(new RegExp(`/tools\\?.*tool=${tool}`), { timeout: 30_000 })
+      await expect(page).toHaveURL(new RegExp(`/workspace\\?.*tool=${tool}`), { timeout: 30_000 })
     }
+  })
+
+  test('the tools-era address /tools?tool=… still lands on the same tab', async ({ page }) => {
+    test.setTimeout(120_000)
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await signIn(page)
+    await page.goto('/tools?tool=persons')
+    await expect(page).toHaveURL(/\/workspace\?.*tool=persons/, { timeout: 30_000 })
+    const strip = page.getByRole('tablist', { name: 'Open tabs' })
+    await expect(strip.getByRole('tab', { name: /Persons/ })).toHaveAttribute('aria-selected', 'true', { timeout: 30_000 })
   })
 
   test('legacy routes carry their own query params over (deep links survive)', async ({ page }) => {
@@ -69,7 +81,7 @@ test.describe(run ? 'investigative tools workspace' : 'investigative tools works
     await signIn(page)
     // places has no standalone record tab: its params pass through untouched.
     await page.goto('/places?q=warehouse')
-    await expect(page).toHaveURL(/\/tools\?.*tool=places/, { timeout: 30_000 })
+    await expect(page).toHaveURL(/\/workspace\?.*tool=places/, { timeout: 30_000 })
     await expect(page).toHaveURL(/[?&]q=warehouse/)
   })
 
@@ -77,13 +89,13 @@ test.describe(run ? 'investigative tools workspace' : 'investigative tools works
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 1280, height: 900 })
     await signIn(page)
-    await page.goto('/tools')
+    await page.goto('/workspace')
     await expect(page.getByRole('heading', { name: 'Investigative Tools', level: 1 })).toBeVisible({ timeout: 30_000 })
 
     // Open Ballistics from its directory card.
     await page.getByRole('button', { name: /^Ballistics/ }).click()
     await expect(page).toHaveURL(/[?&]tool=ballistics/, { timeout: 15_000 })
-    const strip = page.getByRole('tablist', { name: 'Open tools' })
+    const strip = page.getByRole('tablist', { name: 'Open tabs' })
     await expect(strip.getByRole('tab', { name: /Ballistics/ })).toHaveAttribute('aria-selected', 'true')
 
     // Directory chip goes home; the tab stays open (keep-alive contract).

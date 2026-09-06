@@ -17,9 +17,19 @@ describe('case tab rail', () => {
     for (const t of CASE_TABS) expect(CASE_TAB_LABELS[t]).toBeTruthy()
     const labels = Object.values(CASE_TAB_LABELS)
     // The pre-redesign guide advertised these long after they were renamed.
-    expect(labels).not.toContain('Evidence')
     expect(labels).not.toContain('Files')
     expect(labels).not.toContain('Overview')
+    expect(labels).not.toContain('Intel & Notes')
+    expect(labels).not.toContain('Photos & Media')
+    // Phase 3: "Evidence" is the media section's label again (plan §5.5).
+    expect(CASE_TAB_LABELS.media).toBe('Evidence')
+    expect(new Set(labels).size).toBe(labels.length)
+  })
+
+  it('carries the Phase 3 sections (entity sections, Notes, Activity)', () => {
+    for (const t of ['people', 'vehicles', 'gangs', 'locations', 'notes', 'activity'] as const) {
+      expect(CASE_TABS).toContain(t)
+    }
   })
 
   it('the three-area IA is the one the guide documents', () => {

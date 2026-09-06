@@ -1,10 +1,11 @@
 'use client'
 
-/** Workspace-aware navigation for tool records and tool lists. Views call
- *  `useToolNav()` INSTEAD of touching the workspace context directly:
- *   - inside the Investigative Tools workspace it delegates to the workspace
- *     (openRecord/openHref open TABS — no route round-trip, no remount);
- *   - standalone it falls back to router.push of the `/tools?tool=…` form
+/** Workspace-aware navigation for tool records, tool lists and cases. Views
+ *  call `useToolNav()` / `useWorkspaceNav()` INSTEAD of touching the
+ *  workspace context directly:
+ *   - inside the unified workspace they delegate to it (openRecord /
+ *     openHref / openCase open TABS — no route round-trip, no remount);
+ *   - standalone they fall back to router.push of the `/workspace?…` form
  *     (the ToolTabRedirect translation done inline, saving the shim hop), so
  *     a view hosted anywhere still lands its links in the workspace.
  *  Non-tool hrefs passed to openHref simply router.push — callers can route
@@ -13,6 +14,8 @@ import { useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { pushRecent, type RecentType } from '@/lib/recents'
 import { RECORD_PARAM, hasRecordTabs, isToolTab, type ToolId } from '@/lib/toolsModel'
+import { workspaceCaseHref } from '@/lib/workspace/model'
+import { useWorkspace, type OpenCaseOptions } from '@/components/workspace/WorkspaceContext'
 import { useToolsWorkspace } from './ToolsWorkspaceContext'
 
 /** Tool id → recents vocabulary, for the tools whose openRecord lands on a
@@ -53,7 +56,7 @@ export function useToolNav(): ToolNav {
       const param = RECORD_PARAM[toolId]
       if (param) next.set(param, recordId)
     }
-    router.push(`/tools?${next.toString()}`)
+    router.push(`/workspace?${next.toString()}`)
   }, [ws, router])
 
   const openHref = useCallback((href: string) => {
@@ -72,7 +75,7 @@ export function useToolNav(): ToolNav {
           if (id) { next.set('record', id); url.searchParams.delete(param) }
         }
         for (const [k, v] of url.searchParams) if (k !== 'tool' && k !== 'record') next.append(k, v)
-        router.push(`/tools?${next.toString()}`)
+        router.push(`/workspace?${next.toString()}`)
         return
       }
     } catch { /* not a parseable href — let the router handle it */ }
@@ -83,4 +86,40 @@ export function useToolNav(): ToolNav {
     () => ({ openRecord, openHref, inWorkspace: ws !== null }),
     [openRecord, openHref, ws],
   )
+}
+
+/* ── Cases ────────────────────────────────────────────────────────────────── */
+
+export type CaseHrefOptions = { report?: string | null; task?: string | null; evidence?: string | null }
+
+export interface WorkspaceNav {
+  /** Open/focus a case tab (standalone: navigate to `/workspace?case=…`).
+   *  Recents are stamped by the case shell on its first successful load, so
+   *  an unreadable id leaves no trail. */
+  openCase: (caseId: string, section?: string | null, opts?: OpenCaseOptions & CaseHrefOptions) => void
+  /** The workspace address of a case (`/workspace?case=…&tab=…`). For links
+   *  that must stay stable across releases keep using lib/caseLinks
+   *  caseLink() — `/cases?case=` redirects here. */
+  caseHref: (caseId: string, section?: string | null, opts?: CaseHrefOptions) => string
+  inWorkspace: boolean
+}
+
+export function useWorkspaceNav(): WorkspaceNav {
+  const ws = useWorkspace()
+  const router = useRouter()
+
+  const caseHref = useCallback(
+    (caseId: string, section?: string | null, opts: CaseHrefOptions = {}) => workspaceCaseHref(caseId, section, opts),
+    [],
+  )
+
+  const openCase = useCallback((caseId: string, section?: string | null, opts: OpenCaseOptions & CaseHrefOptions = {}) => {
+    const { report, task, evidence, ...open } = opts
+    // Record params are mount-time seeds for the sections — land through the
+    // URL so the provider's intake opens the tab with them in place.
+    if (ws && !report && !task && !evidence) { ws.openCase(caseId, section, open); return }
+    router.push(caseHref(caseId, section, { report, task, evidence }))
+  }, [ws, router, caseHref])
+
+  return useMemo(() => ({ openCase, caseHref, inWorkspace: ws !== null }), [openCase, caseHref, ws])
 }

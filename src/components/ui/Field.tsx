@@ -39,7 +39,9 @@ export function Select({ className = '', invalid, children, ...rest }: React.Sel
   )
 }
 
-export function Textarea({ className = '', invalid, ...rest }: React.TextareaHTMLAttributes<HTMLTextAreaElement> & InvalidProp) {
+/** `ref` is accepted (React 19 passes it as a plain prop) — the note editor
+ *  places the caret after an inserted @mention. */
+export function Textarea({ className = '', invalid, ...rest }: React.ComponentPropsWithRef<'textarea'> & InvalidProp) {
   return <textarea aria-invalid={invalid || undefined} className={`${inputCls} ${invalid ? invalidCls : ''} ${className}`} {...rest} />
 }
 

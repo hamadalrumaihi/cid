@@ -24,6 +24,15 @@ import {
   getDenial, getLatency, getRows, isOffline, mockId, setRows,
   type MockRow, type MockTableName,
 } from '../store'
+import { visibleCaseNotes } from './caseWorkspace'
+
+/** Per-table read predicates the wall applies BEYOND the scenario switches
+ *  (rlsRestricted / permissionDenied): case_notes hides a note restricted to
+ *  command from a session that is neither command nor its author
+ *  (20261021120000 case_notes_sel). Other tables read unfiltered. */
+function readable(table: MockTableName, rows: MockRow[]): MockRow[] {
+  return table === 'case_notes' ? visibleCaseNotes(rows) : rows
+}
 
 /* ---- shared helpers (used by rpc/auth/fivemanage handlers too) ----------- */
 
@@ -174,7 +183,7 @@ async function handleTable(request: Request, table: MockTableName): Promise<Resp
   if (method === 'GET' || method === 'HEAD') {
     if (denial === 'grant') return grantDenied(table)
     // RLS filtering on reads is silent: the wall hides rows, it never errors.
-    const visible = denial === 'rls' ? [] : applyFilters(getRows(table), q)
+    const visible = denial === 'rls' ? [] : applyFilters(readable(table, getRows(table)), q)
     const ordered = applyOrder(visible, q)
     const limited = q.limit !== null ? ordered.slice(0, q.limit) : ordered
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }

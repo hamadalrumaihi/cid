@@ -6,12 +6,12 @@ describe('normalizeCaseTab — legacy tab mapping', () => {
     expect(normalizeCaseTab('evidence')).toBe('media')
   })
 
-  it('maps the retired notes tab to intel (Notes folded into Intel & Notes)', () => {
-    expect(normalizeCaseTab('notes')).toBe('intel')
+  it('keeps ?tab=notes on the Notes section (it exists again since Phase 3)', () => {
+    expect(normalizeCaseTab('notes')).toBe('notes')
   })
 
   it('passes current tab ids through unchanged', () => {
-    for (const t of ['overview', 'media', 'intel', 'reports', 'tasks', 'legal', 'signoff', 'timeline']) {
+    for (const t of ['overview', 'people', 'vehicles', 'gangs', 'locations', 'media', 'intel', 'notes', 'activity', 'reports', 'tasks', 'legal', 'signoff', 'timeline']) {
       expect(normalizeCaseTab(t)).toBe(t)
     }
   })

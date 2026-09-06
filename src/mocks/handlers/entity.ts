@@ -50,21 +50,23 @@ const blank = (v: unknown): string | null => str(v).trim() || null
 
 const COMMAND = new Set(['bureau_lead', 'deputy_director', 'director'])
 const SENIOR = new Set(['senior_detective', ...COMMAND])
-function profile(): Tables<'profiles'> | null {
+/** The signed-in session's profile row (shared with caseWorkspace.ts, which
+ *  applies the same command / owner reading to case notes). */
+export function profile(): Tables<'profiles'> | null {
   const s = getSession()
   if (!s) return null
   return (getRows('profiles') as unknown as Tables<'profiles'>[]).find((p) => p.id === s.userId) ?? null
 }
-const isActive = (p = profile()) => !!p && p.active && p.removed_at == null
-const isOwner = (p = profile()) => isActive(p) && !!p!.is_owner
-const isCommand = (p = profile()) => isActive(p) && (!!p!.is_owner || COMMAND.has(p!.role ?? ''))
+export const isActive = (p = profile()) => !!p && p.active && p.removed_at == null
+export const isOwner = (p = profile()) => isActive(p) && !!p!.is_owner
+export const isCommand = (p = profile()) => isActive(p) && (!!p!.is_owner || COMMAND.has(p!.role ?? ''))
 const isSenior = (p = profile()) => isActive(p) && (!!p!.is_owner || SENIOR.has(p!.role ?? ''))
-const uid = () => getSession()?.userId ?? null
+export const uid = () => getSession()?.userId ?? null
 
 /* ── Rows ───────────────────────────────────────────────────────────────── */
 
 /** Live (not trashed, not policy-denied) rows of a table. */
-const live = (table: MockTableName): MockRow[] =>
+export const live = (table: MockTableName): MockRow[] =>
   getDenial(table) ? [] : getRows(table).filter((r) => r.deleted_at == null)
 
 function isMergedRow(kind: MergeKind, row: MockRow): boolean {
@@ -74,7 +76,7 @@ function isMergedRow(kind: MergeKind, row: MockRow): boolean {
   return false
 }
 const registry = (kind: MergeKind): MockRow[] => live(MERGE_TABLE[kind]).filter((r) => !isMergedRow(kind, r))
-const findRow = (table: MockTableName, id: unknown): MockRow | undefined =>
+export const findRow = (table: MockTableName, id: unknown): MockRow | undefined =>
   getDenial(table) ? undefined : getRows(table).find((r) => r.id === str(id))
 const caseNumber = (caseId: unknown): string | null => str(findRow('cases', caseId)?.case_number) || null
 

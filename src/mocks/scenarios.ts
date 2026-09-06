@@ -57,7 +57,7 @@ export function rpcResult<F extends keyof Database['public']['Functions']>(
 export {
   roleSession, profileRow,
   emptyCase, populatedCase, archivedCase, legalHoldCase, restrictedMediaCase,
-  caseRow, caseTaskRow, legalHoldRow, legalRequestRow, mediaRow,
+  caseLinkRow, caseNoteRow, caseRow, caseTaskRow, legalHoldRow, legalRequestRow, mediaRow,
   notificationRow, personRow, prosecutorCoverageRow, reportRow,
   type MockRole, type RoleSessionResult, type CaseBundle,
 } from './fixtures'

@@ -410,6 +410,27 @@ alter table public.case_intel_links add constraint case_intel_links_pkey PRIMARY
 alter table public.case_intel_links add constraint case_intel_links_case_id_kind_ref_id_key UNIQUE (case_id, kind, ref_id);
 alter table public.case_intel_links enable row level security;
 
+create table public.case_links (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  related_case_id uuid not null,
+  kind text not null default 'related'::text,
+  note text,
+  created_by uuid,
+  created_at timestamp with time zone not null default now(),
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
+);
+alter table public.case_links add constraint case_links_check CHECK ((case_id <> related_case_id));
+alter table public.case_links add constraint case_links_kind_check CHECK ((kind = ANY (ARRAY['related'::text, 'duplicate'::text, 'parent'::text, 'child'::text, 'spawned_from'::text, 'see_also'::text])));
+alter table public.case_links add constraint case_links_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
+alter table public.case_links add constraint case_links_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.case_links add constraint case_links_related_case_id_fkey FOREIGN KEY (related_case_id) REFERENCES cases(id) ON DELETE CASCADE;
+alter table public.case_links add constraint case_links_pkey PRIMARY KEY (id);
+alter table public.case_links enable row level security;
+
 create table public.case_messages (
   id uuid not null default gen_random_uuid(),
   case_id uuid not null,
@@ -429,6 +450,27 @@ alter table public.case_messages add constraint case_messages_case_id_fkey FOREI
 alter table public.case_messages add constraint case_messages_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.case_messages add constraint case_messages_pkey PRIMARY KEY (id);
 alter table public.case_messages enable row level security;
+
+create table public.case_notes (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  author_id uuid,
+  body_md text not null,
+  pinned boolean not null default false,
+  restricted_to_command boolean not null default false,
+  source text not null default 'manual'::text,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
+);
+alter table public.case_notes add constraint case_notes_source_check CHECK ((source = ANY (ARRAY['manual'::text, 'legacy'::text])));
+alter table public.case_notes add constraint case_notes_author_id_fkey FOREIGN KEY (author_id) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.case_notes add constraint case_notes_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
+alter table public.case_notes add constraint case_notes_pkey PRIMARY KEY (id);
+alter table public.case_notes enable row level security;
 
 create table public.case_signoff_history (
   id uuid not null default gen_random_uuid(),
@@ -3344,7 +3386,7 @@ create table public.record_versions (
   updated_at timestamp with time zone not null default now()
 );
 alter table public.record_versions add constraint record_versions_source_check CHECK ((source = ANY (ARRAY['edit'::text, 'restore'::text, 'merge'::text, 'unmerge'::text, 'suggestion'::text, 'promotion'::text])));
-alter table public.record_versions add constraint record_versions_table_check CHECK ((table_name = ANY (ARRAY['cases'::text, 'persons'::text, 'vehicles'::text, 'gangs'::text, 'places'::text, 'accounts'::text, 'narcotics'::text, 'evidence'::text, 'reports'::text, 'legal_requests'::text, 'field_submissions'::text])));
+alter table public.record_versions add constraint record_versions_table_check CHECK ((table_name = ANY (ARRAY['cases'::text, 'persons'::text, 'vehicles'::text, 'gangs'::text, 'places'::text, 'accounts'::text, 'narcotics'::text, 'evidence'::text, 'reports'::text, 'legal_requests'::text, 'field_submissions'::text, 'case_notes'::text])));
 alter table public.record_versions add constraint record_versions_pkey PRIMARY KEY (id);
 alter table public.record_versions add constraint record_versions_version_key UNIQUE (table_name, record_id, version_no);
 alter table public.record_versions enable row level security;
@@ -4627,10 +4669,13 @@ CREATE INDEX case_intel_links_created_by_fkey_idx ON public.case_intel_links USI
 CREATE INDEX case_intel_links_delete_batch_idx ON public.case_intel_links USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
 CREATE INDEX case_intel_links_deleted_at_idx ON public.case_intel_links USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX case_intel_links_ref_idx ON public.case_intel_links USING btree (kind, ref_id);
+CREATE UNIQUE INDEX case_links_pair_live_key ON public.case_links USING btree (case_id, related_case_id) WHERE (deleted_at IS NULL);
+CREATE INDEX case_links_related_idx ON public.case_links USING btree (related_case_id) WHERE (deleted_at IS NULL);
 CREATE INDEX case_messages_author_id_fkey_idx ON public.case_messages USING btree (author_id);
 CREATE INDEX case_messages_delete_batch_idx ON public.case_messages USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
 CREATE INDEX case_messages_deleted_at_idx ON public.case_messages USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX idx_cm_case ON public.case_messages USING btree (case_id, created_at);
+CREATE INDEX case_notes_case_idx ON public.case_notes USING btree (case_id, pinned DESC, created_at DESC) WHERE (deleted_at IS NULL);
 CREATE INDEX case_signoff_history_actor_id_fkey_idx ON public.case_signoff_history USING btree (actor_id);
 CREATE INDEX case_signoff_history_case_id_fkey_idx ON public.case_signoff_history USING btree (case_id);
 CREATE INDEX case_tasks_assignee_idx ON public.case_tasks USING btree (assignee);
@@ -6217,6 +6262,65 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.case_audit_feed(p_case uuid, p_limit integer DEFAULT 50, p_before timestamp with time zone DEFAULT NULL::timestamp with time zone)
+ RETURNS TABLE(id bigint, at timestamp with time zone, actor_id uuid, action text, entity text, entity_id uuid, kind text, label text, changed_fields text[], detail jsonb)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  lim integer := least(greatest(coalesce(p_limit, 50), 1), 200);
+  v_hidden text[] := array['body_md', 'notes', 'note', 'narrative', 'summary', 'fields', 'form_data', 'description', 'instructions'];
+begin
+  if p_case is null or not private.can_read_case(p_case) then return; end if;
+  return query
+  with kids as (
+    select 'reports'::text as tbl, 'report'::text as kind, r.id, r.template as label from public.reports r where r.case_id = p_case
+    union all select 'evidence', 'evidence', e.id, e.item_code from public.evidence e where e.case_id = p_case
+    union all select 'media', 'media', m.id, m.title from public.media m where m.case_id = p_case
+    union all select 'case_tasks', 'case_task', t.id, t.title from public.case_tasks t where t.case_id = p_case
+    union all select 'case_intel_links', 'case_intel_link', l.id, l.kind || ' link' from public.case_intel_links l where l.case_id = p_case
+    union all select 'case_blockers', 'case_blocker', b.id, b.title from public.case_blockers b where b.case_id = p_case
+    union all select 'case_assignments', 'case_assignment', a.id, null from public.case_assignments a where a.case_id = p_case
+    union all select 'case_access_grants', 'case_access_grant', g.id, null from public.case_access_grants g where g.case_id = p_case
+    union all select 'rico_cases', 'rico_case', rc.id, null from public.rico_cases rc where rc.case_id = p_case
+    union all select 'raid_compensations', 'raid_compensation', rp.id, null from public.raid_compensations rp where rp.case_id = p_case
+    union all select 'trackers', 'tracker', tr.id, null from public.trackers tr where tr.case_id = p_case
+    union all select 'case_notes', 'case_note', n.id, case when n.pinned then 'pinned note' else 'note' end from public.case_notes n where n.case_id = p_case
+    union all select 'case_links', 'case_link', cl.id, cl.kind from public.case_links cl where cl.case_id = p_case
+  ),
+  cand as (
+    select a.id, a.created_at, a.actor_id, a.action, a.entity, a.entity_id, 'case'::text as kind,
+           (select c.case_number from public.cases c where c.id = p_case) as label, a.detail
+      from public.audit_log a
+     where a.entity = 'cases' and a.entity_id = p_case
+    union all
+    select a.id, a.created_at, a.actor_id, a.action, a.entity, a.entity_id, k.kind, k.label, a.detail
+      from public.audit_log a join kids k on k.tbl = a.entity and k.id = a.entity_id
+    union all
+    select a.id, a.created_at, a.actor_id, a.action, a.entity, a.entity_id, 'case'::text,
+           (select c.case_number from public.cases c where c.id = p_case), a.detail
+      from public.audit_log a
+     where a.entity not in ('cases', 'legal_requests', 'audit_log') and a.entity_id <> p_case
+       and a.detail ->> 'case_id' = p_case::text
+  )
+  select x.id::bigint, x.created_at, x.actor_id, x.action, x.entity, x.entity_id, x.kind, x.label,
+         case when x.action = 'UPDATE' then (select v.changed_fields from public.record_versions v
+           where v.table_name = x.entity and v.record_id = x.entity_id
+             and v.created_at between x.created_at - interval '2 seconds' and x.created_at + interval '2 seconds'
+           order by v.version_no desc limit 1) end as changed_fields,
+         case when x.detail is null then null else x.detail - v_hidden end as detail
+    from cand x
+   where (p_before is null or x.created_at < p_before)
+     and (x.kind = 'case'
+          or (x.kind in ('case_assignment', 'case_access_grant', 'raid_compensation') and private.can_read_case(p_case))
+          or (x.kind not in ('case', 'case_assignment', 'case_access_grant', 'raid_compensation')
+              and private.perm_registry_visible(x.kind, x.entity_id)))
+   order by x.created_at desc, x.id desc
+   limit lim;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.case_charge_totals(p_case uuid)
  RETURNS jsonb
  LANGUAGE sql
@@ -6405,6 +6509,36 @@ begin
   v_hold := private.case_has_active_hold(p_case);
   return jsonb_build_object('items', out, 'legal_requests', v_legal, 'active_hold', v_hold,
                             'deletable', v_legal = 0 and not v_hold);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.case_note_mention(p_note uuid, p_user_ids uuid[])
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  n public.case_notes;
+  v_sent int := 0;
+begin
+  select * into n from public.case_notes where id = p_note;
+  if n.id is null or v_uid is null or n.author_id is distinct from v_uid or not private.perm_registry_visible('case_note', p_note) then
+    return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'only the note''s author records its mentions');
+  end if;
+  if coalesce((select p.is_test from public.profiles p where p.id = v_uid), false) then
+    return jsonb_build_object('ok', true, 'sent', 0);
+  end if;
+  insert into public.notifications (user_id, type, payload)
+  select p.id, 'note_mention', jsonb_build_object('case_id', n.case_id, 'note_id', n.id, 'author_id', v_uid)
+    from public.profiles p
+   where p.id = any (coalesce(p_user_ids, '{}'::uuid[])) and p.id <> v_uid and p.active and p.removed_at is null
+     and not exists (select 1 from public.notifications x
+                      where x.user_id = p.id and x.type = 'note_mention'
+                        and x.payload ->> 'note_id' = n.id::text and x.created_at > now() - interval '1 hour');
+  get diagnostics v_sent = row_count;
+  return jsonb_build_object('ok', true, 'sent', v_sent);
 end $function$
 ;
 
@@ -7344,6 +7478,9 @@ begin
   select * into c from public.cases where id = p_case;
   if not found or not private.can_access_case(p_case) then
     raise exception 'case not found or not accessible';
+  end if;
+  if c.archived_at is not null then
+    raise exception 'this case is archived — restore it before creating a legal request';
   end if;
   if p_request_type not in ('warrant', 'subpoena') then raise exception 'invalid request type'; end if;
   if p_request_type = 'warrant' and p_subtype not in ('arrest_warrant', 'search_warrant') then
@@ -14077,6 +14214,8 @@ begin
   if r.finalized then raise exception 'report already finalized'; end if;
   if not (private.is_active() and private.can_access_case(r.case_id)) then
     raise exception 'not permitted to finalize this report'; end if;
+  if not private.case_writable(r.case_id) then
+    raise exception 'this case is archived — restore it before finalizing a report'; end if;
   select display_name into v_name from public.profiles where id = v_uid;
   update public.reports
     set finalized = true,
@@ -16542,6 +16681,7 @@ declare c public.cases; v_uid uuid := (select auth.uid()); v_role public.app_rol
 begin
   select * into c from public.cases where id = p_case for update;
   if not found then raise exception 'case not found'; end if;
+  if c.archived_at is not null then raise exception 'this case is archived — restore it before deciding its sign-off'; end if;
   if c.signoff_stage is null then
     raise exception 'this case is not awaiting a decision (it may have just been decided) — reload and retry' using errcode = 'P0001';
   end if;
@@ -16657,6 +16797,7 @@ begin
   select * into c from public.cases where id = p_case for update;
   if not found then raise exception 'case not found'; end if;
   if not private.is_active() then raise exception 'inactive user'; end if;
+  if c.archived_at is not null then raise exception 'this case is archived — restore it before submitting for sign-off'; end if;
   if not (v_uid is not distinct from c.lead_detective_id
           or (c.lead_detective_id is null and v_uid is not distinct from c.created_by))
      then raise exception 'only the case owner (lead detective) can submit this case for sign-off'; end if;
@@ -21181,6 +21322,19 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.block_case_notes_column()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if current_user in ('authenticated', 'anon') and new.notes is distinct from old.notes then
+    raise exception 'cases.notes is read-only — notes live in case_notes' using errcode = 'P0403';
+  end if;
+  return new;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.block_direct_case_archive()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -22397,6 +22551,33 @@ AS $function$
       or h.legal_request_id in (select id from public.legal_requests where case_id = p_case)
     ))
 $function$
+;
+
+CREATE OR REPLACE FUNCTION private.case_note_command(p_case uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.is_command() or private.is_owner()
+      or (private.is_siu_case(p_case) and private.siu_case_command(p_case))
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.case_notes_freeze()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if current_user in ('authenticated', 'anon') then
+    if new.author_id is distinct from old.author_id or new.case_id is distinct from old.case_id
+       or new.source is distinct from old.source then
+      raise exception 'a note''s author, case and source are fixed' using errcode = 'P0403';
+    end if;
+  end if;
+  return new;
+end $function$
 ;
 
 CREATE OR REPLACE FUNCTION private.case_number_base(p_bureau text)
@@ -25117,7 +25298,7 @@ AS $function$
                                and exists (select 1 from public.cases c where c.id = p_id
                                             and (c.archived_at is not null or c.deleted_at is not null))
       else false end
-    when p_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'gang_member', 'gang_turf', 'person_place', 'person_vehicle', 'person_relationship', 'account_link', 'case', 'report', 'media', 'evidence', 'case_task', 'case_message', 'case_intel_link', 'case_blocker', 'rico_case', 'predicate_act') then (
+    when p_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'gang_member', 'gang_turf', 'person_place', 'person_vehicle', 'person_relationship', 'account_link', 'case', 'report', 'media', 'evidence', 'case_task', 'case_message', 'case_intel_link', 'case_blocker', 'rico_case', 'predicate_act', 'case_note', 'case_link') then (
       select case p_action
         when 'read' then st.p_exists and (st.p_deleted_at is null or private.is_owner())
                          and private.perm_registry_visible(p_kind, p_id)
@@ -25248,15 +25429,17 @@ AS $function$
     when 'person_relationship' then exists (select 1 from public.person_relationships l where l.id = p_id and (private.can_delete() or l.created_by = (select auth.uid())) and not private.siu_blocked('person', l.person_a, 'relationships') and not private.siu_blocked('person', l.person_b, 'relationships'))
     when 'account_link' then exists (select 1 from public.account_links l where l.id = p_id and private.is_active() and not private.siu_blocked('account', l.account_id, 'accounts') and not private.siu_blocked('person', l.person_id, 'accounts'))
     when 'case' then exists (select 1 from public.cases c where c.id = p_id and private.can_delete() and private.can_access_case_row(c.bureau, c.lead_detective_id, c.created_by, c.id))
-    when 'report' then (select private.can_delete_case_child(r.case_id) and not private.case_has_active_hold(r.case_id) from public.reports r where r.id = p_id)
-    when 'media' then exists (select 1 from public.media m where m.id = p_id and private.can_delete_case_child(m.case_id) and (m.case_id is null or not private.case_has_active_hold(m.case_id)) and not private.siu_blocked('gang', m.gang_id, 'media') and not private.siu_blocked('person', m.person_id, 'media') and not private.siu_blocked('place', m.place_id, 'media') and not private.siu_blocked('vehicle', m.vehicle_id, 'media'))
-    when 'evidence' then (select private.can_delete_case_child(e.case_id) from public.evidence e where e.id = p_id)
-    when 'case_task' then (select (private.can_delete_case_child(t.case_id) or t.created_by = (select auth.uid())) and not private.case_has_active_hold(t.case_id) from public.case_tasks t where t.id = p_id)
+    when 'report' then (select (private.can_delete_case_child(r.case_id) and private.case_writable(r.case_id)) and not private.case_has_active_hold(r.case_id) from public.reports r where r.id = p_id)
+    when 'media' then exists (select 1 from public.media m where m.id = p_id and (private.can_delete_case_child(m.case_id) and private.case_writable(m.case_id)) and (m.case_id is null or not private.case_has_active_hold(m.case_id)) and not private.siu_blocked('gang', m.gang_id, 'media') and not private.siu_blocked('person', m.person_id, 'media') and not private.siu_blocked('place', m.place_id, 'media') and not private.siu_blocked('vehicle', m.vehicle_id, 'media'))
+    when 'evidence' then (select (private.can_delete_case_child(e.case_id) and private.case_writable(e.case_id)) from public.evidence e where e.id = p_id)
+    when 'case_task' then (select ((private.can_delete_case_child(t.case_id) and private.case_writable(t.case_id)) or t.created_by = (select auth.uid())) and not private.case_has_active_hold(t.case_id) from public.case_tasks t where t.id = p_id)
     when 'case_message' then (select (m.author_id = (select auth.uid()) or private.is_command()) and private.can_access_case(m.case_id) from public.case_messages m where m.id = p_id)
     when 'case_intel_link' then (select private.can_access_case(l.case_id) from public.case_intel_links l where l.id = p_id)
-    when 'case_blocker' then (select private.can_delete_case_child(b.case_id) or b.created_by = (select auth.uid()) from public.case_blockers b where b.id = p_id)
-    when 'rico_case' then (select private.can_delete_case_child(r.case_id) from public.rico_cases r where r.id = p_id)
-    when 'predicate_act' then exists (select 1 from public.predicate_acts p join public.rico_cases r on r.id = p.rico_case_id where p.id = p_id and private.can_delete_case_child(r.case_id))
+    when 'case_note' then exists (select 1 from public.case_notes n where n.id = p_id and private.case_writable(n.case_id) and (n.author_id = (select auth.uid()) or private.is_command()))
+    when 'case_link' then exists (select 1 from public.case_links l where l.id = p_id and private.case_writable(l.case_id))
+    when 'case_blocker' then (select (private.can_delete_case_child(b.case_id) and private.case_writable(b.case_id)) or b.created_by = (select auth.uid()) from public.case_blockers b where b.id = p_id)
+    when 'rico_case' then (select (private.can_delete_case_child(r.case_id) and private.case_writable(r.case_id)) from public.rico_cases r where r.id = p_id)
+    when 'predicate_act' then exists (select 1 from public.predicate_acts p join public.rico_cases r on r.id = p.rico_case_id where p.id = p_id and (private.can_delete_case_child(r.case_id) and private.case_writable(r.case_id)))
     else false end, false)
 $function$
 ;
@@ -25284,15 +25467,17 @@ AS $function$
     when 'person_relationship' then exists (select 1 from public.person_relationships l where l.id = p_id and private.is_active() and not private.siu_blocked('person', l.person_a, 'relationships') and not private.siu_blocked('person', l.person_b, 'relationships'))
     when 'account_link' then exists (select 1 from public.account_links l where l.id = p_id and private.is_active() and not private.siu_blocked('account', l.account_id, 'accounts') and not private.siu_blocked('person', l.person_id, 'accounts'))
     when 'case' then exists (select 1 from public.cases c where c.id = p_id and private.can_access_case_row(c.bureau, c.lead_detective_id, c.created_by, c.id))
-    when 'report' then (select private.can_access_case(r.case_id) from public.reports r where r.id = p_id)
-    when 'media' then exists (select 1 from public.media m where m.id = p_id and private.is_active() and (m.case_id is null or private.can_access_case(m.case_id)) and (not m.restricted or private.can_edit_narcotics_intel()) and not private.siu_blocked('gang', m.gang_id, 'media') and not private.siu_blocked('person', m.person_id, 'media') and not private.siu_blocked('place', m.place_id, 'media') and not private.siu_blocked('vehicle', m.vehicle_id, 'media'))
-    when 'evidence' then (select private.can_access_case(e.case_id) from public.evidence e where e.id = p_id)
-    when 'case_task' then (select private.can_access_case(t.case_id) from public.case_tasks t where t.id = p_id)
-    when 'case_message' then (select (m.author_id = (select auth.uid()) or private.is_command()) and private.can_access_case(m.case_id) from public.case_messages m where m.id = p_id)
-    when 'case_intel_link' then (select private.can_access_case(l.case_id) from public.case_intel_links l where l.id = p_id)
-    when 'case_blocker' then (select private.can_access_case(b.case_id) from public.case_blockers b where b.id = p_id)
-    when 'rico_case' then (select private.can_access_case(r.case_id) from public.rico_cases r where r.id = p_id)
-    when 'predicate_act' then exists (select 1 from public.predicate_acts p join public.rico_cases r on r.id = p.rico_case_id where p.id = p_id and private.can_access_case(r.case_id))
+    when 'report' then (select private.case_writable(r.case_id) from public.reports r where r.id = p_id)
+    when 'media' then exists (select 1 from public.media m where m.id = p_id and private.is_active() and (m.case_id is null or private.case_writable(m.case_id)) and (not m.restricted or private.can_edit_narcotics_intel()) and not private.siu_blocked('gang', m.gang_id, 'media') and not private.siu_blocked('person', m.person_id, 'media') and not private.siu_blocked('place', m.place_id, 'media') and not private.siu_blocked('vehicle', m.vehicle_id, 'media'))
+    when 'evidence' then (select private.case_writable(e.case_id) from public.evidence e where e.id = p_id)
+    when 'case_task' then (select private.case_writable(t.case_id) from public.case_tasks t where t.id = p_id)
+    when 'case_message' then (select (m.author_id = (select auth.uid()) or private.is_command()) and private.case_writable(m.case_id) from public.case_messages m where m.id = p_id)
+    when 'case_intel_link' then (select private.case_writable(l.case_id) from public.case_intel_links l where l.id = p_id)
+    when 'case_note' then exists (select 1 from public.case_notes n where n.id = p_id and private.case_writable(n.case_id) and (n.author_id = (select auth.uid()) or private.is_command()))
+    when 'case_link' then exists (select 1 from public.case_links l where l.id = p_id and private.case_writable(l.case_id))
+    when 'case_blocker' then (select private.case_writable(b.case_id) from public.case_blockers b where b.id = p_id)
+    when 'rico_case' then (select private.case_writable(r.case_id) from public.rico_cases r where r.id = p_id)
+    when 'predicate_act' then exists (select 1 from public.predicate_acts p join public.rico_cases r on r.id = p.rico_case_id where p.id = p_id and private.case_writable(r.case_id))
     else false end, false)
 $function$
 ;
@@ -25326,6 +25511,8 @@ AS $function$
     when 'case_task' then (select private.can_read_case(t.case_id) from public.case_tasks t where t.id = p_id)
     when 'case_message' then (select private.can_access_case(m.case_id) from public.case_messages m where m.id = p_id)
     when 'case_intel_link' then (select private.can_read_case(l.case_id) from public.case_intel_links l where l.id = p_id)
+    when 'case_note' then exists (select 1 from public.case_notes n where n.id = p_id and private.can_read_case(n.case_id) and (not n.restricted_to_command or private.is_command() or n.author_id = (select auth.uid()) or private.is_owner() or (private.is_siu_case(n.case_id) and private.siu_case_command(n.case_id))))
+    when 'case_link' then exists (select 1 from public.case_links l where l.id = p_id and private.can_read_case(l.case_id) and private.can_read_case(l.related_case_id))
     when 'case_blocker' then (select private.can_read_case(b.case_id) from public.case_blockers b where b.id = p_id)
     when 'rico_case' then (select private.can_read_case(r.case_id) from public.rico_cases r where r.id = p_id)
     when 'predicate_act' then exists (select 1 from public.predicate_acts p join public.rico_cases r on r.id = p.rico_case_id where p.id = p_id and private.can_read_case(r.case_id))
@@ -26634,6 +26821,8 @@ begin
     when 'case_intel_links' then 'case_id'
     when 'case_blockers' then 'case_id'
     when 'rico_cases' then 'case_id'
+    when 'case_notes' then 'case_id'
+    when 'case_links' then 'case_id'
     when 'predicate_acts' then '(select r.case_id from public.rico_cases r where r.id = rico_case_id)'
     else 'null::uuid' end;
   execute format('select true, deleted_at, delete_batch, %s from public.%I where id = $1', v_case_expr, t)
@@ -26674,6 +26863,8 @@ AS $function$
     when 'case_blocker' then 'case_blockers'
     when 'rico_case' then 'rico_cases'
     when 'predicate_act' then 'predicate_acts'
+    when 'case_note' then 'case_notes'
+    when 'case_link' then 'case_links'
   end
 $function$
 ;
@@ -27032,6 +27223,7 @@ AS $function$
            when 'narcotics' then array['status']
            when 'field_submissions' then array['officer_id', 'status', 'submitted_at', 'assigned_to',
                                                'assigned_at', 'submission_no', 'archive_reason']
+           when 'case_notes' then array['case_id', 'author_id', 'source']
            else '{}'::text[] end
 $function$
 ;
@@ -27145,6 +27337,7 @@ AS $function$
     when 'report' then 'reports'
     when 'legal' then 'legal_requests'
     when 'field_submission' then 'field_submissions'
+    when 'case_note' then 'case_notes'
     else null end
 $function$
 ;
@@ -27158,7 +27351,7 @@ AS $function$
 declare v boolean;
 begin
   if p_table not in ('cases', 'persons', 'vehicles', 'gangs', 'places', 'accounts', 'narcotics',
-                     'evidence', 'reports', 'legal_requests', 'field_submissions') then
+                     'evidence', 'reports', 'legal_requests', 'field_submissions', 'case_notes') then
     return false;
   end if;
   execute format('select exists (select 1 from public.%I t where t.id = $1)', p_table) into v using p_id;
@@ -27196,8 +27389,15 @@ CREATE TRIGGER case_charges_before_update BEFORE UPDATE ON public.case_charges F
 CREATE TRIGGER case_intel_links_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_intel_links FOR EACH ROW EXECUTE FUNCTION private.audit_detail();
 CREATE TRIGGER case_intel_links_block_change_under_hold BEFORE DELETE OR UPDATE ON public.case_intel_links FOR EACH ROW EXECUTE FUNCTION private.block_intel_link_change_under_hold();
 CREATE TRIGGER case_intel_links_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.case_intel_links FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
+CREATE TRIGGER case_links_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_links FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER case_links_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.case_links FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER case_messages_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.case_messages FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER trg_stamp_author BEFORE INSERT ON public.case_messages FOR EACH ROW EXECUTE FUNCTION stamp_author_identity();
+CREATE TRIGGER case_notes_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_notes FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER case_notes_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.case_notes FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
+CREATE TRIGGER case_notes_freeze BEFORE UPDATE ON public.case_notes FOR EACH ROW EXECUTE FUNCTION private.case_notes_freeze();
+CREATE TRIGGER case_notes_touch BEFORE UPDATE ON public.case_notes FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER case_notes_version AFTER UPDATE ON public.case_notes FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER case_tasks_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_tasks FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER case_tasks_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.case_tasks FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER case_tasks_touch BEFORE UPDATE ON public.case_tasks FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -27206,6 +27406,7 @@ CREATE TRIGGER case_templates_touch BEFORE UPDATE ON public.case_templates FOR E
 CREATE TRIGGER cases_audit AFTER INSERT OR DELETE OR UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER cases_block_archive_cols BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_archive();
 CREATE TRIGGER cases_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
+CREATE TRIGGER cases_block_notes_column BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_case_notes_column();
 CREATE TRIGGER cases_touch BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.touch_cases();
 CREATE TRIGGER cases_version AFTER UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER trg_block_direct_case_bureau BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_bureau();
@@ -27529,11 +27730,11 @@ create policy car_upd on public.case_access_requests
 
 create policy case_assignments_del on public.case_assignments
   as permissive for delete to authenticated
-  using ((private.can_delete_case_child(case_id) AND (assignment_source = 'standard'::text)));
+  using ((private.can_delete_case_child(case_id) AND private.case_writable(case_id) AND (assignment_source = 'standard'::text)));
 
 create policy case_assignments_ins on public.case_assignments
   as permissive for insert to authenticated
-  with check ((private.can_access_case(case_id) AND (assignment_source = 'standard'::text)));
+  with check ((private.case_writable(case_id) AND (assignment_source = 'standard'::text)));
 
 create policy case_assignments_sel on public.case_assignments
   as permissive for select to authenticated
@@ -27541,12 +27742,12 @@ create policy case_assignments_sel on public.case_assignments
 
 create policy case_assignments_upd on public.case_assignments
   as permissive for update to authenticated
-  using ((private.can_access_case(case_id) AND (assignment_source = 'standard'::text)))
-  with check ((private.can_access_case(case_id) AND (assignment_source = 'standard'::text)));
+  using ((private.case_writable(case_id) AND (assignment_source = 'standard'::text)))
+  with check ((private.case_writable(case_id) AND (assignment_source = 'standard'::text)));
 
 create policy case_blockers_ins on public.case_blockers
   as permissive for insert to authenticated
-  with check (private.can_access_case(case_id));
+  with check (private.case_writable(case_id));
 
 create policy case_blockers_sel on public.case_blockers
   as permissive for select to authenticated
@@ -27554,12 +27755,12 @@ create policy case_blockers_sel on public.case_blockers
 
 create policy case_blockers_upd on public.case_blockers
   as permissive for update to authenticated
-  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)))
-  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id)))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id)));
 
 create policy case_charges_ins on public.case_charges
   as permissive for insert to public
-  with check ((private.can_access_case(case_id) AND ((NOT snap_is_rico) OR (private.justice_role() = ANY (ARRAY['prosecutor'::text, 'assistant_district_attorney'::text, 'district_attorney'::text, 'attorney_general'::text, 'judge'::text])))));
+  with check ((private.case_writable(case_id) AND ((NOT snap_is_rico) OR (private.justice_role() = ANY (ARRAY['prosecutor'::text, 'assistant_district_attorney'::text, 'district_attorney'::text, 'attorney_general'::text, 'judge'::text])))));
 
 create policy case_charges_sel on public.case_charges
   as permissive for select to public
@@ -27567,7 +27768,7 @@ create policy case_charges_sel on public.case_charges
 
 create policy case_charges_upd on public.case_charges
   as permissive for update to public
-  using ((private.can_access_case(case_id) OR private.case_charge_court_read(case_id, status)));
+  using ((private.case_writable(case_id) OR private.case_charge_court_read(case_id, status)));
 
 create policy cf_delete on public.case_files
   as permissive for delete to authenticated
@@ -27583,7 +27784,7 @@ create policy cf_read on public.case_files
 
 create policy case_intel_links_ins on public.case_intel_links
   as permissive for insert to authenticated
-  with check (private.can_access_case(case_id));
+  with check (private.case_writable(case_id));
 
 create policy case_intel_links_sel on public.case_intel_links
   as permissive for select to authenticated
@@ -27591,12 +27792,25 @@ create policy case_intel_links_sel on public.case_intel_links
 
 create policy case_intel_links_upd on public.case_intel_links
   as permissive for update to authenticated
-  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)))
-  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id)))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id)));
+
+create policy case_links_ins on public.case_links
+  as permissive for insert to authenticated
+  with check ((private.case_writable(case_id) AND private.can_read_case(related_case_id) AND (created_by = ( SELECT auth.uid() AS uid))));
+
+create policy case_links_sel on public.case_links
+  as permissive for select to authenticated
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_read_case(case_id) AND private.can_read_case(related_case_id)));
+
+create policy case_links_upd on public.case_links
+  as permissive for update to authenticated
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id)))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id) AND private.can_read_case(related_case_id)));
 
 create policy cm_ins on public.case_messages
   as permissive for insert to authenticated
-  with check ((private.can_access_case(case_id) AND (author_id = ( SELECT auth.uid() AS uid))));
+  with check ((private.case_writable(case_id) AND (author_id = ( SELECT auth.uid() AS uid))));
 
 create policy cm_sel on public.case_messages
   as permissive for select to authenticated
@@ -27607,13 +27821,26 @@ create policy cm_upd on public.case_messages
   using (((private.is_live(deleted_at) OR private.is_owner()) AND (((author_id = ( SELECT auth.uid() AS uid)) OR ( SELECT private.is_command() AS is_command)) AND ( SELECT private.can_access_case(case_messages.case_id) AS can_access_case))))
   with check (((private.is_live(deleted_at) OR private.is_owner()) AND (((author_id = ( SELECT auth.uid() AS uid)) OR ( SELECT private.is_command() AS is_command)) AND ( SELECT private.can_access_case(case_messages.case_id) AS can_access_case))));
 
+create policy case_notes_ins on public.case_notes
+  as permissive for insert to authenticated
+  with check ((private.case_writable(case_id) AND (author_id = ( SELECT auth.uid() AS uid)) AND ((NOT restricted_to_command) OR private.case_note_command(case_id))));
+
+create policy case_notes_sel on public.case_notes
+  as permissive for select to authenticated
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_read_case(case_id) AND ((NOT restricted_to_command) OR (author_id = ( SELECT auth.uid() AS uid)) OR private.case_note_command(case_id))));
+
+create policy case_notes_upd on public.case_notes
+  as permissive for update to authenticated
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id) AND ((author_id = ( SELECT auth.uid() AS uid)) OR private.case_note_command(case_id))))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id) AND ((author_id = ( SELECT auth.uid() AS uid)) OR private.case_note_command(case_id)) AND ((NOT restricted_to_command) OR private.case_note_command(case_id))));
+
 create policy csh_sel on public.case_signoff_history
   as permissive for select to authenticated
   using (private.can_read_case(case_id));
 
 create policy case_tasks_ins on public.case_tasks
   as permissive for insert to authenticated
-  with check (private.can_access_case(case_id));
+  with check (private.case_writable(case_id));
 
 create policy case_tasks_sel on public.case_tasks
   as permissive for select to authenticated
@@ -27621,8 +27848,8 @@ create policy case_tasks_sel on public.case_tasks
 
 create policy case_tasks_upd on public.case_tasks
   as permissive for update to authenticated
-  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)))
-  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id)))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id)));
 
 create policy case_templates_del on public.case_templates
   as permissive for delete to authenticated
@@ -27651,8 +27878,8 @@ create policy cases_sel on public.cases
 
 create policy cases_upd on public.cases
   as permissive for update to authenticated
-  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case_row(bureau, lead_detective_id, created_by, id)))
-  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case_row(bureau, lead_detective_id, created_by, id)));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case_row(bureau, lead_detective_id, created_by, id) AND (archived_at IS NULL)))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case_row(bureau, lead_detective_id, created_by, id) AND (archived_at IS NULL)));
 
 create policy cid_delete on public.cid_records
   as permissive for delete to authenticated
@@ -27818,11 +28045,11 @@ create policy documents_versions_sel on public.documents_versions
 
 create policy entity_field_observations_del on public.entity_field_observations
   as permissive for delete to authenticated
-  using ((private.can_access_case(case_id) AND ((recorded_by = ( SELECT auth.uid() AS uid)) OR private.is_command())));
+  using ((private.case_writable(case_id) AND ((recorded_by = ( SELECT auth.uid() AS uid)) OR private.is_command())));
 
 create policy entity_field_observations_ins on public.entity_field_observations
   as permissive for insert to authenticated
-  with check ((private.can_access_case(case_id) AND private.perm_registry_visible(kind, ref_id) AND (recorded_by = ( SELECT auth.uid() AS uid)) AND (promoted_at IS NULL) AND (promoted_by IS NULL)));
+  with check ((private.case_writable(case_id) AND private.perm_registry_visible(kind, ref_id) AND (recorded_by = ( SELECT auth.uid() AS uid)) AND (promoted_at IS NULL) AND (promoted_by IS NULL)));
 
 create policy entity_field_observations_sel on public.entity_field_observations
   as permissive for select to authenticated
@@ -27830,8 +28057,8 @@ create policy entity_field_observations_sel on public.entity_field_observations
 
 create policy entity_field_observations_upd on public.entity_field_observations
   as permissive for update to authenticated
-  using ((private.can_access_case(case_id) AND ((recorded_by = ( SELECT auth.uid() AS uid)) OR private.is_command())))
-  with check ((private.can_access_case(case_id) AND ((recorded_by = ( SELECT auth.uid() AS uid)) OR private.is_command())));
+  using ((private.case_writable(case_id) AND ((recorded_by = ( SELECT auth.uid() AS uid)) OR private.is_command())))
+  with check ((private.case_writable(case_id) AND ((recorded_by = ( SELECT auth.uid() AS uid)) OR private.is_command())));
 
 create policy entity_merges_sel on public.entity_merges
   as permissive for select to authenticated
@@ -27843,7 +28070,7 @@ create policy entity_update_suggestions_sel on public.entity_update_suggestions
 
 create policy evidence_ins on public.evidence
   as permissive for insert to authenticated
-  with check (private.can_access_case(case_id));
+  with check (private.case_writable(case_id));
 
 create policy evidence_sel on public.evidence
   as permissive for select to authenticated
@@ -27851,8 +28078,8 @@ create policy evidence_sel on public.evidence
 
 create policy evidence_upd on public.evidence
   as permissive for update to authenticated
-  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)))
-  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id)))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id)));
 
 create policy feedback_delete_own on public.feedback
   as permissive for delete to authenticated
@@ -28271,7 +28498,7 @@ create policy mdt_sel on public.mdt_wanted_projections
 
 create policy media_ins on public.media
   as permissive for insert to authenticated
-  with check ((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text))));
+  with check ((private.is_active() AND ((case_id IS NULL) OR private.case_writable(case_id)) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text))));
 
 create policy media_sel on public.media
   as permissive for select to authenticated
@@ -28279,8 +28506,8 @@ create policy media_sel on public.media
 
 create policy media_upd on public.media
   as permissive for update to authenticated
-  using (((private.is_live(deleted_at) OR private.is_owner()) AND (private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text)))))
-  with check (((private.is_live(deleted_at) OR private.is_owner()) AND (private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text)))));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND (private.is_active() AND ((case_id IS NULL) OR private.case_writable(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text)))))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND (private.is_active() AND ((case_id IS NULL) OR private.case_writable(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text)))));
 
 create policy member_transfers_sel on public.member_transfers
   as permissive for select to authenticated
@@ -28315,7 +28542,7 @@ create policy mo_profiles_del on public.mo_profiles
 
 create policy mo_profiles_ins on public.mo_profiles
   as permissive for insert to authenticated
-  with check (private.can_access_case(case_id));
+  with check (private.case_writable(case_id));
 
 create policy mo_profiles_sel on public.mo_profiles
   as permissive for select to authenticated
@@ -28323,8 +28550,8 @@ create policy mo_profiles_sel on public.mo_profiles
 
 create policy mo_profiles_upd on public.mo_profiles
   as permissive for update to authenticated
-  using (private.can_access_case(case_id))
-  with check (private.can_access_case(case_id));
+  using (private.case_writable(case_id))
+  with check (private.case_writable(case_id));
 
 create policy narcotic_aliases_del on public.narcotic_aliases
   as permissive for delete to authenticated
@@ -28835,7 +29062,7 @@ create policy raid_compensations_del on public.raid_compensations
 
 create policy raid_compensations_ins on public.raid_compensations
   as permissive for insert to authenticated
-  with check (private.can_access_case(case_id));
+  with check (private.case_writable(case_id));
 
 create policy raid_compensations_sel on public.raid_compensations
   as permissive for select to authenticated
@@ -28843,8 +29070,8 @@ create policy raid_compensations_sel on public.raid_compensations
 
 create policy raid_compensations_upd on public.raid_compensations
   as permissive for update to authenticated
-  using (private.can_access_case(case_id))
-  with check (private.can_access_case(case_id));
+  using (private.case_writable(case_id))
+  with check (private.case_writable(case_id));
 
 create policy record_extraction_facts_sel on public.record_extraction_facts
   as permissive for select to authenticated
@@ -28858,7 +29085,7 @@ create policy record_extractions_del on public.record_extractions
 
 create policy record_extractions_ins on public.record_extractions
   as permissive for insert to authenticated
-  with check (private.can_access_case(case_id));
+  with check (private.case_writable(case_id));
 
 create policy record_extractions_sel on public.record_extractions
   as permissive for select to authenticated
@@ -28866,8 +29093,8 @@ create policy record_extractions_sel on public.record_extractions
 
 create policy record_extractions_upd on public.record_extractions
   as permissive for update to authenticated
-  using (private.can_access_case(case_id))
-  with check (private.can_access_case(case_id));
+  using (private.case_writable(case_id))
+  with check (private.case_writable(case_id));
 
 create policy record_versions_sel on public.record_versions
   as permissive for select to authenticated
@@ -28881,7 +29108,7 @@ create policy report_versions_sel on public.report_versions
 
 create policy reports_ins on public.reports
   as permissive for insert to authenticated
-  with check (private.can_access_case(case_id));
+  with check (private.case_writable(case_id));
 
 create policy reports_sel on public.reports
   as permissive for select to authenticated
@@ -28889,8 +29116,8 @@ create policy reports_sel on public.reports
 
 create policy reports_upd on public.reports
   as permissive for update to authenticated
-  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)))
-  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id)))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id)));
 
 create policy rag_sel on public.restricted_access_grants
   as permissive for select to authenticated
@@ -28902,7 +29129,7 @@ create policy ral_sel on public.restricted_access_log
 
 create policy rico_cases_ins on public.rico_cases
   as permissive for insert to authenticated
-  with check (private.can_access_case(case_id));
+  with check (private.case_writable(case_id));
 
 create policy rico_cases_sel on public.rico_cases
   as permissive for select to authenticated
@@ -28910,8 +29137,8 @@ create policy rico_cases_sel on public.rico_cases
 
 create policy rico_cases_upd on public.rico_cases
   as permissive for update to authenticated
-  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)))
-  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case(case_id)));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id)))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id)));
 
 create policy role_events_sel on public.role_events
   as permissive for select to authenticated
@@ -29128,11 +29355,11 @@ create policy surveillance_alerts_sel on public.surveillance_alerts
 
 create policy surveillance_association_events_del on public.surveillance_association_events
   as permissive for delete to authenticated
-  using ((( SELECT private.can_delete() AS can_delete) AND private.can_access_case(case_id)));
+  using ((( SELECT private.can_delete() AS can_delete) AND private.case_writable(case_id)));
 
 create policy surveillance_association_events_ins on public.surveillance_association_events
   as permissive for insert to authenticated
-  with check (private.can_access_case(case_id));
+  with check (private.case_writable(case_id));
 
 create policy surveillance_association_events_sel on public.surveillance_association_events
   as permissive for select to authenticated
@@ -29140,8 +29367,8 @@ create policy surveillance_association_events_sel on public.surveillance_associa
 
 create policy surveillance_association_events_upd on public.surveillance_association_events
   as permissive for update to authenticated
-  using ((private.can_access_case(case_id) AND (verification_status = 'unverified'::text) AND ((created_by = ( SELECT auth.uid() AS uid)) OR private.is_command())))
-  with check (private.can_access_case(case_id));
+  using ((private.case_writable(case_id) AND (verification_status = 'unverified'::text) AND ((created_by = ( SELECT auth.uid() AS uid)) OR private.is_command())))
+  with check (private.case_writable(case_id));
 
 create policy surveillance_event_participants_del on public.surveillance_event_participants
   as permissive for delete to authenticated
@@ -29190,11 +29417,11 @@ create policy surveillance_observation_entities_upd on public.surveillance_obser
 
 create policy surveillance_observations_del on public.surveillance_observations
   as permissive for delete to authenticated
-  using ((( SELECT private.can_delete() AS can_delete) AND private.can_access_case(case_id)));
+  using ((( SELECT private.can_delete() AS can_delete) AND private.case_writable(case_id)));
 
 create policy surveillance_observations_ins on public.surveillance_observations
   as permissive for insert to authenticated
-  with check (private.can_access_case(case_id));
+  with check (private.case_writable(case_id));
 
 create policy surveillance_observations_sel on public.surveillance_observations
   as permissive for select to authenticated
@@ -29204,8 +29431,8 @@ create policy surveillance_observations_sel on public.surveillance_observations
 
 create policy surveillance_observations_upd on public.surveillance_observations
   as permissive for update to authenticated
-  using ((private.can_access_case(case_id) AND (verification_status = ANY (ARRAY['unverified'::text, 'needs_information'::text])) AND ((created_by = ( SELECT auth.uid() AS uid)) OR private.is_command())))
-  with check (private.can_access_case(case_id));
+  using ((private.case_writable(case_id) AND (verification_status = ANY (ARRAY['unverified'::text, 'needs_information'::text])) AND ((created_by = ( SELECT auth.uid() AS uid)) OR private.is_command())))
+  with check (private.case_writable(case_id));
 
 create policy surveillance_review_history_sel on public.surveillance_review_history
   as permissive for select to authenticated
@@ -29352,7 +29579,9 @@ create policy wl_sel on public.watchlist
 --   public.case_blockers
 --   public.case_files
 --   public.case_intel_links
+--   public.case_links
 --   public.case_messages
+--   public.case_notes
 --   public.case_signoff_history
 --   public.case_tasks
 --   public.case_templates
@@ -29441,7 +29670,9 @@ create policy wl_sel on public.watchlist
 --   case_charges -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_files -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_intel_links -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_links -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_messages -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_notes -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_signoff_history -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_tasks -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_templates -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -29712,6 +29943,7 @@ create policy wl_sel on public.watchlist
 --   private.audit_detail(): {postgres=X/postgres}
 --   private.audit_operation_status(): default (PUBLIC)
 --   private.audit_row_canonical(p_id bigint, p_actor uuid, p_action text, p_entity text, p_entity_id uuid, p_detail jsonb, p_created timestamp with time zone): {postgres=X/postgres}
+--   private.block_case_notes_column(): {postgres=X/postgres}
 --   private.block_direct_case_archive(): default (PUBLIC)
 --   private.block_direct_case_bureau(): default (PUBLIC)
 --   private.block_direct_case_stage(): default (PUBLIC)
@@ -29779,6 +30011,8 @@ create policy wl_sel on public.watchlist
 --   private.case_charge_may(p_case uuid, p_to text): {postgres=X/postgres}
 --   private.case_charge_transition_ok(p_from text, p_to text): default (PUBLIC)
 --   private.case_has_active_hold(p_case uuid): default (PUBLIC)
+--   private.case_note_command(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.case_notes_freeze(): {postgres=X/postgres}
 --   private.case_number_base(p_bureau text): default (PUBLIC)
 --   private.case_service_notify(p_recipient uuid, p_type text, p_payload jsonb): {postgres=X/postgres,service_role=X/postgres}
 --   private.case_writable(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -30001,10 +30235,12 @@ create policy wl_sel on public.watchlist
 --   public.case_access_decide(p_request uuid, p_approve boolean, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_access_renew(p_grant uuid, p_days integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_archive(p_case uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.case_audit_feed(p_case uuid, p_limit integer, p_before timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_charge_totals(p_case uuid): {=X/postgres,postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_charges_for(p_case uuid): {=X/postgres,postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_create(p_bureau text, p_title text, p_summary text, p_priority text, p_area text, p_lead uuid, p_template uuid, p_case_number text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_delete_preview(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.case_note_mention(p_note uuid, p_user_ids uuid[]): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_permanent_delete(p_case uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_reassign_bureau(p_case uuid, p_to_bureau bureau, p_reason text, p_update_originating boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_restore(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}

@@ -28,12 +28,13 @@ import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { CardGridSkeleton, DetailSkeleton } from '@/components/ui/Skeleton'
 import { isRoutingBureau } from '@/lib/legalWorkflow'
 import { PERMANENT_BUREAUS, bureauShort } from '@/lib/roles'
 import { StickyActionBar } from '@/components/shared/StickyActionBar'
+import { useWorkspaceNav } from '@/components/tools/useToolNav'
+import { normalizeCaseTab } from '@/lib/caseLinks'
 import { CaseBoard } from './CaseBoard'
-import { CaseDetail } from './CaseDetail'
 import { CaseFilterBar } from './CaseFilterBar'
 import { CaseModal } from './CaseModal'
 import { CASE_GRID_CLASS, activeCaseFilterCount, applyCaseFilters, isStaleCase, loadCaseFilters, persistCaseFilters, runChunked, EMPTY_FILTERS, type CaseFilters, type CaseRow, type SavedCaseViewConfig } from './caseUtils'
@@ -144,7 +145,21 @@ function CasesViewInner() {
   const casesV = useTableVersion('cases')
   const templatesV = useTableVersion('case_templates')
   const tasksV = useTableVersion('case_tasks')
+  // `/cases?case=X&tab=Y[&report|task|evidence]` is the stable deep-link
+  // address (lib/caseLinks caseLink — notifications, search hits, cross
+  // links). Cases now open as workspace tabs, so the address redirects to
+  // `/workspace?case=…` with its record params carried over (plan §5.5).
   const caseId = sp.get('case')
+  const wsNav = useWorkspaceNav()
+  useEffect(() => {
+    if (!caseId) return
+    const t = window.setTimeout(() => {
+      router.replace(wsNav.caseHref(caseId, normalizeCaseTab(sp.get('tab')), {
+        report: sp.get('report'), task: sp.get('task'), evidence: sp.get('evidence'),
+      }))
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [caseId, sp, router, wsNav])
   const caps = useCapabilities()
 
   // ONE bounded projection over open tasks → the set of case ids with an
@@ -297,15 +312,10 @@ function CasesViewInner() {
     return metrics
   }, [cases, profile, overdueTaskCaseIds, caps.commandScope, setActiveViewName])
 
-  // Keep ?view= on the detail round-trip so the saved-view name (and the bar
-  // it drives) is still active when the user comes back to the list.
+  // Opening a case adds a workspace tab (the board's own ?view= stays in
+  // this route's URL for when the member comes back via the sidebar).
   const openCase = (id: string) => {
-    const p = new URLSearchParams(sp.toString())
-    p.set('case', id)
-    router.push(`/cases?${p.toString()}`)
-  }
-  const closeDetail = () => {
-    router.push(activeViewName ? `/cases?view=${encodeURIComponent(activeViewName)}` : '/cases')
+    wsNav.openCase(id, null, { title: cases.find((c) => c.id === id)?.case_number })
   }
   const setAllSelected = () => setSelected(selected.length === filtered.length ? [] : filtered.map((c) => c.id))
 
@@ -401,7 +411,7 @@ function CasesViewInner() {
     if (filtered.length > SELECT_ALL_CAP) toast(`Selection capped at ${SELECT_ALL_CAP} of ${filtered.length} matching cases.`, 'info')
   }
 
-  if (caseId) return <CaseDetail id={caseId} onBack={closeDetail} onChanged={fetchCases} />
+  if (caseId) return <DetailSkeleton />
 
   return (
     <div className="space-y-4">

@@ -198,13 +198,13 @@ test.describe(run ? 'persons workspace redesign' : 'persons workspace redesign (
 
     // Old list bookmark → the persons tool tab.
     await page.goto('/persons')
-    await expect(page).toHaveURL(/\/tools\?.*tool=persons/, { timeout: 30_000 })
+    await expect(page).toHaveURL(/\/workspace\?.*tool=persons/, { timeout: 30_000 })
     await expect(page.getByRole('heading', { name: 'Persons of Interest', level: 1 })).toBeVisible({ timeout: 30_000 })
 
     // Old record deep link → the workspace record tab (?person= → &record=),
     // extra params (here: section) carried over untouched.
     await page.goto(`/persons?person=${p1Id}&section=identity`)
-    await expect(page).toHaveURL(new RegExp(`/tools\\?.*tool=persons.*record=${p1Id}`), { timeout: 30_000 })
+    await expect(page).toHaveURL(new RegExp(`/workspace\\?.*tool=persons.*record=${p1Id}`), { timeout: 30_000 })
     await expect(page).toHaveURL(/section=identity/)
     await expect(page.getByRole('heading', { name: P1_NAME, level: 1 })).toBeVisible({ timeout: 30_000 })
   })

@@ -24,11 +24,11 @@ import { LegalView } from '@/components/legal/LegalView'
 // Long-tail screens are code-split (client dynamic wrappers, ssr off) so the
 // heavy/rare views — owner tooling, the handbook, chart-heavy analysis tabs —
 // stay out of the page chunk every route shares. Hot paths stay static above.
-// The 14 Intelligence tool views moved into the Investigative Tools workspace
-// (components/tools/toolRegistry); their routes below redirect into /tools.
+// The 14 Intelligence tool views moved into the unified workspace
+// (components/tools/toolRegistry); their routes below redirect into /workspace.
 import {
   AuditView, ConcernView, DevDocsView, FeedbackView, HeatmapView,
-  OwnerView, RicoView, SiuView, ToolsView,
+  OwnerView, RicoView, SiuView, WorkspaceView,
 } from './lazyViews'
 
 /** One route per leaf tab, statically prerendered via generateStaticParams. */
@@ -43,17 +43,20 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
   // anything unknown falls back to My Dashboard (the default landing).
   if (tab === 'reports') redirect('/cases')
   if (!(tab in PAGE_META)) redirect('/inbox')
-  // Legacy Intelligence tool routes → the Investigative Tools workspace. The
-  // routes stay prerendered and valid (deep links, bookmarks, notifications,
-  // case cross-links); a tiny client shim maps their query params onto
-  // /tools?tool=…&record=… and router.replaces.
+  // Legacy Intelligence tool routes → the unified workspace. The routes stay
+  // prerendered and valid (deep links, bookmarks, notifications, case
+  // cross-links); a tiny client shim maps their query params onto
+  // /workspace?tool=…&record=… and router.replaces.
   if ((TOOL_TABS as readonly string[]).includes(tab)) {
     return <ToolTabRedirect tab={tab} />
   }
-  if (tab === 'tools') {
+  // /workspace is the unified workspace; /tools (the tools-era address) renders
+  // the same view and the provider rewrites its URL, so `/tools?tool=persons`
+  // still lands on the persons tab.
+  if (tab === 'workspace' || tab === 'tools') {
     return (
-      <Suspense fallback={<ViewPlaceholder tab="tools" />}>
-        <ToolsView />
+      <Suspense fallback={<ViewPlaceholder tab="workspace" />}>
+        <WorkspaceView />
       </Suspense>
     )
   }
