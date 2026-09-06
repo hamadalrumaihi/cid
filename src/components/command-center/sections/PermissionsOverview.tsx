@@ -4,7 +4,7 @@
  *  command staff can see who can do what without needing owner access. Reads
  *  the generated matrix module (src/lib/permissionsMatrix.ts, rendered from
  *  the permission_catalog seed) — no Owner Portal coupling, no gate. */
-import { PERMISSIONS_MATRIX, MATRIX_NOTE } from '@/lib/permissionsMatrix'
+import { PERMISSIONS_MATRIX, MATRIX_NOTE } from '@/lib/permissions'
 
 export function PermissionsOverview() {
   return (

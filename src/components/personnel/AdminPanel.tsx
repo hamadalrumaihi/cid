@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth'
 import { useFieldStanding } from '@/lib/fieldStanding'
 import { notify } from '@/lib/notify'
 import type { RosterProfile } from '@/lib/profiles'
-import { bureauLabel, canRestoreMember, roleLabel } from '@/lib/roles'
+import { bureauLabel, roleLabel } from '@/lib/roles'
 import { AGENCY_LABEL, justiceRoleLabel } from '@/lib/justice'
 import type { JusticeIdentity } from '@/lib/justiceRoster'
 import { toast } from '@/lib/toast'
@@ -17,6 +17,7 @@ import { fmtDate } from '@/lib/format'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Card } from '@/components/ui/Card'
 import { pendingMembership, type RequestLite } from '@/components/command-center/lib/membershipPending'
+import { canRestoreMember } from '@/lib/permissions'
 
 interface AdminPanelProps {
   profiles: RosterProfile[]

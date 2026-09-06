@@ -36,7 +36,7 @@ import { uiPrompt } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { SectionHeader } from '@/components/ui/PageHeader'
-import { effectiveJusticeRole } from '@/components/justice/legalShared'
+import { effectiveDojRole } from '@/lib/permissions'
 import { isRecusalError } from './RecusalBanner'
 import { JusticePickerModal } from './JusticePickerModal'
 
@@ -498,7 +498,7 @@ export function DojAdmin({ requests, onOpen, reload, onConflict }: {
 
   const membershipOf = (userId: string): Membership | undefined => memberships.find((m) => m.user_id === userId)
   const activeCoverage = coverage.filter((c) => !c.ended_at && (!c.expires_at || Date.parse(c.expires_at) > now))
-  const activeProsecutors = directory.filter((d) => d.active && effectiveJusticeRole(d.justice_role) === 'prosecutor')
+  const activeProsecutors = directory.filter((d) => d.active && effectiveDojRole(d.justice_role) === 'prosecutor')
   const held = requests
     .filter((r) => r.review_status === 'prosecutor_review')
     .sort((a, b) => Date.parse(a.prosecutor_claimed_at ?? a.updated_at) - Date.parse(b.prosecutor_claimed_at ?? b.updated_at))
@@ -539,7 +539,7 @@ export function DojAdmin({ requests, onOpen, reload, onConflict }: {
                     {justiceRoleLabel(d.justice_role)}
                     {m?.prosecutor_bureau ? ` · ${bureauShort(m.prosecutor_bureau)}` : ''}
                   </span>
-                  {effectiveJusticeRole(d.justice_role) === 'prosecutor' && m && !m.prosecutor_bureau && (
+                  {effectiveDojRole(d.justice_role) === 'prosecutor' && m && !m.prosecutor_bureau && (
                     <Badge tone="warn" className="ml-2">No home bureau</Badge>
                   )}
                   {m?.expires_at && (

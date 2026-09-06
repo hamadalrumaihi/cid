@@ -198,6 +198,17 @@ drill is the single highest-value operational task open.
   deletion used to re-point it to the tombstone profile, which is exactly the
   rewrite the chain forbids; a deleted member's uuid now stays on their rows
   and `deleted_member_ledger` keeps the identity snapshot for it.
+
+**Scheduled jobs (pg_cron).** Every job writes a `scheduled_job_runs` row
+through `private.job_begin` / `job_end`; a `failed` row is the first place
+to look when a sweep goes quiet.
+
+| Job | Schedule (UTC) | Does |
+|---|---|---|
+| `sops-sync` | every 15 min | Drive → SOP sync through pg_net (below) |
+| `audit-chain-verify` | 03:15 daily | walks the audit hash chain; `audit_chain_mismatch` to the Owner on the first bad row |
+| `record-versions-prune` | 03:45 daily | `private.record_versions_prune()`: versions older than 2 years, keeping the latest 5 per record and every record on an open case or under a legal hold ([`20261011120000`](../supabase/migrations/20261011120000_record_versions.sql)) |
+| `access-grant-expiry-sweep` | :20 hourly | `private.access_grant_expiry_sweep()`: `access_expiring` reminders three days before a case access grant lapses; `ACCESS_EXPIRED` + `access_expired` + row removal on lapse ([`20261012120000`](../supabase/migrations/20261012120000_case_access_grant_expiry.sql)) |
 - The same rule extends to the append-only history tables the workflow RPCs
   write (`case_signoff_history`, membership/legal histories, `role_events`)
   and to sealed `report_versions` (client-immutable by trigger + revoked

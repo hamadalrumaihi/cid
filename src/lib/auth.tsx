@@ -16,9 +16,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { Session } from '@supabase/supabase-js'
 import { isConfigured, supabase } from './supabase'
 import type { Database } from './database.types'
-import { isCommandRole } from './roles'
 import { resetRealtime } from './realtime'
 import { installErrorReporter } from './errorReport'
+import { isCommandRole } from './permissions/mirrors'
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row']
 

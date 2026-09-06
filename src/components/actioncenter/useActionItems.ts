@@ -7,7 +7,7 @@
  *  flight, so the queue never flashes empty. */
 import { useCallback, useEffect, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { buildActionItems, type AcBoloPerson, type AcDoc, type AcDraft, type AcFieldSubmission, type AcGrant, type AcHold, type AcMemberTransfer, type AcObservation, type AcSiuAccessRequest, type AcSiuDisclosure, type AcSiuReferral, type AcSuggestion, type AcSurvTarget, type ActionItem, type ActionSources } from '@/lib/actionItems'
+import { buildActionItems, type AcBoloPerson, type AcCaseGrant, type AcDoc, type AcDraft, type AcFieldSubmission, type AcGrant, type AcHold, type AcMemberTransfer, type AcObservation, type AcSiuAccessRequest, type AcSiuDisclosure, type AcSiuReferral, type AcSuggestion, type AcSurvTarget, type ActionItem, type ActionSources } from '@/lib/actionItems'
 import {
   ackState, canApproveDoc, docTitle, reviewState,
   type MyAckVersions, type ShelfDoc,
@@ -22,7 +22,7 @@ import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { pendingMembership, type JusticeRequestLite } from '@/components/command-center/lib/membershipPending'
 import { buildLegalViewer, useMyProsecutorBureaus } from '@/components/justice/legalShared'
-import { useSiu } from '@/lib/useSiu'
+import { usePermissions, useSiu } from '@/lib/permissions'
 
 /* Column projections — each mirrors its Ac* Pick in lib/actionItems exactly
  * (the model documents that the loader builds selects from those lists).
@@ -43,6 +43,9 @@ const BLOCKER_COLS = 'id,case_id,title,type,status,owner_id,review_at,created_at
 const HOLD_COLS = 'id,case_id,reason,placed_by,placed_at'
 /** Restricted-access grants — RLS-scoped (command: all; member: own rows). */
 const GRANT_COLS = 'id,case_id,user_id,status,reason,granted_at,decided_at,expires_at'
+/** Case access grants (P1-06) — RLS-scoped: own grants, or every grant on a
+ *  case the viewer can read (leads and command see what they may renew). */
+const CASE_GRANT_COLS = 'id,case_id,officer_id,expires_at,granted_by'
 /** Surveillance — unverified observations + decision/expiry targets, both
  *  RLS-scoped to accessible cases and fail-open (the domain may be absent). */
 const OBS_COLS = 'id,case_id,activity,source_type,created_at,observed_at,updated_at'
@@ -99,22 +102,6 @@ async function fetchMemberTransfers(): Promise<AcMemberTransfer[]> {
   } catch { return [] }
 }
 
-/** The viewer's EFFECTIVE justice role: their justice_memberships row when
- *  active and unexpired, legacy ADA/DA titles mapped to 'prosecutor' — the
- *  client mirror of private.justice_role_effective. Fail-open to null. */
-function effectiveJusticeRole(
-  rows: Array<{ justice_role: string; active: boolean; expires_at: string | null }>,
-  nowMs: number,
-): 'prosecutor' | 'judge' | 'attorney_general' | null {
-  const m = rows.find((r) => r.active && (!r.expires_at || Date.parse(r.expires_at) > nowMs))
-  if (!m) return null
-  if (m.justice_role === 'assistant_district_attorney' || m.justice_role === 'district_attorney'
-    || m.justice_role === 'prosecutor') return 'prosecutor'
-  if (m.justice_role === 'judge') return 'judge'
-  if (m.justice_role === 'attorney_general') return 'attorney_general'
-  return null
-}
-
 /** Only open-work statuses can produce an action item (see buildActionItems
  *  section 9c); terminal/waiting rows never need a fetch-side row. */
 const SUGGESTION_OPEN = ['submitted', 'needs_more_information', 'accepted', 'partially_accepted']
@@ -140,6 +127,7 @@ export interface ActionItemsResult {
 export function useActionItems(): ActionItemsResult {
   const auth = useAuth()
   const siu = useSiu()
+  const permissions = usePermissions()
   const { profile, state, isCommand, isOwner, justiceRole, canEdit } = auth
   // The legal branch's disposition viewer needs live prosecutor bureaus so
   // bureau-awareness rows are recognised (and never shown as assigned work).
@@ -197,7 +185,7 @@ export function useActionItems(): ActionItemsResult {
     const sibCommand = siu.canAccess && siu.isCommand
     try {
       const me = profile.id
-      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks, suggestionRows, holds, restrictedGrants, survObservations, survTargetRows, justiceMembershipRows, memberTransfers, myDrafts, fieldSubmissions, boloPersons, sibAccessRequests, sibReferrals, sibDisclosures] =
+      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks, suggestionRows, holds, restrictedGrants, survObservations, survTargetRows, caseGrants, memberTransfers, myDrafts, fieldSubmissions, boloPersons, sibAccessRequests, sibReferrals, sibDisclosures] =
         await Promise.all([
           // Bounded: newest-first so the AWAITING/returned/follow-up branches
           // and the caseById context map keep the live working set — an
@@ -265,11 +253,11 @@ export function useActionItems(): ActionItemsResult {
           list('surveillance_targets', {
             select: TGT_COLS, in: { status: ['pending_approval', 'authorized', 'active'] },
           }).then((r) => r as unknown as AcSurvTarget[]).catch(() => [] as AcSurvTarget[]),
-          // The viewer's own justice membership — drives the DOJ-pipeline
-          // items (effective role, expiry-aware). Fail-open to empty.
-          list('justice_memberships', { select: 'justice_role,active,expires_at', eq: { user_id: me } })
-            .then((r) => r as Array<{ justice_role: string; active: boolean; expires_at: string | null }>)
-            .catch(() => [] as Array<{ justice_role: string; active: boolean; expires_at: string | null }>),
+          // Case access grants expiring soon (P1-06) — own grants and grants
+          // on readable cases. Fail-open to empty.
+          list('case_access_grants', { select: CASE_GRANT_COLS })
+            .then((r) => r as unknown as AcCaseGrant[])
+            .catch(() => [] as AcCaseGrant[]),
           // Open member transfers — only viewers who could hold a stage
           // decision fetch (command/owner/justice); RLS trims the rest.
           canAdmin || justiceRole ? fetchMemberTransfers() : Promise.resolve([] as AcMemberTransfer[]),
@@ -378,8 +366,9 @@ export function useActionItems(): ActionItemsResult {
         membershipPending,
         legal,
         legalViewer: buildLegalViewer(auth, prosecutorBureaus, undefined, siu.isCommand),
-        justiceRole: effectiveJusticeRole(justiceMembershipRows, nowMs),
+        justiceRole: permissions.perms.doj_role,
         memberTransfers,
+        caseGrants,
         blockers,
         holds,
         restrictedGrants,
@@ -405,7 +394,7 @@ export function useActionItems(): ActionItemsResult {
     } finally {
       setRefreshing(false)
     }
-  }, [state, profile, isCommand, isOwner, justiceRole, canEdit, fetchProfiles, auth, prosecutorBureaus, siu.canAccess, siu.isAgent, siu.isCommand])
+  }, [state, profile, isCommand, isOwner, justiceRole, canEdit, fetchProfiles, auth, prosecutorBureaus, siu.canAccess, siu.isAgent, siu.isCommand, permissions.perms.doj_role])
 
   useEffect(() => {
     // A version-driven refetch fans out ~21 queries — pointless while the tab

@@ -5,7 +5,7 @@
  *  dragging the Supabase client into the Storybook bundle — see
  *  .storybook/preview.tsx). The wired component lives in DashSwitcher.tsx. */
 
-import type { DashboardId } from '@/lib/capabilities'
+import type { DashboardId } from '@/lib/permissions'
 
 export type SwitchableId = Exclude<DashboardId, 'submitter'>
 

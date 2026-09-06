@@ -27,25 +27,13 @@ import { useProfilesStore } from '@/lib/profiles'
 import { useJusticeRoster } from '@/lib/justiceRoster'
 import { useFieldStanding } from '@/lib/fieldStanding'
 import { useTableVersion } from '@/lib/realtime'
+import { canReviewSignoff } from '@/lib/permissions'
 import { Store } from '@/lib/store'
 import { visibleAnnouncements, type AnnouncementRow } from '@/components/announce/announceUtils'
 import { isStaleCase } from '@/components/cases/caseUtils'
 import { pendingMembership, type JusticeRequestLite } from '@/components/command-center/lib/membershipPending'
 
 type CaseRow = Tables<'cases'>
-
-const AWAITING = new Set(['awaiting_bureau_lead', 'awaiting_deputy', 'awaiting_director'])
-
-function canReviewCase(c: CaseRow, profile: { id: string; role?: string | null; division?: string | null } | null): boolean {
-  if (!profile) return false
-  if (c.signoff_status === 'approved_deputy') return c.signoff_assignee_id === profile.id || profile.role === 'deputy_director'
-  if (!AWAITING.has(c.signoff_status ?? '')) return false
-  if (c.signoff_assignee_id === profile.id) return true
-  if (c.signoff_status === 'awaiting_bureau_lead') return profile.role === 'bureau_lead' && c.bureau === profile.division
-  if (c.signoff_status === 'awaiting_deputy') return profile.role === 'deputy_director'
-  if (c.signoff_status === 'awaiting_director') return profile.role === 'director'
-  return false
-}
 
 interface NavBadgeData {
   anns: AnnouncementRow[]
@@ -203,7 +191,7 @@ export function useNavBadges(): NavBadges {
     const seen = Store.get<string>('annSeen', '')
     const announcements = visibleAnnouncements(anns, profile.division, new Set<string>(), true).filter((a) => a.created_at > seen).length
 
-    const review = cases.filter((c) => canReviewCase(c, profile))
+    const review = cases.filter((c) => canReviewSignoff(c, profile))
     const bounced = cases.filter((c) => c.signoff_submitted_by === profile.id && (c.signoff_status === 'changes_requested' || c.signoff_status === 'denied'))
     const inSignoff = new Set([...review, ...bounced].map((c) => c.id))
     const today = todayISO()

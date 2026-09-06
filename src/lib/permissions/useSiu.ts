@@ -18,14 +18,14 @@
  *  module-level promise. Sign-out clears it. */
 
 import { useCallback, useEffect, useState } from 'react'
-import { useAuth } from './auth'
-import { rpc } from './db'
-import { Store } from './store'
+import { useAuth } from '../auth'
+import { rpc } from '../db'
+import { Store } from '../store'
 import {
   maySwitchDepartment, siuCanAppoint, siuCanReadCid, siuIsAgent, siuIsCommand,
   siuOperates, siuStanding, userDepartment, siuCaseReadOnly,
   type Department, type SiuContext, type SiuMembership, type SiuStanding,
-} from './siu'
+} from '../siu'
 
 /** Server payload from `siu_department_context()`. */
 interface DeptContext {

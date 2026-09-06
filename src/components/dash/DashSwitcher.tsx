@@ -6,7 +6,7 @@
  *  Storybook renders it without providers. */
 
 import { useNav } from '@/components/shell/useNav'
-import { useCapabilities } from '@/lib/capabilities'
+import { useCapabilities } from '@/lib/permissions'
 import { useNarrow } from '@/lib/useNarrow'
 import { DashSwitcherView } from './DashSwitcherView'
 

@@ -112,6 +112,30 @@ function restoreRecord(args: Record<string, unknown>): Fns['restore_record']['Re
   return { ok: true, kind, id, restored: { [table]: 1 } }
 }
 
+/** `my_permissions()` (P1-01 / P1-08) derived from the seeded session
+ *  profile — the contract only: access_class, role, bureau, owner flag and
+ *  empty expiries. A signed-out call answers { access_class: 'none' } like
+ *  the server; a scenario pins anything richer with rpcResult(). */
+function myPermissions(): Fns['my_permissions']['Returns'] {
+  const session = getSession()
+  const p = session
+    ? (getRows('profiles') as unknown as Tables<'profiles'>[]).find((r) => r.id === session.userId) ?? null
+    : null
+  if (!p) return { access_class: 'none' }
+  const command = ['bureau_lead', 'deputy_director', 'director'].includes(p.role ?? '')
+  const cls = p.is_owner ? 'owner' : p.active && command ? 'command' : p.active ? 'member' : 'inactive'
+  return {
+    access_class: cls, active: !!p.active, role: p.active ? p.role : null, rank: 0,
+    bureau: p.active ? p.division : null, is_owner: !!p.is_owner, sib_standing: p.is_owner ? 'owner' : null,
+    department: 'cid', doj_role: null, doj_membership_role: null, is_field_officer: false,
+    command_scope: !p.active || !command ? null
+      : p.role === 'bureau_lead' ? { level: 'bureau', bureau: p.division } : { level: 'division', bureau: null },
+    expiries: { doj_membership: null, joint_assignments: [], sib_temporary_access: [], case_access_grants: [] },
+    flags: { is_test: false, login_denied: false, loa: false, removed: false, sib_release_open: false, sib_may_switch: !!p.is_owner, sib_may_control_visibility: p.role === 'director' },
+    generated_at: new Date().toISOString(),
+  }
+}
+
 export const rpcHandlers = [
   http.post(`${supabaseBaseUrl()}/rest/v1/rpc/:fn`, async ({ request, params }) => {
     const shaped = await shapeNetwork()
@@ -128,6 +152,8 @@ export const rpcHandlers = [
         return HttpResponse.json(dojBureauCoverage())
       case 'next_case_number':
         return HttpResponse.json(nextCaseNumber(String(args.p_bureau ?? 'major_crimes')))
+      case 'my_permissions':
+        return HttpResponse.json(myPermissions())
       case 'soft_delete':
         return HttpResponse.json(softDelete(args))
       case 'restore_record':

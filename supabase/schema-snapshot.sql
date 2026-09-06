@@ -231,8 +231,13 @@ create table public.case_access_grants (
   case_id uuid not null,
   officer_id uuid not null,
   granted_by uuid default auth.uid(),
-  created_at timestamp with time zone not null default now()
+  created_at timestamp with time zone not null default now(),
+  expires_at timestamp with time zone not null default (now() + '30 days'::interval),
+  renewed_at timestamp with time zone,
+  reminder_sent_at timestamp with time zone,
+  expired_notified_at timestamp with time zone
 );
+alter table public.case_access_grants add constraint case_access_grants_expiry_window CHECK (((expires_at > created_at) AND (expires_at <= (created_at + '90 days'::interval))));
 alter table public.case_access_grants add constraint case_access_grants_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
 alter table public.case_access_grants add constraint case_access_grants_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES profiles(id);
 alter table public.case_access_grants add constraint case_access_grants_officer_id_fkey FOREIGN KEY (officer_id) REFERENCES profiles(id) ON DELETE CASCADE;
@@ -642,13 +647,33 @@ alter table public.deleted_member_ledger add constraint deleted_member_ledger_de
 alter table public.deleted_member_ledger add constraint deleted_member_ledger_pkey PRIMARY KEY (id);
 alter table public.deleted_member_ledger enable row level security;
 
+create table public.deleted_record_ledger (
+  id uuid not null default gen_random_uuid(),
+  kind text not null,
+  table_name text not null,
+  record_id uuid not null,
+  label text not null,
+  snapshot jsonb not null,
+  destroyed jsonb not null default '{}'::jsonb,
+  unlinked jsonb not null default '{}'::jsonb,
+  storage_objects jsonb not null default '[]'::jsonb,
+  external_assets jsonb not null default '[]'::jsonb,
+  reason text not null,
+  deleted_by uuid,
+  armed_at timestamp with time zone,
+  executed_at timestamp with time zone not null default now()
+);
+alter table public.deleted_record_ledger add constraint deleted_record_ledger_pkey PRIMARY KEY (id);
+alter table public.deleted_record_ledger enable row level security;
+
 create table public.deletion_tokens (
   id uuid not null default gen_random_uuid(),
   target_id uuid not null,
   created_by uuid not null,
   created_at timestamp with time zone not null default now(),
   expires_at timestamp with time zone not null,
-  used_at timestamp with time zone
+  used_at timestamp with time zone,
+  target_kind text
 );
 alter table public.deletion_tokens add constraint deletion_tokens_pkey PRIMARY KEY (id);
 alter table public.deletion_tokens enable row level security;
@@ -3223,6 +3248,26 @@ alter table public.record_extractions add constraint record_extractions_created_
 alter table public.record_extractions add constraint record_extractions_pkey PRIMARY KEY (id);
 alter table public.record_extractions enable row level security;
 
+create table public.record_versions (
+  id bigint generated always as identity not null,
+  table_name text not null,
+  record_id uuid not null,
+  version_no integer not null,
+  actor_id uuid,
+  old jsonb not null,
+  new jsonb not null,
+  changed_fields text[] not null,
+  reason text,
+  source text not null default 'edit'::text,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.record_versions add constraint record_versions_source_check CHECK ((source = ANY (ARRAY['edit'::text, 'restore'::text])));
+alter table public.record_versions add constraint record_versions_table_check CHECK ((table_name = ANY (ARRAY['cases'::text, 'persons'::text, 'vehicles'::text, 'gangs'::text, 'places'::text, 'accounts'::text, 'narcotics'::text, 'evidence'::text, 'reports'::text, 'legal_requests'::text, 'field_submissions'::text])));
+alter table public.record_versions add constraint record_versions_pkey PRIMARY KEY (id);
+alter table public.record_versions add constraint record_versions_version_key UNIQUE (table_name, record_id, version_no);
+alter table public.record_versions enable row level security;
+
 create table public.report_versions (
   id uuid not null default gen_random_uuid(),
   report_id uuid not null,
@@ -4442,6 +4487,7 @@ CREATE INDEX ballistics_benches_case_id_fkey_idx ON public.ballistics_benches US
 CREATE INDEX ballistics_benches_name_trgm ON public.ballistics_benches USING gin (name gin_trgm_ops);
 CREATE INDEX bridge_ingestion_events_obs_idx ON public.bridge_ingestion_events USING btree (observation_id);
 CREATE INDEX bridge_ingestion_events_status_idx ON public.bridge_ingestion_events USING btree (status, received_at DESC);
+CREATE INDEX case_access_grants_expires_idx ON public.case_access_grants USING btree (expires_at);
 CREATE INDEX case_access_grants_granted_by_fkey_idx ON public.case_access_grants USING btree (granted_by);
 CREATE INDEX case_access_grants_officer_id_fkey_idx ON public.case_access_grants USING btree (officer_id);
 CREATE INDEX idx_cag_case ON public.case_access_grants USING btree (case_id);
@@ -4516,6 +4562,7 @@ CREATE INDEX custody_chain_evidence_id_at_idx ON public.custody_chain USING btre
 CREATE INDEX custody_chain_transferred_by_fkey_idx ON public.custody_chain USING btree (transferred_by);
 CREATE INDEX deleted_member_ledger_deleted_by_fkey_idx ON public.deleted_member_ledger USING btree (deleted_by);
 CREATE INDEX deleted_member_ledger_target_id_idx ON public.deleted_member_ledger USING btree (target_id);
+CREATE INDEX deleted_record_ledger_record_idx ON public.deleted_record_ledger USING btree (table_name, record_id);
 CREATE INDEX deletion_tokens_created_by_idx ON public.deletion_tokens USING btree (created_by);
 CREATE INDEX deletion_tokens_target_id_idx ON public.deletion_tokens USING btree (target_id);
 CREATE INDEX document_acknowledgements_user_idx ON public.document_acknowledgements USING btree (user_id);
@@ -4902,6 +4949,8 @@ CREATE INDEX record_extraction_facts_indicator_idx ON public.record_extraction_f
 CREATE INDEX record_extraction_facts_link_idx ON public.record_extraction_facts USING btree (linked_link_id) WHERE (linked_link_id IS NOT NULL);
 CREATE INDEX record_extractions_case_idx ON public.record_extractions USING btree (case_id);
 CREATE INDEX record_extractions_created_by_idx ON public.record_extractions USING btree (created_by);
+CREATE INDEX record_versions_created_idx ON public.record_versions USING btree (created_at);
+CREATE INDEX record_versions_record_idx ON public.record_versions USING btree (table_name, record_id, version_no DESC);
 CREATE INDEX report_versions_created_by_idx ON public.report_versions USING btree (created_by);
 CREATE INDEX report_versions_report_idx ON public.report_versions USING btree (report_id);
 CREATE INDEX reports_author_id_fkey_idx ON public.reports USING btree (author_id);
@@ -6069,6 +6118,55 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.case_access_renew(p_grant uuid, p_days integer DEFAULT 30)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  g public.case_access_grants;
+  c public.cases;
+begin
+  if v_uid is null or p_grant is null then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'unknown grant');
+  end if;
+  select * into g from public.case_access_grants where id = p_grant for update;
+  if not found or not private.can_grant_case(g.case_id) then
+    perform private.perm_deny('grant_access', 'case', coalesce(g.case_id, p_grant), 'not_permitted');
+    return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'you may not renew this grant');
+  end if;
+  if p_days is null or p_days < 1 or p_days > 90 then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'a renewal runs for between 1 and 90 days');
+  end if;
+  select * into c from public.cases where id = g.case_id;
+  if c.deleted_at is not null then
+    return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'the case is deleted');
+  end if;
+
+  update public.case_access_grants
+     set created_at = now(), expires_at = now() + make_interval(days => p_days),
+         renewed_at = now(), granted_by = v_uid,
+         reminder_sent_at = null, expired_notified_at = null
+   where id = p_grant
+   returning * into g;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'ACCESS_RENEWED', 'case_access_grants', g.id,
+          jsonb_build_object('case_id', g.case_id, 'officer_id', g.officer_id,
+                             'days', p_days, 'expires_at', g.expires_at));
+  if g.officer_id <> v_uid then
+    insert into public.notifications (user_id, type, payload)
+    values (g.officer_id, 'access_renewed', jsonb_build_object(
+      'case_id', g.case_id, 'case_number', c.case_number, 'title', c.title,
+      'grant_id', g.id, 'expires_at', g.expires_at, 'renewed_by', v_uid));
+  end if;
+  return jsonb_build_object('ok', true, 'grant_id', g.id, 'case_id', g.case_id,
+                            'officer_id', g.officer_id, 'expires_at', g.expires_at);
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.case_archive(p_case uuid, p_note text DEFAULT NULL::text)
  RETURNS cases
  LANGUAGE plpgsql
@@ -6290,7 +6388,7 @@ CREATE OR REPLACE FUNCTION public.case_permanent_delete(p_case uuid, p_reason te
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare v_uid uuid := (select auth.uid()); c public.cases; v_preview jsonb;
+declare v_uid uuid := (select auth.uid()); c public.cases; v_preview jsonb; v_refs jsonb; v_out jsonb;
 begin
   if not private.is_owner() then raise exception 'permanent case deletion is restricted to the owner'; end if;
   if btrim(coalesce(p_reason, '')) = '' then raise exception 'a reason is required'; end if;
@@ -6302,12 +6400,17 @@ begin
   if exists (select 1 from public.legal_requests where case_id = p_case) then
     raise exception 'this case has legal requests on file and cannot be deleted — withdraw or close them first';
   end if;
+  v_refs := private.permanent_delete_record_refs('cases', p_case);
+  if (v_refs ->> 'blocker_total')::bigint > 0 then
+    raise exception 'this case still holds live material — delete it to the Trash first: %', (v_refs -> 'blockers')::text;
+  end if;
   v_preview := public.case_delete_preview(p_case);
+  v_out := private.permanent_delete_record_apply('case', 'cases', p_case, btrim(p_reason), null);
   insert into public.audit_log (actor_id, action, entity, entity_id, detail)
   values (v_uid, 'CASE_PERMANENT_DELETE', 'cases', p_case,
           jsonb_build_object('case_number', c.case_number, 'title', c.title,
-                             'reason', btrim(p_reason), 'destroyed', v_preview));
-  delete from public.cases where id = p_case;
+                             'reason', btrim(p_reason), 'destroyed', v_preview,
+                             'ledger_id', v_out -> 'ledger_id'));
 end $function$
 ;
 
@@ -11750,7 +11853,11 @@ AS $function$
       'sib_temporary_access', coalesce((
         select jsonb_agg(jsonb_build_object('case_id', t.case_id, 'expires_at', t.expires_at) order by t.expires_at)
           from public.siu_temporary_access t
-         where t.user_id = d.uid and t.revoked_at is null and t.expires_at > now()), '[]'::jsonb)),
+         where t.user_id = d.uid and t.revoked_at is null and t.expires_at > now()), '[]'::jsonb),
+      'case_access_grants', coalesce((
+        select jsonb_agg(jsonb_build_object('case_id', g.case_id, 'expires_at', g.expires_at) order by g.expires_at)
+          from public.case_access_grants g
+         where g.officer_id = d.uid and g.expires_at > now()), '[]'::jsonb)),
     'flags', jsonb_build_object(
       'is_test', coalesce((select is_test from me), false),
       'login_denied', coalesce((select login_denied from me), false),
@@ -12629,6 +12736,112 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.permanent_delete_record_arm(p_kind text, p_id uuid, p_reason text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_kind text := lower(btrim(coalesce(p_kind, '')));
+  v_reason text := btrim(coalesce(p_reason, ''));
+  v_preview jsonb; v_token public.deletion_tokens;
+begin
+  if not private.is_owner() then raise exception 'permanent deletion is restricted to the owner'; end if;
+  perform private.assert_fresh_session();
+  if v_reason = '' then raise exception 'a reason is required to arm a permanent deletion'; end if;
+  v_preview := public.permanent_delete_record_preview(v_kind, p_id);
+  if not (v_preview ->> 'eligible')::boolean then
+    raise exception 'permanent deletion blocked: % — %', array_to_string(array(select jsonb_array_elements_text(v_preview -> 'ineligible_reasons')), '; '),
+      (v_preview -> 'blockers')::text;
+  end if;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'PERMANENT_DELETE_ARMED', v_preview -> 'target' ->> 'table', p_id,
+          jsonb_build_object('kind', v_kind, 'reason', left(v_reason, 500), 'label', v_preview -> 'target' ->> 'label',
+                             'preview', v_preview));
+  insert into public.deletion_tokens (target_id, target_kind, created_by, expires_at)
+  values (p_id, v_kind, v_uid, now() + interval '5 minutes')
+  returning * into v_token;
+  return jsonb_build_object('token', v_token.id, 'expires_at', v_token.expires_at,
+                            'label', v_preview -> 'target' ->> 'label',
+                            'confirm', 'DELETE ' || (v_preview -> 'target' ->> 'label'));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.permanent_delete_record_execute(p_token uuid, p_confirm text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  tok public.deletion_tokens; v_table text; v_label text; v_preview jsonb; v_reason text; v_out jsonb;
+begin
+  if not private.is_owner() then raise exception 'permanent deletion is restricted to the owner'; end if;
+  perform private.assert_fresh_session();
+  select * into tok from public.deletion_tokens where id = p_token for update;
+  if not found or tok.target_kind is null then raise exception 'invalid deletion token -- arm the deletion again'; end if;
+  if tok.created_by is distinct from v_uid then
+    raise exception 'this deletion token was issued to a different owner session -- arm the deletion again';
+  end if;
+  if tok.used_at is not null then raise exception 'this deletion token was already used'; end if;
+  if tok.expires_at <= now() then raise exception 'this deletion token has expired -- arm the deletion again'; end if;
+  v_table := private.soft_delete_table(tok.target_kind);
+  v_label := private.permanent_delete_record_label(v_table, tok.target_id);
+  if v_label is null then raise exception 'this record was already permanently deleted (or never existed)'; end if;
+  if p_confirm is distinct from 'DELETE ' || v_label then
+    raise exception 'confirmation text mismatch -- type exactly: DELETE %', v_label;
+  end if;
+  v_preview := public.permanent_delete_record_preview(tok.target_kind, tok.target_id);
+  if not (v_preview ->> 'eligible')::boolean then
+    raise exception 'permanent deletion blocked -- dependants appeared after arming: %', (v_preview -> 'blockers')::text;
+  end if;
+  v_reason := coalesce((select a.detail ->> 'reason' from public.audit_log a
+                         where a.action = 'PERMANENT_DELETE_ARMED' and a.entity_id = tok.target_id
+                           and a.actor_id = v_uid order by a.created_at desc limit 1), '(reason unavailable)');
+  v_out := private.permanent_delete_record_apply(tok.target_kind, v_table, tok.target_id, v_reason, tok.created_at);
+  update public.deletion_tokens set used_at = now() where id = p_token;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'PERMANENT_DELETE_EXECUTED', v_table, tok.target_id,
+          jsonb_build_object('kind', tok.target_kind, 'label', v_label) || v_out);
+  return jsonb_build_object('target_id', tok.target_id, 'kind', tok.target_kind) || v_out;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.permanent_delete_record_preview(p_kind text, p_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_kind text := lower(btrim(coalesce(p_kind, '')));
+  v_table text := private.soft_delete_table(lower(btrim(coalesce(p_kind, ''))));
+  st record; v_refs jsonb; v_assets jsonb; v_reasons text[] := '{}'; v_archived timestamptz;
+begin
+  if not private.is_owner() then raise exception 'permanent deletion is restricted to the owner'; end if;
+  if v_table is null or p_id is null then raise exception 'unknown record kind'; end if;
+  select * into st from private.soft_delete_state(v_kind, p_id);
+  if not st.p_exists then raise exception 'record not found'; end if;
+  if v_kind = 'case' then select c.archived_at into v_archived from public.cases c where c.id = p_id; end if;
+  v_refs := private.permanent_delete_record_refs(v_table, p_id);
+  v_assets := private.permanent_delete_record_assets(v_table, p_id);
+  if st.p_deleted_at is null and v_archived is null then
+    v_reasons := array_append(v_reasons, 'the record is not in the Trash');
+  end if;
+  if (v_refs ->> 'blocker_total')::bigint > 0 then v_reasons := array_append(v_reasons, 'live material or a legal hold still depends on it'); end if;
+  return v_refs || v_assets || jsonb_build_object(
+    'target', jsonb_build_object('kind', v_kind, 'table', v_table, 'id', p_id,
+                                 'label', private.permanent_delete_record_label(v_table, p_id),
+                                 'deleted_at', st.p_deleted_at, 'delete_batch', st.p_batch,
+                                 'archived_at', v_archived, 'case_id', st.p_case),
+    'eligible', cardinality(v_reasons) = 0,
+    'ineligible_reasons', to_jsonb(v_reasons));
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.person_merge(p_survivor uuid, p_victims uuid[], p_reason text)
  RETURNS void
  LANGUAGE plpgsql
@@ -12929,6 +13142,19 @@ begin
     'Your ' || r.request_type || ' request has a new assigned prosecutor.');
   return r;
 end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.record_history(p_kind text, p_id uuid)
+ RETURNS SETOF record_versions
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select r.* from public.record_versions r
+   where r.table_name = private.version_table(lower(btrim(coalesce(p_kind, ''))))
+     and r.record_id = p_id
+   order by r.version_no desc
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION public.record_subpoena_compliance(p_request uuid, p_status text, p_notes text DEFAULT NULL::text, p_non_compliance_reason text DEFAULT NULL::text, p_date timestamp with time zone DEFAULT now())
@@ -13660,6 +13886,80 @@ begin
   values (v_uid, 'RECORD_RESTORED', v_table, p_id,
           jsonb_build_object('kind', v_kind, 'reason', v_reason, 'batch', st.p_batch, 'restored', v_restored));
   return jsonb_build_object('ok', true, 'kind', v_kind, 'id', p_id, 'restored', v_restored);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.restore_version(p_kind text, p_id uuid, p_version_no integer, p_reason text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_kind text := lower(btrim(coalesce(p_kind, '')));
+  v_table text := private.version_table(lower(btrim(coalesce(p_kind, ''))));
+  v_reason text := left(nullif(btrim(coalesce(p_reason, '')), ''), 500);
+  ver record;
+  v_subset jsonb;
+  v_cols text[];
+  v_list text;
+  n int;
+  v_after int;
+begin
+  if v_uid is null or v_table is null or p_id is null or p_version_no is null then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'unknown record kind or version');
+  end if;
+  if v_table = 'legal_requests' then
+    return jsonb_build_object('ok', false, 'code', 'display_only', 'message', 'legal request versions are display-only');
+  end if;
+  if not private.version_editable(v_kind, v_table, p_id) then
+    perform private.perm_deny('restore_version', v_kind, p_id, 'not_permitted');
+    return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'you may not edit this record');
+  end if;
+  if v_reason is null then
+    return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'a reason is required to restore a version');
+  end if;
+  if v_table = 'reports' and exists (select 1 from public.reports r where r.id = p_id and r.finalized) then
+    return jsonb_build_object('ok', false, 'code', 'sealed', 'message', 'a finalized report is display-only');
+  end if;
+  select * into ver from public.record_versions v
+   where v.table_name = v_table and v.record_id = p_id and v.version_no = p_version_no;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'no such version');
+  end if;
+
+  select jsonb_object_agg(e.key, e.value) into v_subset
+    from jsonb_each(ver.new) e
+   where e.key = any (ver.changed_fields)
+     and not (e.key = any (private.version_protected_columns(v_table)));
+  if v_subset is null then
+    return jsonb_build_object('ok', false, 'code', 'nothing_restorable',
+                              'message', 'that version changed only fields an RPC governs');
+  end if;
+  select array_agg(k order by k) into v_cols from jsonb_object_keys(v_subset) k;
+  select string_agg(format('%I', c), ', ') into v_list from unnest(v_cols) c;
+
+  perform set_config('cid.version_source', 'restore', true);
+  perform set_config('cid.version_reason', v_reason, true);
+  execute format('update public.%I t set (%s) = (select %s from jsonb_populate_record(null::public.%I, $1)) where t.id = $2',
+                 v_table, v_list, v_list, v_table)
+    using v_subset, p_id;
+  get diagnostics n = row_count;
+  perform set_config('cid.version_source', '', true);
+  perform set_config('cid.version_reason', '', true);
+  if n = 0 then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'the record is gone');
+  end if;
+
+  select max(v.version_no) into v_after from public.record_versions v
+   where v.table_name = v_table and v.record_id = p_id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'RECORD_VERSION_RESTORED', v_table, p_id,
+          jsonb_build_object('kind', v_kind, 'version_no', p_version_no, 'fields', to_jsonb(v_cols),
+                             'reason', v_reason, 'new_version_no', v_after));
+  return jsonb_build_object('ok', true, 'kind', v_kind, 'id', p_id, 'version_no', p_version_no,
+                            'fields', to_jsonb(v_cols), 'new_version_no', v_after);
 end $function$
 ;
 
@@ -19830,6 +20130,77 @@ end $function$
 
 -- ---- private ----
 
+CREATE OR REPLACE FUNCTION private.access_grant_expiry_sweep()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare g record; n_reminded int := 0; n_expired int := 0; v_lead uuid;
+begin
+  perform set_config('cid.access_sweep', 'on', true);
+
+  for g in
+    select a.*, c.case_number, c.title, c.lead_detective_id
+      from public.case_access_grants a join public.cases c on c.id = a.case_id
+     where a.reminder_sent_at is null and a.expired_notified_at is null
+       and a.expires_at > now() and a.expires_at <= now() + interval '3 days'
+     order by a.expires_at
+  loop
+    insert into public.notifications (user_id, type, payload)
+    select u, 'access_expiring', jsonb_build_object(
+             'case_id', g.case_id, 'case_number', g.case_number, 'title', g.title,
+             'grant_id', g.id, 'officer_id', g.officer_id, 'expires_at', g.expires_at)
+      from unnest(array_remove(array[g.officer_id, g.lead_detective_id], null)) u
+     group by u;
+    update public.case_access_grants set reminder_sent_at = now() where id = g.id;
+    n_reminded := n_reminded + 1;
+  end loop;
+
+  for g in
+    select a.*, c.case_number, c.title, c.lead_detective_id
+      from public.case_access_grants a join public.cases c on c.id = a.case_id
+     where a.expires_at <= now() and a.expired_notified_at is null
+     order by a.expires_at
+  loop
+    insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+    values (null, 'ACCESS_EXPIRED', 'case_access_grants', g.id,
+            jsonb_build_object('case_id', g.case_id, 'officer_id', g.officer_id,
+                               'granted_by', g.granted_by, 'expires_at', g.expires_at));
+    insert into public.notifications (user_id, type, payload)
+    select u, 'access_expired', jsonb_build_object(
+             'case_id', g.case_id, 'case_number', g.case_number, 'title', g.title,
+             'grant_id', g.id, 'officer_id', g.officer_id, 'expires_at', g.expires_at)
+      from unnest(array_remove(array[g.officer_id, g.lead_detective_id], null)) u
+     group by u;
+    delete from public.case_access_grants where id = g.id;
+    n_expired := n_expired + 1;
+  end loop;
+
+  perform set_config('cid.access_sweep', '', true);
+  return jsonb_build_object('reminded', n_reminded, 'expired', n_expired);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.access_grant_expiry_sweep_job()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_run bigint; v_out jsonb;
+begin
+  v_run := private.job_begin('access_grant_expiry_sweep');
+  begin
+    v_out := private.access_grant_expiry_sweep();
+    perform private.job_end(v_run, 'succeeded', v_out);
+  exception when others then
+    perform private.job_end(v_run, 'failed', jsonb_build_object('error', sqlerrm));
+    raise;
+  end;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.account_freeze_identity()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -19969,6 +20340,30 @@ begin
   insert into public.audit_log (actor_id, action, entity, entity_id)
   values ((select auth.uid()), tg_op, tg_table_name, rid);
   return coalesce(new, old);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.audit_case_access_grant()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  if tg_op = 'INSERT' then
+    insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+    values ((select auth.uid()), 'ACCESS_GRANTED', 'case_access_grants', new.id,
+            jsonb_build_object('case_id', new.case_id, 'officer_id', new.officer_id,
+                               'granted_by', new.granted_by, 'expires_at', new.expires_at));
+    return new;
+  end if;
+  if coalesce(current_setting('cid.access_sweep', true), '') <> 'on' then
+    insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+    values ((select auth.uid()), 'ACCESS_REVOKED', 'case_access_grants', old.id,
+            jsonb_build_object('case_id', old.case_id, 'officer_id', old.officer_id,
+                               'granted_by', old.granted_by, 'expires_at', old.expires_at));
+  end if;
+  return old;
 end $function$
 ;
 
@@ -20503,7 +20898,7 @@ AS $function$
         c.bureau = 'JTF' or c.bureau = me.division
         or c.lead_detective_id = (select auth.uid()) or c.created_by = (select auth.uid())
         or private.is_command()
-        or exists (select 1 from public.case_access_grants g where g.case_id = cid and g.officer_id = (select auth.uid()))
+        or exists (select 1 from public.case_access_grants g where g.case_id = cid and g.officer_id = (select auth.uid()) and g.expires_at > now())
         or private.has_joint_access(cid)
         or private.has_op_joint_access(cid)
       ))
@@ -20538,7 +20933,7 @@ AS $function$
     or p_bureau = (select division from public.profiles where id = (select auth.uid()))
     or p_lead = (select auth.uid()) or p_created_by = (select auth.uid())
     or private.is_command()
-    or exists (select 1 from public.case_access_grants g where g.case_id = p_cid and g.officer_id = (select auth.uid()))
+    or exists (select 1 from public.case_access_grants g where g.case_id = p_cid and g.officer_id = (select auth.uid()) and g.expires_at > now())
     or private.has_joint_access(p_cid)
     or private.has_op_joint_access(p_cid)
   ) end
@@ -23492,7 +23887,8 @@ AS $function$
                                and exists (select 1 from public.cases c where c.id = p_id and c.deleted_at is null)
       when 'delete_child' then private.can_delete_case_child(p_id)
       when 'permanent_delete' then private.is_owner()
-                               and exists (select 1 from public.cases c where c.id = p_id and c.archived_at is not null)
+                               and exists (select 1 from public.cases c where c.id = p_id
+                                            and (c.archived_at is not null or c.deleted_at is not null))
       else false end
     when p_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'gang_member', 'gang_turf', 'person_place', 'person_vehicle', 'person_relationship', 'account_link', 'case', 'report', 'media', 'evidence', 'case_task', 'case_message', 'case_intel_link', 'case_blocker', 'rico_case', 'predicate_act') then (
       select case p_action
@@ -23505,6 +23901,19 @@ AS $function$
         when 'delete'      then st.p_exists and st.p_deleted_at is null and private.perm_registry_delete(p_kind, p_id)
         when 'restore'     then st.p_exists and st.p_deleted_at is not null
                                 and (private.is_owner() or private.perm_registry_delete(p_kind, p_id))
+        -- P1-05: field-level history follows the read; a restore is an edit
+        -- (a finalized report and a legal request are display-only).
+        when 'read_history' then private.version_table(p_kind) is not null
+                                and st.p_exists and (st.p_deleted_at is null or private.is_owner())
+                                and private.perm_registry_visible(p_kind, p_id)
+        when 'restore_version' then private.version_table(p_kind) is not null
+                                and st.p_exists and st.p_deleted_at is null
+                                and (p_kind <> 'case' or exists (select 1 from public.cases c where c.id = p_id and c.archived_at is null))
+                                and private.perm_registry_edit(p_kind, p_id)
+                                and not (p_kind = 'report' and exists (select 1 from public.reports r where r.id = p_id and r.finalized))
+        -- P1-07: the Owner permanently deletes from the Trash (an archived
+        -- case too); the protocol's own preview refuses live dependants.
+        when 'permanent_delete' then private.is_owner() and st.p_exists and st.p_deleted_at is not null
         else false end
       from private.soft_delete_state(p_kind, p_id) st)
     else false end, false)
@@ -23807,6 +24216,177 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.permanent_delete_record_apply(p_kind text, p_table text, p_id uuid, p_reason text, p_armed_at timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_snapshot jsonb; v_batch uuid; v_refs jsonb; v_assets jsonb; v_ledger uuid; v_label text;
+  v_paths text[]; v_storage_ok boolean := true; t text;
+  v_leaf_first text[] := array['predicate_acts', 'rico_cases', 'case_blockers', 'case_intel_links', 'case_messages',
+                               'case_tasks', 'evidence', 'media', 'reports', 'gang_members', 'gang_turf',
+                               'person_places', 'person_vehicles', 'person_relationships', 'account_links',
+                               'persons', 'vehicles', 'gangs', 'places', 'accounts', 'indicators', 'narcotics',
+                               'operations', 'trackers', 'cases'];
+begin
+  execute format('select to_jsonb(t) from public.%I t where t.id = $1', p_table) into v_snapshot using p_id;
+  if v_snapshot is null then raise exception 'record not found'; end if;
+  v_batch := (v_snapshot ->> 'delete_batch')::uuid;
+  v_label := private.permanent_delete_record_label(p_table, p_id);
+  v_refs := private.permanent_delete_record_refs(p_table, p_id);
+  v_assets := private.permanent_delete_record_assets(p_table, p_id);
+
+  insert into public.deleted_record_ledger
+    (kind, table_name, record_id, label, snapshot, destroyed, unlinked, storage_objects, external_assets,
+     reason, deleted_by, armed_at)
+  values (p_kind, p_table, p_id, v_label, v_snapshot, v_refs -> 'destroyed', v_refs -> 'unlinked',
+          v_assets -> 'storage_objects', v_assets -> 'external_assets', p_reason, v_uid, p_armed_at)
+  returning id into v_ledger;
+
+  select coalesce(array_agg(x), '{}') into v_paths from jsonb_array_elements_text(v_assets -> 'storage_objects') x;
+  if cardinality(v_paths) > 0 then
+    begin
+      delete from storage.objects o where o.bucket_id = 'field-evidence' and o.name = any (v_paths);
+    exception when others then
+      v_storage_ok := false;
+      update public.deleted_record_ledger
+         set external_assets = external_assets || jsonb_build_object('storage_error', left(sqlerrm, 300))
+       where id = v_ledger;
+    end;
+  end if;
+
+  if v_batch is not null then
+    foreach t in array v_leaf_first loop
+      execute format('delete from public.%I where delete_batch = $1 and id <> $2', t) using v_batch, p_id;
+    end loop;
+  end if;
+  execute format('delete from public.%I where id = $1', p_table) using p_id;
+
+  return jsonb_build_object('ledger_id', v_ledger, 'label', v_label, 'destroyed', v_refs -> 'destroyed',
+                            'unlinked', v_refs -> 'unlinked', 'storage_objects', v_assets -> 'storage_objects',
+                            'storage_ok', v_storage_ok, 'external_assets', v_assets -> 'external_assets');
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.permanent_delete_record_assets(p_table text, p_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_batch uuid; v_paths jsonb; v_urls jsonb; v_cols text[]; v_where text;
+begin
+  execute format('select delete_batch from public.%I where id = $1', p_table) into v_batch using p_id;
+  select coalesce(array_agg(a.attname::text), '{}') into v_cols
+    from pg_constraint c
+    join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+   where c.contype = 'f' and c.conrelid = 'public.media'::regclass
+     and c.confrelid = ('public.' || quote_ident(p_table))::regclass;
+  v_where := case when p_table = 'media' then 'm.id = $1' else 'false' end;
+  if cardinality(v_cols) > 0 then
+    v_where := v_where || ' or ' || (select string_agg(format('m.%I = $1', c), ' or ') from unnest(v_cols) c);
+  end if;
+  if v_batch is not null then
+    v_where := v_where || format(' or m.delete_batch = %L', v_batch);
+  end if;
+  execute format('select coalesce(jsonb_agg(distinct m.storage_path), ''[]''::jsonb),
+                         coalesce(jsonb_agg(distinct m.external_url) filter (where m.external_url is not null), ''[]''::jsonb)
+                    from public.media m where (%s) and (m.storage_path is not null or m.external_url is not null)', v_where)
+    into v_paths, v_urls using p_id;
+  return jsonb_build_object('storage_objects', coalesce(v_paths, '[]'::jsonb) - 'null',
+                            'external_assets', coalesce(v_urls, '[]'::jsonb));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.permanent_delete_record_label(p_table text, p_id uuid)
+ RETURNS text
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare j jsonb;
+begin
+  execute format('select to_jsonb(t) from public.%I t where t.id = $1', p_table) into j using p_id;
+  if j is null then return null; end if;
+  return coalesce(nullif(btrim(coalesce(j ->> 'case_number', '')), ''), nullif(btrim(coalesce(j ->> 'name', '')), ''),
+                  nullif(btrim(coalesce(j ->> 'plate', '')), ''), nullif(btrim(coalesce(j ->> 'title', '')), ''),
+                  nullif(btrim(coalesce(j ->> 'label', '')), ''), nullif(btrim(coalesce(j ->> 'item_code', '')), ''),
+                  nullif(btrim(coalesce(j ->> 'value', '')), ''), nullif(btrim(coalesce(j ->> 'code', '')), ''),
+                  p_id::text);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.permanent_delete_record_refs(p_table text, p_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  rec record; n_total bigint; n_trashed bigint; n_live bigint; v_has_lifecycle boolean; v_ref text;
+  v_out jsonb := jsonb_build_object('blockers', '{}'::jsonb, 'destroyed', '{}'::jsonb, 'unlinked', '{}'::jsonb);
+  v_total bigint := 0;
+  v_material text[] := array['reports', 'evidence', 'media', 'legal_requests', 'case_intel_links', 'rico_cases',
+                             'predicate_acts', 'gang_members', 'gang_turf', 'person_places', 'person_vehicles',
+                             'person_relationships', 'account_links', 'case_tasks', 'case_messages', 'case_blockers'];
+  v_case uuid;
+begin
+  for rec in
+    select cl.relname::text as tbl, a.attname::text as col, c.confdeltype
+      from pg_constraint c
+      join pg_class cl on cl.oid = c.conrelid
+      join lateral unnest(c.conkey) k(attnum) on true
+      join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
+     where c.contype = 'f' and c.confrelid = ('public.' || quote_ident(p_table))::regclass
+       and c.connamespace = 'public'::regnamespace
+     order by 1, 2
+  loop
+    v_ref := rec.tbl || '.' || rec.col;
+    execute format('select count(*) from public.%I where %I = $1', rec.tbl, rec.col) into n_total using p_id;
+    if n_total = 0 then continue; end if;
+    select exists (select 1 from information_schema.columns
+                    where table_schema = 'public' and table_name = rec.tbl and column_name = 'deleted_at')
+      into v_has_lifecycle;
+    if v_has_lifecycle then
+      execute format('select count(*) from public.%I where %I = $1 and deleted_at is not null', rec.tbl, rec.col)
+        into n_trashed using p_id;
+    else
+      n_trashed := 0;
+    end if;
+    n_live := n_total - n_trashed;
+    if n_trashed > 0 then
+      v_out := jsonb_set(v_out, array['destroyed', v_ref], to_jsonb(n_trashed));
+    end if;
+    if n_live > 0 then
+      if rec.confdeltype in ('a', 'r') or rec.tbl = any (v_material) then
+        v_out := jsonb_set(v_out, array['blockers', v_ref], to_jsonb(n_live));
+        v_total := v_total + n_live;
+      elsif rec.confdeltype = 'n' or rec.confdeltype = 'd' then
+        v_out := jsonb_set(v_out, array['unlinked', v_ref], to_jsonb(n_live));
+      else
+        v_out := jsonb_set(v_out, array['destroyed', v_ref],
+                           to_jsonb(coalesce((v_out -> 'destroyed' ->> v_ref)::bigint, 0) + n_live));
+      end if;
+    end if;
+  end loop;
+
+  select st.p_case into v_case from private.soft_delete_state(
+    case p_table when 'cases' then 'case' when 'reports' then 'report' when 'media' then 'media'
+                 when 'evidence' then 'evidence' when 'case_tasks' then 'case_task'
+                 when 'case_messages' then 'case_message' when 'case_intel_links' then 'case_intel_link'
+                 when 'case_blockers' then 'case_blocker' when 'rico_cases' then 'rico_case'
+                 when 'predicate_acts' then 'predicate_act' else null end, p_id) st;
+  if v_case is not null and private.case_has_active_hold(v_case) then
+    v_out := jsonb_set(v_out, array['blockers', 'legal_holds'], to_jsonb(1));
+    v_total := v_total + 1;
+  end if;
+  return v_out || jsonb_build_object('blocker_total', v_total);
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.permanent_delete_refmap(p_target uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -23857,6 +24437,47 @@ AS $function$
        and (c.expires_at is null or c.expires_at > now())
   ) x where b is not null
 $function$
+;
+
+CREATE OR REPLACE FUNCTION private.record_versions_prune(p_keep integer DEFAULT 5, p_age interval DEFAULT '2 years'::interval)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare n int;
+begin
+  with ranked as (
+    select v.id, v.table_name, v.record_id, v.created_at,
+           row_number() over (partition by v.table_name, v.record_id order by v.version_no desc) as rn
+      from public.record_versions v),
+  victims as (
+    select r.id from ranked r
+     where r.rn > p_keep and r.created_at < now() - p_age
+       and not private.version_record_protected(r.table_name, r.record_id))
+  delete from public.record_versions v using victims where v.id = victims.id;
+  get diagnostics n = row_count;
+  return jsonb_build_object('pruned', n, 'keep', p_keep, 'older_than', p_age::text);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.record_versions_prune_job()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_run bigint; v_out jsonb;
+begin
+  v_run := private.job_begin('record_versions_prune');
+  begin
+    v_out := private.record_versions_prune();
+    perform private.job_end(v_run, 'succeeded', v_out);
+  exception when others then
+    perform private.job_end(v_run, 'failed', jsonb_build_object('error', sqlerrm));
+    raise;
+  end;
+end $function$
 ;
 
 CREATE OR REPLACE FUNCTION private.rls_test_cleanup_surveillance(ids uuid[], case_ids uuid[])
@@ -24923,6 +25544,170 @@ exception when others then
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.version_editable(p_kind text, p_table text, p_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce(case
+    when p_table = 'legal_requests' then false
+    when p_table = 'field_submissions' then exists (
+      select 1 from public.field_submissions f
+       where f.id = p_id and f.officer_id = (select auth.uid()) and f.deleted_at is null)
+    else private.perm_dispatch('edit', p_kind, p_id) end, false)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.version_protected_columns(p_table text)
+ RETURNS text[]
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  select array['id', 'created_at', 'created_by', 'updated_at', 'archived_at', 'archived_by',
+               'deleted_at', 'deleted_by', 'delete_reason', 'delete_batch', 'last_stale_notified_at']
+      || case p_table
+           when 'cases' then array['bureau', 'case_number', 'case_authority', 'status', 'closed_at',
+                                   'lead_detective_id', 'is_joint_case', 'originating_bureau']
+           when 'reports' then array['case_id', 'author_id', 'finalized', 'signature', 'seq', 'kind',
+                                     'parent_id', 'template']
+           when 'evidence' then array['case_id', 'collected_by']
+           when 'narcotics' then array['status']
+           when 'field_submissions' then array['officer_id', 'status', 'submitted_at', 'assigned_to',
+                                               'assigned_at', 'submission_no', 'archive_reason']
+           else '{}'::text[] end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.version_record_protected(p_table text, p_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  with c as (
+    select case p_table
+      when 'cases' then p_id
+      when 'reports' then (select r.case_id from public.reports r where r.id = p_id)
+      when 'evidence' then (select e.case_id from public.evidence e where e.id = p_id)
+      when 'legal_requests' then (select l.case_id from public.legal_requests l where l.id = p_id)
+      else null end as case_id)
+  select coalesce((select c.case_id is not null
+                      and (exists (select 1 from public.cases x where x.id = c.case_id and x.status <> 'closed')
+                           or private.case_has_active_hold(c.case_id))
+                     from c), false)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.version_row()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_mode text := coalesce(tg_argv[0], 'full');
+  v_noise text[] := array['updated_at', 'last_stale_notified_at', 'deleted_at', 'deleted_by',
+                          'delete_reason', 'delete_batch', 'current_version_id'];
+  v_draft text[] := array['title', 'priority', 'form_data', 'narrative', 'person_id',
+                          'person_name_snapshot', 'recipient_type', 'recipient_name', 'classification'];
+  v_old jsonb := to_jsonb(old);
+  v_new jsonb := to_jsonb(new);
+  v_changed text[];
+  v_actor uuid := (select auth.uid());
+  v_source text := coalesce(nullif(current_setting('cid.version_source', true), ''), 'edit');
+  v_reason text := left(nullif(btrim(coalesce(current_setting('cid.version_reason', true), '')), ''), 500);
+  v_last_id bigint; v_last_no int; v_last_actor uuid; v_last_updated timestamptz;
+  v_last_source text; v_last_old jsonb;
+begin
+  if v_mode = 'report' and coalesce((v_old ->> 'finalized')::boolean, false)
+     and coalesce((v_new ->> 'finalized')::boolean, false) then
+    return null;
+  end if;
+  if v_mode = 'legal_draft' then
+    select coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb) into v_old
+      from jsonb_each(v_old) e where e.key = any (v_draft);
+    select coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb) into v_new
+      from jsonb_each(v_new) e where e.key = any (v_draft);
+  end if;
+  v_old := v_old - v_noise;
+  v_new := v_new - v_noise;
+  select coalesce(array_agg(k.key order by k.key), '{}'::text[]) into v_changed
+    from (select e.key from jsonb_each(v_new) e union select e.key from jsonb_each(v_old) e) k
+   where v_old -> k.key is distinct from v_new -> k.key;
+  if cardinality(v_changed) = 0 then return null; end if;
+
+  select r.id, r.version_no, r.actor_id, r.updated_at, r.source, r.old
+    into v_last_id, v_last_no, v_last_actor, v_last_updated, v_last_source, v_last_old
+    from public.record_versions r
+   where r.table_name = tg_table_name::text and r.record_id = new.id
+   order by r.version_no desc limit 1
+     for update;
+
+  if v_last_id is not null and v_source = 'edit' and v_last_source = 'edit'
+     and v_last_actor is not distinct from v_actor
+     and v_last_updated > now() - interval '5 minutes' then
+    select coalesce(array_agg(k.key order by k.key), '{}'::text[]) into v_changed
+      from (select e.key from jsonb_each(v_new) e union select e.key from jsonb_each(v_last_old) e) k
+     where v_last_old -> k.key is distinct from v_new -> k.key;
+    if cardinality(v_changed) = 0 then
+      delete from public.record_versions where id = v_last_id;
+    else
+      update public.record_versions
+         set new = v_new, changed_fields = v_changed, updated_at = now()
+       where id = v_last_id;
+    end if;
+    return null;
+  end if;
+
+  insert into public.record_versions
+    (table_name, record_id, version_no, actor_id, old, new, changed_fields, reason, source)
+  values (tg_table_name::text, new.id, coalesce(v_last_no, 0) + 1, v_actor, v_old, v_new,
+          v_changed, v_reason, v_source);
+  return null;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.version_table(p_kind text)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  select case p_kind
+    when 'case' then 'cases'
+    when 'person' then 'persons'
+    when 'vehicle' then 'vehicles'
+    when 'gang' then 'gangs'
+    when 'place' then 'places'
+    when 'account' then 'accounts'
+    when 'narcotic' then 'narcotics'
+    when 'evidence' then 'evidence'
+    when 'report' then 'reports'
+    when 'legal' then 'legal_requests'
+    when 'field_submission' then 'field_submissions'
+    else null end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.version_visible(p_table text, p_id uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO ''
+AS $function$
+declare v boolean;
+begin
+  if p_table not in ('cases', 'persons', 'vehicles', 'gangs', 'places', 'accounts', 'narcotics',
+                     'evidence', 'reports', 'legal_requests', 'field_submissions') then
+    return false;
+  end if;
+  execute format('select exists (select 1 from public.%I t where t.id = $1)', p_table) into v using p_id;
+  return coalesce(v, false);
+end $function$
+;
+
 -- ============================================================
 -- Triggers (non-internal)
 -- ============================================================
@@ -24934,6 +25719,7 @@ CREATE TRIGGER account_links_stamp BEFORE INSERT OR UPDATE ON public.account_lin
 CREATE TRIGGER accounts_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.accounts FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER accounts_freeze_identity BEFORE UPDATE ON public.accounts FOR EACH ROW EXECUTE FUNCTION private.account_freeze_identity();
 CREATE TRIGGER accounts_track_handle AFTER INSERT OR UPDATE ON public.accounts FOR EACH ROW EXECUTE FUNCTION private.account_track_handle();
+CREATE TRIGGER accounts_version AFTER UPDATE ON public.accounts FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER touch_announcements BEFORE UPDATE ON public.announcements FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_stamp_author_ann BEFORE INSERT ON public.announcements FOR EACH ROW EXECUTE FUNCTION stamp_author_identity();
 CREATE TRIGGER audit_log_chain_stamp BEFORE INSERT ON public.audit_log FOR EACH ROW EXECUTE FUNCTION private.audit_chain_stamp();
@@ -24941,6 +25727,7 @@ CREATE TRIGGER audit_log_immutable BEFORE DELETE OR UPDATE ON public.audit_log F
 CREATE TRIGGER audit_log_no_truncate BEFORE TRUNCATE ON public.audit_log FOR EACH STATEMENT EXECUTE FUNCTION private.audit_chain_block();
 CREATE TRIGGER ballistic_footprints_touch BEFORE UPDATE ON public.ballistic_footprints FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER ballistics_benches_touch BEFORE UPDATE ON public.ballistics_benches FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER case_access_grants_audit AFTER INSERT OR DELETE ON public.case_access_grants FOR EACH ROW EXECUTE FUNCTION private.audit_case_access_grant();
 CREATE TRIGGER audit_car AFTER INSERT OR DELETE OR UPDATE ON public.case_access_requests FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER case_assignments_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_assignments FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER case_blockers_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_blockers FOR EACH ROW EXECUTE FUNCTION private.audit();
@@ -24962,6 +25749,7 @@ CREATE TRIGGER cases_audit AFTER INSERT OR DELETE OR UPDATE ON public.cases FOR 
 CREATE TRIGGER cases_block_archive_cols BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_archive();
 CREATE TRIGGER cases_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER cases_touch BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.touch_cases();
+CREATE TRIGGER cases_version AFTER UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER trg_block_direct_case_bureau BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_bureau();
 CREATE TRIGGER trg_block_direct_case_stage BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_stage();
 CREATE TRIGGER trg_block_direct_signoff BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_signoff();
@@ -24985,6 +25773,7 @@ CREATE TRIGGER documents_versions_immutable BEFORE DELETE OR UPDATE ON public.do
 CREATE TRIGGER evidence_audit AFTER INSERT OR DELETE OR UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER evidence_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER evidence_touch BEFORE UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER evidence_version AFTER UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER external_links_touch BEFORE UPDATE ON public.external_links FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER external_media_refs_touch BEFORE UPDATE ON public.external_media_refs FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER external_officer_identities_touch BEFORE UPDATE ON public.external_officer_identities FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -25015,6 +25804,7 @@ CREATE TRIGGER field_submission_vehicles_audit AFTER INSERT OR DELETE OR UPDATE 
 CREATE TRIGGER field_submissions_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submissions FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_submissions_before_insert BEFORE INSERT ON public.field_submissions FOR EACH ROW EXECUTE FUNCTION private.field_submission_before_insert();
 CREATE TRIGGER field_submissions_before_update BEFORE UPDATE ON public.field_submissions FOR EACH ROW EXECUTE FUNCTION private.field_submission_before_update();
+CREATE TRIGGER field_submissions_version AFTER UPDATE ON public.field_submissions FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER gang_members_audit AFTER INSERT OR DELETE OR UPDATE ON public.gang_members FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER gang_members_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.gang_members FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER gang_members_touch BEFORE UPDATE ON public.gang_members FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -25026,6 +25816,7 @@ CREATE TRIGGER gang_turf_touch BEFORE UPDATE ON public.gang_turf FOR EACH ROW EX
 CREATE TRIGGER gangs_audit AFTER INSERT OR DELETE OR UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER gangs_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER gangs_touch BEFORE UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER gangs_version AFTER UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER gangs_visibility_forget AFTER DELETE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.siu_visibility_forget('gang');
 CREATE TRIGGER indicators_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.indicators FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER integration_sources_touch BEFORE UPDATE ON public.integration_sources FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -25035,6 +25826,7 @@ CREATE TRIGGER trg_touch_justice_memberships BEFORE UPDATE ON public.justice_mem
 CREATE TRIGGER legal_actions_immutable BEFORE DELETE OR UPDATE ON public.legal_request_actions FOR EACH ROW EXECUTE FUNCTION private.block_legal_immutable();
 CREATE TRIGGER legal_signatures_immutable BEFORE DELETE OR UPDATE ON public.legal_request_signatures FOR EACH ROW EXECUTE FUNCTION private.block_legal_immutable();
 CREATE TRIGGER legal_versions_immutable BEFORE DELETE OR UPDATE ON public.legal_request_versions FOR EACH ROW EXECUTE FUNCTION private.block_legal_immutable();
+CREATE TRIGGER legal_requests_version AFTER UPDATE ON public.legal_requests FOR EACH ROW EXECUTE FUNCTION private.version_row('legal_draft');
 CREATE TRIGGER trg_touch_legal_requests BEFORE UPDATE ON public.legal_requests FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_touch_mdt_projections BEFORE UPDATE ON public.mdt_wanted_projections FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER media_audit AFTER INSERT OR DELETE OR UPDATE ON public.media FOR EACH ROW EXECUTE FUNCTION private.audit();
@@ -25067,6 +25859,7 @@ CREATE TRIGGER narcotics_audit AFTER INSERT OR DELETE OR UPDATE ON public.narcot
 CREATE TRIGGER narcotics_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.narcotics FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER narcotics_guard BEFORE INSERT OR UPDATE ON public.narcotics FOR EACH ROW EXECUTE FUNCTION private.guard_narcotic();
 CREATE TRIGGER narcotics_touch BEFORE UPDATE ON public.narcotics FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER narcotics_version AFTER UPDATE ON public.narcotics FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER operations_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.operations FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER operations_touch BEFORE UPDATE ON public.operations FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_audit_operation_status AFTER UPDATE ON public.operations FOR EACH ROW EXECUTE FUNCTION private.audit_operation_status();
@@ -25084,10 +25877,12 @@ CREATE TRIGGER person_vehicles_touch BEFORE UPDATE ON public.person_vehicles FOR
 CREATE TRIGGER persons_audit AFTER INSERT OR DELETE OR UPDATE ON public.persons FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER persons_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.persons FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER persons_touch BEFORE UPDATE ON public.persons FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER persons_version AFTER UPDATE ON public.persons FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER persons_visibility_forget AFTER DELETE ON public.persons FOR EACH ROW EXECUTE FUNCTION private.siu_visibility_forget('person');
 CREATE TRIGGER places_audit AFTER INSERT OR DELETE OR UPDATE ON public.places FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER places_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.places FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER places_touch BEFORE UPDATE ON public.places FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER places_version AFTER UPDATE ON public.places FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER places_visibility_forget AFTER DELETE ON public.places FOR EACH ROW EXECUTE FUNCTION private.siu_visibility_forget('place');
 CREATE TRIGGER predicate_acts_audit AFTER INSERT OR DELETE OR UPDATE ON public.predicate_acts FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER predicate_acts_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.predicate_acts FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
@@ -25102,6 +25897,7 @@ CREATE TRIGGER report_versions_immutable BEFORE UPDATE ON public.report_versions
 CREATE TRIGGER reports_audit AFTER INSERT OR DELETE OR UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER reports_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER reports_touch BEFORE UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER reports_version AFTER UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION private.version_row('report');
 CREATE TRIGGER trg_block_direct_report_finalize BEFORE UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION private.block_direct_report_finalize();
 CREATE TRIGGER rico_cases_audit AFTER INSERT OR DELETE OR UPDATE ON public.rico_cases FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER rico_cases_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.rico_cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
@@ -25138,6 +25934,7 @@ CREATE TRIGGER user_prefs_touch BEFORE UPDATE ON public.user_prefs FOR EACH ROW 
 CREATE TRIGGER vehicles_audit AFTER INSERT OR DELETE OR UPDATE ON public.vehicles FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER vehicles_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.vehicles FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER vehicles_touch BEFORE UPDATE ON public.vehicles FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER vehicles_version AFTER UPDATE ON public.vehicles FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER vehicles_visibility_forget AFTER DELETE ON public.vehicles FOR EACH ROW EXECUTE FUNCTION private.siu_visibility_forget('vehicle');
 
 -- ============================================================
@@ -25448,6 +26245,10 @@ create policy custody_sel on public.custody_chain
   WHERE ((e.id = custody_chain.evidence_id) AND private.can_read_case(e.case_id)))));
 
 create policy dml_sel on public.deleted_member_ledger
+  as permissive for select to authenticated
+  using (private.is_owner());
+
+create policy deleted_record_ledger_sel on public.deleted_record_ledger
   as permissive for select to authenticated
   using (private.is_owner());
 
@@ -26575,6 +27376,10 @@ create policy record_extractions_upd on public.record_extractions
   using (private.can_access_case(case_id))
   with check (private.can_access_case(case_id));
 
+create policy record_versions_sel on public.record_versions
+  as permissive for select to authenticated
+  using (private.version_visible(table_name, record_id));
+
 create policy report_versions_sel on public.report_versions
   as permissive for select to authenticated
   using ((EXISTS ( SELECT 1
@@ -27132,7 +27937,7 @@ create policy wl_sel on public.watchlist
 --   ballistic_footprints -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   ballistics_benches -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   bridge_ingestion_events -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_access_grants -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_access_grants -> authenticated: DELETE, INSERT, SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_access_requests -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_assignments -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_blockers -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -27149,6 +27954,7 @@ create policy wl_sel on public.watchlist
 --   commendations -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   custody_chain -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   deleted_member_ledger -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   deleted_record_ledger -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   deletion_tokens -> service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   document_acknowledgements -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   document_reading_campaigns -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -27251,6 +28057,7 @@ create policy wl_sel on public.watchlist
 --   raid_compensations -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   record_extraction_facts -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   record_extractions -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   record_versions -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   report_versions -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   reports -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   restricted_access_grants -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -27386,6 +28193,8 @@ create policy wl_sel on public.watchlist
 -- ============================================================
 
 --
+--   private.access_grant_expiry_sweep(): {postgres=X/postgres}
+--   private.access_grant_expiry_sweep_job(): {postgres=X/postgres}
 --   private.account_freeze_identity(): default (PUBLIC)
 --   private.account_link_guard_confirm(): default (PUBLIC)
 --   private.account_link_stamp(): default (PUBLIC)
@@ -27393,6 +28202,7 @@ create policy wl_sel on public.watchlist
 --   private.announcement_recipients(p_audience text, p_mentions jsonb, p_author uuid): default (PUBLIC)
 --   private.assert_fresh_session(): default (PUBLIC)
 --   private.audit(): {=X/postgres,postgres=X/postgres,authenticated=X/postgres}
+--   private.audit_case_access_grant(): {postgres=X/postgres}
 --   private.audit_chain_block(): {postgres=X/postgres}
 --   private.audit_chain_hash(p_prev bytea, p_id bigint, p_actor uuid, p_action text, p_entity text, p_entity_id uuid, p_detail jsonb, p_created timestamp with time zone): {postgres=X/postgres}
 --   private.audit_chain_job(): {postgres=X/postgres}
@@ -27576,8 +28386,14 @@ create policy wl_sel on public.watchlist
 --   private.permanent_delete_active_refs(): default (PUBLIC)
 --   private.permanent_delete_blocker_refs(): default (PUBLIC)
 --   private.permanent_delete_plan(): {postgres=X/postgres}
+--   private.permanent_delete_record_apply(p_kind text, p_table text, p_id uuid, p_reason text, p_armed_at timestamp with time zone): {postgres=X/postgres}
+--   private.permanent_delete_record_assets(p_table text, p_id uuid): {postgres=X/postgres}
+--   private.permanent_delete_record_label(p_table text, p_id uuid): {postgres=X/postgres}
+--   private.permanent_delete_record_refs(p_table text, p_id uuid): {postgres=X/postgres}
 --   private.permanent_delete_refmap(p_target uuid): {postgres=X/postgres}
 --   private.prosecutor_bureaus_of(p_user uuid): {postgres=X/postgres,authenticated=X/postgres}
+--   private.record_versions_prune(p_keep integer, p_age interval): {postgres=X/postgres}
+--   private.record_versions_prune_job(): {postgres=X/postgres}
 --   private.rls_test_cleanup_surveillance(ids uuid[], case_ids uuid[]): {postgres=X/postgres}
 --   private.role(): {=X/postgres,postgres=X/postgres,authenticated=X/postgres}
 --   private.signoff_assert_decider(c cases, p_uid uuid, p_role app_role): default (PUBLIC)
@@ -27632,6 +28448,12 @@ create policy wl_sel on public.watchlist
 --   private.transfer_notify(p_transfer transfer_requests, p_actor profiles, p_reason text): default (PUBLIC)
 --   private.user_department(p_user uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.uuid_or_null(p text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.version_editable(p_kind text, p_table text, p_id uuid): {postgres=X/postgres}
+--   private.version_protected_columns(p_table text): {postgres=X/postgres}
+--   private.version_record_protected(p_table text, p_id uuid): {postgres=X/postgres}
+--   private.version_row(): {postgres=X/postgres}
+--   private.version_table(p_kind text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.version_visible(p_table text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.account_merge(p_survivor uuid, p_victims uuid[], p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.acknowledge_document(p_document uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.add_legal_exhibit(p_request uuid, p_type text, p_source_id uuid, p_title text, p_meta jsonb, p_rationale text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -27654,6 +28476,7 @@ create policy wl_sel on public.watchlist
 --   public.can_record(p_action text, p_kind text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.cancel_transfer(p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_access_decide(p_request uuid, p_approve boolean, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.case_access_renew(p_grant uuid, p_days integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_archive(p_case uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_charge_totals(p_case uuid): {=X/postgres,postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_charges_for(p_case uuid): {=X/postgres,postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -27805,10 +28628,14 @@ create policy wl_sel on public.watchlist
 --   public.permanent_delete_arm(p_target uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.permanent_delete_execute(p_token uuid, p_confirm text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.permanent_delete_preview(p_target uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.permanent_delete_record_arm(p_kind text, p_id uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.permanent_delete_record_execute(p_token uuid, p_confirm text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.permanent_delete_record_preview(p_kind text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.person_merge(p_survivor uuid, p_victims uuid[], p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.publish_announcement(p_title text, p_body text, p_audience text, p_mentions jsonb, p_links jsonb, p_pinned boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.publish_reading_campaign(p_document uuid, p_audience text, p_targets jsonb, p_deadline timestamp with time zone, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.reassign_legal_ada(p_request uuid, p_new_ada uuid, p_reason text): {postgres=X/postgres,service_role=X/postgres}
+--   public.record_history(p_kind text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.record_subpoena_compliance(p_request uuid, p_status text, p_notes text, p_non_compliance_reason text, p_date timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.record_subpoena_service(p_request uuid, p_status text, p_method text, p_notes text, p_acknowledged boolean, p_served_at timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.record_warrant_execution(p_request uuid, p_incident_number text, p_officers uuid[], p_outcome text, p_notes text, p_result text, p_executed_at timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -27824,6 +28651,7 @@ create policy wl_sel on public.watchlist
 --   public.resolve_provisional_narcotic(p_provisional uuid, p_action text, p_canonical uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.restore_member_login(p_target uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.restore_record(p_kind text, p_id uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.restore_version(p_kind text, p_id uuid, p_version_no integer, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.restricted_media_break_glass(p_case uuid, p_reason text): {postgres=X/postgres,service_role=X/postgres}
 --   public.restricted_media_count(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.restricted_media_decide_access(p_grant uuid, p_decision text, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}

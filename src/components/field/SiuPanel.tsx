@@ -22,7 +22,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { fmtDateTime } from '@/lib/format'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
-import { useSiu } from '@/lib/useSiu'
+import { useSiu } from '@/lib/permissions'
 import type { FieldSubmissionRow, SubmissionParts } from '@/lib/fieldSubmissions'
 import {
   FOLLOWUP_KINDS, SIU_CATEGORIES, SIU_CATEGORY_LABEL, addFollowup, assignSiuAgent,

@@ -17,16 +17,14 @@ import { rpc, updateNoSelect } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { PermanentDelete } from '@/components/owner/PermanentDelete'
 import type { RosterProfile } from '@/lib/profiles'
-import {
-  BUREAUS, PERMANENT_BUREAUS, ROLE_LABEL, bureauLabel, bureauShort, canRemoveMember, canTransfer,
-  getAssignableRoles, isCommandRole, roleLabel, type RoleParty,
-} from '@/lib/roles'
+import { BUREAUS, PERMANENT_BUREAUS, ROLE_LABEL, bureauLabel, bureauShort, roleLabel, type RoleParty } from '@/lib/roles'
 import { justiceRoleLabel } from '@/lib/justice'
 import { toast } from '@/lib/toast'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { canRemoveMember, canTransfer, getAssignableRoles, isCommandRole } from '@/lib/permissions'
 
 type Bureau = keyof typeof BUREAUS & string
 

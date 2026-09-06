@@ -40,7 +40,7 @@ const TYPE_FILTERS: { key: string; label: string; types: readonly ActionItem['so
   // Transfers covers both bureau transfer_requests and DOJ member_transfers
   // (one sourceType — distinct member_transfer: keys).
   { key: 'transfer', label: 'Transfers', types: ['transfer'] },
-  { key: 'access', label: 'Access', types: ['access_request', 'membership_request', 'restricted_access'] },
+  { key: 'access', label: 'Access', types: ['access_request', 'access_expiring', 'membership_request', 'restricted_access'] },
   { key: 'legal', label: 'Legal', types: ['legal_request'] },
   // DOJ pipeline work (prosecutor queue pickups, assigned prosecutorial /
   // judicial reviews) — only justice-role viewers ever produce these.

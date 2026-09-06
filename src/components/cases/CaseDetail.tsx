@@ -14,8 +14,9 @@ import { Field, Input, Textarea } from '@/components/ui/Field'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { countRows, list, rpc, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
-import { useSiu } from '@/lib/useSiu'
-import { caseDepartment, isOversightStanding, siuClassificationLabel, siuClassificationTint, termsFor } from '@/lib/siu'
+import { useSiu } from '@/lib/permissions'
+import { caseDepartment, siuClassificationLabel, siuClassificationTint, termsFor } from '@/lib/siu'
+import { canReassignBureau as canReassignBureauRule, isOversightStanding } from '@/lib/permissions'
 import { ReleasedIntelligence } from './ReleasedIntelligence'
 import { SiuCaseLifecycle, SiuControlBar } from './SiuControlBar'
 import { Badge } from '@/components/ui/Badge'
@@ -371,7 +372,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   // Bureau reassignment is Deputy Director+/Owner (never bureau_lead) — the
   // cosmetic mirror of case_reassign_bureau's server rule; RLS + the freeze
   // trigger enforce the real one.
-  const canReassignBureau = isOwner || (isCommand && (profile?.role === 'deputy_director' || profile?.role === 'director'))
+  const canReassignBureau = isOwner || (isCommand && canReassignBureauRule({ role: profile?.role, is_owner: isOwner }))
   // Responsible-bureau action (JTF-assigned cases only — legal routing rides
   // originating_bureau): SETTING a missing value is Senior Detective+;
   // CHANGING an already-set one is Deputy Director+/Owner with a reason.

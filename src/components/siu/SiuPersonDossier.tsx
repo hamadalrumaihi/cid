@@ -32,7 +32,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { withRetry } from '@/lib/db'
-import { useSiu } from '@/lib/useSiu'
+import { useSiu } from '@/lib/permissions'
 import {
   SIU_LINK_STRENGTH_LABEL, SIU_WATCH_PRIORITY_LABEL,
   fetchSiuPersonDossier, siuLinkStrength, siuLinkStrengthTint,

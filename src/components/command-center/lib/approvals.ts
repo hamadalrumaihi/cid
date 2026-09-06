@@ -1,5 +1,5 @@
 import type { Tables } from '@/lib/database.types'
-import { canDecideTransferSide } from '@/lib/roles'
+import { canDecideTransferSide } from '@/lib/permissions'
 
 type CaseRow = Tables<'cases'>
 type TransferRow = Tables<'transfer_requests'>

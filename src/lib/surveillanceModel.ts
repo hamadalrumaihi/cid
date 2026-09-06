@@ -1,3 +1,4 @@
+import { isCommandRole } from './permissions/mirrors'
 /** Pure Surveillance & Intelligence model — vocabulary, client authority
  *  mirrors and derived pattern analysis for the 20260812120000 surveillance
  *  domain (no React, no I/O; the docModel/opsJoint pattern). Everything here
@@ -100,8 +101,6 @@ export interface SurvViewer {
   isOwner: boolean
 }
 
-const COMMAND_ROLES = new Set(['bureau_lead', 'deputy_director', 'director'])
-
 /** Mirror of private.can_authorize_surveillance: Deputy Director / Director /
  *  Owner anywhere; a Bureau Lead only for cases in their own division or
  *  JTF-bureau cases. (Self-approval is rejected separately, in the RPC and by
@@ -115,7 +114,7 @@ export function canAuthorizeSurveillance(v: SurvViewer, caseBureau: string | nul
 /** Mirror of surveillance_transition's gate: the requester or command may
  *  manage (submit / activate / suspend / conclude) a target. */
 export function canManageTarget(v: SurvViewer, target: { requested_by: string | null }): boolean {
-  if (v.isOwner || COMMAND_ROLES.has(v.role ?? '')) return true
+  if (v.isOwner || isCommandRole(v.role)) return true
   return !!v.userId && target.requested_by === v.userId
 }
 

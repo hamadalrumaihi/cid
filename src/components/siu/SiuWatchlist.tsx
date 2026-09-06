@@ -37,7 +37,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { rpc, withRetry } from '@/lib/db'
-import { useSiu } from '@/lib/useSiu'
+import { useSiu } from '@/lib/permissions'
 import {
   SIU_WATCH_ENTITY_TYPES, SIU_WATCH_MAX_DAYS, SIU_WATCH_PRIORITIES,
   SIU_WATCH_PRIORITY_LABEL, SIU_WATCH_REVIEW_OUTCOMES,

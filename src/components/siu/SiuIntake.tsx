@@ -32,7 +32,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
 import { list, rpc, withRetry } from '@/lib/db'
-import { useSiu } from '@/lib/useSiu'
+import { useSiu } from '@/lib/permissions'
 import { SiuAccessQueue } from './SiuAccessRequest'
 import {
   SIU_CASE_CATEGORIES, SIU_CLASSIFICATIONS, SIU_CONFLICT_RESOLUTIONS,

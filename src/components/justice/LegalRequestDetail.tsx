@@ -17,7 +17,8 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
-import { useSiu } from '@/lib/useSiu'
+import { useMyJusticeRole } from '@/lib/permissions'
+import { useSiu } from '@/lib/permissions'
 import { list, rpc } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { adoptLegacyDraft, clearDraft, saveDraft as saveUserDraft, type LoadedDraft } from '@/lib/userDrafts'
@@ -44,7 +45,7 @@ import { EmptyState, Notice } from '@/components/ui/Notice'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
 import {
   ClassificationBadge, LegalDeadlineChip, StatusChip, buildLegalViewer, reviewTone,
-  useLegalPeople, useMyJusticeRole, useMyProsecutorBureaus,
+  useLegalPeople, useMyProsecutorBureaus,
 } from './legalShared'
 import { LegalStageTracker } from './LegalStageTracker'
 import { CaseBriefPanel } from './dossier/CaseBriefPanel'

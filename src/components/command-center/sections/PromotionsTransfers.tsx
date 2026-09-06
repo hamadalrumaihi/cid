@@ -13,7 +13,7 @@ import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { type RosterProfile, useProfilesStore, officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
-import { ROLE_LABEL, bureauLabel, bureauShort, canDecideTransferSide, roleLabel, type RoleParty } from '@/lib/roles'
+import { ROLE_LABEL, bureauLabel, bureauShort, roleLabel, type RoleParty } from '@/lib/roles'
 import { timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { useAction } from '@/lib/useAction'
@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ErrorNotice } from '@/components/ui/Notice'
 import { AssignModal } from '@/components/personnel/AssignModal'
+import { canDecideTransferSide } from '@/lib/permissions'
 
 type RoleEvent = Tables<'role_events'>
 type TransferRow = Tables<'transfer_requests'>

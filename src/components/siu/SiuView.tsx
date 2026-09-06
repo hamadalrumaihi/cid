@@ -27,30 +27,9 @@ import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { caseLink } from '@/lib/caseLinks'
 import { list, rpc, withRetry } from '@/lib/db'
-import { useSiu } from '@/lib/useSiu'
+import { useSiu } from '@/lib/permissions'
 import { useTableVersion } from '@/lib/realtime'
-import {
-  SIU_CLASSIFICATIONS, fetchSiuAudit, fetchSiuOverview, fetchSiuRoster,
-  searchSiuCandidates, siuAuditLabel, siuCallsign, siuCanAppointRole, siuCanRemove,
-  siuClassificationLabel, siuClassificationTint, siuRoleLabel,
-  SIU_CLASSIFICATION_HINT, SIU_ROLE_SHORT, SIU_INTEGRITY_NOTE_TYPES,
-  SIU_PRIORITY_DESIGNATIONS, siuDesignationLabel, siuNoteTypeLabel,
-  SIU_OPENABLE_DESIGNATIONS, SIU_TARGET_PRIORITIES, SIU_TARGET_PRIORITY_LABEL,
-  SIU_NOTE_TYPES, fetchSiuTargets, fetchSiuIntelligence, siuTargetPriorityTint,
-  type SiuTargetEntry, type SiuIntelEntry,
-  siuOperationCategoryLabel, type SiuOperationCategory,
-  type SiuAuditRow, type SiuCandidate, type SiuOverview, type SiuRosterRow,
-  type SiuDesignation, type SiuNoteType,
-  SIU_CREDIBILITY, SIU_RELIABILITY, SIU_SOURCE_TYPES,
-  siuCredibilityLabel, siuCredibilityTint,
-  siuReliabilityLabel, siuReviewOutcomeLabel, siuSourceTypeLabel,
-  fetchSiuAccessRequests, fetchSiuCommandDashboard, fetchSiuDisclosures,
-  fetchSiuIntelQuality, fetchSiuReferrals, siuAudienceLabel,
-  siuReferralCategoryLabel,
-  type SiuAccessRequest, type SiuCommandDashboard, type SiuDisclosure,
-  type SiuIntelQuality, type SiuReferral,
-  siuStandingLabel,
-} from '@/lib/siu'
+import { SIU_CLASSIFICATIONS, fetchSiuAudit, fetchSiuOverview, fetchSiuRoster, searchSiuCandidates, siuAuditLabel, siuCallsign, siuClassificationLabel, siuClassificationTint, siuRoleLabel, SIU_CLASSIFICATION_HINT, SIU_ROLE_SHORT, SIU_INTEGRITY_NOTE_TYPES, SIU_PRIORITY_DESIGNATIONS, siuDesignationLabel, siuNoteTypeLabel, SIU_OPENABLE_DESIGNATIONS, SIU_TARGET_PRIORITIES, SIU_TARGET_PRIORITY_LABEL, SIU_NOTE_TYPES, fetchSiuTargets, fetchSiuIntelligence, siuTargetPriorityTint, type SiuTargetEntry, type SiuIntelEntry, siuOperationCategoryLabel, type SiuOperationCategory, type SiuAuditRow, type SiuCandidate, type SiuOverview, type SiuRosterRow, type SiuDesignation, type SiuNoteType, SIU_CREDIBILITY, SIU_RELIABILITY, SIU_SOURCE_TYPES, siuCredibilityLabel, siuCredibilityTint, siuReliabilityLabel, siuReviewOutcomeLabel, siuSourceTypeLabel, fetchSiuAccessRequests, fetchSiuCommandDashboard, fetchSiuDisclosures, fetchSiuIntelQuality, fetchSiuReferrals, siuAudienceLabel, siuReferralCategoryLabel, type SiuAccessRequest, type SiuCommandDashboard, type SiuDisclosure, type SiuIntelQuality, type SiuReferral, siuStandingLabel } from '@/lib/siu'
 import { SiuCompartmentsSection } from './SiuCompartments'
 import { SiuDisclosuresSection } from './SiuDisclosures'
 import { SiuIntakeSection } from './SiuIntake'
@@ -64,7 +43,7 @@ import { SiuOversightSection, SiuTradecraftSection } from './SiuTradecraft'
 import { DashPanel } from '@/components/dash/DashPanel'
 import { DashRow } from '@/components/dash/DashRow'
 import { DashSwitcher } from '@/components/dash/DashSwitcher'
-import {roleLabel, bureauShort} from '@/lib/roles'
+import { roleLabel, bureauShort } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -78,6 +57,7 @@ import { SectionTabs } from '@/components/ui/SectionTabs'
 import { DetailSkeleton, ListSkeleton } from '@/components/ui/Skeleton'
 import { Field, Input, Select, Textarea, inputCls } from '@/components/ui/Field'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
+import { siuCanAppointRole, siuCanRemove } from '@/lib/permissions'
 
 type CaseRow = Tables<'cases'>
 type Section = 'overview' | 'intake' | 'investigations' | 'targets' | 'operations' | 'intelligence'

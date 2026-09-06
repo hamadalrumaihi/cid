@@ -682,3 +682,38 @@ The ten case tables — `cases`, `reports`, `media`, `evidence`, `case_tasks`, `
 | `private.case_writable(case)` | **Prepared** for P3-05 (archived read-only): case access **and** the case neither archived nor soft-deleted. Applied to no policy yet. | definer-internal |
 
 Catalog: 38 rows re-seeded (the 15 registry `read`/`edit`/`soft_delete`/`restore` rows plus the ten case kinds), `('restore','case')` replaced by `('unarchive','case')`. Client: `src/lib/db.ts` extends `SOFT_DELETE_KIND` with the ten tables (list / count filter to live rows, `remove()` / `deleteWithUndo()` route through `soft_delete`, Undo through `restore_record`). Pinned by `v180b`.
+
+## 10. Field-level version history ([`20261011120000`](../supabase/migrations/20261011120000_record_versions.sql))
+
+Every `UPDATE` to a covered record leaves a `record_versions` row: `old`, `new`, `changed_fields`, `actor_id`, `reason`, `source` (`edit` / `restore`). Same-actor bursts inside **five minutes** coalesce into one version (its `new` moves forward, its `old` stays the state before the burst, `updated_at` marks the last save). Covered: `cases`, `persons`, `vehicles`, `gangs`, `places`, `accounts`, `narcotics`, `evidence`, `reports` (draft saves — a sealed report never versions), `legal_requests` (the draft columns only — submitted versions stay in `legal_request_versions`), `field_submissions`. Noise (`updated_at`, `last_stale_notified_at`, the soft-delete lifecycle columns) never versions.
+
+| Object | What it does | Who |
+|---|---|---|
+| `record_versions_sel` → `private.version_visible` | **The parent's SELECT policy is the answer.** `version_visible` is SECURITY INVOKER and asks "can you see the parent row?" under the caller's own RLS — a version of a row you cannot see does not exist for you. No client write (`42501`); `private.version_row()` is the definer trigger that writes. | as the parent |
+| `public.record_history(kind, id)` | INVOKER read, newest first (kinds: the soft-delete vocabulary plus `legal` and `field_submission`). | as the parent |
+| `public.restore_version(kind, id, version_no, reason)` | Edit authority (`can_record('edit', …)`; a field submission is the officer's own live row) **and** a reason. Writes the version's `changed_fields` (minus RPC-governed columns — identity, lifecycle, workflow state) back as an ordinary UPDATE, so it lands as a **new** version with `source = 'restore'`; audited `RECORD_VERSION_RESTORED`. A finalized report (`sealed`) and a legal request (`display_only`) are read-only history. Refuses by returning `{ok:false, code}`. | `can_record('restore_version', kind, id)` |
+| `private.record_versions_prune()` | Retention (VH3): older than 2 years, never the latest 5 per record, never a record on an open case or under an active legal hold. Daily `record-versions-prune` (03:45 UTC). | pg_cron |
+
+Pinned by `v183`; the client mirror of the coalescing rule is `src/lib/recordHistory.ts`.
+
+## 11. Case access grants expire ([`20261012120000`](../supabase/migrations/20261012120000_case_access_grant_expiry.sql))
+
+`case_access_grants` was the one unbounded grant. It now carries `expires_at` (default **30 days**, CHECK ≤ **90 days** from the grant) and both case-access predicates — `private.can_access_case` and `private.can_access_case_row`, re-emitted together — test `expires_at > now()`. A direct `UPDATE` is `42501`; renewal is `public.case_access_renew(grant, days)` (the lead or command via `private.can_grant_case`; the row becomes a new grant: `created_at` reset, `granted_by` the renewer). `ACCESS_GRANTED` / `ACCESS_RENEWED` / `ACCESS_EXPIRED` / `ACCESS_REVOKED` audit rows (entity `case_access_grants`). The hourly `access-grant-expiry-sweep` (minute 20) sends `access_expiring` to the grantee and the case lead three days out, then `access_expired` when the grant lapses and removes the row so the slot is free for a fresh grant; the Action Center surfaces both as `access_expiring` items. `my_permissions().expiries.case_access_grants` lists the viewer's live grants. Pinned by `v184`.
+
+## 12. Permanent deletion, generalised ([`20261013120000`](../supabase/migrations/20261013120000_permanent_delete_record.sql))
+
+The member protocol (§2, Phase B) is now the one way anything leaves the database for good, for all 25 soft-deletable kinds: **Owner only**, the record already **in the Trash** (a case may also be archived), a **fresh sign-in**, a **reason**, a **5-minute single-use token** and the typed **`DELETE <label>`** (the case number, a person's name, a plate…).
+
+| Object | What it does |
+|---|---|
+| `public.permanent_delete_record_preview(kind, id)` | The dependant walk over every foreign key that points at the record (the `case_delete_preview` technique): **blockers** — live rows in material tables (reports, evidence, media, legal requests, intel links, RICO material, the graph link tables, tasks, messages, blockers), anything behind a RESTRICT key, an active legal hold; **destroyed** — the Trash batch that goes with it and cascade keys; **unlinked** — SET NULL keys. Storage paths and external URLs of the media that goes are enumerated. `eligible` plus `ineligible_reasons`. |
+| `public.permanent_delete_record_arm(kind, id, reason)` | Owner + fresh session + reason + eligible → `PERMANENT_DELETE_ARMED` audit + token (`deletion_tokens.target_kind`). |
+| `public.permanent_delete_record_execute(token, confirm)` | Owner + fresh session + the token's owner, unused, unexpired + exact confirmation + a re-run preview → `deleted_record_ledger` row (Owner-readable: snapshot, destroyed, unlinked, storage objects, external assets, reason), the Trash batch deleted leaf-first, then the record; `PERMANENT_DELETE_EXECUTED`. The database **cannot** delete storage objects itself (Storage refuses direct deletes); they are enumerated for the client to remove through the Storage API. |
+| `public.case_permanent_delete(case, reason)` | Now a wrapper over the same apply: Owner, reason, no hold, no legal request, **no live material** — the case's Trash batch goes with it. `CASE_PERMANENT_DELETE` keeps its audit row. |
+| `private.perm_dispatch` | `permanent_delete` answers only the Owner, only for a record in the Trash (an archived case too); `read_history` / `restore_version` (§10) for the versioned kinds. |
+
+Pinned by `v185`; the member protocol stays pinned by `v125`.
+
+## 13. The client permission module (`src/lib/permissions/`, P1-08 / P1-09)
+
+Components import **every** authorization question from `@/lib/permissions`: `usePermissions()` (server-first over `my_permissions()` — `NO_ACCESS` until it resolves and on error, with `retry()`; `can(action, kind)` reads the global matrix cell, `canRecord()` asks `public.can_record`), `useCapabilities()`, `useSiu()`, `useMyJusticeRole()` (now the server's `doj_role`), and the pure mirrors (`mirrors.ts` for CID, `sibMirrors.ts` for SIB). The former duplicates are gone — the three `effectiveJusticeRole` copies, the `COMMAND_ROLES` sets in `actionItems` / `surveillanceModel` / `CasesView` (which still carried the retired `command` value), `CID_TRANSFER_DECIDERS`, the sign-off routing in `useNavBadges` and `SignoffTab`, `CaseDetail`'s bureau-reassignment test, and the SIB-authority gap in `legalWorkflow.viewerOwnsAction`. An ESLint `no-restricted-imports` rule refuses a predicate imported from `roles.ts` / `siu.ts` (labels and fetch helpers stay importable) and the retired `capabilities` / `useSiu` / `permissionsMatrix` paths outside the module. `parity.test.ts` pins the mirrors against the generated matrix.

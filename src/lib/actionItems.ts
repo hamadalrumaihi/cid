@@ -1,3 +1,4 @@
+import { canDecideCidTransfer, isCommandRole } from './permissions/mirrors'
 /** Action Center priority model — the canonical normalizer that turns every
  *  "something is waiting on me" source (tasks, sign-offs, returned cases,
  *  transfers, access/membership requests, legal requests, DOJ-pipeline queue
@@ -37,7 +38,7 @@ import { canAuthorizeSurveillance } from './surveillanceModel'
  *  case_blockers owned by me are first-class queue items (rule 9) and need a
  *  distinct sourceType so the UI can wire its resolve flow. */
 export type ActionSourceType =
-  | 'task' | 'signoff' | 'returned_case' | 'transfer' | 'access_request'
+  | 'task' | 'signoff' | 'returned_case' | 'transfer' | 'access_request' | 'access_expiring'
   | 'membership_request' | 'legal_request' | 'case_followup' | 'handover'
   | 'mention' | 'blocker'
   | 'document_ack' | 'document_review' | 'document_approval' | 'document_sync'
@@ -233,6 +234,16 @@ export interface AcSuggestion {
   updatedAt: string
 }
 
+/** Case access grant — the officer's own, or one on a case the viewer can
+ *  read (RLS cag_sel). expires_at drives the access_expiring items (P1-06). */
+export interface AcCaseGrant {
+  id: string
+  case_id: string
+  officer_id: string
+  expires_at: string
+  granted_by: string | null
+}
+
 export interface ActionSources {
   me: string
   role: string | null          // profile.role
@@ -248,6 +259,8 @@ export interface ActionSources {
   tasks: AcTask[]              // my open tasks (assignee = me, done = false)
   transfers: AcTransfer[]
   accessRequests: AcAccess[]   // status = pending
+  /** Additive (defaults []): case access grants (see AcCaseGrant). */
+  caseGrants?: AcCaseGrant[]
   membershipPending: number | null  // pendingMembership().awaitingCount — command/owner only, null otherwise
   legal: AcLegal[]             // slim projection, non-terminal
   /** Additive (defaults to a plain active-CID viewer): the workflow model's
@@ -335,7 +348,6 @@ export function priorityFromScore(score: number): ActionPriority {
 /** Same values as caseWorkflow's module-private AWAITING / RETURNED sets. */
 const AWAITING_SIGNOFF = new Set(['awaiting_bureau_lead', 'awaiting_deputy', 'awaiting_director'])
 const RETURNED_SIGNOFF = new Set(['changes_requested', 'denied'])
-const COMMAND_ROLES = new Set(['bureau_lead', 'deputy_director', 'director'])
 /** Same values as fieldReview's OPEN_STATUSES (review-active lane) —
  *  redeclared so this module never imports the db-touching fieldReview lib. */
 const INTEL_REVIEW_ACTIVE = new Set(['new', 'reviewing', 'needs_info'])
@@ -602,7 +614,7 @@ export function buildActionItems(s: ActionSources): ActionQueue {
     if (a.status !== 'pending') continue
     const c = caseById.get(a.case_id)
     const isLead = !!c && c.lead_detective_id === s.me
-    const byRole = COMMAND_ROLES.has(s.role ?? '')
+    const byRole = isCommandRole(s.role)
     if (isLead || byRole) {
       const item = add({
         id: `access:${a.id}`, sourceType: 'access_request', sourceId: a.id,
@@ -637,6 +649,37 @@ export function buildActionItems(s: ActionSources): ActionQueue {
       })
     }
     // Non-deciders' others' requests → excluded.
+  }
+
+  /* 5b · expiring case access grants (P1-06) — the grantee sees their own
+   *      lapse (ask the lead), the lead / command sees what they may renew
+   *      (the client mirror of can_grant_case: case lead or command role). */
+  for (const g of s.caseGrants ?? []) {
+    const msLeft = Date.parse(g.expires_at) - s.nowMs
+    if (!Number.isFinite(msLeft) || msLeft > 3 * 86_400_000) continue
+    const c = caseById.get(g.case_id)
+    const isLead = !!c && c.lead_detective_id === s.me
+    const decider = isLead || isCommandRole(s.role) || (s.isOwner ?? false)
+    const mine = g.officer_id === s.me
+    if (!mine && !decider) continue
+    const when = msLeft <= 0 ? 'has expired' : `expires in ${Math.max(1, Math.ceil(msLeft / 86_400_000))} day${msLeft > 86_400_000 ? 's' : ''}`
+    add({
+      id: `grant:${g.id}`, sourceType: 'access_expiring', sourceId: g.id,
+      title: mine
+        ? `Your access to ${c?.case_number ?? 'a case'} ${when}`
+        : `${s.profileName(g.officer_id) || 'Officer'}'s access to ${c?.case_number ?? 'a case'} ${when}`,
+      summary: c ? `${c.case_number} · ${c.title || 'Untitled'}` : 'Case access grant',
+      reason: decider ? 'Renew from the case, or let it lapse' : 'Ask the case lead to renew it if you still need it',
+      status: decider ? 'needs_action' : 'waiting',
+      dueAt: g.expires_at, createdAt: g.expires_at, updatedAt: g.expires_at, waitingSince: g.expires_at,
+      ownerId: decider ? s.me : null, responsibleRole: !isLead && decider && !mine ? s.role : null,
+      caseId: g.case_id, caseNumber: c?.case_number ?? null, bureau: c?.bureau ?? null,
+      deepLink: caseLink(g.case_id),
+      isCommandItem: decider && !isLead && !mine, isPersonalItem: mine || isLead,
+      isWaitingOnCurrentUser: decider,
+      sourceMetadata: { officer_id: g.officer_id, case_id: g.case_id, expires_at: g.expires_at },
+      dedupeKey: `grant:${g.id}`,
+    })
   }
 
   /* 6 · member approvals — one command/owner summary item. The count is the
@@ -783,8 +826,7 @@ export function buildActionItems(s: ActionSources): ActionQueue {
    *      Owner bypass is deliberate). requested → CID command (Deputy
    *      Director+/Owner); cid_approved → the AG (or Owner), minus whoever
    *      took the CID stage; doj_accepted → activation (DD+/AG/Owner). */
-  const CID_TRANSFER_DECIDERS = new Set(['deputy_director', 'director'])
-  const cidTransferDecider = (s.isOwner ?? false) || CID_TRANSFER_DECIDERS.has(s.role ?? '')
+  const cidTransferDecider = canDecideCidTransfer({ role: s.role, is_owner: s.isOwner ?? false })
   const agViewer = jr === 'attorney_general' || (s.isOwner ?? false)
   for (const t of s.memberTransfers ?? []) {
     if (t.user_id === s.me) continue
