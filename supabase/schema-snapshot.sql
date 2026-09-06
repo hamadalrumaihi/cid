@@ -20427,6 +20427,20 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.block_version_immutable()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if current_user in ('authenticated', 'anon') then
+    raise exception '% rows are immutable', tg_table_name using errcode = 'P0403';
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.bureau_label(p_bureau text)
  RETURNS text
  LANGUAGE sql
@@ -24945,6 +24959,7 @@ CREATE TRIGGER documents_audit AFTER INSERT OR DELETE OR UPDATE ON public.docume
 CREATE TRIGGER documents_touch BEFORE UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_document_initial_version AFTER INSERT ON public.documents FOR EACH ROW EXECUTE FUNCTION private.document_initial_version();
 CREATE TRIGGER trg_guard_document BEFORE INSERT OR UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION private.guard_document();
+CREATE TRIGGER documents_versions_immutable BEFORE DELETE OR UPDATE ON public.documents_versions FOR EACH ROW EXECUTE FUNCTION private.block_version_immutable();
 CREATE TRIGGER evidence_audit AFTER INSERT OR DELETE OR UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER evidence_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER evidence_touch BEFORE UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -25503,16 +25518,6 @@ create policy documents_upd on public.documents
   as permissive for update to authenticated
   using (private.can_edit_document_for_bureau(classification, owner_user_id, folder, bureau))
   with check (private.can_edit_document_for_bureau(classification, owner_user_id, folder, bureau));
-
-create policy documents_versions_del on public.documents_versions
-  as permissive for delete to authenticated
-  using (( SELECT private.can_delete() AS can_delete));
-
-create policy documents_versions_ins on public.documents_versions
-  as permissive for insert to authenticated
-  with check ((EXISTS ( SELECT 1
-   FROM documents d
-  WHERE ((d.id = documents_versions.document_id) AND private.can_edit_document_for_bureau(d.classification, d.owner_user_id, d.folder, d.bureau)))));
 
 create policy documents_versions_sel on public.documents_versions
   as permissive for select to authenticated
@@ -27132,7 +27137,7 @@ create policy wl_sel on public.watchlist
 --   document_suggestions -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   document_user_state -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   documents -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   documents_versions -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   documents_versions -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   evidence -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   external_links -> service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   external_media_refs -> service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -27389,6 +27394,7 @@ create policy wl_sel on public.watchlist
 --   private.block_legal_immutable(): default (PUBLIC)
 --   private.block_report_version_update(): default (PUBLIC)
 --   private.block_tracker_self_cosign(): default (PUBLIC)
+--   private.block_version_immutable(): {postgres=X/postgres}
 --   private.bureau_label(p_bureau text): default (PUBLIC)
 --   private.bureau_prefix(p_bureau text): default (PUBLIC)
 --   private.can_access_bureau(b bureau): default (PUBLIC)
