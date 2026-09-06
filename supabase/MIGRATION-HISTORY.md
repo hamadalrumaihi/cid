@@ -441,3 +441,22 @@ rolled-back transaction was reported as `first_bad_id` by the verifier;
 | Version (live) | Name | Repo file |
 |---|---|---|
 | applied via MCP (`audit_chain`) | audit_chain | `20261006120000_audit_chain.sql` |
+
+**P1-03a Soft delete — registries.** `20261007120000_soft_delete_core.sql`
+(`private.is_live`, `private.block_direct_soft_delete`), fifteen per-table
+files `20261007120001 … 120015` (lifecycle columns, SELECT/UPDATE policies
+re-emitted with the liveness conjunct, DELETE policy dropped and privilege
+revoked, freeze trigger) and `20261007120100_soft_delete_rpcs.sql`
+(`public.soft_delete`, `public.restore_record`, `private.perm_registry_delete`,
+`private.perm_registry_visible` and `private.perm_dispatch` re-emitted, 45
+catalog rows). Verified at apply time in a rolled-back transaction: a
+person + vehicle + link soft-deleted with the link cascaded in the batch,
+link restore refused under the deleted parent, parent restore bringing the
+batch back, `RECORD_SOFT_DELETED` / `RECORD_RESTORED` / `PERMISSION_DENIED`
+audit rows, client DELETE `42501`. See `docs/AUTHORIZATION.md` §8.
+
+| Version (live) | Name | Repo file |
+|---|---|---|
+| applied via MCP (`soft_delete_core`) | soft_delete_core | `20261007120000_soft_delete_core.sql` |
+| applied via MCP (`soft_delete_<table>` × 15) | soft_delete_persons … soft_delete_account_links | `20261007120001_soft_delete_persons.sql` … `20261007120015_soft_delete_account_links.sql` |
+| applied via MCP (`soft_delete_rpcs`) | soft_delete_rpcs | `20261007120100_soft_delete_rpcs.sql` |

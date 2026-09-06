@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import type { Database, Tables, TablesInsert, TablesUpdate } from './database.types'
-import { uiConfirm } from '@/components/ui/dialog'
+import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { toast, undoToast } from './toast'
 
 type TableName = keyof Database['public']['Tables']
@@ -44,7 +44,26 @@ export interface ListOptions<T extends TableName> {
    *  ilikeAny() so user input can never inject extra conditions. */
   or?: string
   limit?: number
+  /** Soft-deletable registries (SOFT_DELETE_KIND) list live rows only by
+   *  default; the Trash passes true to read what the caller may restore. */
+  includeDeleted?: boolean
 }
+
+/** Tables that soft-delete (migration 20261007120000 …120100): the value is
+ *  the `kind` the soft_delete / restore_record RPCs take. list() filters
+ *  these to live rows, remove() / deleteWithUndo() route their deletes to
+ *  the RPC (a client DELETE is refused by grants), and the Undo toast calls
+ *  restore_record. Extend here when P1-03b adds the case tables. */
+export const SOFT_DELETE_KIND = {
+  persons: 'person', vehicles: 'vehicle', gangs: 'gang', places: 'place', accounts: 'account',
+  indicators: 'indicator', narcotics: 'narcotic', operations: 'operation', trackers: 'tracker',
+  gang_members: 'gang_member', gang_turf: 'gang_turf', person_places: 'person_place',
+  person_vehicles: 'person_vehicle', person_relationships: 'person_relationship', account_links: 'account_link',
+} as const satisfies Partial<Record<TableName, string>>
+export type SoftDeleteTable = keyof typeof SOFT_DELETE_KIND
+/** Kinds whose soft_delete requires a reason (the parent records; link rows do not). */
+const REASON_REQUIRED: ReadonlySet<string> = new Set(['person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker'])
+const softKindOf = (table: string): string | null => (SOFT_DELETE_KIND as Record<string, string>)[table] ?? null
 
 /** Build a PostgREST `or()` disjunction of contains-matches over `cols`
  *  (`col.ilike.*term*`). PostgREST syntax characters are stripped from the
@@ -58,6 +77,7 @@ export function ilikeAny(cols: readonly string[], term: string): string | null {
 
 export async function list<T extends TableName>(table: T, opts: ListOptions<T> = {}): Promise<Tables<T>[]> {
   let q = raw().from(table).select(opts.select ?? '*')
+  if (softKindOf(table) && !opts.includeDeleted) q = q.is('deleted_at', null)
   if (opts.eq) for (const [k, v] of Object.entries(opts.eq)) q = q.eq(k, v)
   if (opts.is) for (const [k, v] of Object.entries(opts.is)) q = q.is(k, v as null)
   if (opts.in) for (const [k, v] of Object.entries(opts.in)) q = q.in(k, (v ?? []) as unknown[])
@@ -84,9 +104,11 @@ export async function countRows<T extends TableName>(
     eq?: Partial<Record<keyof Tables<T> & string, unknown>>
     /** SQL IS match — e.g. `is: { archived_at: null }` for live-only counts. */
     is?: Partial<Record<keyof Tables<T> & string, null | boolean>>
+    includeDeleted?: boolean
   },
 ): Promise<number> {
   let q = raw().from(table).select('*', { count: 'exact', head: true })
+  if (softKindOf(table) && !filters?.includeDeleted) q = q.is('deleted_at', null)
   if (filters?.eq) for (const [k, v] of Object.entries(filters.eq)) q = q.eq(k, v)
   if (filters?.is) for (const [k, v] of Object.entries(filters.is)) q = q.is(k, v as null)
   const { count, error } = await q
@@ -149,8 +171,37 @@ export async function upsert<T extends TableName>(
 }
 
 export async function remove<T extends TableName>(table: T, id: string): Promise<MutationResult<null>> {
+  if (softKindOf(table)) {
+    const r = await softDeleteRecord(table as SoftDeleteTable, id)
+    return { data: null, error: r.error }
+  }
   const { error } = await raw().from(table).delete().eq('id', id)
   return { data: null, error: asDbError(error) }
+}
+
+/** The soft_delete / restore_record RPCs refuse by RETURNING {ok:false, code}
+ *  (never by raising) so their PERMISSION_DENIED audit row commits; this maps
+ *  that shape onto the { error } contract every mutation helper returns. */
+export type SoftDeleteResult = { ok: boolean; code?: string; message?: string; cascaded?: Record<string, number>; restored?: Record<string, number> }
+const mapSoftResult = (data: unknown, error: DbError | null): MutationResult<SoftDeleteResult> => {
+  if (error) return { data: null, error }
+  const r = (data ?? {}) as SoftDeleteResult
+  if (!r.ok) return { data: r, error: { message: r.message || 'not permitted', code: r.code } }
+  return { data: r, error: null }
+}
+
+/** Soft-delete one registry row (reason required for the parent kinds:
+ *  persons, vehicles, gangs, places, accounts, indicators, narcotics,
+ *  operations, trackers). Cascades to the row's exclusive link rows. */
+export async function softDeleteRecord(table: SoftDeleteTable, id: string, reason?: string | null): Promise<MutationResult<SoftDeleteResult>> {
+  const { data, error } = await raw().rpc('soft_delete', { p_kind: SOFT_DELETE_KIND[table], p_id: id, p_reason: reason ?? null })
+  return mapSoftResult(data, asDbError(error))
+}
+
+/** Restore a soft-deleted registry row (a parent brings its batch back). */
+export async function restoreRecord(table: SoftDeleteTable, id: string, reason?: string | null): Promise<MutationResult<SoftDeleteResult>> {
+  const { data, error } = await raw().rpc('restore_record', { p_kind: SOFT_DELETE_KIND[table], p_id: id, p_reason: reason ?? null })
+  return mapSoftResult(data, asDbError(error))
 }
 
 /** Conditional delete for rows keyed by non-id columns (composite-key link
@@ -225,6 +276,43 @@ export async function deleteWithUndo<T extends TableName>(
     { title: opts.confirmTitle, confirmText: opts.confirmText || 'Delete' },
   ))) return false
   const ids = listRows.map((r) => r.id)
+
+  // Soft-deletable registries: the server keeps the rows and cascades the
+  // exclusive links itself, so no snapshot is needed and Undo is a restore.
+  // Parent kinds require a reason (decision P5 — Bureau Lead+ with reason).
+  const softKind = softKindOf(table)
+  if (softKind) {
+    let reason: string | null = null
+    if (REASON_REQUIRED.has(softKind)) {
+      reason = await uiPrompt(`Reason for deleting ${opts.label || 'this record'}`, { title: opts.confirmTitle || 'Reason required', placeholder: 'Why is this record being removed?…', confirmText: opts.confirmText || 'Delete' })
+      if (reason === null) return false
+      if (!reason.trim()) { toast('A reason is required to delete this record.', 'warn'); return false }
+    }
+    const done: string[] = []
+    let sfail = 0
+    for (const row of listRows) {
+      const r = await softDeleteRecord(table as SoftDeleteTable, row.id, reason)
+      if (r.error) { sfail++; if (r.error.code && r.error.code !== 'denied') toast(r.error.message, 'danger') }
+      else done.push(row.id)
+    }
+    opts.after?.()
+    const one = listRows.length === 1
+    const noun = opts.label || (one ? 'Item' : `${listRows.length} items`)
+    if (sfail && !done.length) { toast(`${noun} delete failed`, 'danger'); return false }
+    undoToast(`${one ? noun + ' deleted' : done.length + ' deleted'}${sfail ? ` · ${sfail} failed` : ''}`, () => {
+      void (async () => {
+        let rok = 0, rfail = 0
+        for (const id of done) {
+          const r = await restoreRecord(table as SoftDeleteTable, id, 'undo')
+          if (r.error) rfail++
+          else rok++
+        }
+        toast(rfail ? `Restored ${rok} of ${done.length}` : (one ? `${noun} restored` : `${rok} restored`), rfail ? (rok ? 'warn' : 'danger') : 'success')
+        opts.after?.()
+      })()
+    })
+    return true
+  }
 
   // Snapshot cascade children BEFORE the delete removes them. If a snapshot
   // fails, ABORT — deleting anyway would cascade-wipe children we could no
