@@ -11,7 +11,7 @@ import { http, HttpResponse } from 'msw'
 import type { Database, Tables } from '@/lib/database.types'
 import { CASE_PREFIX, PERMANENT_BUREAUS } from '@/lib/roles'
 import { supabaseBaseUrl } from '../env'
-import { getRows, getRpcOverride, mockId, seedRows } from '../store'
+import { getDenial, getRows, getRpcOverride, getSession, mockId, seedRows, type MockTableName } from '../store'
 import { postgrestError, shapeNetwork } from './postgrest'
 
 type Fns = Database['public']['Functions']
@@ -64,6 +64,54 @@ function nextCaseNumber(bureau: string): Fns['next_case_number']['Returns'] {
   return `${CASE_PREFIX[bureau] ?? bureau}-${(CASE_NUMBER_BASE[bureau] ?? 0) + count}`
 }
 
+/** kind → table for the soft_delete / restore_record RPCs — the inverse of
+ *  db.ts's SOFT_DELETE_KIND (tests/msw/permission-semantics.test.ts pins
+ *  the two in sync). The mock reproduces only the CONTRACT: refusals are
+ *  returned as {ok:false, code}, never raised; a denied table answers
+ *  `denied`; the parent kinds need a reason. Cascades and the parent-live
+ *  restore rule are server logic and stay out of the mock. */
+export const SOFT_DELETE_TABLE: Record<string, MockTableName> = {
+  person: 'persons', vehicle: 'vehicles', gang: 'gangs', place: 'places', account: 'accounts',
+  indicator: 'indicators', narcotic: 'narcotics', operation: 'operations', tracker: 'trackers',
+  gang_member: 'gang_members', gang_turf: 'gang_turf', person_place: 'person_places',
+  person_vehicle: 'person_vehicles', person_relationship: 'person_relationships', account_link: 'account_links',
+  case: 'cases', report: 'reports', media: 'media', evidence: 'evidence', case_task: 'case_tasks',
+  case_message: 'case_messages', case_intel_link: 'case_intel_links', case_blocker: 'case_blockers',
+  rico_case: 'rico_cases', predicate_act: 'predicate_acts',
+}
+const SOFT_DELETE_REASON_REQUIRED = new Set([
+  'person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker',
+  'case', 'report', 'media', 'evidence', 'rico_case',
+])
+
+function softDelete(args: Record<string, unknown>): Fns['soft_delete']['Returns'] {
+  const kind = String(args.p_kind ?? '').trim().toLowerCase()
+  const table = SOFT_DELETE_TABLE[kind]
+  const id = String(args.p_id ?? '')
+  if (!table || !id) return { ok: false, code: 'bad_request', message: 'unknown record kind' }
+  const row = getDenial(table) ? undefined : getRows(table).find((r) => r.id === id && r.deleted_at == null)
+  if (!row) return { ok: false, code: 'denied', message: 'you may not delete this record' }
+  const reason = String(args.p_reason ?? '').trim() || null
+  if (!reason && SOFT_DELETE_REASON_REQUIRED.has(kind)) {
+    return { ok: false, code: 'reason_required', message: 'a reason is required to delete this record' }
+  }
+  const batch = mockId()
+  const deletedAt = new Date().toISOString()
+  Object.assign(row, { deleted_at: deletedAt, deleted_by: getSession()?.userId ?? null, delete_reason: reason, delete_batch: batch })
+  return { ok: true, kind, id, deleted_at: deletedAt, batch, cascaded: {} }
+}
+
+function restoreRecord(args: Record<string, unknown>): Fns['restore_record']['Returns'] {
+  const kind = String(args.p_kind ?? '').trim().toLowerCase()
+  const table = SOFT_DELETE_TABLE[kind]
+  const id = String(args.p_id ?? '')
+  if (!table || !id) return { ok: false, code: 'bad_request', message: 'unknown record kind' }
+  const row = getDenial(table) ? undefined : getRows(table).find((r) => r.id === id && r.deleted_at != null)
+  if (!row) return { ok: false, code: 'denied', message: 'you may not restore this record' }
+  Object.assign(row, { deleted_at: null, deleted_by: null, delete_reason: null, delete_batch: null })
+  return { ok: true, kind, id, restored: { [table]: 1 } }
+}
+
 export const rpcHandlers = [
   http.post(`${supabaseBaseUrl()}/rest/v1/rpc/:fn`, async ({ request, params }) => {
     const shaped = await shapeNetwork()
@@ -80,6 +128,10 @@ export const rpcHandlers = [
         return HttpResponse.json(dojBureauCoverage())
       case 'next_case_number':
         return HttpResponse.json(nextCaseNumber(String(args.p_bureau ?? 'major_crimes')))
+      case 'soft_delete':
+        return HttpResponse.json(softDelete(args))
+      case 'restore_record':
+        return HttpResponse.json(restoreRecord(args))
       case 'create_notification': {
         const typedArgs = args as Fns['create_notification']['Args']
         seedRows('notifications', [{

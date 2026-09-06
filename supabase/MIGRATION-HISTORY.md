@@ -460,3 +460,29 @@ audit rows, client DELETE `42501`. See `docs/AUTHORIZATION.md` §8.
 | applied via MCP (`soft_delete_core`) | soft_delete_core | `20261007120000_soft_delete_core.sql` |
 | applied via MCP (`soft_delete_<table>` × 15) | soft_delete_persons … soft_delete_account_links | `20261007120001_soft_delete_persons.sql` … `20261007120015_soft_delete_account_links.sql` |
 | applied via MCP (`soft_delete_rpcs`) | soft_delete_rpcs | `20261007120100_soft_delete_rpcs.sql` |
+
+**P1-03b Soft delete — cases and case children.** Ten per-table files
+`20261008120001 … 120010` (`cases`, `reports`, `media`, `evidence`,
+`case_tasks`, `case_messages`, `case_intel_links`, `case_blockers`,
+`rico_cases`, `predicate_acts`: lifecycle columns, SELECT/UPDATE policies
+re-emitted with the liveness conjunct — `cases` on `deleted_at` only, so an
+archived case stays readable — DELETE policy dropped and privilege revoked,
+freeze trigger) and `20261008120100_soft_delete_case_rpcs.sql`
+(`private.soft_delete_table` / `soft_delete_state` / `perm_registry_visible`
+/ `perm_registry_delete` / `perm_dispatch` re-emitted for all 25 kinds,
+`private.perm_registry_edit` new, `private.case_writable` prepared for
+P3-05, `public.soft_delete` cascading a case to its exclusive children and a
+RICO case to its predicate acts, `public.restore_record` with the
+parent-live rule, the `('restore','case')` catalog row replaced by
+`('unarchive','case')`, 38 catalog rows). Verified at apply time in a
+rolled-back transaction: a case + report + task soft-deleted with both
+children cascaded in the batch, report restore refused under the deleted
+case, case restore bringing the batch back, `can_record('unarchive'|'restore',
+'case', …)` false on a live case, a stranger denied, `RECORD_SOFT_DELETED` /
+`RECORD_RESTORED` / `PERMISSION_DENIED` audit rows. See
+`docs/AUTHORIZATION.md` §9.
+
+| Version (live) | Name | Repo file |
+|---|---|---|
+| applied via MCP (`soft_delete_<table>` × 10) | soft_delete_cases … soft_delete_predicate_acts | `20261008120001_soft_delete_cases.sql` … `20261008120010_soft_delete_predicate_acts.sql` |
+| applied via MCP (`soft_delete_case_rpcs`) | soft_delete_case_rpcs | `20261008120100_soft_delete_case_rpcs.sql` |
