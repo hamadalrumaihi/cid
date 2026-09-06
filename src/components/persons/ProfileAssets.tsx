@@ -7,7 +7,8 @@
  *  ever migrated to Places by a human via the per-row "Link to Place…" action
  *  — never automatically, and the legacy row always stays. */
 import { useCallback, useMemo, useState } from 'react'
-import { ilikeAny, insert, list, remove, update } from '@/lib/db'
+import { insert, list, remove, update } from '@/lib/db'
+import { searchPlaceHits, searchVehicleHits } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { fmtDate } from '@/lib/format'
@@ -31,7 +32,6 @@ import { PROVENANCE_KINDS, humanize } from '@/components/gangs/gangIntel'
 import { CONFIDENCE_LEVELS, LINK_STATUSES, PLACE_ROLES, VEHICLE_ROLES, placeRoleLabel, vehicleRoleLabel } from './personIntel'
 import { parseProperties, type PersonRow, type PersonProperty } from './PersonModal'
 import {
-  PLACE_LITE_COLS, VEHICLE_LITE_COLS,
   type MediaRow, type PersonPlaceRow, type PersonVehicleRow, type PlaceLite, type PlacesData,
   type VehicleLite, type VehiclesData,
 } from './profileLoad'
@@ -143,7 +143,7 @@ export function PersonVehiclesSection({ data, canEdit, onLink, onRefresh }: {
   )
 }
 
-/** Link vehicle — bounded server-backed plate search (ilikeAny + limit 20) +
+/** Link vehicle — bounded server-backed plate search (entity_suggest) +
  *  a REQUIRED role (person_vehicles is for non-owner relations; ownership is
  *  edited on the vehicle itself). */
 export function LinkVehicleModal({ person, existing, onClose, onSaved }: {
@@ -161,13 +161,15 @@ export function LinkVehicleModal({ person, existing, onClose, onSaved }: {
   const [busy, setBusy] = useState(false)
 
   const linked = useMemo(() => new Set(existing.map((l) => l.vehicle_id)), [existing])
+  // Shared entity_suggest arm; already-linked plates are excluded, and ONE
+  // bounded in:{id} read drops the person's own registered vehicles (an
+  // owned car is shown in the Owned strip, never offered as a link).
   const searchVehicles = useCallback(async (q: string): Promise<PickedRecord[]> => {
-    const or = ilikeAny(['plate', 'model', 'color'], q)
-    const rows = await list('vehicles', { select: VEHICLE_LITE_COLS, order: 'plate', limit: 20, ...(or ? { or } : {}) })
-      .then((r) => r as unknown as VehicleLite[]).catch(() => [] as VehicleLite[])
-    return rows
-      .filter((v) => !linked.has(v.id) && v.owner_id !== person.id)
-      .map((v) => ({ id: v.id, label: v.plate || 'Vehicle', sublabel: [v.model, v.color].filter(Boolean).join(' · ') || undefined }))
+    const hits = await searchVehicleHits(q, { exclude: linked })
+    if (!hits.length) return []
+    const owned = await list('vehicles', { select: 'id', eq: { owner_id: person.id }, in: { id: hits.map((h) => h.id) } })
+      .then((r) => new Set((r as unknown as { id: string }[]).map((v) => v.id))).catch(() => new Set<string>())
+    return hits.filter((h) => !owned.has(h.id)).map((h) => ({ id: h.id, label: h.label, ...(h.sublabel ? { sublabel: h.sublabel } : {}) }))
   }, [linked, person.id])
 
   const save = async () => {
@@ -375,13 +377,10 @@ export function LinkPersonPlaceModal({ person, existing, legacy, onClose, onSave
   const [busy, setBusy] = useState(false)
 
   const linked = useMemo(() => new Set(existing.map((l) => l.place_id)), [existing])
+  // Shared entity_suggest arm; already-linked places are excluded.
   const searchPlaces = useCallback(async (q: string): Promise<PickedRecord[]> => {
-    const or = ilikeAny(['name', 'area'], q)
-    const rows = await list('places', { select: PLACE_LITE_COLS, order: 'name', limit: 20, ...(or ? { or } : {}) })
-      .then((r) => r as unknown as PlaceLite[]).catch(() => [] as PlaceLite[])
-    return rows
-      .filter((p) => !linked.has(p.id))
-      .map((p) => ({ id: p.id, label: p.name, sublabel: [humanize(p.type), p.area].filter(Boolean).join(' · ') || undefined }))
+    const hits = await searchPlaceHits(q, { exclude: linked })
+    return hits.map((p) => ({ id: p.id, label: p.label, ...(p.sublabel ? { sublabel: p.sublabel } : {}) }))
   }, [linked])
 
   const save = async () => {

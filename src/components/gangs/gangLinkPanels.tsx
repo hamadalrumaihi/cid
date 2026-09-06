@@ -6,7 +6,8 @@
  *  own slice (bounded, RLS-scoped) and subscribes to its own realtime table so
  *  edits made from the Account Registry / Narcotics dossier appear live. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ilikeAny, insert, list, remove, update } from '@/lib/db'
+import { insert, list, remove, update } from '@/lib/db'
+import { searchAccountHits, searchNarcoticHits } from '@/lib/entitySearch'
 import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
@@ -61,13 +62,11 @@ export function GangAccountsPanel({ gangId, canEdit }: { gangId: string; canEdit
   }, [load, vLinks])
 
   const linked = useMemo(() => new Set((links ?? []).map((l) => l.account_id)), [links])
+  // Shared entity_suggest arm (merged tombstones never offered); already-
+  // linked accounts are excluded.
   const searchAccounts = useCallback(async (q: string): Promise<PickedRecord[]> => {
-    const or = ilikeAny(['handle', 'display_name', 'platform'], q)
-    const rows = await list('accounts', { select: 'id,platform,handle,display_name,lifecycle', order: 'updated_at', ascending: false, limit: 20, ...(or ? { or } : {}) })
-      .then((r) => r as unknown as AccountLite[]).catch(() => [] as AccountLite[])
-    return rows
-      .filter((a) => a.lifecycle !== 'merged' && !linked.has(a.id))
-      .map((a) => ({ id: a.id, label: `@${a.handle}`, sublabel: [a.platform, a.display_name].filter(Boolean).join(' · ') }))
+    const hits = await searchAccountHits(q, { exclude: linked })
+    return hits.map((a) => ({ id: a.id, label: a.label, sublabel: a.sublabel ?? '' }))
   }, [linked])
 
   const addLink = async () => {
@@ -200,13 +199,10 @@ export function GangNarcoticsPanel({ gangId, canEdit }: { gangId: string; canEdi
     return () => window.clearTimeout(t)
   }, [load, v])
 
+  // Shared entity_suggest arm (merged narcotics never offered).
   const searchNarcotics = useCallback(async (q: string): Promise<PickedRecord[]> => {
-    const or = ilikeAny(['name'], q)
-    const drugs = await list('narcotics', { select: 'id,name,category,status', order: 'name', limit: 20, ...(or ? { or } : {}) })
-      .then((r) => r as unknown as NarcoticLite[]).catch(() => [] as NarcoticLite[])
-    return drugs
-      .filter((d) => d.status !== 'merged')
-      .map((d) => ({ id: d.id, label: d.name, ...(d.category ? { sublabel: humanize(d.category) } : {}) }))
+    const hits = await searchNarcoticHits(q)
+    return hits.map((d) => ({ id: d.id, label: d.label, ...(d.sublabel ? { sublabel: d.sublabel } : {}) }))
   }, [])
 
   const addLink = async () => {

@@ -31,6 +31,7 @@ import { useSiu } from '@/lib/permissions'
 import { useTableVersion } from '@/lib/realtime'
 import { SIU_CLASSIFICATIONS, fetchSiuAudit, fetchSiuOverview, fetchSiuRoster, searchSiuCandidates, siuAuditLabel, siuCallsign, siuClassificationLabel, siuClassificationTint, siuRoleLabel, SIU_CLASSIFICATION_HINT, SIU_ROLE_SHORT, SIU_INTEGRITY_NOTE_TYPES, SIU_PRIORITY_DESIGNATIONS, siuDesignationLabel, siuNoteTypeLabel, SIU_OPENABLE_DESIGNATIONS, SIU_TARGET_PRIORITIES, SIU_TARGET_PRIORITY_LABEL, SIU_NOTE_TYPES, fetchSiuTargets, fetchSiuIntelligence, siuTargetPriorityTint, type SiuTargetEntry, type SiuIntelEntry, siuOperationCategoryLabel, type SiuOperationCategory, type SiuAuditRow, type SiuCandidate, type SiuOverview, type SiuRosterRow, type SiuDesignation, type SiuNoteType, SIU_CREDIBILITY, SIU_RELIABILITY, SIU_SOURCE_TYPES, siuCredibilityLabel, siuCredibilityTint, siuReliabilityLabel, siuReviewOutcomeLabel, siuSourceTypeLabel, fetchSiuAccessRequests, fetchSiuCommandDashboard, fetchSiuDisclosures, fetchSiuIntelQuality, fetchSiuReferrals, siuAudienceLabel, siuReferralCategoryLabel, type SiuAccessRequest, type SiuCommandDashboard, type SiuDisclosure, type SiuIntelQuality, type SiuReferral, siuStandingLabel } from '@/lib/siu'
 import { SiuCompartmentsSection } from './SiuCompartments'
+import { SiuReconcileSection } from './SiuReconcile'
 import { SiuDisclosuresSection } from './SiuDisclosures'
 import { SiuIntakeSection } from './SiuIntake'
 import { SiuWatchlistSection } from './SiuWatchlist'
@@ -180,7 +181,12 @@ export function SiuView() {
       {section === 'intelligence' && <IntelligenceSection />}
       {section === 'watchlist' && <SiuWatchlistSection />}
       {section === 'tradecraft' && <SiuTradecraftSection />}
-      {section === 'compartments' && <SiuCompartmentsSection />}
+      {section === 'compartments' && (
+        <>
+          <SiuCompartmentsSection />
+          <SiuReconcileSection />
+        </>
+      )}
       {section === 'disclosure' && <SiuDisclosuresSection />}
       {section === 'command' && <SiuCommandSection />}
       {section === 'oversight' && <SiuOversightSection />}

@@ -1,9 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ilikeAny, insert, list, rpc, update } from '@/lib/db'
+import { insert, list, rpc, update } from '@/lib/db'
+import { findDuplicates } from '@/lib/entity'
 import type { TablesInsert } from '@/lib/database.types'
-import { searchMemberHits, type EntityHit } from '@/lib/entitySearch'
+import { searchCaseHits, searchMemberHits, searchPlaceHits, type EntityHit } from '@/lib/entitySearch'
 import { useProfilesStore } from '@/lib/profiles'
 import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
 import { useAuth } from '@/lib/auth'
@@ -17,14 +18,13 @@ import { EmptyState } from '@/components/ui/Notice'
 import { SaveState } from '@/components/ui/SaveState'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
-import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
+import { DuplicateMatchNotice, duplicateMatches, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
-import { searchCaseOptions } from '@/components/persons/ProfileRelations'
 import { useToolNav } from '@/components/tools/useToolNav'
 import {
   CONFIDENCE_LEVELS, GANG_CLASSIFICATIONS, GANG_STATUSES, PROVENANCE_KINDS, SUMMARY_SECTIONS, TURF_STATUSES, humanize,
 } from './gangIntel'
-import { MEMBER_CONFIDENCE, MEMBER_STATUSES, RANK_SUGGEST, type CaseOption, type Density, type GangPlaceRow, type GangRow, type MemberRow, type PersonRow, type PlaceRow, type ThreatLevel } from './gangShared'
+import { MEMBER_CONFIDENCE, MEMBER_STATUSES, RANK_SUGGEST, type CaseOption, type Density, type GangPlaceRow, type GangRow, type MemberRow, type PersonRow, type ThreatLevel } from './gangShared'
 
 const input = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
 const label = 'mb-1 block text-xs font-semibold text-slate-400'
@@ -82,7 +82,10 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
     return { id: lead, label: p?.display_name || '(assigned officer)', thumbUrl: p?.avatar_url ?? null }
   }, [lead, rosterProfiles])
 
-  // Duplicate hint at create time — bounded ilike name search, never blocking.
+  // Duplicate hint at create time — entity_duplicates on name + aliases
+  // (P2-08): a strong hit (same normalized name) offers "Use existing", a
+  // soft hit (similar name) is a quieter notice. Never blocks saving.
+  const nav = useToolNav()
   const [dupes, setDupes] = useState<DuplicateMatch[]>([])
   useEffect(() => {
     if (record) return // edit mode — the record IS the existing one
@@ -90,15 +93,13 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
     let live = true
     const t = window.setTimeout(async () => {
       if (q.length < 2) { if (live) setDupes([]); return }
-      const or = ilikeAny(['name', 'aliases'], q)
-      if (!or) { if (live) setDupes([]); return }
-      const rows = await list('gangs', { select: 'id,name,aliases', or, limit: 5 })
-        .then((r) => r as unknown as { id: string; name: string; aliases: string | null }[]).catch(() => [])
+      const rows = await findDuplicates('gang', { name: q, alias: aliases.trim() || null })
       if (!live) return
-      setDupes(rows.slice(0, 3).map((g) => ({ type: 'gang', id: g.id, label: g.name, sublabel: g.aliases ? `aka ${g.aliases}` : undefined })))
+      setDupes(duplicateMatches('gang', rows))
     }, 400)
     return () => { live = false; window.clearTimeout(t) }
-  }, [name, record])
+  }, [name, aliases, record])
+  const useExisting = (m: DuplicateMatch) => { nav.openHref(`/gangs?gang=${encodeURIComponent(m.id)}`); onClose() }
 
   const setSection = (k: string, v: string) => setSummary((s) => ({ ...s, [k]: v }))
 
@@ -229,7 +230,7 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
           <div>
             <label htmlFor="gang-name" className={label}>Name *</label>
             <input id="gang-name" value={name} onChange={(e) => setName(e.target.value)} className={input} />
-            {!record && <DuplicateMatchNotice matches={dupes} />}
+            {!record && <DuplicateMatchNotice matches={dupes} onUseExisting={useExisting} />}
           </div>
           <div><label htmlFor="gang-aliases" className={label}>Aliases</label><input id="gang-aliases" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="OneS, 1s" className={input} /></div>
           <div><label htmlFor="gang-colors" className={label}>Colors</label><input id="gang-colors" value={colors} onChange={(e) => setColors(e.target.value)} placeholder="Black and Gold" className={input} /></div>
@@ -645,7 +646,7 @@ export function TurfModal({ gangId, onClose, onSaved }: { gangId: string; onClos
 
 /** Durable attach-to-case — creates a structured case_intel_links row (kind=gang)
  *  instead of an unstructured chat message. The case picker is a bounded
- *  server-backed search (ilikeAny + limit 20 — never a whole-table load);
+ *  server-backed search (entity_suggest — never a whole-table load);
  *  duplicate attachment is blocked by the unique (case_id, kind, ref_id) key. */
 export function AttachGangModal({ gang, onClose, onSaved }: { gang: GangRow; onClose: () => void; onSaved?: () => void }) {
   const { profile } = useAuth()
@@ -690,7 +691,7 @@ export function AttachGangModal({ gang, onClose, onSaved }: { gang: GangRow; onC
             placeholder="Search case number or title…"
             value={picked}
             onChange={setPicked}
-            search={searchCaseOptions}
+            search={searchCaseHits}
           />
           <div><label htmlFor="attach-role" className={label}>Gang role in the case</label><input id="attach-role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="Subject, suspect org, rival…" className={input} /></div>
           <div><label htmlFor="attach-note" className={label}>Note (optional)</label><input id="attach-note" value={note} onChange={(e) => setNote(e.target.value)} className={input} /></div>
@@ -703,7 +704,7 @@ export function AttachGangModal({ gang, onClose, onSaved }: { gang: GangRow; onC
 }
 
 /** Link an existing place to the gang with a role/confidence/provenance. The
- *  place picker is a bounded server-backed search (ilikeAny + limit 20);
+ *  place picker is the shared entity_suggest arm (bounded, RLS-scoped);
  *  already-linked places are excluded and the unique key backs the friendly
  *  duplicate message. */
 export function LinkPlaceModal({ gang, existing, onClose, onSaved }: {
@@ -718,13 +719,8 @@ export function LinkPlaceModal({ gang, existing, onClose, onSaved }: {
   const [busy, setBusy] = useState(false)
 
   const searchPlaces = useCallback(async (q: string): Promise<PickedRecord[]> => {
-    const or = ilikeAny(['name', 'area'], q)
-    const rows = await list('places', { select: 'id,name,type,area', order: 'name', limit: 20, ...(or ? { or } : {}) })
-      .then((r) => r as unknown as Pick<PlaceRow, 'id' | 'name' | 'type' | 'area'>[])
-      .catch(() => [] as Pick<PlaceRow, 'id' | 'name' | 'type' | 'area'>[])
-    return rows
-      .filter((p) => !linkedIds.has(p.id))
-      .map((p) => ({ id: p.id, label: p.name, sublabel: [humanize(p.type), p.area].filter(Boolean).join(' · ') || undefined }))
+    const hits = await searchPlaceHits(q, { exclude: linkedIds })
+    return hits.map((p) => ({ id: p.id, label: p.label, ...(p.sublabel ? { sublabel: p.sublabel } : {}) }))
   }, [linkedIds])
 
   const go = async () => {

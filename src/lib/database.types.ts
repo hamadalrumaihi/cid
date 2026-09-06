@@ -2535,6 +2535,150 @@ export type Database = {
           },
         ]
       }
+      entity_field_observations: {
+        Row: {
+          case_id: string
+          created_at: string
+          field: string
+          id: string
+          kind: string
+          note: string | null
+          promoted_at: string | null
+          promoted_by: string | null
+          recorded_by: string | null
+          ref_id: string
+          source_id: string | null
+          source_kind: string
+          value: string
+        }
+        Insert: {
+          case_id: string
+          created_at?: string
+          field: string
+          id?: string
+          kind: string
+          note?: string | null
+          promoted_at?: string | null
+          promoted_by?: string | null
+          recorded_by?: string | null
+          ref_id: string
+          source_id?: string | null
+          source_kind?: string
+          value: string
+        }
+        Update: {
+          case_id?: string
+          created_at?: string
+          field?: string
+          id?: string
+          kind?: string
+          note?: string | null
+          promoted_at?: string | null
+          promoted_by?: string | null
+          recorded_by?: string | null
+          ref_id?: string
+          source_id?: string | null
+          source_kind?: string
+          value?: string
+        }
+        Relationships: []
+      }
+      entity_merges: {
+        Row: {
+          actor_id: string | null
+          created_at: string
+          id: string
+          kind: string
+          manifest: Json
+          reason: string
+          reverse_reason: string | null
+          reversed_at: string | null
+          reversed_by: string | null
+          survivor_id: string
+          victim_ids: string[]
+          victim_snapshots: Json
+        }
+        Insert: {
+          actor_id?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          manifest?: Json
+          reason: string
+          reverse_reason?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
+          survivor_id: string
+          victim_ids: string[]
+          victim_snapshots?: Json
+        }
+        Update: {
+          actor_id?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          manifest?: Json
+          reason?: string
+          reverse_reason?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
+          survivor_id?: string
+          victim_ids?: string[]
+          victim_snapshots?: Json
+        }
+        Relationships: []
+      }
+      entity_update_suggestions: {
+        Row: {
+          created_at: string
+          current_value: string | null
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          field: string
+          id: string
+          kind: string
+          proposed_by: string | null
+          proposed_value: string | null
+          reason: string
+          ref_id: string
+          source_observation_id: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          current_value?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          field: string
+          id?: string
+          kind: string
+          proposed_by?: string | null
+          proposed_value?: string | null
+          reason: string
+          ref_id: string
+          source_observation_id?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          current_value?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          field?: string
+          id?: string
+          kind?: string
+          proposed_by?: string | null
+          proposed_value?: string | null
+          reason?: string
+          ref_id?: string
+          source_observation_id?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       evidence: {
         Row: {
           case_id: string | null
@@ -3819,6 +3963,7 @@ export type Database = {
           org_name: string | null
           org_role: string | null
           phone: string | null
+          phone_normalized: string | null
           reason: string | null
           submission_id: string
         }
@@ -3833,6 +3978,7 @@ export type Database = {
           org_name?: string | null
           org_role?: string | null
           phone?: string | null
+          phone_normalized?: never
           reason?: string | null
           submission_id: string
         }
@@ -3847,6 +3993,7 @@ export type Database = {
           org_name?: string | null
           org_role?: string | null
           phone?: string | null
+          phone_normalized?: never
           reason?: string | null
           submission_id?: string
         }
@@ -4390,11 +4537,13 @@ export type Database = {
           id: string
           intelligence_summary: Json
           lead_detective_id: string | null
+          merged_into: string | null
           name: string
           next_review_at: string | null
           notes: string | null
           reviewed_at: string | null
           reviewed_by: string | null
+          siu_hidden_flag: boolean
           status: string | null
           threat_level: Database["public"]["Enums"]["threat_level"]
           updated_at: string
@@ -4413,11 +4562,13 @@ export type Database = {
           id?: string
           intelligence_summary?: Json
           lead_detective_id?: string | null
+          merged_into?: string | null
           name: string
           next_review_at?: string | null
           notes?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          siu_hidden_flag?: boolean
           status?: string | null
           threat_level?: Database["public"]["Enums"]["threat_level"]
           updated_at?: string
@@ -4436,11 +4587,13 @@ export type Database = {
           id?: string
           intelligence_summary?: Json
           lead_detective_id?: string | null
+          merged_into?: string | null
           name?: string
           next_review_at?: string | null
           notes?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          siu_hidden_flag?: boolean
           status?: string | null
           threat_level?: Database["public"]["Enums"]["threat_level"]
           updated_at?: string
@@ -4482,6 +4635,7 @@ export type Database = {
           kind: string
           note: string | null
           value: string
+          value_normalized: string | null
         }
         Insert: {
           case_id: string
@@ -4495,6 +4649,7 @@ export type Database = {
           kind?: string
           note?: string | null
           value: string
+          value_normalized?: never
         }
         Update: {
           case_id?: string
@@ -4508,6 +4663,7 @@ export type Database = {
           kind?: string
           note?: string | null
           value?: string
+          value_normalized?: never
         }
         Relationships: [
           {
@@ -8418,11 +8574,13 @@ export type Database = {
           next_review_at: string | null
           notes: string | null
           phone: string | null
+          phone_normalized: string | null
           priority: string | null
           properties: Json
           review_note: string | null
           reviewed_at: string | null
           reviewed_by: string | null
+          siu_hidden_flag: boolean
           status: string | null
           updated_at: string
           vch: number | null
@@ -8460,11 +8618,13 @@ export type Database = {
           next_review_at?: string | null
           notes?: string | null
           phone?: string | null
+          phone_normalized?: never
           priority?: string | null
           properties?: Json
           review_note?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          siu_hidden_flag?: boolean
           status?: string | null
           updated_at?: string
           vch?: number | null
@@ -8502,11 +8662,13 @@ export type Database = {
           next_review_at?: string | null
           notes?: string | null
           phone?: string | null
+          phone_normalized?: never
           priority?: string | null
           properties?: Json
           review_note?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          siu_hidden_flag?: boolean
           status?: string | null
           updated_at?: string
           vch?: number | null
@@ -8604,9 +8766,11 @@ export type Database = {
           deleted_at: string | null
           deleted_by: string | null
           id: string
+          merged_into: string | null
           name: string
           narcotic_id: string | null
           notes: string | null
+          siu_hidden_flag: boolean
           type: Database["public"]["Enums"]["location_type"]
           updated_at: string
         }
@@ -8621,9 +8785,11 @@ export type Database = {
           deleted_at?: string | null
           deleted_by?: string | null
           id?: string
+          merged_into?: string | null
           name: string
           narcotic_id?: string | null
           notes?: string | null
+          siu_hidden_flag?: boolean
           type: Database["public"]["Enums"]["location_type"]
           updated_at?: string
         }
@@ -8638,9 +8804,11 @@ export type Database = {
           deleted_at?: string | null
           deleted_by?: string | null
           id?: string
+          merged_into?: string | null
           name?: string
           narcotic_id?: string | null
           notes?: string | null
+          siu_hidden_flag?: boolean
           type?: Database["public"]["Enums"]["location_type"]
           updated_at?: string
         }
@@ -10577,6 +10745,51 @@ export type Database = {
         }
         Relationships: []
       }
+      siu_reconcile_queue: {
+        Row: {
+          cid_label: string
+          cid_record_id: string
+          created_at: string
+          hidden_label: string
+          hidden_record_id: string
+          id: string
+          kind: string
+          note: string | null
+          resolution: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          signal: string
+        }
+        Insert: {
+          cid_label?: string
+          cid_record_id: string
+          created_at?: string
+          hidden_label?: string
+          hidden_record_id: string
+          id?: string
+          kind: string
+          note?: string | null
+          resolution?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          signal: string
+        }
+        Update: {
+          cid_label?: string
+          cid_record_id?: string
+          created_at?: string
+          hidden_label?: string
+          hidden_record_id?: string
+          id?: string
+          kind?: string
+          note?: string | null
+          resolution?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          signal?: string
+        }
+        Relationships: []
+      }
       siu_referrals: {
         Row: {
           category: string
@@ -11592,10 +11805,12 @@ export type Database = {
           deleted_by: string | null
           gang_id: string | null
           id: string
+          merged_into: string | null
           model: string | null
           notes: string | null
           owner_id: string | null
           plate: string
+          siu_hidden_flag: boolean
           updated_at: string
         }
         Insert: {
@@ -11608,10 +11823,12 @@ export type Database = {
           deleted_by?: string | null
           gang_id?: string | null
           id?: string
+          merged_into?: string | null
           model?: string | null
           notes?: string | null
           owner_id?: string | null
           plate: string
+          siu_hidden_flag?: boolean
           updated_at?: string
         }
         Update: {
@@ -11624,10 +11841,12 @@ export type Database = {
           deleted_by?: string | null
           gang_id?: string | null
           id?: string
+          merged_into?: string | null
           model?: string | null
           notes?: string | null
           owner_id?: string | null
           plate?: string
+          siu_hidden_flag?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -14078,6 +14297,80 @@ export type Database = {
       media_designate_evidence: {
         Args: { p_clear?: boolean; p_media: string; p_ref?: string }
         Returns: Database["public"]["Tables"]["media"]["Row"]
+      }
+      entity_crossref: {
+        Args: { p_id?: string; p_kind: string; p_limit?: number; p_q?: string }
+        Returns: {
+          bureau: string
+          case_id: string
+          case_number: string
+          detail: string
+          observed_at: string
+          title: string
+          via: string
+        }[]
+      }
+      entity_duplicates: {
+        Args: { p_kind: string; p_payload: Json }
+        Returns: {
+          id: string
+          label: string
+          score: number
+          signal: string
+          strength: string
+          sublabel: string
+        }[]
+      }
+      entity_merge: {
+        Args: { p_kind: string; p_reason: string; p_survivor: string; p_victims: string[] }
+        Returns: Json
+      }
+      entity_merge_preview: {
+        Args: { p_kind: string; p_survivor: string; p_victims: string[] }
+        Returns: Json
+      }
+      entity_suggest: {
+        Args: { p_kind: string; p_limit?: number; p_q: string }
+        Returns: {
+          exact: boolean
+          id: string
+          kind: string
+          label: string
+          score: number
+          sublabel: string
+        }[]
+      }
+      entity_suggest_update: {
+        Args: {
+          p_expected_current?: string
+          p_field: string
+          p_id: string
+          p_kind: string
+          p_observation_id?: string
+          p_reason: string
+          p_value: string
+        }
+        Returns: Json
+      }
+      entity_suggestion_decide: {
+        Args: { p_accept: boolean; p_id: string; p_note?: string }
+        Returns: Json
+      }
+      entity_suggestion_withdraw: {
+        Args: { p_id: string }
+        Returns: Json
+      }
+      entity_unmerge: {
+        Args: { p_merge_id: string; p_reason: string }
+        Returns: Json
+      }
+      promote_observation: {
+        Args: { p_id: string; p_reason: string }
+        Returns: Json
+      }
+      siu_reconcile_resolve: {
+        Args: { p_id: string; p_note?: string; p_resolution: string }
+        Returns: Json
       }
     }
     Enums: {

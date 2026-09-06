@@ -12,6 +12,7 @@ import type { Database, Tables } from '@/lib/database.types'
 import { CASE_PREFIX, PERMANENT_BUREAUS } from '@/lib/roles'
 import { supabaseBaseUrl } from '../env'
 import { getDenial, getRows, getRpcOverride, getSession, mockId, seedRows, type MockTableName } from '../store'
+import { ENTITY_RPCS } from './entity'
 import { postgrestError, shapeNetwork } from './postgrest'
 
 type Fns = Database['public']['Functions']
@@ -171,6 +172,9 @@ export const rpcHandlers = [
         return new HttpResponse(null, { status: 204 })
       }
       default:
+        // Phase 2 entity layer (suggest / duplicates / crossref / merge /
+        // suggestions / reconcile) — see ./entity.ts.
+        if (fn in ENTITY_RPCS) return HttpResponse.json(ENTITY_RPCS[fn](args) as Parameters<typeof HttpResponse.json>[0])
         return postgrestError(404, 'PGRST202',
           `Could not find the function public.${fn} in the schema cache — add a handler in src/mocks/handlers/rpc.ts or use scenarios.rpcResult().`)
     }

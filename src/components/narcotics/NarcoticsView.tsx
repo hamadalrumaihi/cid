@@ -2,7 +2,7 @@
 
 /** Narcotics Intelligence — the visual substance registry.
  *  Supersedes the old accordion: a quiet header with one prominent search
- *  (indexed search_narcotics RPC), category pills, a responsive grid of
+ *  (entity_suggest), category pills, a responsive grid of
  *  substance cards, a modest metric strip and a small filters popover. Merged
  *  tombstones are excluded everywhere. `?drug=<id>` drills into the dossier
  *  (lives in NarcoticsDossier.tsx, imported lazily). Registry model + card
@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { insert, list, rpc, withRetry } from '@/lib/db'
+import { findDuplicates, suggestEntities } from '@/lib/entity'
 import { useAuth } from '@/lib/auth'
 import { useRegistry } from '@/lib/useRegistry'
 import { useTableVersion } from '@/lib/realtime'
@@ -26,6 +27,7 @@ import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionTabs, type SectionTab } from '@/components/ui/SectionTabs'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { DuplicateMatchNotice, duplicateMatches, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import { useToolNav } from '@/components/tools/useToolNav'
 import { NarcoticsRegistryCard } from './NarcoticsRegistryCard'
 import {
@@ -86,8 +88,8 @@ export function NarcoticsView() {
   const [creating, setCreating] = useState(false)
   const [suggesting, setSuggesting] = useState(false)
 
-  // Server-side search (search_narcotics RPC): ranked ids hydrated from the
-  // loaded rows, misses fetched by id. null = browse mode.
+  // Server-side search (entity_suggest): ranked ids hydrated from the loaded
+  // rows, misses fetched by id. null = browse mode.
   const [searchIds, setSearchIds] = useState<string[] | null>(null)
   const [searching, setSearching] = useState(false)
   const [extraRows, setExtraRows] = useState<ReadonlyMap<string, RegistryNarcotic>>(new Map())
@@ -146,10 +148,11 @@ export function NarcoticsView() {
       void (async () => {
         if (seq !== searchSeq.current) return
         setSearching(true)
-        const res = await rpc('search_narcotics', { p_query: q, p_limit: 60 })
+        // Shared entity_suggest arm (P2-08): exact-normalized hits first,
+        // merged tombstones filtered server-side, bounded at 50.
+        const hits = await suggestEntities('narcotic', q, 50)
         if (seq !== searchSeq.current) return
-        if (res.error) { setSearching(false); setSearchIds(null); toast(`Search failed: ${res.error.message}`, 'danger'); return }
-        const ids = (res.data ?? []).map((r) => r.id)
+        const ids = hits.map((r) => r.id)
         const misses = ids.filter((id) => !rowMapRef.current.has(id))
         if (misses.length) {
           const fetched = await list('narcotics', { select: NARCOTIC_LIST_COLS, in: { id: misses } })
@@ -437,6 +440,7 @@ function PopCheck({ label, checked, onChange }: { label: string; checked: boolea
 
 /* ---- Add-substance modal (minimal create; the dossier owns rich editing) --- */
 function NarcoticCreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+  const nav = useToolNav()
   const [name, setName] = useState('')
   const [category, setCategory] = useState<string>('unknown')
   const [status, setStatus] = useState<string>('reported')
@@ -445,6 +449,24 @@ function NarcoticCreateModal({ onClose, onCreated }: { onClose: () => void; onCr
   const [restricted, setRestricted] = useState(false)
   const [serverSpecific, setServerSpecific] = useState(false)
   const [busy, setBusy] = useState(false)
+
+  // Duplicate hint — entity_duplicates on the typed name (P2-08): the same
+  // name or a registered alias is a strong hit (offers "Use existing"), a
+  // similar name a soft notice. Advisory only; the merge flow handles real
+  // duplicates.
+  const [dupes, setDupes] = useState<DuplicateMatch[]>([])
+  useEffect(() => {
+    const q = name.trim()
+    let live = true
+    const t = window.setTimeout(async () => {
+      if (q.length < 2) { if (live) setDupes([]); return }
+      const rows = await findDuplicates('narcotic', { name: q })
+      if (!live) return
+      setDupes(duplicateMatches('narcotic', rows))
+    }, 400)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [name])
+  const useExisting = (m: DuplicateMatch) => { nav.openHref(`/narcotics?drug=${encodeURIComponent(m.id)}`); onClose() }
 
   const save = async () => {
     if (!name.trim()) { toast('Name is required.', 'warn'); return }
@@ -475,7 +497,12 @@ function NarcoticCreateModal({ onClose, onCreated }: { onClose: () => void; onCr
       <ModalHeader title="Add substance" onClose={onClose} />
       <div className="space-y-3">
         <Field label="Name" required>
-          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Blue Dream" />}
+          {(id) => (
+            <>
+              <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Blue Dream" />
+              <DuplicateMatchNotice matches={dupes} onUseExisting={useExisting} />
+            </>
+          )}
         </Field>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Category">

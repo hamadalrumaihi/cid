@@ -5,11 +5,19 @@
  *  deconfliction: the same value surfacing in two or more cases raises an
  *  alert. The indicators table is shared intel (all active members see every
  *  value), but case titles are RLS-scoped — a match into a case the viewer
- *  cannot open renders as a restricted stub instead of leaking its details. */
-import { useMemo, useState } from 'react'
+ *  cannot open renders as a restricted stub instead of leaking its details.
+ *
+ *  Phase 2 (P2-06/P2-08): matching runs on the server's own key —
+ *  `indicators.value_normalized` (private.norm_phone for phones, lower/trim
+ *  otherwise) — so the registry never re-implements normalization; the
+ *  per-row Cross-ref opens `entity_crossref` (matching indicators AND report
+ *  mentions, bounded, RLS-scoped); the create modal asks `entity_duplicates`
+ *  whether the value is already logged elsewhere. */
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
 import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
+import { findDuplicates, type DuplicateRow } from '@/lib/entity'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { useRegistry } from '@/lib/useRegistry'
@@ -24,6 +32,7 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { inputCls, labelCls } from '@/components/ui/Field'
+import { CrossrefList } from '@/components/shared/CrossrefList'
 import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import { searchCaseHits, type EntityHit } from '@/lib/entitySearch'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
@@ -42,17 +51,11 @@ const KIND_META: Record<string, { label: string }> = {
   other:   { label: 'Other' },
 }
 
-/** Match key: identifiers that are digits/codes compare with separators
- *  stripped (so "(555) 201-3344" ≡ "555-2013344"); free-text kinds compare
- *  case- and whitespace-insensitively. */
-const matchKey = (kind: string, value: string): string => {
-  const v = value.trim().toLowerCase()
-  if (kind === 'phone' || kind === 'account' || kind === 'serial') {
-    const stripped = v.replace(/[^a-z0-9]/g, '')
-    return `${kind}:${stripped || v}`
-  }
-  return `${kind}:${v.replace(/\s+/g, ' ')}`
-}
+/** Deconfliction key — the server's generated `value_normalized` (the same
+ *  key entity_duplicates / entity_crossref match on), per kind. A row from
+ *  before the column was backfilled falls back to a plain lower/trim. */
+const matchKey = (r: Pick<IndicatorRow, 'kind' | 'value' | 'value_normalized'>): string =>
+  `${r.kind}:${r.value_normalized ?? r.value.trim().toLowerCase()}`
 
 export function IndicatorsView() {
   const { state, canEdit, canDelete } = useAuth()
@@ -62,6 +65,8 @@ export function IndicatorsView() {
   const [query, setQuery] = useState(() => sp.get('q') ?? '')
   const [kindFilter, setKindFilter] = useState('')
   const [editor, setEditor] = useState<{ record: IndicatorRow | null } | null>(null)
+  // Per-indicator cross-reference (entity_crossref) — opened from a row.
+  const [xref, setXref] = useState<IndicatorRow | null>(null)
   const vCases = useTableVersion('cases')
 
   // Registry owns rows/loading/error + the deferred, version-driven refetch.
@@ -87,7 +92,7 @@ export function IndicatorsView() {
   const matches = useMemo(() => {
     const byKey = new Map<string, { sample: IndicatorRow; caseIds: Set<string> }>()
     for (const r of rows) {
-      const k = matchKey(r.kind, r.value)
+      const k = matchKey(r)
       const e = byKey.get(k)
       if (e) e.caseIds.add(r.case_id)
       else byKey.set(k, { sample: r, caseIds: new Set([r.case_id]) })
@@ -116,7 +121,7 @@ export function IndicatorsView() {
     await deleteWithUndo('indicators', r, { label: `Indicator ${r.value}`, noConfirm: true, after: refresh })
   }
 
-  const isHot = (r: IndicatorRow) => (matches.get(matchKey(r.kind, r.value))?.caseIds.size ?? 0) >= 2
+  const isHot = (r: IndicatorRow) => (matches.get(matchKey(r))?.caseIds.size ?? 0) >= 2
 
   const caseLink = (r: IndicatorRow) => {
     const c = caseById.get(r.case_id)
@@ -132,6 +137,7 @@ export function IndicatorsView() {
 
   const rowActions = (r: IndicatorRow) => (
     <span className="flex flex-shrink-0 items-center gap-2">
+      <button onClick={() => setXref(r)} aria-label={`Cross-reference ${r.value} across cases`} className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10 sm:min-h-0">Cross-ref</button>
       {canEdit && <button onClick={() => setEditor({ record: r })} className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10 sm:min-h-0">Edit</button>}
       {canDelete && <button onClick={() => void onDelete(r)} aria-label="Delete indicator" className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10 sm:min-h-0"><XMarkIcon size={14} /></button>}
     </span>
@@ -162,11 +168,7 @@ export function IndicatorsView() {
       render: (r) => <span className="text-xs">{caseLink(r)}</span>,
     },
     { key: 'note', label: 'Note', value: (r) => r.note ?? '', render: (r) => <span className="line-clamp-2 max-w-[16rem] text-xs text-slate-400">{r.note || '—'}</span> },
-    ...(canEdit || canDelete ? [{
-      key: 'actions', label: 'Actions',
-      value: () => '',
-      render: (r) => rowActions(r),
-    } satisfies DataColumn<IndicatorRow>] : []),
+    { key: 'actions', label: 'Actions', value: () => '', render: (r) => rowActions(r) },
   ]
 
   // Narrow-viewport fallback for the table — the registry card, unchanged.
@@ -225,7 +227,7 @@ export function IndicatorsView() {
             <p className="mb-2 text-[13px] font-semibold text-white"><AlertIcon size={13} className="inline align-[-2px] text-amber-300" /> Deconfliction alerts ({alerts.length})</p>
             <div className="space-y-2">
               {alerts.map((a) => (
-                <div key={matchKey(a.sample.kind, a.sample.value)} className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+                <div key={matchKey(a.sample)} className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
                   <p className="text-sm font-semibold text-white">
                     {a.sample.value}
                     <Badge tone="neutral" className="ml-2 font-medium text-slate-400">{KIND_META[a.sample.kind]?.label ?? a.sample.kind}</Badge>
@@ -302,6 +304,20 @@ export function IndicatorsView() {
           onSaved={() => { setEditor(null); void refresh() }}
         />
       )}
+      {xref && (
+        <Modal open onClose={() => setXref(null)}>
+          <ModalHeader title={`Cross-reference · ${xref.value}`} onClose={() => setXref(null)} />
+          <p className="mb-3 text-sm text-slate-400">
+            Other cases where this {KIND_META[xref.kind]?.label.toLowerCase() ?? xref.kind} is logged or mentioned in a report — bounded and answered server-side under your access.
+          </p>
+          <CrossrefList
+            kind="indicator"
+            id={xref.id}
+            emptyTitle="No cross-case matches"
+            emptyHint="Cases appear here when the same value is logged on another case or mentioned in a report you can read."
+          />
+        </Modal>
+      )}
     </div>
   )
 }
@@ -339,6 +355,23 @@ export function IndicatorModal({ record, currentCase, onClose, onSaved }: {
   const [value, setValue] = useState(record?.value ?? '')
   const [note, setNote] = useState(record?.note ?? '')
   const [busy, setBusy] = useState(false)
+
+  // Deconfliction preview — entity_duplicates on the typed value (P2-08):
+  // the same normalized value already logged elsewhere. For an indicator
+  // that is the SIGNAL, not a reason to stop — logging it here raises the
+  // cross-case alert — so it renders as a notice, never a block.
+  const [elsewhere, setElsewhere] = useState<DuplicateRow[]>([])
+  useEffect(() => {
+    const v = value.trim()
+    let live = true
+    const t = window.setTimeout(async () => {
+      if (v.length < 2) { if (live) setElsewhere([]); return }
+      const rows = await findDuplicates('indicator', { kind, value: v, exclude_id: record?.id ?? null })
+      if (!live) return
+      setElsewhere(rows.filter((r) => r.id !== record?.id))
+    }, 400)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [kind, value, record?.id])
 
   const dirty = () =>
     caseId !== (record?.case_id ?? '') || kind !== (record?.kind ?? 'phone') ||
@@ -383,6 +416,21 @@ export function IndicatorModal({ record, currentCase, onClose, onSaved }: {
             <input id="indicator-value" value={value} onChange={(e) => setValue(e.target.value)} placeholder="e.g. (555) 201-3344" className={`${inputCls} font-mono`} />
           </div>
         </div>
+        {elsewhere.length > 0 && (
+          <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs">
+            <p className="font-semibold text-amber-200">
+              <AlertIcon size={12} className="inline align-[-2px]" /> Already logged on {elsewhere.length === 1 ? 'another case' : `${elsewhere.length} other cases`} — saving here raises a deconfliction alert.
+            </p>
+            <ul className="mt-1 space-y-0.5 text-slate-200">
+              {elsewhere.slice(0, 3).map((r) => (
+                <li key={r.id} className="truncate">
+                  <span className="font-mono">{r.label}</span>
+                  {r.sublabel && <span className="text-slate-400"> · {r.sublabel}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div>
           <label htmlFor="indicator-note" className={labelCls}>Note</label>
           <textarea id="indicator-note" value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Where it surfaced, who it belongs to…" className={inputCls} />

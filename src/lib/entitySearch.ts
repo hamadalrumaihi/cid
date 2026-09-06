@@ -1,19 +1,32 @@
 /** Shared entity-search registry — ONE place for the per-kind suggestion
- *  queries behind pickers/link modals, extracted from the copy-pasted idioms
- *  (ProfileRelations/gangModals/VehicleProfile/PersonModal person-RPC two-step,
- *  the assorted ilikeAny pickers, search.ts's member/charge cache arms).
+ *  queries behind pickers/link modals.
  *
- *  Every db-backed search runs on the caller's own RLS-scoped client through
- *  ilikeAny() (the sanctioned injection boundary) or a typed RPC, projected
- *  and bounded (default 20). A transient failure degrades to no suggestions
- *  ([]), never an exception — same contract as the pickers this replaces.
- *  Merged tombstones (persons/accounts lifecycle, narcotics merged_into) are
- *  filtered so a picker can never link a dead record.
+ *  Phase 2 (Portal Improvements P2-02/P2-08): the registry kinds — person,
+ *  vehicle, gang, place, account, case, narcotic — delegate a typed query to
+ *  the SECURITY INVOKER `entity_suggest` RPC through src/lib/entity
+ *  (suggestEntities → toHit): normalized fast paths (phone, plate, handle),
+ *  trgm fallback, exact-normalized hits first, ≤ 50 rows, and RLS filtering
+ *  hidden/sealed/merged/deleted rows server-side. The client only applies
+ *  `exclude`, `limit` and (persons) the stable rankPersonRows ordering.
  *
- *  Blank query ⇒ most-recent rows (order updated_at desc) for db-backed kinds;
- *  member/charge filter their client caches (roster store / penal catalog) and
- *  return the whole bounded pool instead. */
-import { ilikeAny, list, rpc } from './db'
+ *  A BLANK query keeps the picker contract ('' lists the most recent ~20
+ *  rows so a picker is useful before typing): one projected, bounded
+ *  `list()` ordered by updated_at with the same tombstone filters — never an
+ *  ilike disjunction, which is the whole point of the migration. A query
+ *  under 2 characters is answered by the blank path too (entity_suggest
+ *  returns nothing below 2).
+ *
+ *  Thumbs: a suggest row carries no mugshot, so person hits no longer ship
+ *  `thumbUrl` — the picker's RecordThumb falls back to initials, and the
+ *  collapsed row keeps whatever thumb the caller already holds. Pickers that
+ *  need real thumbs fetch them lazily (RecordSearchPicker getThumb).
+ *
+ *  operation / legal_request have no RPC arm and stay on ilikeAny (the
+ *  sanctioned injection boundary); member / charge filter client caches. A
+ *  transient failure degrades to no suggestions ([]), never an exception. */
+import { ilikeAny, list } from './db'
+import { suggestEntities, toHit } from './entity/api'
+import type { SuggestKind } from './entity/kinds'
 import { penalSearch, penalSentence } from './penal'
 import { activeProfiles } from './profiles'
 import { bureauShort, roleLabel } from './roles'
@@ -63,11 +76,12 @@ export function normPlate(v: string | null | undefined): string | null {
 
 /** Digits plus a leading '+' only (no SQL phone normalizer exists — this is
  *  the client-side matching convention). '' / no digits ⇒ null. */
+/** Mirror of private.norm_phone: digits only, a leading country code 1 on an
+ *  11-digit number dropped. entitySearch.test pins the parity cases. */
 export function normPhone(v: string | null | undefined): string | null {
-  const s = String(v ?? '').trim()
-  const digits = s.replace(/\D/g, '')
+  const digits = String(v ?? '').replace(/\D/g, '')
   if (!digits) return null
-  return (s.startsWith('+') ? '+' : '') + digits
+  return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits
 }
 
 /** Mirror of accounts.handle_normalized (lower(btrim)) plus a leading-@ strip
@@ -104,7 +118,7 @@ function finish(hits: EntityHit[], opts?: EntitySearchOptions): EntityHit[] {
 
 /** One bounded ilikeAny query; ilikeAny returns null for a blank/stripped
  *  term, in which case its documented contract applies: most-recent rows. */
-type IlikeTable = 'gangs' | 'places' | 'accounts' | 'cases' | 'operations' | 'legal_requests' | 'vehicles'
+type IlikeTable = 'operations' | 'legal_requests'
 async function ilikeRows<Row>(
   table: IlikeTable, select: string, searchCols: readonly string[], q: string, limit: number,
 ): Promise<Row[]> {
@@ -115,18 +129,73 @@ async function ilikeRows<Row>(
   return rows as unknown as Row[]
 }
 
-/* ── Persons — the extracted two-step RPC idiom ─────────────────────────── */
+/* ── Registry kinds — entity_suggest ────────────────────────────────────── */
 
-interface PersonRow {
-  id: string; name: string | null; alias: string | null; dob: string | null
-  phone: string | null; status: string | null; gang_id: string | null
-  mugshot_url: string | null; lifecycle: string
+/** Blank-query "recent rows" projections, mirroring entity_suggest's
+ *  label/sublabel shapes so a picker looks the same before and after typing. */
+type RecentTable = 'persons' | 'vehicles' | 'gangs' | 'places' | 'accounts' | 'cases' | 'narcotics'
+interface RecentSpec { table: RecentTable; select: string; is?: Record<string, null>; live?: (r: Record<string, unknown>) => boolean; hit: (r: Record<string, unknown>) => EntityHit }
+const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
+const RECENT: Record<SuggestKind, RecentSpec | null> = {
+  person: {
+    table: 'persons', select: 'id,name,alias,status,lifecycle',
+    live: (r) => r.lifecycle !== 'merged',
+    hit: (r) => ({ id: String(r.id), label: str(r.name) || 'Person', sublabel: joinDots([str(r.alias), str(r.status)]), meta: { kind: 'person', exact: null } }),
+  },
+  vehicle: {
+    table: 'vehicles', select: 'id,plate,model,color',
+    hit: (r) => ({ id: String(r.id), label: str(r.plate) || 'Vehicle', sublabel: joinDots([str(r.model), str(r.color)]), meta: { kind: 'vehicle', exact: null } }),
+  },
+  gang: {
+    table: 'gangs', select: 'id,name,aliases,status',
+    hit: (r) => ({ id: String(r.id), label: String(r.name), sublabel: joinDots([str(r.aliases) ? `aka ${str(r.aliases)}` : null, str(r.status)]), meta: { kind: 'gang', exact: null } }),
+  },
+  place: {
+    table: 'places', select: 'id,name,type,area',
+    hit: (r) => ({ id: String(r.id), label: String(r.name), sublabel: joinDots([str(r.type), str(r.area)]), meta: { kind: 'place', exact: null } }),
+  },
+  narcotic: {
+    table: 'narcotics', select: 'id,name,category,status', is: { merged_into: null },
+    hit: (r) => ({ id: String(r.id), label: String(r.name), sublabel: joinDots([str(r.category), str(r.status)]), meta: { kind: 'narcotic', exact: null } }),
+  },
+  case: {
+    table: 'cases', select: 'id,case_number,title',
+    hit: (r) => ({ id: String(r.id), label: String(r.case_number), sublabel: str(r.title) ?? undefined, meta: { kind: 'case', exact: null } }),
+  },
+  account: {
+    table: 'accounts', select: 'id,platform,handle,display_name,lifecycle',
+    live: (r) => r.lifecycle !== 'merged',
+    hit: (r) => ({ id: String(r.id), label: `@${String(r.handle)}`, sublabel: joinDots([str(r.platform), str(r.display_name)]), meta: { kind: 'account', exact: null } }),
+  },
+  phone: null,
+  indicator: null,
 }
-const PERSON_COLS = 'id,name,alias,dob,phone,status,gang_id,mugshot_url,lifecycle'
+
+/** Typed query ⇒ entity_suggest (server order kept: exact-normalized hits
+ *  first). Blank/short query ⇒ most-recent rows. Both bounded, both
+ *  degrade to []. */
+async function suggestHits(kind: SuggestKind, q: string, opts?: EntitySearchOptions): Promise<EntityHit[]> {
+  const limit = opts?.limit ?? DEFAULT_LIMIT
+  const query = q.trim()
+  try {
+    if (query.length < 2) {
+      const spec = RECENT[kind]
+      if (!spec) return []
+      const rows = await list(spec.table, {
+        select: spec.select, ...(spec.is ? { is: spec.is } : {}),
+        order: 'updated_at', ascending: false, limit: limit + OVERFETCH,
+      }) as unknown as Record<string, unknown>[]
+      return finish(rows.filter((r) => !spec.live || spec.live(r)).map(spec.hit), opts)
+    }
+    const rows = await suggestEntities(kind, query, Math.min(limit + OVERFETCH, 50))
+    return finish(rows.map(toHit), opts)
+  } catch { return [] }
+}
 
 /** Stable person ordering: hits whose normalized name/alias/phone EXACTLY
- *  equals the normalized query first, then the search_persons rank order,
- *  then original position. Pure — exported for the ranking unit tests. */
+ *  equals the normalized query first, then the RPC rank order, then original
+ *  position. Pure — exported for the ranking unit tests; the person arm runs
+ *  it as the final client-side ordering over entity_suggest's answer. */
 export function rankPersonRows<T extends { id: string; name: string | null; alias: string | null; phone: string | null }>(
   rows: readonly T[], rpcOrder: ReadonlyMap<string, number>, q: string,
 ): T[] {
@@ -144,155 +213,28 @@ export function rankPersonRows<T extends { id: string; name: string | null; alia
 export async function searchPersonHits(q: string, opts?: EntitySearchOptions): Promise<EntityHit[]> {
   const limit = opts?.limit ?? DEFAULT_LIMIT
   const query = q.trim()
+  if (query.length < 2) return suggestHits('person', query, opts)
   try {
-    let rows: PersonRow[]
-    if (!query) {
-      rows = await list('persons', {
-        select: PERSON_COLS, order: 'updated_at', ascending: false, limit: limit + OVERFETCH,
-      }) as unknown as PersonRow[]
-    } else {
-      // Indexed, RLS-safe search_persons → hydrate the lite projection by id →
-      // re-rank (exact matches first, then RPC rank).
-      const res = await rpc('search_persons', { p_q: query, p_limit: limit + OVERFETCH })
-      const ids = (res.data ?? []).map((h) => h.id)
-      if (res.error || !ids.length) return []
-      const order = new Map(ids.map((id, i) => [id, i] as const))
-      const hydrated = await list('persons', { select: PERSON_COLS, in: { id: ids } }) as unknown as PersonRow[]
-      rows = rankPersonRows(hydrated, order, query)
-    }
-    const live = rows.filter((r) => r.lifecycle !== 'merged')
-    // Gang names for the sublabel — one bounded in:{id} lookup, best-effort.
-    const gangIds = [...new Set(live.map((r) => r.gang_id).filter((x): x is string => !!x))]
-    const gangName = new Map<string, string>()
-    if (gangIds.length) {
-      const gangs = await list('gangs', { select: 'id,name', in: { id: gangIds } })
-        .then((r) => r as unknown as { id: string; name: string }[])
-        .catch(() => [] as { id: string; name: string }[])
-      for (const g of gangs) gangName.set(g.id, g.name)
-    }
-    return finish(live.map((p) => ({
-      id: p.id,
-      label: p.name || 'Person',
-      sublabel: joinDots([p.dob, humanize(p.status), p.gang_id ? gangName.get(p.gang_id) : null]),
-      thumbUrl: p.mugshot_url,
-    })), opts)
+    const rows = await suggestEntities('person', query, Math.min(limit + OVERFETCH, 50))
+    // entity_suggest already puts exact-normalized hits first; rankPersonRows
+    // keeps that order stable (name/alias exactness, then server rank).
+    const order = new Map(rows.map((r, i) => [r.id, i] as const))
+    const ranked = rankPersonRows(
+      rows.map((r) => ({ id: r.id, name: r.label, alias: r.sublabel?.split(' · ')[0] ?? null, phone: null, row: r })),
+      order, query,
+    )
+    return finish(ranked.map((x) => toHit(x.row)), opts)
   } catch { return [] }
 }
 
-/* ── Vehicles — ilike arm + exact-normalized-plate arm ──────────────────── */
+export const searchVehicleHits = (q: string, opts?: EntitySearchOptions): Promise<EntityHit[]> => suggestHits('vehicle', q, opts)
+export const searchGangHits = (q: string, opts?: EntitySearchOptions): Promise<EntityHit[]> => suggestHits('gang', q, opts)
+export const searchPlaceHits = (q: string, opts?: EntitySearchOptions): Promise<EntityHit[]> => suggestHits('place', q, opts)
+export const searchAccountHits = (q: string, opts?: EntitySearchOptions): Promise<EntityHit[]> => suggestHits('account', q, opts)
+export const searchCaseHits = (q: string, opts?: EntitySearchOptions): Promise<EntityHit[]> => suggestHits('case', q, opts)
+export const searchNarcoticHits = (q: string, opts?: EntitySearchOptions): Promise<EntityHit[]> => suggestHits('narcotic', q, opts)
 
-interface VehicleRow { id: string; plate: string; model: string | null; color: string | null; owner_id: string | null }
-const VEHICLE_COLS = 'id,plate,model,color,owner_id'
-
-export async function searchVehicleHits(q: string, opts?: EntitySearchOptions): Promise<EntityHit[]> {
-  const limit = opts?.limit ?? DEFAULT_LIMIT
-  const query = q.trim()
-  try {
-    let rows: VehicleRow[]
-    if (!query) {
-      rows = await ilikeRows<VehicleRow>('vehicles', VEHICLE_COLS, ['plate'], '', limit + OVERFETCH)
-    } else {
-      const plain = await ilikeRows<VehicleRow>('vehicles', VEHICLE_COLS, ['plate', 'model', 'color'], query, limit + OVERFETCH)
-        .catch(() => [] as VehicleRow[])
-      // Exact-normalized-plate arm: ilike can't cross separator differences
-      // ('ab-123' vs the stored 'AB123' and vice versa), so probe on the first
-      // two normalized characters (a bounded candidate set — standard plate
-      // formats keep them adjacent either way) and client-filter on
-      // normPlate equality, mirroring the UNIQUE upper(plate) key.
-      let exact: VehicleRow[] = []
-      const np = normPlate(query)
-      if (np) {
-        const probe = ilikeAny(['plate'], np.slice(0, 2))
-        if (probe) {
-          const candidates = await list('vehicles', { select: VEHICLE_COLS, or: probe, limit: 50 })
-            .then((r) => r as unknown as VehicleRow[])
-            .catch(() => [] as VehicleRow[])
-          exact = candidates.filter((v) => normPlate(v.plate) === np)
-        }
-      }
-      rows = [...exact, ...plain] // finish() dedupes; exact plates rank first
-    }
-    // Owner names for the sublabel — one bounded in:{id} lookup, best-effort.
-    const ownerIds = [...new Set(rows.map((r) => r.owner_id).filter((x): x is string => !!x))]
-    const ownerName = new Map<string, string>()
-    if (ownerIds.length) {
-      const owners = await list('persons', { select: 'id,name', in: { id: ownerIds } })
-        .then((r) => r as unknown as { id: string; name: string }[])
-        .catch(() => [] as { id: string; name: string }[])
-      for (const o of owners) ownerName.set(o.id, o.name)
-    }
-    return finish(rows.map((v) => ({
-      id: v.id,
-      label: v.plate,
-      sublabel: joinDots([v.model, v.color, v.owner_id ? ownerName.get(v.owner_id) : null]),
-    })), opts)
-  } catch { return [] }
-}
-
-/* ── Simple ilike-backed kinds ──────────────────────────────────────────── */
-
-export async function searchGangHits(q: string, opts?: EntitySearchOptions): Promise<EntityHit[]> {
-  const limit = opts?.limit ?? DEFAULT_LIMIT
-  try {
-    type Row = { id: string; name: string; aliases: string | null; status: string | null; threat_level: string }
-    const rows = await ilikeRows<Row>('gangs', 'id,name,aliases,status,threat_level', ['name', 'aliases'], q, limit + OVERFETCH)
-    return finish(rows.map((g) => ({
-      id: g.id,
-      label: g.name,
-      sublabel: joinDots([g.aliases ? `aka ${g.aliases}` : null, humanize(g.status), g.threat_level ? `Threat: ${humanize(g.threat_level)}` : null]),
-    })), opts)
-  } catch { return [] }
-}
-
-export async function searchPlaceHits(q: string, opts?: EntitySearchOptions): Promise<EntityHit[]> {
-  const limit = opts?.limit ?? DEFAULT_LIMIT
-  try {
-    type Row = { id: string; name: string; type: string; area: string | null }
-    const rows = await ilikeRows<Row>('places', 'id,name,type,area', ['name', 'area'], q, limit + OVERFETCH)
-    return finish(rows.map((p) => ({
-      id: p.id,
-      label: p.name,
-      sublabel: joinDots([humanize(p.type), p.area]),
-    })), opts)
-  } catch { return [] }
-}
-
-export async function searchAccountHits(q: string, opts?: EntitySearchOptions): Promise<EntityHit[]> {
-  const limit = opts?.limit ?? DEFAULT_LIMIT
-  const query = q.trim()
-  try {
-    type Row = { id: string; platform: string; handle: string; display_name: string | null; lifecycle: string }
-    const cols = 'id,platform,handle,display_name,lifecycle'
-    const rows = await ilikeRows<Row>('accounts', cols, ['handle', 'display_name', 'platform'], query, limit + OVERFETCH)
-    // Second arm on the normalized handle so '@CoolGuy' finds 'coolguy'
-    // (handle_normalized is generated lower(btrim); the strip mirrors it).
-    const nh = normHandle(query)
-    let normalized: Row[] = []
-    if (nh && nh !== query.toLowerCase()) {
-      normalized = await ilikeRows<Row>('accounts', cols, ['handle'], nh, limit + OVERFETCH).catch(() => [] as Row[])
-    }
-    return finish([...rows, ...normalized]
-      .filter((a) => a.lifecycle !== 'merged')
-      .map((a) => ({
-        id: a.id,
-        label: `@${a.handle}`,
-        sublabel: joinDots([a.platform, a.display_name]),
-      })), opts)
-  } catch { return [] }
-}
-
-export async function searchCaseHits(q: string, opts?: EntitySearchOptions): Promise<EntityHit[]> {
-  const limit = opts?.limit ?? DEFAULT_LIMIT
-  try {
-    type Row = { id: string; case_number: string; title: string | null; status: string; bureau: string }
-    const rows = await ilikeRows<Row>('cases', 'id,case_number,title,status,bureau', ['case_number', 'title'], q, limit + OVERFETCH)
-    return finish(rows.map((c) => ({
-      id: c.id,
-      label: c.case_number,
-      sublabel: joinDots([c.title, humanize(c.status), noDash(bureauShort(c.bureau))]),
-    })), opts)
-  } catch { return [] }
-}
+/* ── ilike-backed kinds without an RPC arm ─────────────────────────────── */
 
 export async function searchOperationHits(q: string, opts?: EntitySearchOptions): Promise<EntityHit[]> {
   const limit = opts?.limit ?? DEFAULT_LIMIT
@@ -316,36 +258,6 @@ export async function searchLegalRequestHits(q: string, opts?: EntitySearchOptio
       id: r.id,
       label: r.request_number,
       sublabel: r.title || undefined,
-    })), opts)
-  } catch { return [] }
-}
-
-/* ── Narcotics — typed RPC (search_narcotics) ───────────────────────────── */
-
-export async function searchNarcoticHits(q: string, opts?: EntitySearchOptions): Promise<EntityHit[]> {
-  const limit = opts?.limit ?? DEFAULT_LIMIT
-  const query = q.trim()
-  try {
-    if (!query) {
-      type Row = { id: string; name: string; category: string; status: string; restricted: boolean }
-      const rows = await list('narcotics', {
-        select: 'id,name,category,status,restricted', is: { merged_into: null },
-        order: 'updated_at', ascending: false, limit: limit + OVERFETCH,
-      }) as unknown as Row[]
-      return finish(rows.map((n) => ({
-        id: n.id,
-        label: n.name,
-        sublabel: joinDots([humanize(n.category), humanize(n.status)]),
-        meta: { restricted: n.restricted ? 'true' : 'false' },
-      })), opts)
-    }
-    const res = await rpc('search_narcotics', { p_query: query, p_limit: limit + OVERFETCH })
-    if (res.error) return []
-    return finish((res.data ?? []).map((n) => ({
-      id: n.id,
-      label: n.name,
-      sublabel: joinDots([humanize(n.category), humanize(n.status)]),
-      meta: { restricted: n.restricted ? 'true' : 'false' },
     })), opts)
   } catch { return [] }
 }

@@ -13,14 +13,20 @@
  *  unlinked on the 9th, wrong Rodriguez" is information; a vanished row is not.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/lib/auth'
+import { buildAutofill } from '@/lib/autofill'
 import { bureauLabel } from '@/lib/roles'
 import { list } from '@/lib/db'
+import type { DuplicateRow } from '@/lib/entity'
 import { fmtDateTime } from '@/lib/format'
 import { officerName } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
-import type { FieldSubmissionRow } from '@/lib/fieldSubmissions'
+import { loadSubmissionParts, type FieldSubmissionRow, type SubmissionParts } from '@/lib/fieldSubmissions'
+import {
+  linkClaim, linkFor, loadClaimLinks, loadMatches,
+  type ClaimKind, type FieldClaimLinkRow, type TargetKind,
+} from '@/lib/fieldReview'
 import {
   CASE_BUREAUS, OBSERVATION_CONFIDENCE,
   createCaseFrom, createObservationFrom, isProvenance, linkCase, linkLine,
@@ -34,6 +40,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { uiPrompt } from '@/components/ui/dialog'
+import { DuplicatePanel, EntityCreateSheet, EntityPicker } from '@/components/entity'
 
 interface CasePick { id: string; case_number: string | null; title: string | null }
 
@@ -83,6 +90,8 @@ export function IntelActions({ submission, onChanged }: {
 
   const live = liveLinks(links)
   const removed = links.filter((l) => l.unlinked_at)
+  // Cases already linked stay out of the picker's answers.
+  const linkedCaseIds = useMemo(() => new Set(liveLinks(links).map((l) => l.case_id)), [links])
 
   const unlink = async (l: FieldCaseLinkRow) => {
     const why = await uiPrompt(
@@ -154,17 +163,19 @@ export function IntelActions({ submission, onChanged }: {
               Open a case from this
             </Button>
           )}
-          <Select value="" aria-label="Link to an existing case" className="text-xs"
-            onChange={(e) => {
-              const caseId = e.target.value
-              if (!caseId) return
-              void (async () => { await after(await linkCase(id, caseId), 'Linked.') })()
-            }}>
-            <option value="">Link to an existing case…</option>
-            {cases.filter((c) => !live.some((l) => l.case_id === c.id)).map((c) => (
-              <option key={c.id} value={c.id}>{caseName(c, null)}</option>
-            ))}
-          </Select>
+          {/* entity_suggest('case') — bounded and RLS-scoped, so the answer is
+              already the set of cases this reviewer could link to. */}
+          <div className="min-w-[16rem] flex-1">
+            <EntityPicker
+              kind="case" label="Link to an existing case" value={null} peek={false}
+              exclude={linkedCaseIds}
+              placeholder="Search case number or title…"
+              onChange={(hit) => {
+                if (!hit) return
+                void (async () => { await after(await linkCase(id, hit.id), 'Linked.') })()
+              }}
+            />
+          </div>
         </div>
 
         {opening && (
@@ -175,6 +186,12 @@ export function IntelActions({ submission, onChanged }: {
               await after(err, 'Case opened. This record is recorded as where it came from.')
             }} />
         )}
+      </div>
+
+      {/* ── Registry records ──────────────────────────────────────────────── */}
+      <div className="mt-4 border-t border-white/5 pt-3">
+        <h5 className="text-xs font-medium text-slate-500">Registry records</h5>
+        <ClaimRegistry submissionId={id} onLinked={(err) => after(err, 'Matched to the existing record.')} />
       </div>
 
       {/* ── Surveillance ──────────────────────────────────────────────────── */}
@@ -277,6 +294,147 @@ export function IntelActions({ submission, onChanged }: {
         )}
       </div>
     </Card>
+  )
+}
+
+/** The record's structured claims (persons, vehicles, organizations,
+ *  locations) against the registry, through the entity layer (P2-09):
+ *  `field_claim_matches` feeds a DuplicatePanel whose Use existing links the
+ *  claim; an EntityPicker matches by hand; Create opens the shared create
+ *  sheet prefilled from the claim (buildAutofill) and links the new record.
+ *  Every write is still `field_claim_link` — only the UI plumbing changed. */
+interface Claim { kind: ClaimKind; id: string; label: string; target: TargetKind; draft: Record<string, string> }
+
+const SIGNAL_FOR: Record<TargetKind, string> = { person: 'name', vehicle: 'plate', gang: 'name', place: 'name' }
+
+const prefill = (o: Record<string, string | null | undefined>): Record<string, string> =>
+  buildAutofill(o, {}).values as Record<string, string>
+
+function claimsOf(parts: SubmissionParts): Claim[] {
+  return [
+    ...parts.persons.map((p): Claim => ({
+      kind: 'person', id: p.id, target: 'person',
+      label: [p.full_name, p.alias].filter(Boolean).join(' / ') || 'unidentified person',
+      draft: prefill({ name: p.full_name, alias: p.alias, phone: p.phone, notes: p.description }),
+    })),
+    ...parts.vehicles.map((v): Claim => ({
+      kind: 'vehicle', id: v.id, target: 'vehicle',
+      label: [v.plate, v.color, v.model].filter(Boolean).join(' ') || 'vehicle, no details',
+      draft: prefill({ plate: v.plate, model: [v.make, v.model].filter(Boolean).join(' ') || null, color: v.color, notes: v.description }),
+    })),
+    ...parts.orgs.map((o): Claim => ({
+      kind: 'org', id: o.id, target: 'gang',
+      label: o.name || o.org_type.replace(/_/g, ' '),
+      draft: prefill({ name: o.name, colors: o.colors, notes: o.territory ? `Territory: ${o.territory}` : null }),
+    })),
+    ...parts.locations.map((l): Claim => ({
+      kind: 'location', id: l.id, target: 'place',
+      label: [l.street, l.postal].filter(Boolean).join(' ') || l.kind.replace(/_/g, ' '),
+      draft: prefill({ name: [l.street, l.postal].filter(Boolean).join(' ') || null, area: l.postal, notes: l.description }),
+    })),
+  ]
+}
+
+function ClaimRegistry({ submissionId, onLinked }: {
+  submissionId: string
+  onLinked: (err: string | null) => Promise<void>
+}) {
+  const [claims, setClaims] = useState<Claim[] | null>(null)
+  const [links, setLinks] = useState<FieldClaimLinkRow[]>([])
+
+  const load = useCallback(async () => {
+    const [parts, l] = await Promise.all([loadSubmissionParts(submissionId), loadClaimLinks(submissionId)])
+    setClaims(claimsOf(parts)); setLinks(l)
+  }, [submissionId])
+
+  useEffect(() => {
+    const t = window.setTimeout(() => { void load() }, 0)
+    return () => window.clearTimeout(t)
+  }, [load])
+
+  if (claims === null) return null
+  if (!claims.length) {
+    return <p className="mt-1 text-xs text-slate-500">No structured claims to match against the registry.</p>
+  }
+  return (
+    <ul className="mt-2 space-y-2">
+      {claims.map((c) => (
+        <ClaimRow key={c.id} claim={c} linked={!!linkFor(links, c.kind, c.id)}
+          onLink={async (target, recordId) => { await onLinked(await linkClaim(c.kind, c.id, target, recordId)); await load() }} />
+      ))}
+    </ul>
+  )
+}
+
+function ClaimRow({ claim, linked, onLink }: {
+  claim: Claim
+  linked: boolean
+  onLink: (target: TargetKind, recordId: string) => Promise<void>
+}) {
+  const [matches, setMatches] = useState<{ rows: DuplicateRow[]; kinds: Record<string, TargetKind>; also: number; matchable: boolean } | null>(null)
+  const [looking, setLooking] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const kindLabel = claim.target === 'gang' ? 'organization' : claim.target
+
+  const look = async () => {
+    setLooking(true)
+    const r = await loadMatches(claim.kind, claim.id)
+    setLooking(false)
+    const kinds: Record<string, TargetKind> = {}
+    for (const m of r.matches) kinds[m.id] = m.kind
+    setMatches({
+      matchable: r.matchable, also: r.also_reported, kinds,
+      rows: r.matches.map((m): DuplicateRow => ({
+        id: m.id, label: m.label, sublabel: null, signal: SIGNAL_FOR[m.kind],
+        strength: m.exact ? 'strong' : 'soft', score: m.exact ? 1 : 0.5,
+      })),
+    })
+  }
+
+  return (
+    <li className="rounded-lg bg-ink-950/50 px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="min-w-0 text-sm text-slate-200">
+          <span className="text-xs text-slate-500">{kindLabel} — </span>{claim.label}
+        </span>
+        {linked && <Badge tone="good">Matched to an existing {kindLabel}</Badge>}
+      </div>
+      {!linked && (
+        <div className="mt-2 space-y-2">
+          {matches === null ? (
+            <Button size="sm" variant="ghost" loading={looking} onClick={() => void look()}>Look for an existing record</Button>
+          ) : !matches.matchable ? (
+            <p className="text-[11px] text-slate-500">Nothing to match this against.</p>
+          ) : (
+            <>
+              {matches.also > 0 && (
+                <p className="text-[11px] text-amber-300">
+                  Also named in {matches.also} other submission{matches.also === 1 ? '' : 's'} — worth a look, not corroboration.
+                </p>
+              )}
+              {matches.rows.length ? (
+                <DuplicatePanel rows={matches.rows} kind={claim.target}
+                  onUseExisting={(r) => void onLink(matches.kinds[r.id] ?? claim.target, r.id)} />
+              ) : (
+                <p className="text-[11px] text-slate-500">No existing record matches. Nothing is created automatically.</p>
+              )}
+            </>
+          )}
+          <EntityPicker
+            kind={claim.target} label={`Match to a ${kindLabel}`} value={null}
+            onChange={(hit) => { if (hit) void onLink(claim.target, hit.id) }}
+            onCreateNew={() => setCreating(true)}
+            createLabel={(q) => `Create a new ${kindLabel} from this claim: \u201c${q}\u201d`}
+          />
+          <EntityCreateSheet
+            kind={claim.target} open={creating} initial={claim.draft}
+            onClose={() => setCreating(false)}
+            onCreated={(hit) => void onLink(claim.target, hit.id)}
+            onUseExisting={(hit) => void onLink(claim.target, hit.id)}
+          />
+        </div>
+      )}
+    </li>
   )
 }
 

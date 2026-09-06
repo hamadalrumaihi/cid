@@ -13,7 +13,9 @@
  *  panel renders and queries exactly what it did before Phase 5. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
-import { ilikeAny, list, rpc } from '@/lib/db'
+import { list, rpc } from '@/lib/db'
+import { suggestEntities } from '@/lib/entity'
+import { searchAccountHits, searchVehicleHits } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/lib/toast'
 import { fmtDateTime } from '@/lib/format'
@@ -83,16 +85,27 @@ export function MdtExportsPanel({ canPropose, isCommand }: { canPropose: boolean
 
   const active = useMemo(() => (rows ?? []).filter((r) => r.status !== 'cleared'), [rows])
 
-  // Person targets: only BOLO-flagged persons are eligible, so the search is
-  // scoped eq:{bolo:true} directly — bounded + RLS-scoped, merged tombstones
-  // drop out. Blank query lists the most recently flagged.
+  // Person targets: only BOLO-flagged persons are eligible. A typed query
+  // goes through entity_suggest (P2-08 — the shared, RLS-scoped suggestion
+  // arm), then ONE bounded in:{id} read applies the eligibility rule
+  // (eq:{bolo:true}) and fetches the mugshot/risk for the row; blank lists
+  // the most recently flagged. Merged tombstones never come back from the
+  // RPC, and the hydration filters them again for the blank path.
   const searchFlaggedPersons = useCallback(async (q: string): Promise<PersonPick[]> => {
-    const or = ilikeAny(['name', 'alias'], q)
-    const r = (await list('persons', {
-      select: 'id,name,alias,bolo_risk,mugshot_url,lifecycle', eq: { bolo: true },
-      order: 'updated_at', ascending: false, limit: 20, ...(or ? { or } : {}),
-    })) as unknown as { id: string; name: string; alias: string | null; bolo_risk: string | null; mugshot_url: string | null; lifecycle: string }[]
-    return r.filter((p) => p.lifecycle !== 'merged').map((p) => ({
+    type Row = { id: string; name: string; alias: string | null; bolo_risk: string | null; mugshot_url: string | null; lifecycle: string }
+    const select = 'id,name,alias,bolo_risk,mugshot_url,lifecycle'
+    const term = q.trim()
+    let r: Row[]
+    if (term.length < 2) {
+      r = (await list('persons', { select, eq: { bolo: true }, order: 'updated_at', ascending: false, limit: 20 })) as unknown as Row[]
+    } else {
+      const hits = await suggestEntities('person', term, 50)
+      if (!hits.length) return []
+      const rows = (await list('persons', { select, eq: { bolo: true }, in: { id: hits.map((h) => h.id) } })) as unknown as Row[]
+      const byId = new Map(rows.map((x) => [x.id, x]))
+      r = hits.map((h) => byId.get(h.id)).filter((x): x is Row => !!x)
+    }
+    return r.filter((p) => p.lifecycle !== 'merged').slice(0, 20).map((p) => ({
       id: p.id,
       label: p.name || 'Person',
       sublabel: [p.alias ? `“${p.alias}”` : null, p.bolo_risk ? `${p.bolo_risk} risk` : null].filter(Boolean).join(' · ') || undefined,
@@ -101,16 +114,15 @@ export function MdtExportsPanel({ canPropose, isCommand }: { canPropose: boolean
   }, [])
 
   // Only reachable with the expansion flag on (the pickers never render
-  // without it). Bounded + RLS-scoped; merged tombstones drop out.
+  // without it). Shared entity-search arms (entity_suggest; RLS-scoped,
+  // merged tombstones dropped). The account snapshot keeps the bare handle.
   const searchAccounts = useCallback(async (q: string): Promise<PickedRecord[]> => {
-    const or = ilikeAny(['handle'], q)
-    const r = (await list('accounts', { select: 'id,handle,platform,lifecycle', order: 'updated_at', ascending: false, limit: 20, ...(or ? { or } : {}) })) as unknown as { id: string; handle: string; platform: string; lifecycle: string }[]
-    return r.filter((a) => a.lifecycle !== 'merged').map((a) => ({ id: a.id, label: a.handle, sublabel: a.platform }))
+    const hits = await searchAccountHits(q)
+    return hits.map((h) => ({ id: h.id, label: h.label.replace(/^@/, ''), ...(h.sublabel ? { sublabel: h.sublabel } : {}) }))
   }, [])
   const searchVehicles = useCallback(async (q: string): Promise<PickedRecord[]> => {
-    const or = ilikeAny(['plate', 'model'], q)
-    const r = (await list('vehicles', { select: 'id,plate,model', order: 'updated_at', ascending: false, limit: 20, ...(or ? { or } : {}) })) as unknown as { id: string; plate: string; model: string | null }[]
-    return r.map((x) => ({ id: x.id, label: x.plate, ...(x.model ? { sublabel: x.model } : {}) }))
+    const hits = await searchVehicleHits(q)
+    return hits.map((h) => ({ id: h.id, label: h.label, ...(h.sublabel ? { sublabel: h.sublabel } : {}) }))
   }, [])
 
   const isAccountKind = kind === 'account'

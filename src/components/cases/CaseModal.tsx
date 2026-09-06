@@ -4,8 +4,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { CheckIcon } from '@/components/shell/icons'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { DuplicateMatchNotice, duplicateMatches, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
+import { useToolNav } from '@/components/tools/useToolNav'
 import { insert, list, rpc, update, deleteWithUndo } from '@/lib/db'
+import { findDuplicates } from '@/lib/entity'
 import { createCase } from '@/lib/services/cases'
 import type { Tables, TablesUpdate } from '@/lib/database.types'
 import { searchMemberHits, searchOperationHits, type EntityHit } from '@/lib/entitySearch'
@@ -133,6 +136,26 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
   const numberPrefix = record?.case_number?.match(/^[A-Z]+(?=-)/)?.[0] ?? prefixOf(form.bureau)
   const dirty = () => JSON.stringify(form) !== JSON.stringify(initial)
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
+  // Duplicate hint at create time — entity_duplicates on the typed number
+  // and title (P2-08): an existing case with the same number is a strong
+  // hit (offers "Use existing"), a similar title a soft notice. Advisory
+  // only — the server's unique key still guards the number.
+  const nav = useToolNav()
+  const [dupes, setDupes] = useState<DuplicateMatch[]>([])
+  useEffect(() => {
+    if (!open || record) return
+    const title = form.title.trim()
+    const number = form.digits ? `${numberPrefix}-${form.digits}` : ''
+    let live = true
+    const t = window.setTimeout(async () => {
+      if (title.length < 2 && !number) { if (live) setDupes([]); return }
+      const rows = await findDuplicates('case', { title: title || null, case_number: number || null })
+      if (!live) return
+      setDupes(duplicateMatches('case', rows))
+    }, 400)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [open, record, form.title, form.digits, numberPrefix])
+  const useExisting = (m: DuplicateMatch) => { nav.openHref(`/cases?case=${encodeURIComponent(m.id)}`); onClose() }
   const applyTemplate = (tpl: CaseTemplateRow | null) => {
     setChecklist(tplTasks(tpl))
     setTemplateId(tpl?.id ?? null)
@@ -258,6 +281,7 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
           </label>
           <label className="md:col-span-2 text-sm text-slate-300">Title
             <input value={form.title} onChange={(e) => set('title', e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white" />
+            {!record && <DuplicateMatchNotice matches={dupes} onUseExisting={useExisting} />}
           </label>
           <label className="text-sm text-slate-300">Status
             <select value={form.status} onChange={(e) => set('status', e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white">
