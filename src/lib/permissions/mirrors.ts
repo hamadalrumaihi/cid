@@ -178,3 +178,46 @@ export const canProposeReportTemplate = (v: CidViewer | null): boolean =>
  *  Owner — publish, discard, create a new key, retire / restore, set default. */
 export const canPublishReportTemplate = (v: CidViewer | null): boolean =>
   !!v && (!!v.is_owner || isDeputyOrDirector(v.role))
+
+/* ---- intel triage (field_submission_* RPCs, Phase 6 contract §8) --------
+ * Mirrors of the perm_dispatch arm for kind 'field_submission'. Readability
+ * is implied — the viewer is looking at the record — so each predicate only
+ * repeats the status / rank half of the rule. The RPCs raise on refusal. */
+
+const INTEL_REJECTABLE: ReadonlySet<string> = new Set(['new', 'reviewing', 'needs_info', 'reviewed', 'actionable'])
+
+/** Active AND Bureau Lead+ — private.is_command() (the Owner flag alone does
+ *  not count; is_command reads the role). */
+const isIntelCommand = (v: CidViewer | null): boolean =>
+  !!v && v.active !== false && isCommandRole(v.role)
+
+/** Mirror of field_submission_reject's gate: any active reviewer, on a
+ *  submitted record that is not already archived or rejected. */
+export const canRejectIntel = (status: string | null | undefined): boolean =>
+  INTEL_REJECTABLE.has(status ?? '')
+
+/** Mirror of field_submission_restore: from archived any active reviewer;
+ *  from rejected a Bureau Lead or above only. Anything else has nothing to
+ *  restore. */
+export function canRestoreIntel(status: string | null | undefined, v: CidViewer | null): boolean {
+  if (!v || v.active === false) return false
+  if (status === 'archived') return true
+  if (status === 'rejected') return isIntelCommand(v)
+  return false
+}
+
+/** Mirror of field_submission_validate's status gate: not a draft, not
+ *  archived, not rejected (the derived every-claim-decided condition is the
+ *  server's to check — see fieldReview.readyToValidate for the hint). */
+export const canValidateIntel = (status: string | null | undefined): boolean =>
+  !!status && status !== 'draft' && status !== 'archived' && status !== 'rejected'
+
+/** Mirror of field_submission_assign's gate: command. */
+export const canAssignIntel = (v: CidViewer | null): boolean => isIntelCommand(v)
+
+/** Mirror of field_submission_delete's gate: command (soft delete). */
+export const canDeleteIntel = (v: CidViewer | null): boolean => isIntelCommand(v)
+
+/** Mirror of field_submission_undelete's gate: the Owner — never whoever
+ *  deleted it. */
+export const canUndeleteIntel = (v: CidViewer | null): boolean => !!v?.is_owner

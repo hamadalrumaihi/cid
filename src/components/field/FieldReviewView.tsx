@@ -19,6 +19,7 @@
  *  is the failure worth designing against.
  */
 import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { fmtDateTime, timeAgo } from '@/lib/format'
 import { officerName, useProfilesStore } from '@/lib/profiles'
@@ -26,17 +27,18 @@ import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import {
   RELIABILITIES, RELIABILITY_LABEL, RELIABILITY_MEANING, URGENCIES, URGENCY_LABEL,
-  fieldStatusLabel, gradeSubmission, isExternalSource, jurisdictionLabel,
-  loadSubmissionParts, reliabilityLabel, sourceLabel,
+  gradeSubmission, isExternalSource, jurisdictionLabel,
+  loadSubmissionParts, reliabilityLabel, reviewerStatusLabel, sourceLabel,
   submissionRef, urgencyLabel, urgencyTone,
   type FieldSubmissionRow, type Reliability, type SubmissionParts, type Urgency,
 } from '@/lib/fieldSubmissions'
 import {
-  ARCHIVE_REASONS, DELETED_FILTER, QUEUE_FILTERS, QUEUE_LABEL, SIU_FILTERS,
+  ARCHIVE_REASONS, DELETED_FILTER, NON_ROW_FILTERS, QUEUE_FILTERS, QUEUE_LABEL, SIU_FILTERS,
   SIU_FILTER_LABEL, VERDICTS, VERDICT_LABEL, VERDICT_MEANING, VERDICT_TONE,
   archiveSubmission, askOfficer, assignSubmission, assignmentLine, awaitingReviewer,
-  claimSubmission, deleteSubmission, loadRepeats, repeatLine, restoreSubmission,
-  searchSubmissions, undeleteSubmission,
+  claimSubmission, commentSubmission, deleteSubmission, loadRepeats, readyToValidate,
+  rejectSubmission, repeatLine, restoreSubmission,
+  searchSubmissions, undeleteSubmission, validateSubmission, validationStale, withdrawValidation,
   countsSummary, decideClaim, decideSubmission, loadAssignments,
   loadClaimProgress, loadCounts, loadMessages, loadReviewNotes, loadReviewQueue,
   loadVerdicts, matchesFilter, progressLabel, releaseSubmission, reviewNext, reviewPrompt,
@@ -51,10 +53,11 @@ import { evidenceLabel, evidenceUrl, loadEvidence, type FieldEvidenceRow } from 
 import { FieldAccessQueue, countPending, useAccessRequests } from './FieldAccessQueue'
 import { FieldAccessRoster, useFieldRoster } from './FieldAccessRoster'
 import { IntelActions } from './IntelActions'
+import { IntelGroups, IntelGroupsList } from './IntelGroups'
 import { SiuPanel } from './SiuPanel'
 import { FieldSubmitForm } from './FieldSubmitForm'
 import { siuCategoryLabel, siuStateLabel, siuStateTone } from '@/lib/fieldSiu'
-import { useSiu } from '@/lib/permissions'
+import { canRejectIntel, canRestoreIntel, canValidateIntel, useSiu, type CidViewer } from '@/lib/permissions'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -70,9 +73,16 @@ const NO_PARTS: SubmissionParts = { persons: [], vehicles: [], orgs: [], locatio
 export function FieldReviewView() {
   const { state, profile, isCommand, isOwner } = useAuth()
   const me = profile?.id ?? null
+  // Deep link: `/tools?tool=field-review&record=<id>` (notifications, the SIB
+  // cross-link). The workspace carries the generic `record` param under this
+  // tool's own `submission` seed (toolsModel RECORD_PARAM + the URL mirror),
+  // and this view reads whichever spelling is present -- at mount, and again
+  // if the URL changes while it stays mounted.
+  const sp = useSearchParams()
+  const seed = sp.get('submission') ?? sp.get('record')
   const [rows, setRows] = useState<FieldSubmissionRow[] | null>(null)
   const [counts, setCounts] = useState<Record<string, SubmissionCounts>>({})
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, setSelected] = useState<string | null>(seed)
   const [tab, setTab] = useState<
     QueueFilter | SiuFilter | typeof DELETED_FILTER | 'access' | 'legacy'>('unclaimed')
   const [writing, setWriting] = useState(false)
@@ -82,7 +92,10 @@ export function FieldReviewView() {
   // all for an archived record, which is exactly the one somebody searches for.
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<Map<string, string[]> | null>(null)
-  const v = useTableVersion('field_submissions')
+  // field_submissions is not published (its rows carry the report text); the
+  // shadow table field_submission_events (P6-06) is -- status, assignee and
+  // SIB state only, RLS-filtered -- so the queue follows server changes.
+  const v = useTableVersion('field_submission_events')
   const access = useAccessRequests()
   const roster = useFieldRoster()
   const siu = useSiu()
@@ -95,6 +108,11 @@ export function FieldReviewView() {
     const t = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(t)
   }, [refresh, v])
+  useEffect(() => {
+    if (!seed) return
+    const t = window.setTimeout(() => setSelected(seed), 0)
+    return () => window.clearTimeout(t)
+  }, [seed])
 
   // Debounced, because the search reaches seven tables and a reviewer types
   // faster than that deserves.
@@ -125,7 +143,7 @@ export function FieldReviewView() {
   // each queue. Only the ones that mean "somebody is waiting" are counted; a
   // number on "All" or "Processed" is trivia.
   const countFor = (f: QueueFilter | SiuFilter | typeof DELETED_FILTER): number | undefined =>
-    f === 'all' || f === 'processed' ? undefined
+    f === 'all' || f === 'processed' || (NON_ROW_FILTERS as readonly string[]).includes(f) ? undefined
       : all.filter((r) => matchesFilter(r, f, me)).length
 
   return (
@@ -230,9 +248,13 @@ export function FieldReviewView() {
         <FieldAccessRoster rows={roster.rows} onChanged={() => void roster.refresh()} />
       ) : !current && tab === 'legacy' ? (
         <FieldAccessQueue rows={access.rows} onChanged={() => void access.refresh()} />
+      ) : !current && !searching && tab === 'groups' ? (
+        // Live intel groups (P6-03) -- a list of groups, not of submissions.
+        <IntelGroupsList onOpen={(id) => setSelected(id)} />
       ) : current ? (
         <SubmissionDetail
           submission={current}
+          counts={counts[current.id]}
           onBack={() => setSelected(null)}
           onChanged={() => void refresh()}
         />
@@ -323,9 +345,12 @@ function ReportCard({ r, counts, me, isCommand, matched, onOpen, onChanged }: {
           </Badge>
           {r.urgency && <Badge tone={urgencyTone(r.urgency)}>{urgencyLabel(r.urgency)}</Badge>}
           <Badge tone="accent">{jurisdictionLabel(r.jurisdiction)}</Badge>
-          <Badge tone={r.status === 'needs_info' ? 'warn' : 'accent'}>
-            {fieldStatusLabel(r.status)}
+          <Badge tone={r.status === 'needs_info' ? 'warn' : r.status === 'rejected' ? 'neutral' : 'accent'}>
+            {reviewerStatusLabel(r.status)}
           </Badge>
+          {/* The explicit mark (P6-05), not the derived condition: a reviewer
+              said so, and their name is on the record. */}
+          {r.validated_at && <Badge tone="good">Validated</Badge>}
           {/* A workflow indicator, never "confirmed SIB case" -- the wording
               comes from siuStateLabel so the two cannot drift apart. */}
           {r.siu_state && (
@@ -443,16 +468,28 @@ function AssignButton({ submission, onChanged }: {
   )
 }
 
-function SubmissionDetail({ submission, onBack, onChanged }: {
+function SubmissionDetail({ submission, counts, onBack, onChanged }: {
   submission: FieldSubmissionRow
+  /** The queue's per-record counts -- carries the derived validation flag. */
+  counts: SubmissionCounts | undefined
   onBack: () => void
   onChanged: () => void
 }) {
-  const { isCommand } = useAuth()
+  const { profile, isCommand } = useAuth()
+  // The cosmetic mirror's view of the viewer. The RPCs re-check every one of
+  // these; this only decides which buttons are worth drawing.
+  const viewer: CidViewer | null = profile
+    ? { id: profile.id, role: profile.role, division: profile.division, active: profile.active, is_owner: profile.is_owner }
+    : null
   const [parts, setParts] = useState<SubmissionParts>(NO_PARTS)
   const [evidence, setEvidence] = useState<FieldEvidenceRow[]>([])
   const [messages, setMessages] = useState<FieldMessageRow[]>([])
   const [notes, setNotes] = useState<FieldReviewNoteRow[]>([])
+  // The reason lives only in the reviewer-private notes (never on the row,
+  // which the submitter reads): the latest "Rejected: …" note carries it.
+  const rejectReason = submission.status === 'rejected'
+    ? (notes.find((n) => n.note.startsWith('Rejected: '))?.note.slice('Rejected: '.length) ?? null)
+    : null
   const [verdicts, setVerdicts] = useState<FieldVerdictRow[]>([])
   const [links, setLinks] = useState<FieldClaimLinkRow[]>([])
   const [progress, setProgress] = useState<ClaimProgress | null>(null)
@@ -525,14 +562,50 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
   }
 
   const restore = async () => {
+    const rejected = submission.status === 'rejected'
     const why = await uiPrompt(
       'It comes back as "being reviewed" — somebody is looking again. The reason '
-      + 'it was archived stays on the record.',
-      { title: 'Restore from the archive', placeholder: 'Why now? (optional)', confirmText: 'Restore' },
+      + `it was ${rejected ? 'rejected' : 'archived'} stays on the record.`,
+      {
+        title: rejected ? 'Restore a rejected record' : 'Restore from the archive',
+        placeholder: 'Why now? (optional)', confirmText: 'Restore',
+      },
     )
     // An empty reason is fine here; a cancelled dialog is not.
     if (why === null) return
     await after(await restoreSubmission(id, why), 'Restored.')
+  }
+
+  const reject = async () => {
+    const why = await uiPrompt(
+      'Rejecting says this should not be treated as intelligence. The officer '
+      + 'sees "Closed" and never the reason; reviewers see both. Nothing is '
+      + 'deleted, and a Bureau Lead or above can restore it. If the information '
+      + 'is simply not useful right now, archive it instead.',
+      { title: 'Reject this record', placeholder: 'Say why it is rejected.', confirmText: 'Reject' },
+    )
+    if (!why?.trim()) return
+    await after(await rejectSubmission(id, why), 'Rejected. The officer sees it as closed.')
+  }
+
+  const validate = async () => {
+    const note = await uiPrompt(
+      'Validating says every claim has a verdict and the source is graded. Your '
+      + 'name goes on the record with the note. A later verdict change does not '
+      + 'take the mark off — the record says "claims changed since" instead.',
+      { title: 'Mark as validated', placeholder: 'What was checked, and against what?', confirmText: 'Validate' },
+    )
+    if (!note?.trim()) return
+    await after(await validateSubmission(id, note), 'Validated.')
+  }
+
+  const unvalidate = async () => {
+    const note = await uiPrompt(
+      'The mark comes off and the reason stays in the internal notes.',
+      { title: 'Withdraw validation', placeholder: 'Why is the validation withdrawn?', confirmText: 'Withdraw' },
+    )
+    if (!note?.trim()) return
+    await after(await withdrawValidation(id, note), 'Validation withdrawn.')
   }
 
   const drop = async () => {
@@ -574,6 +647,29 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
             {submission.archive_reason && (
               <p className="text-xs text-amber-300/80">
                 Archived — “{submission.archive_reason}”
+              </p>
+            )}
+            {/* Reviewer-facing only. The submitter's surface (FieldShell)
+                never renders this row and never reads the reason. */}
+            {submission.status === 'rejected' && (
+              <p className="text-xs text-slate-400">
+                Rejected{submission.rejected_by ? ` by ${officerName(submission.rejected_by) ?? 'a reviewer'}` : ''}
+                {submission.rejected_at ? ` on ${fmtDateTime(submission.rejected_at)}` : ''}
+                {rejectReason ? ` — “${rejectReason}”` : ''}
+              </p>
+            )}
+            {submission.validated_at && (
+              <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                <Badge tone="good">Validated</Badge>
+                <span>
+                  by {officerName(submission.validated_by) ?? 'a reviewer'} on {fmtDateTime(submission.validated_at)}
+                  {validationStale(submission, counts) && ' · claims changed since'}
+                </span>
+              </p>
+            )}
+            {readyToValidate(submission, counts) && (
+              <p className="mt-1 text-xs text-emerald-300/90">
+                Ready to validate — every claim is decided and the source is graded.
               </p>
             )}
           </div>
@@ -649,6 +745,11 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
       <IntelActions submission={submission}
         onChanged={() => { void load(); onChanged() }} />
 
+      {/* Related records (P6-03): "part of group X", the suggestion panel
+          and the group actions. A group never merges or edits a member. */}
+      <IntelGroups submission={submission}
+        onChanged={() => { void load(); onChanged() }} />
+
       <SiuPanel submission={submission} parts={parts}
         onChanged={() => { void load(); onChanged() }} />
 
@@ -718,12 +819,30 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
           {/* Archive is the normal way a record leaves the queue: everything
               is kept and it can be undone. It is offered next to the review
               actions because that is where the decision is actually made. */}
-          {submission.status === 'archived' ? (
+          {canRestoreIntel(submission.status, viewer) ? (
             <Button size="sm" variant="ghost" onClick={() => void restore()}>
-              Restore from archive
+              {submission.status === 'rejected' ? 'Restore' : 'Restore from archive'}
             </Button>
-          ) : (
+          ) : submission.status !== 'archived' && submission.status !== 'rejected' ? (
             <Button size="sm" variant="ghost" onClick={() => void archive()}>Archive</Button>
+          ) : null}
+          {/* Reject is the rarer thing that is not archive. Restoring one is
+              command's call, so the button above only appears for them --
+              the RPC refuses everybody else regardless. */}
+          {canRejectIntel(submission.status) && (
+            <Button size="sm" variant="ghost" onClick={() => void reject()}>Reject</Button>
+          )}
+          {canValidateIntel(submission.status) && (
+            submission.validated_at ? (
+              <Button size="sm" variant="ghost" onClick={() => void unvalidate()}>
+                Withdraw validation
+              </Button>
+            ) : (
+              <Button size="sm" variant={readyToValidate(submission, counts) ? 'primary' : 'ghost'}
+                onClick={() => void validate()}>
+                Validate
+              </Button>
+            )
           )}
           {/* Deleting is not tidying up. It is for a record that should not
               exist -- and the server refuses it outright the moment anything
@@ -754,7 +873,7 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
               {(fid) => (
                 <Select id={fid} value={next} onChange={(e) => setNext(e.target.value)}>
                   <option value="">Choose an outcome…</option>
-                  {edges.map((s) => <option key={s} value={s}>{fieldStatusLabel(s)}</option>)}
+                  {edges.map((s) => <option key={s} value={s}>{reviewerStatusLabel(s)}</option>)}
                 </Select>
               )}
             </Field>
@@ -774,10 +893,13 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
           </div>
         ) : (
           <p className="mt-3 text-sm text-slate-400">
-            This report is settled. Nothing moves out of {fieldStatusLabel(submission.status)}.
+            This report is settled. Nothing moves out of {reviewerStatusLabel(submission.status)}
+            {submission.status === 'rejected' ? ' except a restore by a Bureau Lead or above' : ''}.
           </p>
         )}
       </Card>
+
+      <Composer submissionId={id} onDone={() => void load()} />
 
       <Card>
         <h4 className="text-[13px] font-semibold text-white">
@@ -828,6 +950,71 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
         )}
       </Card>
     </div>
+  )
+}
+
+/** One place to write, two destinations (P6-02). The toggle is the whole
+ *  difference: a private note lands in the reviewers' table the officer's
+ *  account cannot read; a message lands in the thread the officer reads. The
+ *  default is private, because the failure worth designing against is
+ *  internal reasoning ending up in front of the person it is about. Neither
+ *  moves the status -- asking a question that needs an answer is "Ask the
+ *  officer" above, which does. */
+function Composer({ submissionId, onDone }: {
+  submissionId: string
+  onDone: () => void
+}) {
+  const [toOfficer, setToOfficer] = useState(false)
+  const [body, setBody] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const send = async () => {
+    setBusy(true)
+    const err = await commentSubmission(submissionId, body, toOfficer)
+    setBusy(false)
+    if (err) { toast(err, 'danger'); return }
+    setBody('')
+    toast(toOfficer ? 'Message sent to the officer.' : 'Note saved.', 'success')
+    onDone()
+  }
+
+  const chip = (on: boolean, label: string) => (
+    <button type="button" aria-pressed={toOfficer === on}
+      onClick={() => setToOfficer(on)}
+      className={`min-h-9 rounded-full border px-3 py-1 text-xs font-semibold transition ${
+        toOfficer === on
+          ? 'border-badge-500/40 bg-badge-500/15 text-white'
+          : 'border-white/10 text-slate-400 hover:bg-white/5 hover:text-white'
+      }`}>
+      {label}
+    </button>
+  )
+
+  return (
+    <Card>
+      <h4 className="text-[13px] font-semibold text-white">Write</h4>
+      <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Who reads this">
+        {chip(false, 'Private note to reviewers')}
+        {chip(true, 'Message the officer')}
+      </div>
+      <div className="mt-3">
+        <Field label={toOfficer ? 'Message' : 'Note'}
+          hint={toOfficer
+            ? 'The reporting officer reads this in their thread. It does not change the status — use “Ask the officer” when you need an answer.'
+            : 'Reviewer-only. The officer’s account has no access to this table at all.'}>
+          {(fid) => (
+            <Textarea id={fid} rows={3} value={body} disabled={busy}
+              onChange={(e) => setBody(e.target.value)} />
+          )}
+        </Field>
+      </div>
+      <div className="mt-2 flex justify-end">
+        <Button size="sm" variant={toOfficer ? 'primary' : 'secondary'} disabled={busy || !body.trim()}
+          onClick={() => void send()}>
+          {busy ? 'Saving…' : toOfficer ? 'Send to officer' : 'Save note'}
+        </Button>
+      </div>
+    </Card>
   )
 }
 

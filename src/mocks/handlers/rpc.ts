@@ -14,6 +14,7 @@ import { supabaseBaseUrl } from '../env'
 import { getDenial, getRows, getRpcOverride, getSession, mockId, seedRows, type MockTableName } from '../store'
 import { CASE_WORKSPACE_RPCS } from './caseWorkspace'
 import { ENTITY_RPCS } from './entity'
+import { INTEL_RPCS, IntelRpcError } from './intel'
 import { LEGAL_RPCS, LegalRpcError } from './legal'
 import { postgrestError, shapeNetwork } from './postgrest'
 import { REPORT_RPCS, ReportRpcError } from './reports'
@@ -200,6 +201,18 @@ export const rpcHandlers = [
             return HttpResponse.json(REPORT_RPCS[fn](args) as Parameters<typeof HttpResponse.json>[0])
           } catch (e) {
             if (e instanceof ReportRpcError) return postgrestError(400, e.code, e.message)
+            throw e
+          }
+        }
+        // Phase 6 intel triage (reject / comment / validate, groups, extended
+        // links + convert, the SIB cross-link) — see ./intel.ts. An authority
+        // refusal raises P0403 (private.perm_raise), a validation one P0001.
+        if (fn in INTEL_RPCS) {
+          try {
+            const out = INTEL_RPCS[fn](args)
+            return out === undefined ? new HttpResponse(null, { status: 204 }) : HttpResponse.json(out as Parameters<typeof HttpResponse.json>[0])
+          } catch (e) {
+            if (e instanceof IntelRpcError) return postgrestError(400, e.code, e.message)
             throw e
           }
         }

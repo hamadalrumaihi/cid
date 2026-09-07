@@ -12,7 +12,7 @@
  *          re-fetched through the viewer's RLS-scoped client on restore, and a
  *          row that no longer resolves closes silently. */
 import { TAB_LABEL } from '@/lib/nav'
-import { hasRecordTabs, isToolTab, type ToolId } from '@/lib/toolsModel'
+import { RECORD_PARAM, hasRecordTabs, isToolTab, type ToolId } from '@/lib/toolsModel'
 
 export type TabKind = 'tool' | 'record' | 'case'
 
@@ -314,6 +314,15 @@ export function mirrorParams(current: URLSearchParams, active: WorkspaceTab | nu
   clearCase()
   if (active.toolId) p.set('tool', active.toolId)
   if (active.kind === 'record') p.set('record', active.id)
-  else p.delete('record')
+  else {
+    // A `?record=` on a tool WITHOUT record tabs is a list seed in the
+    // generic spelling (`/tools?tool=field-review&record=X` from a
+    // notification): carry it under the tool's own param so the view can
+    // read it after this rewrite, instead of dropping it on the floor.
+    const seedParam = active.toolId && !hasRecordTabs(active.toolId) ? RECORD_PARAM[active.toolId] : undefined
+    const seed = p.get('record')
+    if (seedParam && seed && !p.has(seedParam)) p.set(seedParam, seed)
+    p.delete('record')
+  }
   return p
 }

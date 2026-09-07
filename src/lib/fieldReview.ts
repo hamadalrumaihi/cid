@@ -32,7 +32,13 @@ export type FieldReviewNoteRow = Tables<'field_submission_reviews'>
 
 /** Mirrors private.field_submission_transition_ok(). Archived and rejected
  *  reopen to 'reviewing' on purpose: a wrong rejection should be fixable, and a
- *  report archived before its moment can matter later. */
+ *  report archived before its moment can matter later.
+ *
+ *  These are the outcomes the "Move to" control offers through
+ *  field_submission_decide. 'rejected' is deliberately NOT among them even
+ *  though the transition exists server-side: rejecting needs a reason and goes
+ *  through field_submission_reject (P6-01), and a rejected record leaves only
+ *  through field_submission_restore -- decide refuses it. */
 const NEXT: Record<FieldStatus, readonly FieldStatus[]> = {
   draft: [],
   new: ['reviewing', 'reviewed', 'actionable', 'archived'],
@@ -45,6 +51,8 @@ const NEXT: Record<FieldStatus, readonly FieldStatus[]> = {
   // Archived reopens to reviewing and nowhere else -- restoring means somebody
   // is looking again, not that the old decision comes back with it.
   archived: ['reviewing'],
+  // Rejected reopens only through Restore (command), never through decide.
+  rejected: [],
 }
 
 export function reviewNext(from: string): readonly FieldStatus[] {
@@ -67,10 +75,15 @@ export function isOpen(s: string): boolean {
  *
  *  'processed' is deliberately not called "closed". A report that produced
  *  intelligence and a report that was rejected are both done being triaged, and
- *  neither is closed in any sense the officer would recognise. */
+ *  neither is closed in any sense the officer would recognise.
+ *
+ *  'groups' is not a queue of submissions at all: it lists the live intel
+ *  groups (P6-03, components/field/IntelGroups). It sits in this strip because
+ *  a reviewer looking for "the three reports about the Vespucci crew" is
+ *  looking in the same place as for any one of them. */
 export const QUEUE_FILTERS = [
   'all', 'unclaimed', 'mine', 'assigned', 'needs_info', 'city', 'blaine',
-  'processed', 'archived',
+  'processed', 'archived', 'rejected', 'groups',
 ] as const
 export type QueueFilter = (typeof QUEUE_FILTERS)[number]
 
@@ -84,7 +97,13 @@ export const QUEUE_LABEL: Record<QueueFilter, string> = {
   blaine: 'Blaine County',
   processed: 'Processed',
   archived: 'Archived',
+  rejected: 'Rejected',
+  groups: 'Groups',
 }
+
+/** Filters that list something other than submission rows. The queue view
+ *  mounts a different list for these and shows no count on the tab. */
+export const NON_ROW_FILTERS: readonly QueueFilter[] = ['groups']
 
 /** The Owner's view of records somebody deleted. Separate from the queue
  *  filters because it is not a queue: nobody works it, and it exists so a
@@ -111,7 +130,7 @@ export const SIU_FILTER_LABEL: Record<SiuFilter, string> = {
 }
 
 /** Statuses that are done being triaged. */
-const PROCESSED: readonly string[] = ['reviewed', 'actionable', 'archived']
+const PROCESSED: readonly string[] = ['reviewed', 'actionable', 'archived', 'rejected']
 
 export function matchesFilter(
   r: Pick<FieldSubmissionRow, 'status' | 'assigned_to' | 'jurisdiction'
@@ -146,6 +165,9 @@ export function matchesFilter(
     case 'blaine': return r.jurisdiction === 'blaine'
     case 'processed': return PROCESSED.includes(r.status)
     case 'archived': return r.status === 'archived'
+    case 'rejected': return r.status === 'rejected'
+    // Not a list of submissions -- see NON_ROW_FILTERS.
+    case 'groups': return false
     default: return true
   }
 }
@@ -267,6 +289,29 @@ export interface SubmissionCounts {
   locations: number
   items: number
   evidence: number
+  /** Structured claims across the five claim tables (P6-05). */
+  claims: number
+  /** Claims that carry a verdict. */
+  decided: number
+  /** The DERIVED validation condition: every claim decided and the source
+   *  graded. Not the explicit mark -- that is `validated_at` on the row. */
+  validated: boolean
+}
+
+/** "Ready to validate": the derived condition holds and nobody has set the
+ *  explicit mark yet. Null counts (a fetch that failed) read as not ready. */
+export function readyToValidate(
+  s: Pick<FieldSubmissionRow, 'validated_at' | 'status'>, c: SubmissionCounts | undefined,
+): boolean {
+  return !!c?.validated && !s.validated_at && s.status !== 'archived' && s.status !== 'rejected'
+}
+
+/** The explicit mark is set but the claims or the grade changed since -- the
+ *  badge says both rather than quietly dropping the mark (contract §3). */
+export function validationStale(
+  s: Pick<FieldSubmissionRow, 'validated_at'>, c: SubmissionCounts | undefined,
+): boolean {
+  return !!s.validated_at && !!c && !c.validated
 }
 
 /** What each report contains, for the queue card, in one call. The alternative
@@ -367,8 +412,20 @@ export async function archiveSubmission(id: string, reason: string): Promise<str
   return res.error?.message ?? null
 }
 
+/** Reject. The rarer thing that is not archive: a reviewer saying this should
+ *  not be treated as intelligence at all. The reason is required server-side
+ *  and lands in a reviewer-private note; the submitter sees "Closed" and
+ *  nothing else, and is deliberately NOT notified (IT3). Nothing is deleted --
+ *  a Bureau Lead or above can restore it. */
+export async function rejectSubmission(id: string, reason: string): Promise<string | null> {
+  const res = await rpc('field_submission_reject', { p_submission: id, p_reason: reason })
+  return res.error?.message ?? null
+}
+
 /** Restore. Comes back as 'reviewing', never as whatever it was before:
- *  somebody is looking again, and the archive reason stays on the record. */
+ *  somebody is looking again, and the archive reason stays on the record.
+ *  The SERVER decides who may: from archived any active reviewer, from
+ *  rejected command only -- the signature does not change. */
 export async function restoreSubmission(
   id: string, reason?: string,
 ): Promise<string | null> {
@@ -416,6 +473,41 @@ export async function decideSubmission(
 export async function askOfficer(id: string, question: string): Promise<string | null> {
   const res = await rpc('field_submission_ask', {
     p_submission: id, p_question: question,
+  })
+  return res.error?.message ?? null
+}
+
+/** A reviewer writing something down without moving the status (P6-02).
+ *  ONE composer, two destinations, and the flag is the whole difference:
+ *  `visibleToOfficer = false` lands in field_submission_reviews (the officer's
+ *  account cannot read that table), `true` lands in the thread the officer
+ *  reads. Direct inserts into the notes table are gone (the policy was
+ *  dropped), so this is the only way a reviewer writes either. */
+export async function commentSubmission(
+  id: string, body: string, visibleToOfficer: boolean,
+): Promise<string | null> {
+  const text = body.trim()
+  if (!text) return 'Write something first.'
+  const res = await rpc('field_submission_comment', {
+    p_submission: id, p_body: text, p_visible_to_officer: visibleToOfficer,
+  })
+  return res.error?.message ?? null
+}
+
+/** Mark the record validated (P6-05): every claim has a verdict and the source
+ *  is graded. The server checks that condition and refuses otherwise, naming
+ *  what is missing; the note is required. */
+export async function validateSubmission(id: string, note: string): Promise<string | null> {
+  const res = await rpc('field_submission_validate', { p_submission: id, p_note: note })
+  return res.error?.message ?? null
+}
+
+/** Take the mark off again, saying why. A later verdict change does NOT clear
+ *  it on its own -- the badge shows "claims changed since" instead -- so this
+ *  is the only way the mark comes off. */
+export async function withdrawValidation(id: string, note: string): Promise<string | null> {
+  const res = await rpc('field_submission_validate', {
+    p_submission: id, p_note: note, p_clear: true,
   })
   return res.error?.message ?? null
 }
@@ -537,7 +629,27 @@ export function verdictFor(
 // records on its own would mean a patrol officer's guess becoming a database
 // fact with nobody's name against it.
 
-export type TargetKind = 'person' | 'vehicle' | 'gang' | 'place'
+/** Where a claim may point. The first four are the registries a claim is
+ *  matched AGAINST (`field_claim_matches`); the last three arrived with P6-04
+ *  and are chosen by hand through the entity picker. */
+export type TargetKind = 'person' | 'vehicle' | 'gang' | 'place' | 'narcotic' | 'account' | 'indicator'
+
+/** The pair rule in `field_claim_link`, mirrored so the picker never offers a
+ *  target the server would refuse ("a person claim cannot be linked to a
+ *  narcotic"). The FIRST entry is the claim's natural home — what the create
+ *  sheet converts it into. An indicator is case-scoped: it can be linked, but
+ *  never created from here. */
+export const LINK_TARGETS: Record<ClaimKind, readonly TargetKind[]> = {
+  person: ['person', 'account', 'indicator'],
+  vehicle: ['vehicle', 'indicator'],
+  org: ['gang', 'account', 'indicator'],
+  location: ['place', 'indicator'],
+  item: ['narcotic', 'indicator'],
+}
+
+export function primaryTarget(kind: ClaimKind): TargetKind {
+  return LINK_TARGETS[kind][0]
+}
 
 export interface EntityMatch {
   kind: TargetKind
@@ -596,12 +708,26 @@ export async function linkClaim(
 export function linkFor(
   links: FieldClaimLinkRow[], kind: ClaimKind, claimId: string,
 ): FieldClaimLinkRow | null {
+  // An item claim links since P6-04 (to a narcotic or an indicator), so all
+  // five claim kinds read the same way.
   const col = ({
     person: 'claim_person_id', vehicle: 'claim_vehicle_id',
-    org: 'claim_org_id', location: 'claim_location_id',
-  } as const)[kind as 'person' | 'vehicle' | 'org' | 'location'] ?? null
-  if (!col) return null
+    org: 'claim_org_id', location: 'claim_location_id', item: 'claim_item_id',
+  } as const)[kind]
   return links.find((l) => l[col] === claimId) ?? null
+}
+
+/** Which record a link points at — one of seven id columns is set, and the
+ *  CHECK on the table promises exactly one. */
+export function linkTarget(l: FieldClaimLinkRow): { kind: TargetKind; id: string } | null {
+  if (l.person_id) return { kind: 'person', id: l.person_id }
+  if (l.vehicle_id) return { kind: 'vehicle', id: l.vehicle_id }
+  if (l.gang_id) return { kind: 'gang', id: l.gang_id }
+  if (l.place_id) return { kind: 'place', id: l.place_id }
+  if (l.narcotic_id) return { kind: 'narcotic', id: l.narcotic_id }
+  if (l.account_id) return { kind: 'account', id: l.account_id }
+  if (l.indicator_id) return { kind: 'indicator', id: l.indicator_id }
+  return null
 }
 
 /** How to summarise review progress in one line. Deliberately does NOT say

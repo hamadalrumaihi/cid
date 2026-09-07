@@ -83,7 +83,23 @@ export const NOTIF_LABEL: Record<string, string> = {
   restricted_access_denied: '🔒 Restricted access denied',
   restricted_access_revoked: '🔒 Restricted access revoked',
   surveillance_decided: 'Surveillance request decided',
+  // Phase 6 intel triage (contract §4). Payloads carry {submission_id,
+  // submission_no, jurisdiction, actor} and nothing of the report itself.
+  intel_new: '🛈 New intelligence submitted',
+  intel_assigned: 'Intelligence assigned to you',
+  intel_question: 'A question about your report',
+  intel_reply: 'The officer replied on a report',
+  intel_referred: 'Intelligence referred to SIB',
 }
+
+const isIntel = (t: string): boolean => t.startsWith('intel_')
+
+/** The review tool with one record selected (`record` is the workspace's
+ *  generic record param; FieldReviewView reads it as a mount-time seed). */
+export const intelReviewHref = (submissionId: string | null | undefined): string =>
+  submissionId
+    ? `/tools?tool=field-review&record=${encodeURIComponent(submissionId)}`
+    : '/tools?tool=field-review'
 
 // Payload parsing is zod-validated (v1.14): malformed payloads degrade to {}
 // instead of leaking raw JSON into the bell panel.
@@ -105,6 +121,9 @@ export function notifDetail(n: NotificationRow): string | null {
 /** Secondary human line — the reason (or tracker/target context). */
 export function notifSub(n: NotificationRow): string | null {
   const p = asPayload(n.payload)
+  // Intel kinds show the FI number and nothing else — by contract the payload
+  // carries no reason or summary, and this line must never grow one.
+  if (isIntel(n.type)) return p.submission_no || null
   return p.reason || p.title || [p.tracker_code, p.target].filter(Boolean).join(' · ') || null
 }
 
@@ -163,6 +182,14 @@ export function notifHref(n: NotificationRow, opts: { command?: boolean } = {}):
     const docId = typeof p.document_id === 'string' ? p.document_id : null
     return docId ? `/sops?doc=${docId}` : '/sops?view=suggestions'
   }
+  // Intel triage (Phase 6 §4): every kind lands on the review tool with the
+  // record selected. That includes intel_question, the ONLY kind a submitter
+  // receives: a CID-authored record's author is a CID member with a bell, and
+  // the review tool is their surface; a patrol officer's account renders
+  // FieldShell for EVERY route (app layout, state 'field') and has no bell at
+  // all — "Question for you" is surfaced on the shell's home screen instead,
+  // so no separate officer href exists to route to.
+  if (isIntel(t)) return intelReviewHref(p.submission_id)
   if (t === 'membership_request' || t === 'access_requested') return '/command-center?s=approvals'
   if (t.startsWith('transfer')) return '/command-center?s=promotions'
   // membership_update doubles as the transfer-status fan-out (transfer_id in

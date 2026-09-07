@@ -110,7 +110,7 @@ const rows = <T extends MockTableName>(table: T): Tables<T>[] =>
   (getDenial(table) ? [] : getRows(table)) as unknown as Tables<T>[]
 
 /** The mock's private.can_read_case for an arbitrary profile. */
-function canReadCaseAs(p: Tables<'profiles'> | null, kase: MockRow | undefined): boolean {
+export function canReadCaseAs(p: Tables<'profiles'> | null, kase: MockRow | undefined): boolean {
   if (!kase || !isActive(p) || kase.deleted_at != null) return false
   if (p!.is_owner || WIDE_COMMAND.has(p!.role ?? '')) return true
   if (kase.bureau === 'JTF' || kase.bureau === p!.division) return true

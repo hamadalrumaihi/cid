@@ -153,6 +153,28 @@ verifies this exact shape in `beforeAll` and fails with a provisioning
 message on drift. The Owner fixture remains the `assign_judge` fallback the
 suites exercise when no AG is seated.
 
+### Field-officer fixture (Phase 6, optional)
+
+The intel-triage suites (`tests/rls/v188a`, `v188b`) and `tests/e2e/intel.spec.ts`
+prove the CID side with lsb / bcb / lead / director / owner alone. The
+**officer wall** — a submitter who is not `profiles.active` reads their own
+record and the officer thread but never a reviewer note, receives
+`intel_question` and nothing else, sees a rejected record as "Closed" and
+never the reason, and whose reply fires `intel_reply` — needs one more
+fixture, listed under issue #299 with the DOJ roster. Every leg that needs
+it `it.skipIf`s (RLS) or `test.skip`s (E2E) cleanly until it exists.
+
+| Account | Shape | Password secret | Proves |
+| --- | --- | --- | --- |
+| `rls-test-field@cidportal.test` | auth user + profile (`is_test=true` via `handle_new_user`), `profiles.active=false`, not login-denied, not removed; one `field_officers` row (`agency='SAHP'`, any callsign, `active=true`) — the intelligence-only access class | `RLS_TEST_PASSWORD_FIELD` | the officer's own send, the private-note wall, the "Closed" receipt, `intel_question` / `intel_reply` |
+
+Provisioning rules: the profile must **never** be active (an active author is
+stamped `from_reviewer` and reads the notes like any member — the wall
+under test would not exist); appoint the standing through
+`field_officers` directly on the dedicated project (the self-serve RPC is
+for real officers). `rls_test_cleanup` sweeps the officer's own records
+(`officer_id = any(ids)`, migration `20261030120000`) and its notifications.
+
 ---
 
 ## Rebuilding an isolated environment — migrations are the source of truth

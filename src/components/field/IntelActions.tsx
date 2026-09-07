@@ -18,13 +18,14 @@ import { useAuth } from '@/lib/auth'
 import { buildAutofill } from '@/lib/autofill'
 import { bureauLabel } from '@/lib/roles'
 import { list } from '@/lib/db'
-import type { DuplicateRow } from '@/lib/entity'
+import { isMergeKind, type DuplicateRow, type MergeKind } from '@/lib/entity'
+import { convertClaim, registryHref } from '@/lib/fieldConvert'
 import { fmtDateTime } from '@/lib/format'
 import { officerName } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
-import { loadSubmissionParts, type FieldSubmissionRow, type SubmissionParts } from '@/lib/fieldSubmissions'
+import { ITEM_CATEGORY_LABEL, loadSubmissionParts, type FieldSubmissionRow, type SubmissionParts } from '@/lib/fieldSubmissions'
 import {
-  linkClaim, linkFor, loadClaimLinks, loadMatches,
+  LINK_TARGETS, linkClaim, linkFor, linkTarget, loadClaimLinks, loadMatches, primaryTarget,
   type ClaimKind, type FieldClaimLinkRow, type TargetKind,
 } from '@/lib/fieldReview'
 import {
@@ -40,7 +41,8 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { uiPrompt } from '@/components/ui/dialog'
-import { DuplicatePanel, EntityCreateSheet, EntityPicker } from '@/components/entity'
+import { DuplicatePanel, EntityCreateSheet, EntityPicker, type SheetSubmitResult } from '@/components/entity'
+import { useToolNav } from '@/components/tools/useToolNav'
 
 interface CasePick { id: string; case_number: string | null; title: string | null }
 
@@ -191,7 +193,8 @@ export function IntelActions({ submission, onChanged }: {
       {/* ── Registry records ──────────────────────────────────────────────── */}
       <div className="mt-4 border-t border-white/5 pt-3">
         <h5 className="text-xs font-medium text-slate-500">Registry records</h5>
-        <ClaimRegistry submissionId={id} onLinked={(err) => after(err, 'Matched to the existing record.')} />
+        <ClaimRegistry submissionId={id} onLinked={(err) => after(err, 'Matched to the existing record.')}
+          onChanged={() => { void load(); onChanged() }} />
       </div>
 
       {/* ── Surveillance ──────────────────────────────────────────────────── */}
@@ -298,14 +301,22 @@ export function IntelActions({ submission, onChanged }: {
 }
 
 /** The record's structured claims (persons, vehicles, organizations,
- *  locations) against the registry, through the entity layer (P2-09):
- *  `field_claim_matches` feeds a DuplicatePanel whose Use existing links the
- *  claim; an EntityPicker matches by hand; Create opens the shared create
- *  sheet prefilled from the claim (buildAutofill) and links the new record.
- *  Every write is still `field_claim_link` — only the UI plumbing changed. */
+ *  locations, items) against the registry, through the entity layer (P2-09,
+ *  extended by P6-04): `field_claim_matches` feeds a DuplicatePanel whose Use
+ *  existing links the claim; an EntityPicker matches by hand against any
+ *  target the pair rule allows (a person claim to a person, an account or an
+ *  indicator; an item to a narcotic …); Convert opens the shared create sheet
+ *  prefilled from the claim (buildAutofill) and saves through
+ *  `field_submission_convert`, which creates the record with its provenance
+ *  and links the claim in one audited call. Every hand-made match is still
+ *  `field_claim_link`. */
 interface Claim { kind: ClaimKind; id: string; label: string; target: TargetKind; draft: Record<string, string> }
 
-const SIGNAL_FOR: Record<TargetKind, string> = { person: 'name', vehicle: 'plate', gang: 'name', place: 'name' }
+const SIGNAL_FOR: Record<TargetKind, string> = {
+  person: 'name', vehicle: 'plate', gang: 'name', place: 'name', narcotic: 'name', account: 'handle', indicator: 'value',
+}
+
+const targetLabel = (t: TargetKind): string => (t === 'gang' ? 'organization' : t)
 
 const prefill = (o: Record<string, string | null | undefined>): Record<string, string> =>
   buildAutofill(o, {}).values as Record<string, string>
@@ -313,31 +324,43 @@ const prefill = (o: Record<string, string | null | undefined>): Record<string, s
 function claimsOf(parts: SubmissionParts): Claim[] {
   return [
     ...parts.persons.map((p): Claim => ({
-      kind: 'person', id: p.id, target: 'person',
+      kind: 'person', id: p.id, target: primaryTarget('person'),
       label: [p.full_name, p.alias].filter(Boolean).join(' / ') || 'unidentified person',
       draft: prefill({ name: p.full_name, alias: p.alias, phone: p.phone, notes: p.description }),
     })),
     ...parts.vehicles.map((v): Claim => ({
-      kind: 'vehicle', id: v.id, target: 'vehicle',
+      kind: 'vehicle', id: v.id, target: primaryTarget('vehicle'),
       label: [v.plate, v.color, v.model].filter(Boolean).join(' ') || 'vehicle, no details',
       draft: prefill({ plate: v.plate, model: [v.make, v.model].filter(Boolean).join(' ') || null, color: v.color, notes: v.description }),
     })),
     ...parts.orgs.map((o): Claim => ({
-      kind: 'org', id: o.id, target: 'gang',
+      kind: 'org', id: o.id, target: primaryTarget('org'),
       label: o.name || o.org_type.replace(/_/g, ' '),
       draft: prefill({ name: o.name, colors: o.colors, notes: o.territory ? `Territory: ${o.territory}` : null }),
     })),
     ...parts.locations.map((l): Claim => ({
-      kind: 'location', id: l.id, target: 'place',
+      kind: 'location', id: l.id, target: primaryTarget('location'),
       label: [l.street, l.postal].filter(Boolean).join(' ') || l.kind.replace(/_/g, ' '),
       draft: prefill({ name: [l.street, l.postal].filter(Boolean).join(' ') || null, area: l.postal, notes: l.description }),
+    })),
+    // A seizure is an event, so an item was never matchable — but the
+    // substance it names is a standing narcotics record, or should be.
+    ...parts.items.map((i): Claim => ({
+      kind: 'item', id: i.id, target: primaryTarget('item'),
+      label: [i.suspected_substance, ITEM_CATEGORY_LABEL[i.category] ?? i.category].filter(Boolean).join(' · ') || 'item, no details',
+      draft: prefill({
+        name: i.suspected_substance,
+        summary: [i.description, i.packaging ? `Packaging: ${i.packaging}` : null].filter(Boolean).join('\n') || null,
+      }),
     })),
   ]
 }
 
-function ClaimRegistry({ submissionId, onLinked }: {
+function ClaimRegistry({ submissionId, onLinked, onChanged }: {
   submissionId: string
   onLinked: (err: string | null) => Promise<void>
+  /** A conversion already toasted from the sheet — only the parent refreshes. */
+  onChanged: () => void
 }) {
   const [claims, setClaims] = useState<Claim[] | null>(null)
   const [links, setLinks] = useState<FieldClaimLinkRow[]>([])
@@ -359,22 +382,32 @@ function ClaimRegistry({ submissionId, onLinked }: {
   return (
     <ul className="mt-2 space-y-2">
       {claims.map((c) => (
-        <ClaimRow key={c.id} claim={c} linked={!!linkFor(links, c.kind, c.id)}
-          onLink={async (target, recordId) => { await onLinked(await linkClaim(c.kind, c.id, target, recordId)); await load() }} />
+        <ClaimRow key={c.id} claim={c} link={linkFor(links, c.kind, c.id)}
+          onLink={async (target, recordId) => { await onLinked(await linkClaim(c.kind, c.id, target, recordId)); await load() }}
+          onConverted={async () => { await load(); onChanged() }} />
       ))}
     </ul>
   )
 }
 
-function ClaimRow({ claim, linked, onLink }: {
+function ClaimRow({ claim, link, onLink, onConverted }: {
   claim: Claim
-  linked: boolean
+  link: FieldClaimLinkRow | null
   onLink: (target: TargetKind, recordId: string) => Promise<void>
+  /** The server already linked the claim — only reload and say so. */
+  onConverted: () => Promise<void>
 }) {
+  const nav = useToolNav()
   const [matches, setMatches] = useState<{ rows: DuplicateRow[]; kinds: Record<string, TargetKind>; also: number; matchable: boolean } | null>(null)
   const [looking, setLooking] = useState(false)
   const [creating, setCreating] = useState(false)
-  const kindLabel = claim.target === 'gang' ? 'organization' : claim.target
+  const [target, setTarget] = useState<TargetKind>(claim.target)
+  const targets = LINK_TARGETS[claim.kind]
+  const chosenLabel = targetLabel(target)
+  const linked = link ? linkTarget(link) : null
+  // Convert only lands in a registry the create sheet renders — an indicator
+  // is case-scoped and is linked, never minted from here.
+  const convertKind: MergeKind | null = isMergeKind(target) ? target : null
 
   const look = async () => {
     setLooking(true)
@@ -391,17 +424,31 @@ function ClaimRow({ claim, linked, onLink }: {
     })
   }
 
+  /** The sheet's save path: the server creates, stamps provenance and links.
+   *  A duplicate verdict comes back as rows for the sheet's own panel; a
+   *  refusal is toasted in the server's words and shown inline. */
+  const convert = async (values: Record<string, string>, reason?: string): Promise<SheetSubmitResult> => {
+    if (!convertKind) return { id: null, error: { message: 'Choose a registry to convert into.' } }
+    const res = await convertClaim(convertKind, claim.kind, claim.id, values, reason)
+    if (res.ok) return { id: res.id, error: null }
+    if ('matches' in res) return { id: null, error: null, duplicates: res.matches }
+    toast(res.message, 'danger')
+    return { id: null, error: { message: res.message, code: res.code } }
+  }
+
   return (
     <li className="rounded-lg bg-ink-950/50 px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="min-w-0 text-sm text-slate-200">
-          <span className="text-xs text-slate-500">{kindLabel} — </span>{claim.label}
+          <span className="text-xs text-slate-500">{claim.kind === 'org' ? 'organization' : claim.kind} — </span>{claim.label}
         </span>
-        {linked && <Badge tone="good">Matched to an existing {kindLabel}</Badge>}
+        {linked && <Badge tone="good">Matched to an existing {targetLabel(linked.kind)}</Badge>}
       </div>
       {!linked && (
         <div className="mt-2 space-y-2">
-          {matches === null ? (
+          {/* Items were never matchable: the RPC says so, and the picker below
+              is the way to a narcotic. */}
+          {claim.kind !== 'item' && (matches === null ? (
             <Button size="sm" variant="ghost" loading={looking} onClick={() => void look()}>Look for an existing record</Button>
           ) : !matches.matchable ? (
             <p className="text-[11px] text-slate-500">Nothing to match this against.</p>
@@ -419,19 +466,38 @@ function ClaimRow({ claim, linked, onLink }: {
                 <p className="text-[11px] text-slate-500">No existing record matches. Nothing is created automatically.</p>
               )}
             </>
+          ))}
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <EntityPicker
+              kind={target} label={`Match to ${target === 'account' || target === 'indicator' ? 'an' : 'a'} ${chosenLabel}`} value={null}
+              onChange={(hit) => { if (hit) void onLink(target, hit.id) }}
+              onCreateNew={convertKind ? () => setCreating(true) : undefined}
+              createLabel={(q) => `Create a new ${chosenLabel} from this claim: “${q}”`}
+            />
+            {targets.length > 1 && (
+              <Select value={target} aria-label={`What this ${claim.kind === 'org' ? 'organization' : claim.kind} claim refers to`}
+                className="text-xs" onChange={(e) => setTarget(e.target.value as TargetKind)}>
+                {targets.map((t) => <option key={t} value={t}>{targetLabel(t)}</option>)}
+              </Select>
+            )}
+          </div>
+          {convertKind && (
+            <Button size="sm" variant="ghost" onClick={() => setCreating(true)}>
+              Convert to a new {chosenLabel} record
+            </Button>
           )}
-          <EntityPicker
-            kind={claim.target} label={`Match to a ${kindLabel}`} value={null}
-            onChange={(hit) => { if (hit) void onLink(claim.target, hit.id) }}
-            onCreateNew={() => setCreating(true)}
-            createLabel={(q) => `Create a new ${kindLabel} from this claim: \u201c${q}\u201d`}
-          />
-          <EntityCreateSheet
-            kind={claim.target} open={creating} initial={claim.draft}
-            onClose={() => setCreating(false)}
-            onCreated={(hit) => void onLink(claim.target, hit.id)}
-            onUseExisting={(hit) => void onLink(claim.target, hit.id)}
-          />
+          {convertKind && (
+            <EntityCreateSheet
+              kind={convertKind} open={creating} initial={claim.draft}
+              submit={convert}
+              onClose={() => setCreating(false)}
+              onCreated={(hit) => {
+                void onConverted()
+                nav.openHref(registryHref(convertKind, hit.id))
+              }}
+              onUseExisting={(hit) => void onLink(convertKind, hit.id)}
+            />
+          )}
         </div>
       )}
     </li>

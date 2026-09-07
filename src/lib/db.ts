@@ -6,7 +6,7 @@ import { toast, undoToast } from './toast'
 
 type TableName = keyof Database['public']['Tables']
 
-export type DbError = { message: string; code?: string }
+export type DbError = { message: string; code?: string; details?: string }
 export type MutationResult<T> = { data: T | null; error: DbError | null }
 
 /** Contract carried over from the vanilla data layer:
@@ -23,8 +23,23 @@ export type MutationResult<T> = { data: T | null; error: DbError | null }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const raw = () => supabase() as unknown as SupabaseClient<any, 'public', any>
 
-const asDbError = (error: { message: string; code?: string } | null): DbError | null =>
-  error ? { message: error.message, code: error.code } : null
+const asDbError = (error: { message: string; code?: string; details?: string } | null): DbError | null =>
+  error ? { message: error.message, code: error.code, details: error.details } : null
+
+/** A definer RPC that refuses on authority raises SQLSTATE P0403 with
+ *  {action, kind, id, reason} in the error DETAIL (private.perm_raise). The
+ *  refusal itself rolls the server's audit row back with the statement, so
+ *  the client acknowledges it once through perm_denied_ack — the server
+ *  re-checks the claim before recording it. Fire-and-forget. */
+function ackDenied(error: { code?: string; details?: string } | null): void {
+  if (!error || error.code !== 'P0403' || !error.details) return
+  try {
+    const d = JSON.parse(error.details) as { action?: string; kind?: string; id?: string | null; reason?: string }
+    if (!d.action || !d.kind) return
+    void raw().rpc('perm_denied_ack', { p_action: d.action, p_kind: d.kind, p_id: d.id ?? null, p_reason: d.reason ?? null })
+      .then(() => undefined, () => undefined)
+  } catch { /* a malformed detail is not worth a second error */ }
+}
 
 export interface ListOptions<T extends TableName> {
   /** Column projection (e.g. Operations picker's slim case rows). Omitting
@@ -238,6 +253,7 @@ export async function removeWhere<T extends TableName>(
 type Fn = keyof Database['public']['Functions']
 export async function rpc<F extends Fn>(fn: F, args: Database['public']['Functions'][F]['Args']): Promise<MutationResult<Database['public']['Functions'][F]['Returns']>> {
   const { data, error } = await raw().rpc(fn, args)
+  if (fn !== 'perm_denied_ack') ackDenied(error)
   return { data: data as Database['public']['Functions'][F]['Returns'], error: asDbError(error) }
 }
 

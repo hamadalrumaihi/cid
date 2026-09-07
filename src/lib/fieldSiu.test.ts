@@ -29,6 +29,7 @@ const act = (over: Partial<FieldSiuActionRow> = {}): FieldSiuActionRow => ({
 })
 
 const sub = (over: Partial<FieldSubmissionRow> = {}): FieldSubmissionRow => ({
+  rejected_at: null, rejected_by: null, validated_at: null, validated_by: null,
   id: 's1', submission_no: 'FI-2026-0001', officer_id: 'u1', snap_agency: 'SAHP',
   snap_callsign: '924', snap_rank: null, snap_unit: null,
   snap_officer_name: 'Tom Wood',

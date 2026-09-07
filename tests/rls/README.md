@@ -42,6 +42,7 @@ low-privilege test accounts and assert that the security wall holds:
 | `rls-test-judge / -judge2@cidportal.test` | active **Judge** (`justice_memberships`: judiciary / judge), **no active CID profile** — not provisioned, issue #299 | judicial claim (atomic race), decisions incl. partial approval, the judge return fast lane; judge2 stays unassigned to prove isolation and cannot see a sealed assignment |
 | `rls-test-ag@cidportal.test` | active **Attorney General** (`justice_memberships`: doj / attorney_general), no active CID profile — not provisioned, issue #299 | AG oversight of every judge-submitted request (sealed included), `assign_judge` for sealed requests, comment / observer authority, never a decision |
 | `rls-test-justice@cidportal.test` | no membership at all | the first-login Gate (CID-only application form) in `tests/e2e/justice.spec.ts` |
+| `rls-test-field@cidportal.test` | **field officer** (`field_officers` standing, `profiles.active=false`) — **optional**, not provisioned, issue #299 | the intelligence-only submitter's wall (`v188a` / `v188b`, `intel.spec.ts`): reads its own record and the thread, never a reviewer note; receives `intel_question` only; its reply fires `intel_reply`; sees a rejected record as "Closed" |
 
 Retired with Portal Improvements P4-01 (the prosecutor stage is gone; Judge +
 Attorney General are the only justice roles): `rls-test-prosecutor` /
@@ -192,6 +193,75 @@ version at test time, never assumed; templates for the flow legs are
   runs as lsb AND bcb (each sweeps its own case); the person row is removed
   by the lead.
 
+### Intel triage, Phase 6 (`tests/rls/v188a` … `v188c`)
+
+Portal Improvements P6-01 … P6-07 (migrations `20261030120000_intel_triage` →
+`20261031120000_intel_groups_convert`): a rejected status the submitter reads
+as "Closed", one comment composer with two audiences, an explicit validation
+mark, minimal notifications, a realtime shadow table behind the read wall,
+groups, extended claim links and convert-with-provenance. CID fixtures —
+lsb (the MCB detective who **authors** the test records as an investigator
+and reviews), bcb (the other reviewer; the owner of an unreadable case),
+lead (command: assign, restore-from-rejected, delete), director (command
+with `director_oversight` SIB standing — never an agent), owner (the SIB
+agent stand-in; audit reads), inactive; the field-officer fixture is
+optional (`RLS_TEST_PASSWORD_FIELD`) and its legs `it.skipIf`. Records are
+created by lsb with a `'[rls-test] v188x …'` summary in the city
+jurisdiction (a draft first when claims are wanted — claim inserts are
+draft-only — then `status: 'new'`); `rls_test_cleanup` sweeps
+fixture-authored `field_submissions` and `intel_groups` (`20261030120000` /
+`20261031120000`) and the lead hard-deletes best-effort in `afterAll`.
+**Authority refusals raise SQLSTATE `P0403`** (`private.perm_raise`) — the
+suites assert `error.code === 'P0403'` plus the message, never an audit row
+(a `PERMISSION_DENIED` written before a raise rolls back).
+
+- **v188a** (P6-01 / P6-02 / P6-05): reject needs a reason and sets
+  `rejected_at / _by` + the note 'Rejected: …' and the audit reason (the
+  reason is not a row column) with no notification to the submitter; decide / ask / a second reject are refused
+  and validate says 'closed'; restore-from-rejected → P0403 for lsb and
+  bcb, allowed for the lead (reviewing, columns cleared, 'Restored after
+  rejection', `from_status`); the guard refuses every direct UPDATE of a
+  sent record, a draft's review / SIB / grade columns and a forged INSERT; comment private → a
+  reviewer note, visible → the thread with `from_reviewer`, blank refused,
+  the notes INSERT 42501, a reviewer's direct message refused, the
+  submitter's reply allowed only while `needs_info`; validate refused with
+  '(0 of 2 claims decided, source ungraded)' → '(2 of 2 …, source
+  ungraded)' → set after grading, 'already validated', withdrawn with a
+  note, 'not validated'; `field_submission_counts.validated`. Officer legs:
+  a private note never reaches the officer, a visible message does.
+- **v188b** (P6-06 / P6-07): `intel_new` to the lead and the director with
+  exactly `submission_id / submission_no / jurisdiction / actor_id /
+  actor_name`; nothing for lsb, bcb, the inactive; `intel_assigned` to bcb
+  only (`assigned_by`); `intel_question` to lsb only; an investigator
+  author's reply is stamped `from_reviewer` and pings nobody (the officer
+  fixture's reply → `intel_reply`); the shadow row's five columns readable
+  by every reader, none for the inactive, 42501 on every client write, no
+  shadow for a draft until it is sent; the lead is refused
+  `field_submission_siu_sensitive` (SIB only — the contract's "flip as lead"
+  is done through a `public_corruption` referral instead), after which bcb,
+  the lead and the director read neither the record nor its shadow while
+  lsb (referrer) and the Owner do; `intel_referred` to the Owner only;
+  `siu_referred_submissions()` zero rows for the director / bcb / lsb and
+  the nine keys for the Owner; no intel payload ever carries summary /
+  details / reason.
+- **v188c** (P6-03 / P6-04): suggest names G2 / G3 by number for G1 and
+  the group for G3 afterwards; create with two members (bcb reads the group,
+  the inactive does not; an inactive creator → P0403); add / duplicate /
+  draft / no-reason / the lead refused; a removed member keeps its row and
+  re-adding clears `removed_*`; summary counts 5 claims / 1 decided and
+  names the linked case; `link_case` once, bcb's SCB case refused, unlink
+  with a reason; 42501 on the three tables; `field_submission_delete`
+  refuses a live member ('intel groups'); close → P0403 for bcb, the
+  creator closes, a closed group refuses members, the lead reopens; the
+  Owner sees the seven `INTEL_GROUP_*` audit rows; `field_claim_link` item →
+  narcotic (`claim_item_id`), duplicate refused, person → narcotic refused,
+  bcb's indicator refused, own indicator allowed, the inactive → P0403, the
+  linked repeat signal; convert: the duplicate answer, then success with a
+  reason (`source_submission_id`, `created_by`, the "Created despite a
+  possible duplicate" note, the claim link, `FIELD_CLAIM_CONVERTED`), item →
+  narcotic, missing / unknown keys, the wrong pair, a draft, the inactive
+  denied. The registry rows are deleted by the lead in `afterAll`.
+
 ### DOJ legal review (v1.13.0 — `tests/rls/legal.test.ts`; historical model)
 
 37 assertions covering the DOJ Legal Review System (see
@@ -277,6 +347,7 @@ RLS_TEST_PASSWORD_APPLICANT=… # optional — enables the approval-success bloc
 RLS_TEST_PASSWORD_JUDGE=…     # optional — DOJ legs (judge); not provisioned, issue #299
 RLS_TEST_PASSWORD_JUDGE2=…    # optional — the second judge (v163 race)
 RLS_TEST_PASSWORD_AG=…        # optional — the Attorney General
+RLS_TEST_PASSWORD_FIELD=…     # optional — the field-officer fixture (v188a/b officer legs, intel.spec); not provisioned, issue #299
 # optional overrides: RLS_TEST_SUPABASE_URL, RLS_TEST_ANON_KEY
 ```
 

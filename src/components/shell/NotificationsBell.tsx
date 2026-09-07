@@ -30,6 +30,7 @@ function ctaLabel(href: string): string {
   if (href.startsWith('/owner')) return 'Open Owner Console'
   if (href.startsWith('/profile')) return 'View your profile'
   if (href.startsWith('/guide')) return 'Open the field guide'
+  if (href.startsWith('/tools?tool=field-review')) return 'Open the record'
   return 'Open'
 }
 import { useTableVersion } from '@/lib/realtime'

@@ -166,6 +166,7 @@ export function prosecutorCoverageRow(
 
 export function personRow(overrides: Partial<Tables<'persons'>> = {}): Tables<'persons'> {
   return {
+    source_submission_id: null,
     phone_normalized: null,
     siu_hidden_flag: false,
     delete_batch: null,
@@ -536,6 +537,246 @@ export function reportExportRow(
     id: mockId(),
     verification_code: 'ABCDEF0123',
     version_number: null,
+    ...overrides,
+  }
+}
+
+/* ── Intelligence triage (Phase 6, migrations 20261030120000 → 20261031120000) ── */
+
+/** An intelligence record (field_submissions). Defaults to a SENT record
+ *  (`status: 'new'`, numbered) authored by an investigator in the city
+ *  jurisdiction; `officer_id` must be named (the author is the read wall's
+ *  first clause). A draft is `status: 'draft', submission_no: null`. */
+export function fieldSubmissionRow(
+  overrides: Partial<Tables<'field_submissions'>> & Pick<Tables<'field_submissions'>, 'officer_id'>,
+): Tables<'field_submissions'> {
+  const id = overrides.id ?? mockId()
+  return {
+    archive_reason: null,
+    archived_at: null,
+    archived_by: null,
+    assigned_at: null,
+    assigned_to: null,
+    created_at: mockTimestamp(),
+    created_by: overrides.officer_id,
+    delete_reason: null,
+    deleted_at: null,
+    deleted_by: null,
+    details: 'Mock intelligence details.',
+    id,
+    jurisdiction: 'city',
+    mdt_reference: null,
+    observed_at: null,
+    observed_precision: 'unknown',
+    observed_to: null,
+    rejected_at: null,
+    rejected_by: null,
+    reliability: null,
+    siu_assigned_at: null,
+    siu_assigned_to: null,
+    siu_case_id: null,
+    siu_category: null,
+    siu_reason: null,
+    siu_referred_at: null,
+    siu_referred_by: null,
+    siu_sensitive: false,
+    siu_state: null,
+    snap_agency: 'major_crimes',
+    snap_callsign: '4021',
+    snap_officer_name: 'Det. Mara Voss',
+    snap_rank: 'detective',
+    snap_unit: null,
+    source_codename: null,
+    source_type: 'detective',
+    status: 'new',
+    submission_no: `FI-26-${id.slice(-4)}`,
+    submitted_at: mockTimestamp(),
+    summary: 'Mock intelligence summary.',
+    updated_at: mockTimestamp(),
+    urgency: null,
+    validated_at: null,
+    validated_by: null,
+    ...overrides,
+  }
+}
+
+/** A person claim on a record. */
+export function fieldSubmissionPersonRow(
+  overrides: Partial<Tables<'field_submission_persons'>> & Pick<Tables<'field_submission_persons'>, 'submission_id'>,
+): Tables<'field_submission_persons'> {
+  return {
+    alias: null,
+    basis: 'observed',
+    created_at: mockTimestamp(),
+    description: null,
+    full_name: 'Mock Claimed Person',
+    id: mockId(),
+    note: null,
+    org_name: null,
+    org_role: null,
+    phone: null,
+    phone_normalized: null,
+    reason: null,
+    ...overrides,
+  }
+}
+
+/** An item / seizure claim on a record (the claim kind that converts to a narcotic). */
+export function fieldSubmissionItemRow(
+  overrides: Partial<Tables<'field_submission_items'>> & Pick<Tables<'field_submission_items'>, 'submission_id'>,
+): Tables<'field_submission_items'> {
+  return {
+    basis: 'observed',
+    category: 'narcotics',
+    created_at: mockTimestamp(),
+    description: 'Mock seized substance',
+    id: mockId(),
+    note: null,
+    package_count: null,
+    packaging: null,
+    quantity: null,
+    seized_from_location: null,
+    seized_from_person: null,
+    seized_from_vehicle: null,
+    suspected_substance: 'Mock substance',
+    tested: null,
+    weight_grams: null,
+    weight_unit: null,
+    weight_value: null,
+    ...overrides,
+  }
+}
+
+/** A verdict on one claim — exactly one of the claim columns is set. */
+export function fieldClaimVerdictRow(
+  overrides: Partial<Tables<'field_claim_verdicts'>> & Pick<Tables<'field_claim_verdicts'>, 'submission_id'>,
+): Tables<'field_claim_verdicts'> {
+  return {
+    decided_at: mockTimestamp(),
+    decided_by: null,
+    id: mockId(),
+    item_id: null,
+    location_id: null,
+    note: null,
+    org_id: null,
+    person_id: null,
+    vehicle_id: null,
+    verdict: 'verified',
+    ...overrides,
+  }
+}
+
+/** A claim → registry link (one claim column, one target column). */
+export function fieldClaimLinkRow(
+  overrides: Partial<Tables<'field_claim_links'>> & Pick<Tables<'field_claim_links'>, 'submission_id'>,
+): Tables<'field_claim_links'> {
+  return {
+    account_id: null,
+    claim_item_id: null,
+    claim_location_id: null,
+    claim_org_id: null,
+    claim_person_id: null,
+    claim_vehicle_id: null,
+    gang_id: null,
+    id: mockId(),
+    indicator_id: null,
+    linked_at: mockTimestamp(),
+    linked_by: null,
+    narcotic_id: null,
+    person_id: null,
+    place_id: null,
+    vehicle_id: null,
+    ...overrides,
+  }
+}
+
+/** A reviewer-private note (RPC-only since P6-02). */
+export function fieldSubmissionReviewRow(
+  overrides: Partial<Tables<'field_submission_reviews'>> & Pick<Tables<'field_submission_reviews'>, 'submission_id'>,
+): Tables<'field_submission_reviews'> {
+  return {
+    author_id: null,
+    created_at: mockTimestamp(),
+    id: mockId(),
+    note: 'Mock reviewer note.',
+    ...overrides,
+  }
+}
+
+/** A message on the officer thread (`from_reviewer` is trigger-stamped live). */
+export function fieldSubmissionMessageRow(
+  overrides: Partial<Tables<'field_submission_messages'>> & Pick<Tables<'field_submission_messages'>, 'submission_id'>,
+): Tables<'field_submission_messages'> {
+  return {
+    author_id: null,
+    body: 'Mock message to the officer.',
+    created_at: mockTimestamp(),
+    from_reviewer: true,
+    id: mockId(),
+    ...overrides,
+  }
+}
+
+/** The realtime shadow row (P6-06): status / assignee / SIB state only —
+ *  never a summary, a jurisdiction or a reason. */
+export function fieldSubmissionEventRow(
+  overrides: Partial<Tables<'field_submission_events'>> & Pick<Tables<'field_submission_events'>, 'submission_id'>,
+): Tables<'field_submission_events'> {
+  return {
+    assigned_to: null,
+    siu_state: null,
+    status: 'new',
+    updated_at: mockTimestamp(),
+    ...overrides,
+  }
+}
+
+/** An intelligence group (P6-03) — the lead record is always a member. */
+export function intelGroupRow(
+  overrides: Partial<Tables<'intel_groups'>> & Pick<Tables<'intel_groups'>, 'lead_submission_id'>,
+): Tables<'intel_groups'> {
+  return {
+    close_reason: null,
+    closed_at: null,
+    closed_by: null,
+    created_at: mockTimestamp(),
+    created_by: null,
+    id: mockId(),
+    note: null,
+    title: 'Mock intelligence group',
+    updated_at: mockTimestamp(),
+    ...overrides,
+  }
+}
+
+/** A group membership; a removed member keeps its row with `removed_*` set. */
+export function intelGroupMemberRow(
+  overrides: Partial<Tables<'intel_group_members'>> & Pick<Tables<'intel_group_members'>, 'group_id' | 'submission_id'>,
+): Tables<'intel_group_members'> {
+  return {
+    added_at: mockTimestamp(),
+    added_by: null,
+    id: mockId(),
+    note: null,
+    remove_reason: null,
+    removed_at: null,
+    removed_by: null,
+    ...overrides,
+  }
+}
+
+/** A case linked to a group (a group fact — members are not individually linked). */
+export function intelGroupCaseRow(
+  overrides: Partial<Tables<'intel_group_cases'>> & Pick<Tables<'intel_group_cases'>, 'group_id' | 'case_id'>,
+): Tables<'intel_group_cases'> {
+  return {
+    id: mockId(),
+    linked_at: mockTimestamp(),
+    linked_by: null,
+    note: null,
+    unlink_reason: null,
+    unlinked_at: null,
+    unlinked_by: null,
     ...overrides,
   }
 }
