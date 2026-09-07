@@ -44,17 +44,21 @@ export type FieldItemRow = Tables<'field_submission_items'>
  *  verdicts already say which claims are decided, and a coarser whole-record
  *  echo of them could only ever disagree.
  *
- *  'rejected' folded into 'archived'. It meant "this was worth nothing", which
- *  is one of the archive reasons -- and keeping both meant two ways to say the
- *  same thing, one of which read as an accusation about the person who sent it. */
+ *  'rejected' came back in Phase 6 (IT1) as a REVIEWER's word, not the
+ *  author's: a reviewer needs to tell "kept on file, may matter later" apart
+ *  from "should not be treated as intelligence", and the archive reasons were
+ *  carrying that distinction in free text. The author never sees the
+ *  difference -- both read as "Closed" below -- and never sees the reason. */
 export const FIELD_STATUSES = [
-  'draft', 'new', 'reviewing', 'needs_info', 'reviewed', 'actionable', 'archived',
+  'draft', 'new', 'reviewing', 'needs_info', 'reviewed', 'actionable', 'archived', 'rejected',
 ] as const
 export type FieldStatus = (typeof FIELD_STATUSES)[number]
 
 /** What each status means TO THE AUTHOR. Deliberately plain, and deliberately
  *  free of internal detail -- an author learns that their report was used, not
- *  how CID is working it. */
+ *  how CID is working it. Archived and rejected are the same word on purpose:
+ *  "nothing further is needed from you" is all the submitter is owed, and a
+ *  status that read as an accusation would only discourage the next report. */
 const STATUS_LABEL: Record<FieldStatus, string> = {
   draft: 'Draft',
   new: 'Sent',
@@ -62,10 +66,24 @@ const STATUS_LABEL: Record<FieldStatus, string> = {
   needs_info: 'Question for you',
   reviewed: 'Reviewed',
   actionable: 'Being acted on',
-  archived: 'Filed, no action',
+  archived: 'Closed',
+  rejected: 'Closed',
 }
 export function fieldStatusLabel(s: string): string {
   return STATUS_LABEL[s as FieldStatus] ?? s
+}
+
+/** What each status means TO A REVIEWER. The review screen needs the
+ *  distinction the author does not: "Filed, no action" is a record kept for
+ *  later, "Rejected" is one a reviewer decided should not be treated as
+ *  intelligence. Everything else reads as it does to the author. */
+export const REVIEWER_STATUS_LABEL: Record<FieldStatus, string> = {
+  ...STATUS_LABEL,
+  archived: 'Filed, no action',
+  rejected: 'Rejected',
+}
+export function reviewerStatusLabel(s: string): string {
+  return REVIEWER_STATUS_LABEL[s as FieldStatus] ?? s
 }
 
 const STATUS_MEANING: Record<FieldStatus, string> = {
@@ -75,7 +93,8 @@ const STATUS_MEANING: Record<FieldStatus, string> = {
   needs_info: 'An investigator has asked you something. Open it to answer.',
   reviewed: 'An investigator has read it and understood it. Nothing further is needed right now.',
   actionable: 'It is being acted on.',
-  archived: 'Kept on file. Nothing to act on right now -- it may still matter later.',
+  archived: 'Kept on file. Nothing further is needed from you.',
+  rejected: 'Kept on file. Nothing further is needed from you.',
 }
 export function fieldStatusMeaning(s: string): string {
   return STATUS_MEANING[s as FieldStatus] ?? ''

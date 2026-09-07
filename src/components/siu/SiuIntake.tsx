@@ -32,7 +32,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
 import { list, rpc, withRetry } from '@/lib/db'
+import { siuCategoryLabel, siuStateLabel, siuStateTone } from '@/lib/fieldSiu'
+import { jurisdictionLabel } from '@/lib/fieldSubmissions'
+import { intelReviewHref } from '@/lib/notifText'
 import { useSiu } from '@/lib/permissions'
+import { useToolNav } from '@/components/tools/useToolNav'
 import { SiuAccessQueue } from './SiuAccessRequest'
 import {
   SIU_CASE_CATEGORIES, SIU_CLASSIFICATIONS, SIU_CONFLICT_RESOLUTIONS,
@@ -58,11 +62,35 @@ const fmtWhen = (v?: string | null) =>
 /** Referrals still needing a decision. */
 const OPEN_STATUSES = ['submitted', 'under_review', 'info_requested']
 
+/** One row of `siu_referred_submissions()` (P6-07): the cross-link from a
+ *  Field Intelligence report SIB was asked to take. The RPC returns the id,
+ *  the number and the SIB handling columns -- never the summary. It answers
+ *  agents only (`private.siu_is_agent()`), zero rows for oversight, so this
+ *  list sits behind the same nothing-here surface as the referral queue. */
+interface ReferredSubmission {
+  id: string
+  submission_no: string | null
+  siu_category: string | null
+  siu_state: string | null
+  siu_referred_at: string | null
+  siu_referred_by: string | null
+  siu_assigned_to: string | null
+  siu_case_id: string | null
+  jurisdiction: string | null
+}
+
+async function fetchReferredSubmissions(): Promise<ReferredSubmission[]> {
+  const res = await rpc('siu_referred_submissions', {})
+  if (res.error || !Array.isArray(res.data)) return []
+  return res.data as unknown as ReferredSubmission[]
+}
+
 export function SiuIntakeSection() {
   const siu = useSiu()
   const [rows, setRows] = useState<SiuReferral[]>([])
   const [conflicts, setConflicts] = useState<SiuConflict[]>([])
   const [access, setAccess] = useState<SiuAccessRequest[]>([])
+  const [intel, setIntel] = useState<ReferredSubmission[]>([])
   const [people, setPeople] = useState<Tables<'profiles'>[]>([])
   const [loading, setLoading] = useState(true)
   const [showClosed, setShowClosed] = useState(false)
@@ -70,14 +98,16 @@ export function SiuIntakeSection() {
 
   const load = useCallback(async () => {
     try {
-      const [r, k, p, a] = await Promise.all([
+      const [r, k, p, a, fi] = await Promise.all([
         withRetry(() => fetchSiuReferrals()),
         withRetry(() => fetchSiuConflicts()),
         withRetry(() => list('profiles', { order: 'display_name', limit: 500 })),
         // Command-only by RLS; an ordinary agent simply gets an empty list.
         withRetry(() => fetchSiuAccessRequests()).catch((): SiuAccessRequest[] => []),
+        // Agents only server-side; fail-open to none, like the rest.
+        fetchReferredSubmissions().catch((): ReferredSubmission[] => []),
       ])
-      setRows(r); setConflicts(k); setPeople(p); setAccess(a)
+      setRows(r); setConflicts(k); setPeople(p); setAccess(a); setIntel(fi)
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'danger')
     } finally { setLoading(false) }
@@ -188,6 +218,8 @@ export function SiuIntakeSection() {
         )}
       </Card>
 
+      <ReferredIntel rows={intel} nameOf={nameOf} />
+
       <Card>
         <SectionHeader
           title="Conflicts of interest"
@@ -240,6 +272,63 @@ export function SiuIntakeSection() {
         />
       )}
     </div>
+  )
+}
+
+/* ------------------------------------------------------ referred field intel */
+
+/** Field Intelligence reports referred to (or accepted by) SIB. The report
+ *  stays CID's -- "a referral is not a disappearance" -- so each row opens it
+ *  in the Intelligence review tool rather than copying anything here. */
+function ReferredIntel({ rows, nameOf }: {
+  rows: ReferredSubmission[]
+  nameOf: (id?: string | null) => string | null
+}) {
+  const nav = useToolNav()
+  const waiting = rows.filter((r) => r.siu_state === 'referred').length
+  return (
+    <Card>
+      <SectionHeader
+        title="Referred from field intelligence"
+        subtitle="Reports CID asked SIB to take. Accept or decline on the report itself; it keeps its FI number and its queue either way."
+        actions={waiting > 0
+          ? <Badge tint="bg-amber-500/15 text-amber-300">{waiting} awaiting a decision</Badge>
+          : undefined}
+      />
+      {!rows.length ? (
+        <p className="mt-3 text-xs text-slate-400">No field intelligence has been referred.</p>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {rows.map((r) => (
+            <li key={r.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={siuStateTone(r.siu_state)}>{siuStateLabel(r.siu_state)}</Badge>
+                <Badge tone="neutral">{siuCategoryLabel(r.siu_category)}</Badge>
+                <button type="button"
+                  className="font-mono text-sm font-semibold text-slate-100 underline-offset-2 hover:underline"
+                  onClick={() => nav.openHref(intelReviewHref(r.id))}>
+                  {r.submission_no ?? 'Field report'}
+                </button>
+                <span className="ml-auto text-[11px] text-slate-400">{fmtWhen(r.siu_referred_at)}</span>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
+                <span>{jurisdictionLabel(r.jurisdiction)}</span>
+                {r.siu_referred_by && <span>Referred by {nameOf(r.siu_referred_by) ?? 'a CID investigator'}</span>}
+                {r.siu_assigned_to && <span>SIB: {nameOf(r.siu_assigned_to) ?? 'a Special Agent'}</span>}
+                {r.siu_case_id && <span className="text-emerald-300/80">Investigation linked</span>}
+                <button
+                  type="button"
+                  className="ml-auto text-sky-300 underline-offset-2 hover:underline"
+                  onClick={() => nav.openHref(intelReviewHref(r.id))}
+                >
+                  Open the report
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   )
 }
 

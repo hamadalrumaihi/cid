@@ -878,6 +878,105 @@ recorded with one, an arrest-warrant draft self-sealing on submit,
 refused with an open task, a direct waive refused, the director waiving and
 the closure submitting, reviewers and the author notified.
 
+**Phase 6 — Intel triage (P6-01 … P6-08).**
+
+**P6-01 / P6-02 / P6-05 / P6-06 rejected status, comments, validation,
+notifications and realtime.** `20261030120000_intel_triage.sql` (applied as
+`intel_triage`, then `intel_triage_perm_raise` — the authority refusals of
+the new RPCs raise through `private.perm_raise` (SQLSTATE P0403) because a
+`perm_deny` row written before a RAISE rolls back with the statement):
+`rejected` in the status CHECK and `private.field_submission_transition_ok`
+(terminal for reviewers; only a Bureau Lead or above restores it, to
+reviewing), `rejected_at / rejected_by` and `validated_at / validated_by`
+(the reason and the note are never row columns — see the follow-up below),
+`private.block_direct_intel_review_columns` (a NON-definer BEFORE UPDATE
+guard: a client session cannot flip the status to rejected or touch the
+rejected / validated / assignment / SIB columns), `field_submission_reject`,
+`field_submission_restore` re-emitted (from rejected = command),
+`field_submission_comment` (a reviewer-private note or a message the officer
+reads; `field_submission_reviews_ins` dropped and `field_submission_messages_ins`
+narrowed to the officer's own reply while a question is open),
+`field_submission_validate` (the explicit mark needs every claim decided and
+the source graded; withdrawing needs a note) with the derived flag in the
+re-created `field_submission_counts`, `private.intel_reviewers` /
+`intel_notify` (kinds `intel_new` to command, `intel_assigned`,
+`intel_question` — the only kind a submitter receives — `intel_reply`,
+`intel_referred` to SIB agents; minimal payloads, never a summary; test-actor
+suppression as `report_notify`), the `field_submission_events` realtime
+shadow table (id / status / assigned_to / siu_state / updated_at, read
+through `private.field_submission_readable`, drafts and deleted rows never
+mirrored) maintained by `private.field_submission_after_change`, and
+`rls_test_cleanup` spliced to delete the fixtures' own records. Verified at
+apply time in a rolled-back transaction: the shadow row appearing on send and
+never for a draft, a direct `status = 'rejected'` / `validated_at` write
+refused by the guard, a direct note insert `42501`, both comment branches,
+validate refused until the claim was decided and the source graded then
+allowed once, reject with a reason (the shadow row following), decide from
+rejected refused, restore refused for a detective and allowed for the
+director, `intel_new` to command, `intel_assigned` to the assignee,
+`intel_question` to the author, `intel_referred` to the agents, no payload
+carrying summary / details / reason text.
+
+**P6-03 / P6-04 / P6-07 / P6-08 groups, extended links, convert, the SIB
+cross-link and the catalog.** `20261031120000_intel_groups_convert.sql`
+(applied as `intel_groups_convert`, then `intel_groups_convert_policy_grant`
+— the policy helper `private.intel_group_readable` needs EXECUTE for
+`authenticated`): `intel_groups` / `intel_group_members` /
+`intel_group_cases` (SELECT through the readable lead / member record;
+RPC-only writes; a group never merges, deletes or edits a member),
+`intel_group_create / _add / _remove / _link_case / _unlink_case / _close /
+_reopen`, `intel_group_suggest` (the repeat signal: readable records sharing
+a named or linked signal and the live groups they belong to — numbers and
+labels only), `intel_group_summary`, `field_submission_dependencies` gaining
+`intel groups`; `field_claim_links` widened with `claim_item_id` and
+`narcotic_id / account_id / indicator_id` under the claim → target pair rule
+(`private.field_claim_pair_ok`; an indicator needs case visibility;
+targets must be live and visible), `field_claim_link` and
+`field_submission_repeats` re-emitted, `source_submission_id` on the six
+registries, `field_submission_convert` (the registry's own duplicate
+matcher answers `{ok:false, code:'duplicate', matches}` — filtered to what
+the caller may see — until a reason is given; the record carries the
+provenance pointer and the claim is linked), `siu_referred_submissions`
+(SIB agents only — never oversight standing), the `field_submission` arm of
+`private.perm_dispatch` (read / reject / restore / comment / validate /
+group / convert / link / assign / delete / undelete) with ten catalog rows,
+and `rls_test_cleanup` spliced for the fixtures' groups. Verified at apply
+time in a rolled-back transaction: a group of two with the lead refused
+removal, a member removed and re-added, a case linked, the summary and the
+suggestion (the grouped record excluded), a closed group refusing a member,
+a direct group insert `42501`, a person claim refused a narcotic target, an
+item claim converted to a narcotic then a second item linked to it (twice
+refused), a bogus indicator refused, a person claim converted with the
+provenance pointer and the claim linked, the same name on a second record
+answered `duplicate` then created with a reason and the note appended,
+`can_record` answering the new arm, zero referred rows for the Director's
+oversight standing and the rows for an agent.
+
+**Security-review follow-up** (applied as `intel_review_fixes`, folded into
+both repo files): the guard trigger is BEFORE INSERT OR UPDATE — a client
+INSERT with any review / SIB / grade column set is refused and a client
+UPDATE of a sent record is refused outright (the author's draft editor is the
+only client UPDATE path; this also closes the tombstone bypass of the
+account-column protection); the definer insert trigger resets those columns
+for every caller; `reject_reason` and `validation_note` are dropped from the
+row — the author reads their own row — and live only in the reviewer-private
+note and the audit row; the shadow keeps a soft-deleted record as status
+`deleted` (an UPDATE the wall filters) instead of a DELETE event that hands
+its key to every subscriber; `intel_new` is throttled per actor; the repeat
+signal and the suggestion name a linked record only when the reader may see
+it; `intel_group_cases` is readable only with case visibility; the convert
+payload's enum fields are validated with the RPC's own wording and a
+non-manager's converted narcotic lands unidentified / unverified;
+`perm_denied_ack` records only a refusal the server agrees with, for a
+catalogued pair, at most twenty rows per actor per ten minutes, and
+`src/lib/db.ts` acknowledges a P0403 automatically. Verified in a rolled-back
+transaction: a forged sensitive / validated insert refused, a draft edit
+allowed, the author's archive and the tombstone bypass refused, the reason
+only in the note, the P0403 restore refusal acknowledged once and an allowed
+or uncatalogued claim refused, a bad date of birth refused with the RPC's
+wording, a soft-deleted record's shadow row `deleted` and invisible to a
+detective.
+
 | Version (live) | Name | Repo file |
 |---|---|---|
 | applied via MCP (`entity_normalization`, `entity_normalization_phone_fix`) | entity_normalization | `20261014120000_entity_normalization.sql` |
@@ -896,6 +995,8 @@ the closure submitting, reviewers and the author notified.
 | applied via MCP (`legal_sweeps`, `legal_review_fixes`) | legal_sweeps | `20261027120000_legal_sweeps.sql` |
 | applied via MCP (`report_templates`) | report_templates | `20261028120000_report_templates.sql` |
 | applied via MCP (`report_review`, `report_review_entity_exists`, `report_review_fixes`) | report_review | `20261029120000_report_review.sql` |
+| applied via MCP (`intel_triage`, `intel_triage_perm_raise`, `intel_review_fixes`) | intel_triage | `20261030120000_intel_triage.sql` |
+| applied via MCP (`intel_groups_convert`, `intel_groups_convert_policy_grant`, `intel_review_fixes`) | intel_groups_convert | `20261031120000_intel_groups_convert.sql` |
 | applied via MCP (`record_versions`) | record_versions | `20261011120000_record_versions.sql` |
 | applied via MCP (`case_access_grant_expiry`) | case_access_grant_expiry | `20261012120000_case_access_grant_expiry.sql` |
 | applied via MCP (`permanent_delete_record`, `permanent_delete_record_preview_fix`) | permanent_delete_record | `20261013120000_permanent_delete_record.sql` |

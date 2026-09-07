@@ -138,6 +138,7 @@ export type Database = {
       }
       accounts: {
         Row: {
+          source_submission_id: string | null
           category: string | null
           created_at: string
           created_by: string | null
@@ -164,6 +165,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          source_submission_id?: string | null
           category?: string | null
           created_at?: string
           created_by?: string | null
@@ -188,6 +190,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          source_submission_id?: string | null
           category?: string | null
           created_at?: string
           created_by?: string | null
@@ -3405,6 +3408,10 @@ export type Database = {
       }
       field_claim_links: {
         Row: {
+          claim_item_id: string | null
+          account_id: string | null
+          indicator_id: string | null
+          narcotic_id: string | null
           claim_location_id: string | null
           claim_org_id: string | null
           claim_person_id: string | null
@@ -3419,6 +3426,10 @@ export type Database = {
           vehicle_id: string | null
         }
         Insert: {
+          claim_item_id?: string | null
+          account_id?: string | null
+          indicator_id?: string | null
+          narcotic_id?: string | null
           claim_location_id?: string | null
           claim_org_id?: string | null
           claim_person_id?: string | null
@@ -3433,6 +3444,10 @@ export type Database = {
           vehicle_id?: string | null
         }
         Update: {
+          claim_item_id?: string | null
+          account_id?: string | null
+          indicator_id?: string | null
+          narcotic_id?: string | null
           claim_location_id?: string | null
           claim_org_id?: string | null
           claim_person_id?: string | null
@@ -3767,6 +3782,38 @@ export type Database = {
             foreignKeyName: "field_submission_sources_submission_id_fkey"
             columns: ["submission_id"]
             isOneToOne: true
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      field_submission_events: {
+        Row: {
+          assigned_to: string | null
+          siu_state: string | null
+          status: string
+          submission_id: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          siu_state?: string | null
+          status: string
+          submission_id: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          siu_state?: string | null
+          status?: string
+          submission_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_submission_events_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
             referencedRelation: "field_submissions"
             referencedColumns: ["id"]
           },
@@ -4202,6 +4249,10 @@ export type Database = {
       }
       field_submissions: {
         Row: {
+          rejected_at: string | null
+          rejected_by: string | null
+          validated_at: string | null
+          validated_by: string | null
           assigned_at: string | null
           assigned_to: string | null
           created_at: string
@@ -4245,6 +4296,10 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          rejected_at?: string | null
+          rejected_by?: string | null
+          validated_at?: string | null
+          validated_by?: string | null
           assigned_at?: string | null
           assigned_to?: string | null
           created_at?: string
@@ -4288,6 +4343,10 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          rejected_at?: string | null
+          rejected_by?: string | null
+          validated_at?: string | null
+          validated_by?: string | null
           assigned_at?: string | null
           assigned_to?: string | null
           created_at?: string
@@ -4623,6 +4682,7 @@ export type Database = {
       }
       gangs: {
         Row: {
+          source_submission_id: string | null
           aliases: string | null
           classification: string | null
           colors: string | null
@@ -4648,6 +4708,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          source_submission_id?: string | null
           aliases?: string | null
           classification?: string | null
           colors?: string | null
@@ -4673,6 +4734,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          source_submission_id?: string | null
           aliases?: string | null
           classification?: string | null
           colors?: string | null
@@ -4875,6 +4937,155 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      intel_group_cases: {
+        Row: {
+          case_id: string
+          group_id: string
+          id: string
+          linked_at: string
+          linked_by: string | null
+          note: string | null
+          unlink_reason: string | null
+          unlinked_at: string | null
+          unlinked_by: string | null
+        }
+        Insert: {
+          case_id: string
+          group_id: string
+          id?: string
+          linked_at?: string
+          linked_by?: string | null
+          note?: string | null
+          unlink_reason?: string | null
+          unlinked_at?: string | null
+          unlinked_by?: string | null
+        }
+        Update: {
+          case_id?: string
+          group_id?: string
+          id?: string
+          linked_at?: string
+          linked_by?: string | null
+          note?: string | null
+          unlink_reason?: string | null
+          unlinked_at?: string | null
+          unlinked_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intel_group_cases_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "intel_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intel_group_cases_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      intel_group_members: {
+        Row: {
+          added_at: string
+          added_by: string | null
+          group_id: string
+          id: string
+          note: string | null
+          remove_reason: string | null
+          removed_at: string | null
+          removed_by: string | null
+          submission_id: string
+        }
+        Insert: {
+          added_at?: string
+          added_by?: string | null
+          group_id: string
+          id?: string
+          note?: string | null
+          remove_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          submission_id: string
+        }
+        Update: {
+          added_at?: string
+          added_by?: string | null
+          group_id?: string
+          id?: string
+          note?: string | null
+          remove_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intel_group_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "intel_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intel_group_members_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      intel_groups: {
+        Row: {
+          close_reason: string | null
+          closed_at: string | null
+          closed_by: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          lead_submission_id: string
+          note: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          close_reason?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lead_submission_id: string
+          note?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          close_reason?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lead_submission_id?: string
+          note?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intel_groups_lead_submission_id_fkey"
+            columns: ["lead_submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       justice_membership_request_history: {
         Row: {
@@ -7959,6 +8170,7 @@ export type Database = {
       }
       narcotics: {
         Row: {
+          source_submission_id: string | null
           appearance: string | null
           category: string
           charge_codes: Json
@@ -7998,6 +8210,7 @@ export type Database = {
           wholesale_price: number | null
         }
         Insert: {
+          source_submission_id?: string | null
           appearance?: string | null
           category?: string
           charge_codes?: Json
@@ -8036,6 +8249,7 @@ export type Database = {
           wholesale_price?: number | null
         }
         Update: {
+          source_submission_id?: string | null
           appearance?: string | null
           category?: string
           charge_codes?: Json
@@ -8899,6 +9113,7 @@ export type Database = {
       }
       persons: {
         Row: {
+          source_submission_id: string | null
           alias: string | null
           bolo: boolean
           bolo_case_id: string | null
@@ -8943,6 +9158,7 @@ export type Database = {
           vch: number | null
         }
         Insert: {
+          source_submission_id?: string | null
           alias?: string | null
           bolo?: boolean
           bolo_case_id?: string | null
@@ -8987,6 +9203,7 @@ export type Database = {
           vch?: number | null
         }
         Update: {
+          source_submission_id?: string | null
           alias?: string | null
           bolo?: boolean
           bolo_case_id?: string | null
@@ -9113,6 +9330,7 @@ export type Database = {
       }
       places: {
         Row: {
+          source_submission_id: string | null
           area: string | null
           case_id: string | null
           controlling_gang_id: string | null
@@ -9132,6 +9350,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          source_submission_id?: string | null
           area?: string | null
           case_id?: string | null
           controlling_gang_id?: string | null
@@ -9151,6 +9370,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          source_submission_id?: string | null
           area?: string | null
           case_id?: string | null
           controlling_gang_id?: string | null
@@ -12399,6 +12619,7 @@ export type Database = {
       }
       vehicles: {
         Row: {
+          source_submission_id: string | null
           color: string | null
           created_at: string
           created_by: string | null
@@ -12417,6 +12638,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          source_submission_id?: string | null
           color?: string | null
           created_at?: string
           created_by?: string | null
@@ -12435,6 +12657,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          source_submission_id?: string | null
           color?: string | null
           created_at?: string
           created_by?: string | null
@@ -13445,6 +13668,72 @@ export type Database = {
         Args: { p_submission: string }
         Returns: Json
       }
+      field_submission_reject: {
+        Args: { p_reason: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_comment: {
+        Args: { p_body: string; p_submission: string; p_visible_to_officer?: boolean }
+        Returns: string
+      }
+      field_submission_validate: {
+        Args: { p_clear?: boolean; p_note: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_convert: {
+        Args: { p_claim: string; p_claim_kind: string; p_kind: string; p_payload: Json; p_reason?: string }
+        Returns: Json
+      }
+      intel_group_create: {
+        Args: { p_lead: string; p_members?: string[]; p_note?: string; p_title: string }
+        Returns: string
+      }
+      intel_group_add: {
+        Args: { p_group: string; p_note?: string; p_submission: string }
+        Returns: undefined
+      }
+      intel_group_remove: {
+        Args: { p_group: string; p_reason: string; p_submission: string }
+        Returns: undefined
+      }
+      intel_group_link_case: {
+        Args: { p_case: string; p_group: string; p_note?: string }
+        Returns: string
+      }
+      intel_group_unlink_case: {
+        Args: { p_case: string; p_group: string; p_reason: string }
+        Returns: undefined
+      }
+      intel_group_close: {
+        Args: { p_group: string; p_reason: string }
+        Returns: undefined
+      }
+      intel_group_reopen: {
+        Args: { p_group: string; p_reason: string }
+        Returns: undefined
+      }
+      intel_group_suggest: {
+        Args: { p_submission: string }
+        Returns: Json
+      }
+      intel_group_summary: {
+        Args: { p_group: string }
+        Returns: Json
+      }
+      siu_referred_submissions: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          jurisdiction: string | null
+          siu_assigned_to: string | null
+          siu_case_id: string | null
+          siu_category: string | null
+          siu_referred_at: string | null
+          siu_referred_by: string | null
+          siu_state: string | null
+          submission_no: string | null
+        }[]
+      }
       field_submission_ask: {
         Args: { p_question: string; p_submission: string }
         Returns: undefined
@@ -13618,6 +13907,9 @@ export type Database = {
       field_submission_counts: {
         Args: Record<PropertyKey, never>
         Returns: {
+          claims: number
+          decided: number
+          validated: boolean
           evidence: number
           items: number
           locations: number

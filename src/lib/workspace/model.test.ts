@@ -245,5 +245,11 @@ describe('workspace model — URL contract', () => {
     expect(mirrorParams(new URLSearchParams('tool=persons&section=identity'), rec).toString()).toBe('tool=vehicles&section=identity&record=v1')
     // Directory → nothing tab-related remains.
     expect(mirrorParams(new URLSearchParams('tool=persons&record=p1&case=c1&tab=x&q=1'), null).toString()).toBe('q=1')
+    // A generic `record` on a tool WITHOUT record tabs is a list seed: it is
+    // carried under the tool's own param (`/tools?tool=field-review&record=X`
+    // from a notification → `?tool=field-review&submission=X`), never dropped.
+    const intel = openTool(EMPTY_WORKSPACE, 'field-review').tabs[0]
+    expect(mirrorParams(new URLSearchParams('tool=field-review&record=s1'), intel).toString()).toBe('tool=field-review&submission=s1')
+    expect(mirrorParams(new URLSearchParams('tool=field-review&submission=s2&record=s1'), intel).toString()).toBe('tool=field-review&submission=s2')
   })
 })

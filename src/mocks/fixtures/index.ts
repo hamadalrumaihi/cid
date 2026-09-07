@@ -4,6 +4,8 @@ export {
   caseChargeRow, caseLinkRow, caseNoteRow, caseRow, caseTaskRow, justiceMembershipRow,
   legalHoldRow, legalRequestExhibitRow, legalRequestRow, mediaRow, notificationRow, personRow, prosecutorCoverageRow,
   reportEntityRow, reportExportRow, reportRow, reportTemplateRow, reportTemplateVersionRow,
+  fieldClaimLinkRow, fieldClaimVerdictRow, fieldSubmissionEventRow, fieldSubmissionItemRow, fieldSubmissionMessageRow,
+  fieldSubmissionPersonRow, fieldSubmissionReviewRow, fieldSubmissionRow, intelGroupCaseRow, intelGroupMemberRow, intelGroupRow,
 } from './rows'
 export {
   emptyCase, populatedCase, archivedCase, legalHoldCase, restrictedMediaCase,

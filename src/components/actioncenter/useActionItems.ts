@@ -156,10 +156,12 @@ export function useActionItems(): ActionItemsResult {
   const vSurvTgt = useTableVersion('surveillance_targets')
   const vDrafts = useTableVersion('user_drafts')
   const vPersons = useTableVersion('persons')
-  // NOTE: field_submissions is NOT in the realtime publication — this counter
-  // never moves (silent no-op). The unclaimed-intel rows still refresh on
-  // every other trigger (visibility catch-up, manual Refresh, sibling bumps).
-  const vFieldSubs = useTableVersion('field_submissions')
+  // field_submissions itself is NOT in the realtime publication (its rows
+  // carry the report text). The shadow table field_submission_events (P6-06)
+  // is: status / assignee / SIB state and nothing else, RLS-filtered to what
+  // the viewer could read — so the unclaimed-intel lane refreshes on a claim,
+  // a decision or a new send without the summary ever crossing the wire.
+  const vFieldSubs = useTableVersion('field_submission_events')
 
   const refresh = useCallback(async () => {
     if (state !== 'in' || !profile) return

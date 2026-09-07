@@ -9,14 +9,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   AUTHORABLE_SOURCES, FIELD_STATUSES, RELIABILITIES, RELIABILITY_LABEL,
-  RELIABILITY_MEANING, SOURCE_TYPES, URGENCIES, URGENCY_LABEL, fieldStatusLabel,
-  fieldStatusMeaning, isEditableByOfficer, isExternalSource, normalizedGrams,
-  reliabilityLabel, sourceLabel, submissionRef, submitProblem, urgencyLabel,
-  urgencyTone, weightProblem,
+  RELIABILITY_MEANING, REVIEWER_STATUS_LABEL, SOURCE_TYPES, URGENCIES, URGENCY_LABEL,
+  fieldStatusLabel, fieldStatusMeaning, isEditableByOfficer, isExternalSource,
+  normalizedGrams, reliabilityLabel, reviewerStatusLabel, sourceLabel, submissionRef,
+  submitProblem, urgencyLabel, urgencyTone, weightProblem,
 } from './fieldSubmissions'
 import type { FieldSubmissionRow } from './fieldSubmissions'
 
 const sub = (over: Partial<FieldSubmissionRow> = {}): FieldSubmissionRow => ({
+  rejected_at: null, rejected_by: null, validated_at: null, validated_by: null,
   id: 's1', submission_no: null, officer_id: 'u1', snap_agency: 'SAHP',
   snap_callsign: '924', snap_rank: null, snap_unit: null,
   snap_officer_name: 'Tom Wood',
@@ -136,6 +137,34 @@ describe('status wording', () => {
       expect(fieldStatusLabel(s).toLowerCase()).not.toContain('ticket')
       expect(fieldStatusMeaning(s).toLowerCase()).not.toContain('ticket')
     }
+  })
+
+  it('tells the submitter "Closed" for archived AND rejected, and never why', () => {
+    // IT1: the author is owed "nothing further is needed from you" and not a
+    // verdict on their report. The reason lives in a reviewer-private note.
+    expect(fieldStatusLabel('archived')).toBe('Closed')
+    expect(fieldStatusLabel('rejected')).toBe('Closed')
+    expect(fieldStatusMeaning('rejected')).toBe(fieldStatusMeaning('archived'))
+    expect(fieldStatusMeaning('rejected')).toMatch(/Nothing further is needed from you/)
+    for (const s of ['archived', 'rejected']) {
+      expect(fieldStatusLabel(s).toLowerCase()).not.toContain('reject')
+      expect(fieldStatusMeaning(s).toLowerCase()).not.toContain('reject')
+    }
+  })
+
+  it('tells a reviewer the difference the submitter is not shown', () => {
+    expect(reviewerStatusLabel('archived')).toBe('Filed, no action')
+    expect(reviewerStatusLabel('rejected')).toBe('Rejected')
+    // Everything else reads the same on both surfaces.
+    for (const s of FIELD_STATUSES.filter((s) => s !== 'archived' && s !== 'rejected')) {
+      expect(reviewerStatusLabel(s), s).toBe(fieldStatusLabel(s))
+      expect(REVIEWER_STATUS_LABEL[s], s).toBeTruthy()
+    }
+    expect(reviewerStatusLabel('something_new')).toBe('something_new')
+  })
+
+  it('includes rejected in the status vocabulary', () => {
+    expect(FIELD_STATUSES).toContain('rejected')
   })
 
   it('falls back to the raw value for a status it does not know', () => {

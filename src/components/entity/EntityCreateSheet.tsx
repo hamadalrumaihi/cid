@@ -8,7 +8,9 @@
  *  that is appended to the record's notes (EA1: never hard-block, EA10:
  *  reuse is the default). Saving is a plain RLS-audited insert — the server's
  *  partial unique index means a plate CID cannot see never errors, while a
- *  live duplicate plate still answers 23505 and is offered as Use existing. */
+ *  live duplicate plate still answers 23505 and is offered as Use existing.
+ *  A caller with its own save path (the claim conversion RPC, P6-04) hands it
+ *  in as `submit`; a `duplicates` answer from it lands in the same panel. */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TablesInsert } from '@/lib/database.types'
 import { insert, type DbError } from '@/lib/db'
@@ -52,6 +54,10 @@ async function insertRecord(kind: MergeKind, values: Record<string, string>): Pr
   }
 }
 
+/** What a `submit` override answers: the insert's shape, plus the server's
+ *  own duplicate verdict when it refused for that reason. */
+export interface SheetSubmitResult { id: string | null; error: DbError | null; duplicates?: DuplicateRow[] }
+
 const toHit = (kind: MergeKind, r: DuplicateRow): EntityHit =>
   ({ id: r.id, label: r.label, sublabel: r.sublabel ?? undefined, meta: { kind } })
 
@@ -65,11 +71,16 @@ export interface EntityCreateSheetProps {
   caseId?: string
   /** Offers Merge on the strong matches when two or more already exist. */
   allowMerge?: boolean
+  /** Replaces the direct insert. Receives the trimmed CREATE_FIELDS values
+   *  and, once the user has answered a strong match, their "create anyway"
+   *  reason — the override is the callee's to record, so nothing is appended
+   *  to the notes here. `duplicates` in the answer renders the panel. */
+  submit?: (values: Record<string, string>, reason?: string) => Promise<SheetSubmitResult>
   onCreated: (hit: EntityHit) => void
   onUseExisting: (hit: EntityHit) => void
 }
 
-export function EntityCreateSheet({ kind, open, onClose, initial, allowMerge, onCreated, onUseExisting }: EntityCreateSheetProps) {
+export function EntityCreateSheet({ kind, open, onClose, initial, allowMerge, submit, onCreated, onUseExisting }: EntityCreateSheetProps) {
   const fields = CREATE_FIELDS[kind]
   const [values, setValues] = useState<Record<string, string>>({})
   /** The last duplicate answer, keyed by the payload it answered — a stale
@@ -142,13 +153,22 @@ export function EntityCreateSheet({ kind, open, onClose, initial, allowMerge, on
     setError(null)
     const row: Record<string, string> = {}
     for (const f of fields) { const v = values[f.key]?.trim(); if (v) row[f.key] = v }
-    if (strong.length) {
+    if (strong.length && !submit) {
       const col = NOTES_COLUMN[kind]
       const line = `Created despite duplicate warning: ${override.trim()}`
       row[col] = row[col] ? `${row[col]}\n\n${line}` : line
     }
-    const res = await insertRecord(kind, row)
+    const res: SheetSubmitResult = submit
+      ? await submit(row, strong.length ? override.trim() : undefined)
+      : await insertRecord(kind, row)
     setBusy(false)
+    if (res.duplicates?.length) {
+      // The server's verdict outranks the debounced preview: show its rows so
+      // the buttons flip to Use existing / Create anyway.
+      setDupes(res.duplicates)
+      setError(`This ${label} may already exist.`)
+      return
+    }
     if (res.error || !res.id) {
       if (res.error?.code === '23505') {
         setError(kind === 'vehicle' ? 'That plate already exists.' : `That ${label} already exists.`)

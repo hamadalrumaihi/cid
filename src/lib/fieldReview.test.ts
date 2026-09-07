@@ -10,15 +10,16 @@
 import { describe, expect, it } from 'vitest'
 import { FIELD_STATUSES, type FieldSubmissionRow } from './fieldSubmissions'
 import {
-  ARCHIVE_REASONS, DELETED_FILTER, OPEN_STATUSES, QUEUE_FILTERS, QUEUE_LABEL,
+  ARCHIVE_REASONS, DELETED_FILTER, NON_ROW_FILTERS, OPEN_STATUSES, QUEUE_FILTERS, QUEUE_LABEL,
   assignmentLine, awaitingReviewer, countsSummary, isOpen, matchesFilter,
-  repeatLine, reviewNext, reviewPrompt,
+  readyToValidate, repeatLine, reviewNext, reviewPrompt, validationStale,
 } from './fieldReview'
 import type {
   FieldAssignmentRow, FieldMessageRow, RepeatSignal, SubmissionCounts,
 } from './fieldReview'
 
 const sub = (over: Partial<FieldSubmissionRow> = {}): FieldSubmissionRow => ({
+  rejected_at: null, rejected_by: null, validated_at: null, validated_by: null,
   id: 's1', submission_no: 'FI-2026-0001', officer_id: 'u1', snap_agency: 'SAHP',
   snap_callsign: '924', snap_rank: null, snap_unit: null,
   snap_officer_name: 'Tom Wood',
@@ -87,6 +88,15 @@ describe('the review lane', () => {
     expect(reviewNext('nonsense')).toEqual([])
   })
 
+  it('never offers rejected through the decide control, and nothing out of rejected', () => {
+    // Rejecting needs a reason (field_submission_reject); a rejected record
+    // leaves only through a command restore. decide refuses both.
+    for (const s of FIELD_STATUSES) {
+      expect(reviewNext(s), s).not.toContain('rejected')
+    }
+    expect(reviewNext('rejected')).toEqual([])
+  })
+
   it('every offered outcome is a real status', () => {
     for (const s of FIELD_STATUSES) {
       for (const to of reviewNext(s)) {
@@ -147,7 +157,8 @@ describe('spotting a reply that is waiting', () => {
 
 const counts = (over: Partial<SubmissionCounts> = {}): SubmissionCounts => ({
   submission_id: 's1', persons: 0, vehicles: 0, orgs: 0,
-  locations: 0, items: 0, evidence: 0, ...over,
+  locations: 0, items: 0, evidence: 0,
+  claims: 0, decided: 0, validated: false, ...over,
 })
 
 const asg = (over: Partial<FieldAssignmentRow> = {}): FieldAssignmentRow => ({
@@ -208,7 +219,30 @@ describe('the queues', () => {
     expect(matchesFilter(sub({ status: 'archived' }), 'processed', ME)).toBe(true)
     expect(matchesFilter(sub({ status: 'reviewed' }), 'processed', ME)).toBe(true)
     expect(matchesFilter(sub({ status: 'actionable' }), 'processed', ME)).toBe(true)
+    expect(matchesFilter(sub({ status: 'rejected' }), 'processed', ME)).toBe(true)
     expect(matchesFilter(sub({ status: 'needs_info' }), 'processed', ME)).toBe(false)
+  })
+
+  it('keeps a rejected record in its own queue and out of the working ones', () => {
+    const r = sub({ status: 'rejected', assigned_to: null })
+    expect(QUEUE_FILTERS).toContain('rejected')
+    expect(matchesFilter(r, 'rejected', ME)).toBe(true)
+    expect(matchesFilter(r, 'archived', ME)).toBe(false)
+    expect(matchesFilter(r, 'unclaimed', ME)).toBe(false)
+    expect(matchesFilter(r, 'all', ME)).toBe(true)
+    expect(matchesFilter(sub({ status: 'archived' }), 'rejected', ME)).toBe(false)
+    // Rejected is closed: the open lane is unchanged.
+    expect(isOpen('rejected')).toBe(false)
+    expect(OPEN_STATUSES).not.toContain('rejected')
+  })
+
+  it('lists groups, not submissions, under Groups', () => {
+    expect(QUEUE_FILTERS).toContain('groups')
+    expect(QUEUE_LABEL.groups).toBe('Groups')
+    expect(NON_ROW_FILTERS).toContain('groups')
+    for (const s of FIELD_STATUSES) {
+      expect(matchesFilter(sub({ status: s }), 'groups', ME), s).toBe(false)
+    }
   })
 })
 
@@ -284,6 +318,31 @@ describe('archive and delete are different things', () => {
 
   it('labels every queue including the archive', () => {
     for (const f of QUEUE_FILTERS) expect(QUEUE_LABEL[f], f).toBeTruthy()
+  })
+})
+
+describe('the validation mark', () => {
+  it('is ready when the derived condition holds and nobody has set the mark', () => {
+    const c = counts({ claims: 2, decided: 2, validated: true })
+    expect(readyToValidate(sub({ status: 'reviewing' }), c)).toBe(true)
+    expect(readyToValidate(sub({ status: 'reviewing', validated_at: '2026-08-20T00:00:00Z' }), c)).toBe(false)
+    expect(readyToValidate(sub({ status: 'reviewing' }), counts({ claims: 2, decided: 1 }))).toBe(false)
+    expect(readyToValidate(sub({ status: 'reviewing' }), undefined)).toBe(false)
+  })
+
+  it('is never offered on a closed record', () => {
+    const c = counts({ claims: 1, decided: 1, validated: true })
+    expect(readyToValidate(sub({ status: 'archived' }), c)).toBe(false)
+    expect(readyToValidate(sub({ status: 'rejected' }), c)).toBe(false)
+  })
+
+  it('says "claims changed since" instead of silently dropping the mark', () => {
+    const marked = sub({ validated_at: '2026-08-20T00:00:00Z' })
+    expect(validationStale(marked, counts({ claims: 2, decided: 1, validated: false }))).toBe(true)
+    expect(validationStale(marked, counts({ claims: 2, decided: 2, validated: true }))).toBe(false)
+    expect(validationStale(sub(), counts({ validated: false }))).toBe(false)
+    // Unknown counts are not a verdict on the mark.
+    expect(validationStale(marked, undefined)).toBe(false)
   })
 })
 

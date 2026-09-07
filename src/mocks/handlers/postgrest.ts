@@ -25,6 +25,10 @@ import {
   type MockRow, type MockTableName,
 } from '../store'
 import { visibleCaseNotes } from './caseWorkspace'
+import {
+  IntelRpcError, afterFieldMessageInsert, afterFieldSubmissionChange, fieldSubmissionPatch, messageInsertGuard,
+  stampFieldMessage, stampFieldSubmission, visibleIntelRows,
+} from './intel'
 import { visibleLegalRows } from './legal'
 import { ensureReportTemplates, pinReportTemplateVersion, reportUpdateGuard, visibleReportRows } from './reports'
 
@@ -34,11 +38,13 @@ import { ensureReportTemplates, pinReportTemplateVersion, reportUpdateGuard, vis
  *  (20261021120000 case_notes_sel); the Phase 4 legal tables read only for
  *  requests the session can view (can_view_legal_request, ./legal.ts); the
  *  Phase 5 report tables read for active members (templates) or through the
- *  parent report (entities / exports, ./reports.ts). Other tables read
- *  unfiltered. */
+ *  parent report (entities / exports, ./reports.ts); the Phase 6 intel
+ *  tables (the records, the shadow table, groups, notes, the thread) read
+ *  through private.field_submission_readable (./intel.ts). Other tables
+ *  read unfiltered. */
 function readable(table: MockTableName, rows: MockRow[]): MockRow[] {
   if (table === 'case_notes') return visibleCaseNotes(rows)
-  return visibleReportRows(table, visibleLegalRows(table, rows))
+  return visibleIntelRows(table, visibleReportRows(table, visibleLegalRows(table, rows)))
 }
 
 /** Tables whose rows the migrations SEED: an empty mock store answers like
@@ -218,11 +224,26 @@ async function handleTable(request: Request, table: MockTableName): Promise<Resp
     const body = (await request.json()) as MockRow | MockRow[]
     // BEFORE INSERT triggers the wall applies: reports_template_pin
     // (20261028120000) fills template_version_id from the published version
-    // of a known template key.
-    const rows = (Array.isArray(body) ? body : [body])
-      .map((r) => ({ id: mockId(), ...r }))
-      .map((r) => (table === 'reports' ? pinReportTemplateVersion(r) : r))
+    // of a known template key; field_submission_before_insert stamps the
+    // author and numbers a send; the officer thread's INSERT policy is the
+    // author's own reply while a question is open (20261030120000).
+    let rows: MockRow[]
+    try {
+      rows = (Array.isArray(body) ? body : [body])
+        .map((r) => ({ id: mockId(), ...r }))
+        .map((r) => (table === 'reports' ? pinReportTemplateVersion(r) : table === 'field_submissions' ? stampFieldSubmission(r) : r))
+    } catch (e) {
+      if (e instanceof IntelRpcError) return postgrestError(400, e.code, e.message)
+      throw e
+    }
+    if (table === 'field_submission_messages') {
+      for (const r of rows) { const refusal = messageInsertGuard(r); if (refusal) return postgrestError(403, '42501', refusal) }
+      rows = rows.map(stampFieldMessage)
+    }
     setRows(table, [...getRows(table), ...rows])
+    // AFTER INSERT: the realtime shadow + intel_new on a send; intel_reply on the officer's reply.
+    if (table === 'field_submissions') for (const r of rows) afterFieldSubmissionChange(r, null)
+    if (table === 'field_submission_messages') for (const r of rows) afterFieldMessageInsert(r)
     if (!wantsRepresentation(request)) return new HttpResponse(null, { status: 201 })
     return HttpResponse.json(project(rows, q.select), { status: 201 })
   }
@@ -242,6 +263,23 @@ async function handleTable(request: Request, table: MockTableName): Promise<Resp
         const refusal = reportUpdateGuard(row, patch)
         if (refusal) return postgrestError(403, 'P0403', refusal)
       }
+    }
+    // block_direct_intel_review_columns + field_submission_before_update
+    // (20261030120000): the review state only changes through the review
+    // actions; a draft is the author's editor; a send is numbered. Raised
+    // triggers surface as PostgREST 400 / P0001, and the AFTER trigger
+    // maintains the realtime shadow.
+    if (table === 'field_submissions') {
+      const next = new Map<MockRow, MockRow>()
+      for (const row of matched) {
+        const r = fieldSubmissionPatch(row, patch)
+        if ('refusal' in r) return postgrestError(400, 'P0001', r.refusal)
+        next.set(row, r.row)
+      }
+      setRows(table, getRows(table).map((row) => next.get(row) ?? row))
+      for (const [row, updated] of next) afterFieldSubmissionChange(updated, String(row.status))
+      if (!wantsRepresentation(request)) return new HttpResponse(null, { status: 204 })
+      return HttpResponse.json(project([...next.values()], q.select), { status: 200 })
     }
     const matchedIds = new Set(matched)
     setRows(table, getRows(table).map((row) => (matchedIds.has(row) ? { ...row, ...patch } : row)))

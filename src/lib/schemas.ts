@@ -58,6 +58,10 @@ export const notifPayloadSchema = z.object({
   sealed: z.boolean().optional(),
   actor_id: z.string().optional(),
   actor_name: z.string().optional(),
+  // Intel triage kinds (Phase 6 §4) — the payload is MINIMAL by contract:
+  // the id and number, never the summary, the reason or a claim.
+  submission_id: z.string().optional(),
+  submission_no: z.string().optional(),
 }).loose()
 export type NotifPayload = z.infer<typeof notifPayloadSchema>
 

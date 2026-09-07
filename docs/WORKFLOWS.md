@@ -373,7 +373,10 @@ surveillance, outside agencies (`field_submissions` + per-entity claim tables;
 
 Lifecycle (author-facing labels): `draft` Draft → `new` Sent → `reviewing`
 Being reviewed → `needs_info` Question for you → `reviewed` / `actionable`
-Being acted on / `archived` Filed, no action. Reviewers claim/release/assign,
+Being acted on / `archived` **Closed** / `rejected` **Closed** (Phase 6: the
+submitter sees one word for both — "Kept on file; nothing further is needed
+from you" — and never the reason; reviewers see "Filed, no action" vs
+"Rejected"). Reviewers claim/release/assign,
 verify **per claim** (Verified / Unverified / Disputed / Rejected — reliability
 grades the source, a verdict grades one claim), match claims to existing
 registry records (`field_claim_link` — asserts identity, edits neither side),
@@ -382,6 +385,81 @@ confidential source), archive with a reason, or — command only — soft-delete
 (Owner-only undelete). SIB referral: flag → refer (category; `public_corruption`
 restricts the report immediately) → SIB accepts/declines and assigns its own
 agent — a Bureau Lead cannot make that assignment.
+
+**Phase 6 triage** ([`20261030120000`](../supabase/migrations/20261030120000_intel_triage.sql) → [`20261031120000`](../supabase/migrations/20261031120000_intel_groups_convert.sql); authority in [AUTHORIZATION.md §18](AUTHORIZATION.md#18-intel-triage-phase-6-20261030120000--20261031120000)):
+
+- **Rejected** (`field_submission_reject`, reason required) is a terminal
+  reviewer state: `new | reviewing | needs_info | reviewed | actionable →
+  rejected`; the only way out is `field_submission_restore` — from the
+  archive any reviewer, from `rejected` **command only** — which lands in
+  `reviewing` and clears `rejected_at / rejected_by`. The reason is **not a
+  row column**: it lives only in the reviewer note `Rejected: <reason>` /
+  `Restored after rejection` and the audit rows `FIELD_SUBMISSION_REJECTED
+  {reason}` / `_RESTORED {from_status}`; the submitter is **not** notified
+  and never sees it (the same holds for the validation note). The
+  queue's `processed` filter includes rejected records and a `rejected`
+  filter lists them alone.
+- **Comments** (`field_submission_comment(id, body, visible_to_officer)`):
+  one composer, two audiences. Private (default) → a `field_submission_reviews`
+  note; visible → a `field_submission_messages` row with `from_reviewer`.
+  Neither moves the status; the body never enters the audit detail. The
+  notes table is RPC-only now; the thread's only client INSERT is the
+  submitter's own reply while a question is open (`needs_info`).
+- **Validation** (`field_submission_validate(id, note[, clear])`): an
+  explicit, audited mark on top of the derived flag —
+  `field_submission_counts()` reports `claims / decided / validated` where
+  `validated = claims > 0 and decided = claims and reliability is set`.
+  Setting the mark requires that flag ('validate every claim and grade the
+  source first (n of m claims decided, source ungraded)') and a note; a
+  later verdict change or re-grade does not clear it (the badge adds "claims
+  changed since"); withdrawing needs a note. Closed records (archived /
+  rejected) refuse both.
+- **Groups** (`intel_groups` / `intel_group_members` / `intel_group_cases`,
+  RPC-only): `intel_group_suggest` names the other readable records sharing
+  a repeat signal (by number, never a summary) and the live groups they sit
+  in; a reviewer confirms with `intel_group_create` (the lead is always a
+  member) or `intel_group_add`; `intel_group_remove` needs a reason and never
+  removes the lead ('the lead record stays in its group — close the group
+  instead'); `intel_group_link_case`
+  is a group fact (members are not individually linked); `intel_group_close`
+  / `_reopen` are the creator's or command's. A group never merges, never
+  deletes, never edits a member; a live member cannot be soft-deleted
+  ('intel groups' in `field_submission_dependencies`). `intel_group_summary`
+  counts members the caller cannot read as `hidden`.
+- **Extended links + convert** (`field_claim_link`): a claim now links to
+  `person | vehicle | gang | place | narcotic | account | indicator` under
+  the pair rule — person → person / account / indicator; vehicle → vehicle /
+  indicator; org → gang / account / indicator; location → place / indicator;
+  **item → narcotic / indicator** (an indicator must sit on a case the
+  caller can see; a duplicate live link raises 'already linked').
+  `field_submission_convert(kind, claim_kind, claim, payload[, reason])`
+  creates the registry record from the claim (payload keys = the kind's
+  `CREATE_FIELDS`; server-side `entity_duplicates` → `{ok:false,
+  code:'duplicate', matches}` unless a reason is given, which is appended
+  as "Created despite a possible duplicate: …"), stamps
+  `source_submission_id` (**provenance**, on persons / vehicles / gangs /
+  places / accounts / narcotics), links the claim and audits
+  `FIELD_CLAIM_CONVERTED`.
+- **Notifications** (`private.intel_notify`, minimal payload — never the
+  summary, details, reason or a claim; never the actor; one unread per kind
+  per record per hour; test actors never reach real targets): `intel_new`
+  (a send → command + Owner inside the record's wall), `intel_assigned`
+  (the assignee), `intel_question` (the submitter — the only kind a
+  submitter ever receives), `intel_reply` (the assignee, else the reviewer
+  who asked), `intel_referred` (SIB agents, never the referrer or oversight).
+- **Realtime**: `field_submission_events` is the shadow the clients
+  subscribe to — `submission_id / status / assigned_to / siu_state /
+  updated_at`, no text — maintained by an AFTER trigger (a draft is never
+  mirrored; a soft-deleted record stays as status `deleted` rather than a
+  realtime DELETE that would hand its key to every subscriber) and read
+  through the same wall as the record, so a `siu_sensitive` row never
+  reaches a client outside it. `intel_new` is capped at ten unread per
+  actor per ten minutes.
+- **SIB cross-link**: `siu_state = referred | accepted` is the link;
+  `siu_referred_submissions()` lists them for SIB **agents** only (zero rows
+  for oversight) without the summary; SIB Intake shows "Referred from field
+  intelligence" and the record's SIB panel shows the SIB case once
+  `siu_case_id` is set.
 
 ## Related workflows documented elsewhere
 

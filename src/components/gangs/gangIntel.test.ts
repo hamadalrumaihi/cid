@@ -18,6 +18,7 @@ const member = (over: Partial<MemberRow>): MemberRow => ({
 })
 
 const gang = (over: Partial<GangRow>): GangRow => ({
+  source_submission_id: null,
   id: 'g1', name: 'Test', colors: null, threat_level: 'medium', notes: null,
   created_by: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
   aliases: null, classification: null, status: null, confidence: null,

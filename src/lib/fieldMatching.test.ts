@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { linkFor, type FieldClaimLinkRow } from './fieldReview'
 
 const link = (over: Partial<FieldClaimLinkRow>): FieldClaimLinkRow => ({
+  account_id: null, indicator_id: null, narcotic_id: null, claim_item_id: null,
   id: Math.random().toString(36), submission_id: 's1',
   claim_person_id: null, claim_vehicle_id: null, claim_org_id: null,
   claim_location_id: null,

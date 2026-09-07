@@ -247,18 +247,22 @@ All incoming information — from patrol, detectives, surveillance or outside ag
 
 A submission describes **what was involved**: add a **Person**, **Vehicle**, **Gang / MC**, **Location** or **Item / Seizure**, attach evidence and media, and state the basis for each claim — I saw this myself, someone told me, or not stated. A summary and a jurisdiction (Los Santos / City or Blaine County) are required to send.
 
-The submitter can follow their report's life: **Draft → Sent → Being reviewed → Question for you → Reviewed / Being acted on / Filed, no action**. A reviewer's question opens a thread with the officer; internal review notes are never shown to the submitter.
+The submitter can follow their report's life: **Draft → Sent → Being reviewed → Question for you → Reviewed / Being acted on / Closed**. **Closed** means "kept on file; nothing further is needed from you" — whether the record was filed for reference or rejected, the submitter sees the same word and never a reason. A reviewer's question opens a thread with the officer (the only thing a submitter is ever notified about); internal review notes are never shown to the submitter.
 
 ### Reviewing
 
-Every active CID member sees every field submission — jurisdiction is where the events happened, not a routing rule, and no bureau owns the queue. The review queue offers All / Unclaimed / Mine / Assigned / Needs info / per-jurisdiction / Processed / Archived views. A reviewer:
+Every active CID member sees every field submission — jurisdiction is where the events happened, not a routing rule, and no bureau owns the queue. The review queue offers All / Unclaimed / Mine / Assigned / Needs info / per-jurisdiction / Processed / Archived / Rejected views and a **Groups** list; command and the portal owner are notified of every new record, an assignee of an assignment, and a reviewer of the officer's reply. A reviewer:
 
 1. **Takes** the record (or releases it back; command can assign a handler — the assignment history is kept).
 2. Checks **Seen before** — the repeat signal against earlier submissions.
 3. **Verifies each claim**: Verified, Unverified, Disputed or Rejected. Reliability grades the source; a verdict grades one claim.
 4. **Matches** a claim to an existing person, vehicle, gang or place — asserting they're the same thing without editing either record.
 5. **Acts** where warranted: open a case from the record, link it to an existing case, cite it as a surveillance observation, or register a confidential source.
-6. **Decides**: record urgency and reliability, archive with a reason (no investigative value, duplicate, resolved elsewhere, outdated, unable to corroborate, retained for reference), or — command only — delete. Deleted records can be restored only by the portal owner.
+6. **Decides**: record urgency and reliability, archive with a reason (no investigative value, duplicate, resolved elsewhere, outdated, unable to corroborate, retained for reference), **reject** with a reason (the submitter sees "Closed", never the reason; only a Bureau Lead or above can **restore** a rejected record), or — command only — delete. Deleted records can be restored only by the portal owner.
+7. **Comments** with one composer and a visibility switch: **Private note to reviewers** (the default — never shown to the submitter) or **Message the officer** (lands in the officer's thread). Neither changes the record's status.
+8. **Validates** once every claim has a verdict and the source is graded: **Validate** asks for a note and marks the record "Validated by … on …"; a later verdict change keeps the mark and adds "claims changed since"; **Withdraw validation** needs a note too. A closed record cannot be validated.
+9. **Groups** related records: "Looks related" suggests other records naming the same person, plate or organisation (or linked to the same registry record); **Create group** / **Add to group** confirm it, **Remove** needs a reason, and a group can be **linked to a case** as one fact. A group's lead record stays in the group; close the group instead of removing it. A record in a live group cannot be deleted.
+10. **Converts** a claim into a registry record with **Convert to record** — the create sheet opens prefilled from the claim; a likely duplicate is shown first ("Use existing record" links the claim instead; "Create anyway" needs a reason). The new record carries where it came from. A claim can also be matched to a **narcotic**, an **account** or a case **indicator**, not only a person, vehicle, gang or place.
 
 ### Referral to SIB
 

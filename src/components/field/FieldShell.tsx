@@ -62,9 +62,10 @@ const BUCKETS: Array<{ id: BucketId; label: string; statuses: readonly string[] 
   { id: 'sent', label: 'Sent', statuses: ['new'] },
   { id: 'reviewing', label: 'Being reviewed', statuses: ['reviewing'] },
   { id: 'needs_info', label: 'Question for you', statuses: ['needs_info'] },
-  // Three terminal states, one bucket: reviewed, acted on, or filed — each
+  // Four terminal states, one bucket: reviewed, acted on, or closed (filed
+  // or rejected -- the author is told "Closed" for both and never why). Each
   // means "nothing more is needed from you".
-  { id: 'done', label: 'Reviewed', statuses: ['reviewed', 'actionable', 'archived'] },
+  { id: 'done', label: 'Reviewed', statuses: ['reviewed', 'actionable', 'archived', 'rejected'] },
 ]
 
 /** Name, callsign, rank and agency, as one line. The callsign and rank come

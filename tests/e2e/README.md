@@ -79,3 +79,34 @@ fixtures). Self-skips without `RLS_TEST_PASSWORD_LSB` / `_LEAD`.
 
 Selectors follow the Phase 5 `ReportsTab` (labels from
 `REPORT_REVIEW_LABEL`); the assertions are the contract, the markup is not.
+
+## Intel triage (`intel.spec.ts`, Phase 6)
+
+Runs against the **live project** with the lsb + lead fixtures (one
+`[rls-test]` record with an undecided person claim per run, built inline
+through the same REST path the RLS suite uses, swept by `rls_test_cleanup()`
+with the crash-safety teardown) and, when `RLS_TEST_PASSWORD_FIELD` is set,
+the optional field-officer fixture (its own record, deleted by the lead).
+Self-skips without `RLS_TEST_PASSWORD_LSB` / `_LEAD`; the officer leg
+`test.skip`s on its own.
+
+- **Reject → Rejected / Restore**: the reviewer's **Reject** (reason
+  prompt) shows **Rejected**; a detective is not offered **Restore**; the
+  Bureau Lead is, and restoring clears the rejection (verified through the
+  API too).
+- **Closed, never the reason** (officer fixture): the officer's **My
+  Reports** lists the rejected record as **Closed**; neither the list nor
+  the receipt renders "Rejected" or the reason text.
+- **One composer, two audiences**: **Private note to reviewers** (default)
+  posts a note that the officer thread never carries (asserted on the
+  `field_submission_messages` / `field_submission_reviews` tables as well);
+  **Message the officer** posts to the thread with `from_reviewer`.
+- **Validate gate**: **Validate** (note prompt) on a record with an
+  undecided claim surfaces the server's `validate every claim and grade the
+  source first`; `validated_at` stays null.
+
+Selectors follow the contract's labels (Reject, Restore, Validate, "Private
+note to reviewers", "Message the officer", "Closed", "Rejected") and the
+`/tools?tool=field-review&record=<id>` deep link; where the Phase 6 review
+screen names a control differently, update the selector — the assertions
+are the contract, the markup is not.

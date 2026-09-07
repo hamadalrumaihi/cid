@@ -19,6 +19,7 @@
  *  second branch. This file just avoids offering buttons that would be refused.
  */
 import { useCallback, useEffect, useState } from 'react'
+import { useWorkspaceNav } from '@/components/tools/useToolNav'
 import { fmtDateTime } from '@/lib/format'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
@@ -46,6 +47,7 @@ export function SiuPanel({ submission, parts, onChanged }: {
   onChanged: () => void
 }) {
   const siu = useSiu()
+  const { openCase } = useWorkspaceNav()
   const profiles = useProfilesStore((s) => s.profiles)
   const fetchProfiles = useProfilesStore((s) => s.fetch)
   const [actions, setActions] = useState<FieldSiuActionRow[]>([])
@@ -186,6 +188,22 @@ export function SiuPanel({ submission, parts, onChanged }: {
             <p className="mt-1 text-xs text-slate-400">
               SIB: {officerName(submission.siu_assigned_to) ?? 'a Special Agent'}
               {submission.siu_assigned_at && ` since ${fmtDateTime(submission.siu_assigned_at)}`}
+            </p>
+          )}
+          {/* The cross-link (P6-07): siu_case_id is the fact that this report
+              fed an SIB investigation. CID learns that much and no more --
+              the case itself is behind siu_case_access, so only an agent is
+              offered the way in. */}
+          {submission.siu_case_id && (
+            <p className="mt-1 text-xs text-slate-400">
+              Part of an SIB investigation.
+              {siu.isAgent && (
+                <button type="button"
+                  className="ml-2 font-semibold text-sky-300 underline-offset-2 hover:underline"
+                  onClick={() => openCase(submission.siu_case_id!)}>
+                  Open the investigation
+                </button>
+              )}
             </p>
           )}
         </>

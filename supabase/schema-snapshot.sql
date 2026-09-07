@@ -126,7 +126,8 @@ create table public.accounts (
   deleted_at timestamp with time zone,
   deleted_by uuid,
   delete_reason text,
-  delete_batch uuid
+  delete_batch uuid,
+  source_submission_id uuid
 );
 alter table public.accounts add constraint accounts_category_check CHECK ((category = ANY (ARRAY['person'::text, 'shared'::text, 'gang'::text, 'business'::text])));
 alter table public.accounts add constraint accounts_lifecycle_check CHECK ((lifecycle = ANY (ARRAY['active'::text, 'merged'::text])));
@@ -134,6 +135,7 @@ alter table public.accounts add constraint accounts_state_check CHECK ((state = 
 alter table public.accounts add constraint accounts_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.accounts add constraint accounts_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.accounts add constraint accounts_merged_into_fkey FOREIGN KEY (merged_into) REFERENCES accounts(id) ON DELETE SET NULL;
+alter table public.accounts add constraint accounts_source_submission_id_fkey FOREIGN KEY (source_submission_id) REFERENCES field_submissions(id) ON DELETE SET NULL;
 alter table public.accounts add constraint accounts_pkey PRIMARY KEY (id);
 alter table public.accounts enable row level security;
 
@@ -1241,16 +1243,24 @@ create table public.field_claim_links (
   gang_id uuid,
   place_id uuid,
   linked_by uuid,
-  linked_at timestamp with time zone not null default now()
+  linked_at timestamp with time zone not null default now(),
+  claim_item_id uuid,
+  narcotic_id uuid,
+  account_id uuid,
+  indicator_id uuid
 );
-alter table public.field_claim_links add constraint field_claim_links_one_claim CHECK ((num_nonnulls(claim_person_id, claim_vehicle_id, claim_org_id, claim_location_id) = 1));
-alter table public.field_claim_links add constraint field_claim_links_one_target CHECK ((num_nonnulls(person_id, vehicle_id, gang_id, place_id) = 1));
+alter table public.field_claim_links add constraint field_claim_links_one_claim CHECK ((num_nonnulls(claim_person_id, claim_vehicle_id, claim_org_id, claim_location_id, claim_item_id) = 1));
+alter table public.field_claim_links add constraint field_claim_links_one_target CHECK ((num_nonnulls(person_id, vehicle_id, gang_id, place_id, narcotic_id, account_id, indicator_id) = 1));
+alter table public.field_claim_links add constraint field_claim_links_account_id_fkey FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE SET NULL;
+alter table public.field_claim_links add constraint field_claim_links_claim_item_id_fkey FOREIGN KEY (claim_item_id) REFERENCES field_submission_items(id) ON DELETE CASCADE;
 alter table public.field_claim_links add constraint field_claim_links_claim_location_id_fkey FOREIGN KEY (claim_location_id) REFERENCES field_submission_locations(id) ON DELETE CASCADE;
 alter table public.field_claim_links add constraint field_claim_links_claim_org_id_fkey FOREIGN KEY (claim_org_id) REFERENCES field_submission_orgs(id) ON DELETE CASCADE;
 alter table public.field_claim_links add constraint field_claim_links_claim_person_id_fkey FOREIGN KEY (claim_person_id) REFERENCES field_submission_persons(id) ON DELETE CASCADE;
 alter table public.field_claim_links add constraint field_claim_links_claim_vehicle_id_fkey FOREIGN KEY (claim_vehicle_id) REFERENCES field_submission_vehicles(id) ON DELETE CASCADE;
 alter table public.field_claim_links add constraint field_claim_links_gang_id_fkey FOREIGN KEY (gang_id) REFERENCES gangs(id) ON DELETE SET NULL;
+alter table public.field_claim_links add constraint field_claim_links_indicator_id_fkey FOREIGN KEY (indicator_id) REFERENCES indicators(id) ON DELETE SET NULL;
 alter table public.field_claim_links add constraint field_claim_links_linked_by_fkey FOREIGN KEY (linked_by) REFERENCES profiles(id);
+alter table public.field_claim_links add constraint field_claim_links_narcotic_id_fkey FOREIGN KEY (narcotic_id) REFERENCES narcotics(id) ON DELETE SET NULL;
 alter table public.field_claim_links add constraint field_claim_links_person_id_fkey FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE SET NULL;
 alter table public.field_claim_links add constraint field_claim_links_place_id_fkey FOREIGN KEY (place_id) REFERENCES places(id) ON DELETE SET NULL;
 alter table public.field_claim_links add constraint field_claim_links_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES field_submissions(id) ON DELETE CASCADE;
@@ -1405,6 +1415,17 @@ alter table public.field_submission_cases add constraint field_submission_cases_
 alter table public.field_submission_cases add constraint field_submission_cases_unlinked_by_fkey FOREIGN KEY (unlinked_by) REFERENCES profiles(id);
 alter table public.field_submission_cases add constraint field_submission_cases_pkey PRIMARY KEY (id);
 alter table public.field_submission_cases enable row level security;
+
+create table public.field_submission_events (
+  submission_id uuid not null,
+  status text not null,
+  assigned_to uuid,
+  siu_state text,
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.field_submission_events add constraint field_submission_events_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES field_submissions(id) ON DELETE CASCADE;
+alter table public.field_submission_events add constraint field_submission_events_pkey PRIMARY KEY (submission_id);
+alter table public.field_submission_events enable row level security;
 
 create table public.field_submission_evidence (
   id uuid not null default gen_random_uuid(),
@@ -1644,7 +1665,11 @@ create table public.field_submissions (
   deleted_at timestamp with time zone,
   deleted_by uuid,
   delete_reason text,
-  source_codename text
+  source_codename text,
+  rejected_at timestamp with time zone,
+  rejected_by uuid,
+  validated_at timestamp with time zone,
+  validated_by uuid
 );
 alter table public.field_submissions add constraint field_submissions_jurisdiction_check CHECK (((jurisdiction IS NULL) OR (jurisdiction = ANY (ARRAY['city'::text, 'blaine'::text]))));
 alter table public.field_submissions add constraint field_submissions_jurisdiction_on_submit CHECK (((status = 'draft'::text) OR (jurisdiction IS NOT NULL)));
@@ -1654,7 +1679,7 @@ alter table public.field_submissions add constraint field_submissions_reliabilit
 alter table public.field_submissions add constraint field_submissions_siu_category_check CHECK (((siu_category IS NULL) OR (siu_category = ANY (ARRAY['organized_crime'::text, 'gang_mc_enterprise'::text, 'narcotics_trafficking'::text, 'firearms_trafficking'::text, 'public_corruption'::text, 'fugitive'::text, 'major_crime_scene'::text, 'cross_jurisdiction'::text, 'other_complex'::text]))));
 alter table public.field_submissions add constraint field_submissions_siu_state_check CHECK (((siu_state IS NULL) OR (siu_state = ANY (ARRAY['flagged'::text, 'referred'::text, 'accepted'::text, 'declined'::text]))));
 alter table public.field_submissions add constraint field_submissions_source_type_check CHECK ((source_type = ANY (ARRAY['patrol'::text, 'detective'::text, 'confidential'::text, 'surveillance'::text, 'internal'::text, 'external'::text, 'other'::text])));
-alter table public.field_submissions add constraint field_submissions_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'new'::text, 'reviewing'::text, 'needs_info'::text, 'reviewed'::text, 'actionable'::text, 'archived'::text])));
+alter table public.field_submissions add constraint field_submissions_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'new'::text, 'reviewing'::text, 'needs_info'::text, 'reviewed'::text, 'actionable'::text, 'archived'::text, 'rejected'::text])));
 alter table public.field_submissions add constraint field_submissions_summary_on_submit CHECK (((status = 'draft'::text) OR (COALESCE(btrim(summary), ''::text) <> ''::text)));
 alter table public.field_submissions add constraint field_submissions_urgency_check CHECK (((urgency IS NULL) OR (urgency = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
 alter table public.field_submissions add constraint field_submissions_archived_by_fkey FOREIGN KEY (archived_by) REFERENCES profiles(id);
@@ -1662,9 +1687,11 @@ alter table public.field_submissions add constraint field_submissions_assigned_t
 alter table public.field_submissions add constraint field_submissions_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
 alter table public.field_submissions add constraint field_submissions_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.field_submissions add constraint field_submissions_officer_id_fkey FOREIGN KEY (officer_id) REFERENCES profiles(id);
+alter table public.field_submissions add constraint field_submissions_rejected_by_fkey FOREIGN KEY (rejected_by) REFERENCES profiles(id);
 alter table public.field_submissions add constraint field_submissions_siu_assigned_to_fkey FOREIGN KEY (siu_assigned_to) REFERENCES profiles(id);
 alter table public.field_submissions add constraint field_submissions_siu_case_id_fkey FOREIGN KEY (siu_case_id) REFERENCES cases(id);
 alter table public.field_submissions add constraint field_submissions_siu_referred_by_fkey FOREIGN KEY (siu_referred_by) REFERENCES profiles(id);
+alter table public.field_submissions add constraint field_submissions_validated_by_fkey FOREIGN KEY (validated_by) REFERENCES profiles(id);
 alter table public.field_submissions add constraint field_submissions_pkey PRIMARY KEY (id);
 alter table public.field_submissions add constraint field_submissions_submission_no_key UNIQUE (submission_no);
 alter table public.field_submissions enable row level security;
@@ -1789,7 +1816,8 @@ create table public.gangs (
   delete_reason text,
   delete_batch uuid,
   siu_hidden_flag boolean not null default false,
-  merged_into uuid
+  merged_into uuid,
+  source_submission_id uuid
 );
 alter table public.gangs add constraint gangs_classification_check CHECK (((classification IS NULL) OR (classification = ANY (ARRAY['street_gang'::text, 'organized_crime'::text, 'motorcycle_club'::text, 'faction'::text, 'cartel'::text, 'crew'::text, 'unknown'::text]))));
 alter table public.gangs add constraint gangs_confidence_check CHECK (((confidence IS NULL) OR (confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
@@ -1799,6 +1827,7 @@ alter table public.gangs add constraint gangs_deleted_by_fkey FOREIGN KEY (delet
 alter table public.gangs add constraint gangs_lead_detective_id_fkey FOREIGN KEY (lead_detective_id) REFERENCES profiles(id);
 alter table public.gangs add constraint gangs_merged_into_fkey FOREIGN KEY (merged_into) REFERENCES gangs(id) ON DELETE SET NULL;
 alter table public.gangs add constraint gangs_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES profiles(id);
+alter table public.gangs add constraint gangs_source_submission_id_fkey FOREIGN KEY (source_submission_id) REFERENCES field_submissions(id) ON DELETE SET NULL;
 alter table public.gangs add constraint gangs_pkey PRIMARY KEY (id);
 alter table public.gangs enable row level security;
 
@@ -1865,6 +1894,63 @@ create table public.integration_sources (
 alter table public.integration_sources add constraint integration_sources_kind_check CHECK ((kind = ANY (ARRAY['fivem_server'::text, 'mdt'::text, 'media_host'::text, 'other'::text])));
 alter table public.integration_sources add constraint integration_sources_pkey PRIMARY KEY (id);
 alter table public.integration_sources enable row level security;
+
+create table public.intel_group_cases (
+  id uuid not null default gen_random_uuid(),
+  group_id uuid not null,
+  case_id uuid not null,
+  linked_by uuid,
+  linked_at timestamp with time zone not null default now(),
+  note text,
+  unlinked_at timestamp with time zone,
+  unlinked_by uuid,
+  unlink_reason text
+);
+alter table public.intel_group_cases add constraint intel_group_cases_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
+alter table public.intel_group_cases add constraint intel_group_cases_group_id_fkey FOREIGN KEY (group_id) REFERENCES intel_groups(id) ON DELETE CASCADE;
+alter table public.intel_group_cases add constraint intel_group_cases_linked_by_fkey FOREIGN KEY (linked_by) REFERENCES profiles(id);
+alter table public.intel_group_cases add constraint intel_group_cases_unlinked_by_fkey FOREIGN KEY (unlinked_by) REFERENCES profiles(id);
+alter table public.intel_group_cases add constraint intel_group_cases_pkey PRIMARY KEY (id);
+alter table public.intel_group_cases add constraint intel_group_cases_group_id_case_id_key UNIQUE (group_id, case_id);
+alter table public.intel_group_cases enable row level security;
+
+create table public.intel_group_members (
+  id uuid not null default gen_random_uuid(),
+  group_id uuid not null,
+  submission_id uuid not null,
+  added_by uuid,
+  added_at timestamp with time zone not null default now(),
+  note text,
+  removed_at timestamp with time zone,
+  removed_by uuid,
+  remove_reason text
+);
+alter table public.intel_group_members add constraint intel_group_members_added_by_fkey FOREIGN KEY (added_by) REFERENCES profiles(id);
+alter table public.intel_group_members add constraint intel_group_members_group_id_fkey FOREIGN KEY (group_id) REFERENCES intel_groups(id) ON DELETE CASCADE;
+alter table public.intel_group_members add constraint intel_group_members_removed_by_fkey FOREIGN KEY (removed_by) REFERENCES profiles(id);
+alter table public.intel_group_members add constraint intel_group_members_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES field_submissions(id) ON DELETE CASCADE;
+alter table public.intel_group_members add constraint intel_group_members_pkey PRIMARY KEY (id);
+alter table public.intel_group_members add constraint intel_group_members_group_id_submission_id_key UNIQUE (group_id, submission_id);
+alter table public.intel_group_members enable row level security;
+
+create table public.intel_groups (
+  id uuid not null default gen_random_uuid(),
+  title text not null,
+  note text,
+  lead_submission_id uuid not null,
+  created_by uuid,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  closed_at timestamp with time zone,
+  closed_by uuid,
+  close_reason text
+);
+alter table public.intel_groups add constraint intel_groups_title_check CHECK (((btrim(title) <> ''::text) AND (length(title) <= 200)));
+alter table public.intel_groups add constraint intel_groups_closed_by_fkey FOREIGN KEY (closed_by) REFERENCES profiles(id);
+alter table public.intel_groups add constraint intel_groups_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
+alter table public.intel_groups add constraint intel_groups_lead_submission_id_fkey FOREIGN KEY (lead_submission_id) REFERENCES field_submissions(id) ON DELETE CASCADE;
+alter table public.intel_groups add constraint intel_groups_pkey PRIMARY KEY (id);
+alter table public.intel_groups enable row level security;
 
 create table public.justice_membership_request_history (
   id uuid not null default gen_random_uuid(),
@@ -2936,7 +3022,8 @@ create table public.narcotics (
   deleted_at timestamp with time zone,
   deleted_by uuid,
   delete_reason text,
-  delete_batch uuid
+  delete_batch uuid,
+  source_submission_id uuid
 );
 alter table public.narcotics add constraint narcotics_category_check CHECK ((category = ANY (ARRAY['cannabis'::text, 'stimulant'::text, 'opioid'::text, 'sedative'::text, 'hallucinogen'::text, 'synthetic'::text, 'unknown'::text])));
 alter table public.narcotics add constraint narcotics_confidence_check CHECK (((confidence IS NULL) OR (confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
@@ -2950,6 +3037,7 @@ alter table public.narcotics add constraint narcotics_representative_media_id_fk
 alter table public.narcotics add constraint narcotics_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.narcotics add constraint narcotics_source_case_id_fkey FOREIGN KEY (source_case_id) REFERENCES cases(id) ON DELETE SET NULL;
 alter table public.narcotics add constraint narcotics_source_evidence_id_fkey FOREIGN KEY (source_evidence_id) REFERENCES evidence(id) ON DELETE SET NULL;
+alter table public.narcotics add constraint narcotics_source_submission_id_fkey FOREIGN KEY (source_submission_id) REFERENCES field_submissions(id) ON DELETE SET NULL;
 alter table public.narcotics add constraint narcotics_pkey PRIMARY KEY (id);
 alter table public.narcotics enable row level security;
 
@@ -3304,7 +3392,8 @@ create table public.persons (
   delete_reason text,
   delete_batch uuid,
   phone_normalized text generated always as (private.norm_phone(phone)) stored,
-  siu_hidden_flag boolean not null default false
+  siu_hidden_flag boolean not null default false,
+  source_submission_id uuid
 );
 alter table public.persons add constraint persons_bolo_risk_check CHECK (((bolo_risk IS NULL) OR (bolo_risk = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
 alter table public.persons add constraint persons_classification_check CHECK (((classification IS NULL) OR (classification = ANY (ARRAY['person_of_interest'::text, 'suspect'::text, 'witness'::text, 'victim'::text, 'informant'::text, 'associate'::text, 'other'::text]))));
@@ -3319,6 +3408,7 @@ alter table public.persons add constraint persons_gang_fk FOREIGN KEY (gang_id) 
 alter table public.persons add constraint persons_lead_detective_id_fkey FOREIGN KEY (lead_detective_id) REFERENCES profiles(id);
 alter table public.persons add constraint persons_merged_into_fkey FOREIGN KEY (merged_into) REFERENCES persons(id) ON DELETE SET NULL;
 alter table public.persons add constraint persons_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES profiles(id);
+alter table public.persons add constraint persons_source_submission_id_fkey FOREIGN KEY (source_submission_id) REFERENCES field_submissions(id) ON DELETE SET NULL;
 alter table public.persons add constraint persons_pkey PRIMARY KEY (id);
 alter table public.persons enable row level security;
 
@@ -3349,7 +3439,8 @@ create table public.places (
   delete_reason text,
   delete_batch uuid,
   siu_hidden_flag boolean not null default false,
-  merged_into uuid
+  merged_into uuid,
+  source_submission_id uuid
 );
 alter table public.places add constraint places_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL;
 alter table public.places add constraint places_controlling_gang_id_fkey FOREIGN KEY (controlling_gang_id) REFERENCES gangs(id) ON DELETE SET NULL;
@@ -3357,6 +3448,7 @@ alter table public.places add constraint places_created_by_fkey FOREIGN KEY (cre
 alter table public.places add constraint places_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.places add constraint places_merged_into_fkey FOREIGN KEY (merged_into) REFERENCES places(id) ON DELETE SET NULL;
 alter table public.places add constraint places_narcotic_fk FOREIGN KEY (narcotic_id) REFERENCES narcotics(id) ON DELETE SET NULL;
+alter table public.places add constraint places_source_submission_id_fkey FOREIGN KEY (source_submission_id) REFERENCES field_submissions(id) ON DELETE SET NULL;
 alter table public.places add constraint places_pkey PRIMARY KEY (id);
 alter table public.places enable row level security;
 
@@ -4755,13 +4847,15 @@ create table public.vehicles (
   delete_reason text,
   delete_batch uuid,
   siu_hidden_flag boolean not null default false,
-  merged_into uuid
+  merged_into uuid,
+  source_submission_id uuid
 );
 alter table public.vehicles add constraint vehicles_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
 alter table public.vehicles add constraint vehicles_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.vehicles add constraint vehicles_gang_id_fkey FOREIGN KEY (gang_id) REFERENCES gangs(id) ON DELETE SET NULL;
 alter table public.vehicles add constraint vehicles_merged_into_fkey FOREIGN KEY (merged_into) REFERENCES vehicles(id) ON DELETE SET NULL;
 alter table public.vehicles add constraint vehicles_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES persons(id) ON DELETE SET NULL;
+alter table public.vehicles add constraint vehicles_source_submission_id_fkey FOREIGN KEY (source_submission_id) REFERENCES field_submissions(id) ON DELETE SET NULL;
 alter table public.vehicles add constraint vehicles_pkey PRIMARY KEY (id);
 alter table public.vehicles enable row level security;
 
@@ -5005,6 +5099,9 @@ CREATE INDEX feedback_meta_updated_by_idx ON public.feedback_meta USING btree (u
 CREATE UNIQUE INDEX field_access_requests_one_pending ON public.field_access_requests USING btree (user_id) WHERE (status = 'pending'::text);
 CREATE INDEX field_access_requests_status_idx ON public.field_access_requests USING btree (status, created_at DESC);
 CREATE INDEX field_assignments_submission_idx ON public.field_assignments USING btree (submission_id, created_at DESC);
+CREATE INDEX field_claim_links_account_idx ON public.field_claim_links USING btree (account_id) WHERE (account_id IS NOT NULL);
+CREATE INDEX field_claim_links_indicator_idx ON public.field_claim_links USING btree (indicator_id) WHERE (indicator_id IS NOT NULL);
+CREATE INDEX field_claim_links_narcotic_idx ON public.field_claim_links USING btree (narcotic_id) WHERE (narcotic_id IS NOT NULL);
 CREATE INDEX field_claim_links_submission_idx ON public.field_claim_links USING btree (submission_id);
 CREATE UNIQUE INDEX field_claim_verdicts_item_uk ON public.field_claim_verdicts USING btree (item_id) WHERE (item_id IS NOT NULL);
 CREATE UNIQUE INDEX field_claim_verdicts_location_uk ON public.field_claim_verdicts USING btree (location_id) WHERE (location_id IS NOT NULL);
@@ -5072,6 +5169,9 @@ CREATE INDEX indicators_value_norm_idx ON public.indicators USING btree (kind, v
 CREATE INDEX indicators_value_trgm ON public.indicators USING gin (value gin_trgm_ops);
 CREATE INDEX integration_events_entity_idx ON public.integration_events USING btree (entity_type, entity_id);
 CREATE INDEX integration_events_status_idx ON public.integration_events USING btree (status, received_at DESC);
+CREATE INDEX intel_group_cases_case_idx ON public.intel_group_cases USING btree (case_id);
+CREATE INDEX intel_group_members_submission_idx ON public.intel_group_members USING btree (submission_id);
+CREATE INDEX intel_groups_lead_idx ON public.intel_groups USING btree (lead_submission_id);
 CREATE INDEX justice_membership_request_history_actor_id_idx ON public.justice_membership_request_history USING btree (actor_id);
 CREATE INDEX justice_membership_request_history_request_id_idx ON public.justice_membership_request_history USING btree (request_id);
 CREATE INDEX justice_membership_requests_decided_by_idx ON public.justice_membership_requests USING btree (decided_by);
@@ -9744,38 +9844,43 @@ declare v_actor uuid := (select auth.uid()); v_submission uuid;
 begin
   if not private.is_active() then raise exception 'not authorized'; end if;
 
-  v_submission := case p_kind
-    when 'person'   then (select submission_id from public.field_submission_persons where id = p_claim)
-    when 'vehicle'  then (select submission_id from public.field_submission_vehicles where id = p_claim)
-    when 'org'      then (select submission_id from public.field_submission_orgs where id = p_claim)
-    when 'location' then (select submission_id from public.field_submission_locations where id = p_claim)
-    else null end;
+  v_submission := private.field_claim_submission(p_kind, p_claim);
   if v_submission is null then raise exception 'no such claim: % %', p_kind, p_claim; end if;
+  if not private.field_submission_readable(v_submission) then
+    perform private.perm_raise('link', 'field_submission', v_submission, 'outside the read wall', 'that record is not in your jurisdiction');
+  end if;
   if (select status from public.field_submissions where id = v_submission) = 'draft' then
     raise exception 'that report has not been sent yet';
   end if;
-
-  if not (case p_target_kind
-            when 'person'  then exists (select 1 from public.persons where id = p_target)
-            when 'vehicle' then exists (select 1 from public.vehicles where id = p_target)
-            when 'gang'    then exists (select 1 from public.gangs where id = p_target)
-            when 'place'   then exists (select 1 from public.places where id = p_target)
-            else false end) then
+  if not private.field_claim_pair_ok(p_kind, p_target_kind) then
+    raise exception 'a % claim cannot be linked to a %', p_kind, p_target_kind;
+  end if;
+  if not private.field_link_target_ok(p_target_kind, p_target) then
     raise exception 'no such %: %', p_target_kind, p_target;
+  end if;
+  if exists (select 1 from public.field_claim_links l
+              where l.submission_id = v_submission
+                and coalesce(l.claim_person_id, l.claim_vehicle_id, l.claim_org_id, l.claim_location_id, l.claim_item_id) = p_claim
+                and coalesce(l.person_id, l.vehicle_id, l.gang_id, l.place_id, l.narcotic_id, l.account_id, l.indicator_id) = p_target) then
+    raise exception 'already linked';
   end if;
 
   insert into public.field_claim_links
-    (submission_id, claim_person_id, claim_vehicle_id, claim_org_id, claim_location_id,
-     person_id, vehicle_id, gang_id, place_id, linked_by)
+    (submission_id, claim_person_id, claim_vehicle_id, claim_org_id, claim_location_id, claim_item_id,
+     person_id, vehicle_id, gang_id, place_id, narcotic_id, account_id, indicator_id, linked_by)
   values (v_submission,
           case when p_kind = 'person'   then p_claim end,
           case when p_kind = 'vehicle'  then p_claim end,
           case when p_kind = 'org'      then p_claim end,
           case when p_kind = 'location' then p_claim end,
-          case when p_target_kind = 'person'  then p_target end,
-          case when p_target_kind = 'vehicle' then p_target end,
-          case when p_target_kind = 'gang'    then p_target end,
-          case when p_target_kind = 'place'   then p_target end,
+          case when p_kind = 'item'     then p_claim end,
+          case when p_target_kind = 'person'    then p_target end,
+          case when p_target_kind = 'vehicle'   then p_target end,
+          case when p_target_kind = 'gang'      then p_target end,
+          case when p_target_kind = 'place'     then p_target end,
+          case when p_target_kind = 'narcotic'  then p_target end,
+          case when p_target_kind = 'account'   then p_target end,
+          case when p_target_kind = 'indicator' then p_target end,
           v_actor);
 
   insert into public.audit_log (actor_id, action, entity, entity_id, detail)
@@ -10251,6 +10356,8 @@ begin
   insert into public.audit_log (actor_id, action, entity, entity_id, detail)
   values (v_actor, 'FIELD_SUBMISSION_INFO_REQUESTED', 'field_submissions', p_submission,
           jsonb_build_object('submission_no', v.submission_no, 'from_status', v.status));
+
+  perform private.intel_notify(v.officer_id, p_submission, 'intel_question');
 end $function$
 ;
 
@@ -10308,6 +10415,9 @@ begin
           jsonb_build_object('submission_no', v.submission_no,
                              'from_user', v.assigned_to, 'to_user', p_user,
                              'reason', v_reason));
+
+  perform private.intel_notify(p_user, p_submission, 'intel_assigned',
+                               jsonb_build_object('assigned_by', v_actor, 'action', v_action));
 end $function$
 ;
 
@@ -10352,8 +10462,195 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.field_submission_comment(p_submission uuid, p_body text, p_visible_to_officer boolean DEFAULT false)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_actor uuid := (select auth.uid()); v public.field_submissions; v_id uuid;
+        v_body text := btrim(coalesce(p_body, ''));
+begin
+  if not private.is_active() then
+    perform private.perm_raise('comment', 'field_submission', p_submission, 'not an active member', 'not authorized');
+  end if;
+  if v_body = '' then raise exception 'write the comment first'; end if;
+  if length(v_body) > 4000 then raise exception 'a comment is at most 4000 characters'; end if;
+
+  select * into v from public.field_submissions where id = p_submission;
+  if not found then raise exception 'no such record'; end if;
+  if not private.field_submission_readable(p_submission) then
+    perform private.perm_raise('comment', 'field_submission', p_submission, 'outside the read wall', 'that record is not in your jurisdiction');
+  end if;
+  if v.status = 'draft' then raise exception 'that record has not been sent yet'; end if;
+
+  if coalesce(p_visible_to_officer, false) then
+    insert into public.field_submission_messages (submission_id, author_id, from_reviewer, body)
+    values (p_submission, v_actor, true, v_body) returning id into v_id;
+  else
+    insert into public.field_submission_reviews (submission_id, author_id, note)
+    values (p_submission, v_actor, v_body) returning id into v_id;
+  end if;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_actor, 'FIELD_SUBMISSION_COMMENTED', 'field_submissions', p_submission,
+          jsonb_build_object('submission_no', v.submission_no,
+                             'visible_to_officer', coalesce(p_visible_to_officer, false),
+                             'comment_id', v_id));
+  return v_id;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.field_submission_convert(p_kind text, p_claim_kind text, p_claim uuid, p_payload jsonb, p_reason text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_actor uuid := (select auth.uid());
+  v_submission uuid; v_no text; v_status text;
+  j jsonb := coalesce(p_payload, '{}'::jsonb);
+  v_allowed text[]; v_required text[]; k text; v_id uuid;
+  v_matches jsonb; v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+  v_notes text; v_note_col text;
+begin
+  if not private.is_active() then
+    return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'not authorized');
+  end if;
+  if p_kind not in ('person', 'vehicle', 'gang', 'place', 'account', 'narcotic') then
+    raise exception 'unknown kind: %', p_kind;
+  end if;
+  v_submission := private.field_claim_submission(p_claim_kind, p_claim);
+  if v_submission is null then raise exception 'no such claim: % %', p_claim_kind, p_claim; end if;
+  if not private.field_submission_readable(v_submission) then
+    perform private.perm_deny('convert', 'field_submission', v_submission, 'outside the read wall');
+    return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'that record is not in your jurisdiction');
+  end if;
+  select status, submission_no into v_status, v_no from public.field_submissions where id = v_submission;
+  if v_status = 'draft' then raise exception 'that report has not been sent yet'; end if;
+  if not private.field_claim_pair_ok(p_claim_kind, p_kind) then
+    raise exception 'a % claim cannot become a %', p_claim_kind, p_kind;
+  end if;
+  if jsonb_typeof(j) <> 'object' then raise exception 'payload must be an object'; end if;
+
+  v_allowed := case p_kind
+    when 'person'   then array['name', 'alias', 'dob', 'phone', 'notes']
+    when 'vehicle'  then array['plate', 'model', 'color', 'notes']
+    when 'gang'     then array['name', 'aliases', 'colors', 'notes']
+    when 'place'    then array['name', 'type', 'area', 'notes']
+    when 'account'  then array['platform', 'handle', 'display_name', 'summary']
+    when 'narcotic' then array['name', 'category', 'summary'] end;
+  v_required := case p_kind
+    when 'person'   then array['name']
+    when 'vehicle'  then array['plate']
+    when 'gang'     then array['name']
+    when 'place'    then array['name', 'type']
+    when 'account'  then array['platform', 'handle']
+    when 'narcotic' then array['name', 'category'] end;
+  for k in select jsonb_object_keys(j) loop
+    if not (k = any(v_allowed)) then raise exception 'unknown field for a %: %', p_kind, k; end if;
+    if jsonb_typeof(j -> k) not in ('string', 'null') then raise exception 'field % must be a string', k; end if;
+  end loop;
+  foreach k in array v_required loop
+    if coalesce(btrim(j ->> k), '') = '' then raise exception 'field % is required for a %', k, p_kind; end if;
+  end loop;
+  if p_kind = 'place' and (j ->> 'type') not in ('drug_lab', 'stash_house', 'dead_drop', 'front_business', 'chop_shop') then
+    raise exception 'choose one of the place types';
+  end if;
+  if p_kind = 'narcotic' and (j ->> 'category') not in ('cannabis', 'stimulant', 'opioid', 'sedative', 'hallucinogen', 'synthetic', 'unknown') then
+    raise exception 'choose one of the narcotic categories';
+  end if;
+  if p_kind = 'person' and nullif(btrim(coalesce(j ->> 'dob', '')), '') is not null
+     and (j ->> 'dob') !~ '^\d{4}-\d{2}-\d{2}$' then
+    raise exception 'the date of birth must be YYYY-MM-DD';
+  end if;
+
+  -- Duplicate detection (the registry's own matcher), filtered to what the
+  -- caller may see; a strong match without a reason is the answer.
+  select coalesce(jsonb_agg(jsonb_build_object('id', d.id, 'label', d.label, 'sublabel', d.sublabel, 'signal', d.signal)), '[]'::jsonb)
+    into v_matches
+    from public.entity_duplicates(p_kind, j) d
+   where d.strength = 'strong'
+     and private.perm_registry_visible(p_kind, d.id)
+     and (select st.p_exists and st.p_deleted_at is null from private.soft_delete_state(p_kind, d.id) st);
+  if jsonb_array_length(v_matches) > 0 and v_reason is null then
+    return jsonb_build_object('ok', false, 'code', 'duplicate', 'matches', v_matches,
+                              'message', 'a record like this already exists — link it, or create anyway with a reason');
+  end if;
+
+  v_note_col := case when p_kind in ('account', 'narcotic') then 'summary' else 'notes' end;
+  v_notes := nullif(btrim(coalesce(j ->> v_note_col, '')), '');
+  if v_reason is not null and jsonb_array_length(v_matches) > 0 then
+    v_notes := concat_ws(E'\n', v_notes, 'Created despite a possible duplicate: ' || v_reason);
+  end if;
+
+  case p_kind
+    when 'person' then
+      insert into public.persons (name, alias, dob, phone, notes, created_by, source_submission_id)
+      values (btrim(j ->> 'name'), nullif(btrim(coalesce(j ->> 'alias', '')), ''),
+              nullif(btrim(coalesce(j ->> 'dob', '')), '')::date,
+              nullif(btrim(coalesce(j ->> 'phone', '')), ''), v_notes, v_actor, v_submission)
+      returning id into v_id;
+    when 'vehicle' then
+      insert into public.vehicles (plate, model, color, notes, created_by, source_submission_id)
+      values (btrim(j ->> 'plate'), nullif(btrim(coalesce(j ->> 'model', '')), ''),
+              nullif(btrim(coalesce(j ->> 'color', '')), ''), v_notes, v_actor, v_submission)
+      returning id into v_id;
+    when 'gang' then
+      insert into public.gangs (name, aliases, colors, notes, created_by, source_submission_id)
+      values (btrim(j ->> 'name'), nullif(btrim(coalesce(j ->> 'aliases', '')), ''),
+              nullif(btrim(coalesce(j ->> 'colors', '')), ''), v_notes, v_actor, v_submission)
+      returning id into v_id;
+    when 'place' then
+      insert into public.places (name, type, area, notes, created_by, source_submission_id)
+      values (btrim(j ->> 'name'), (j ->> 'type')::public.location_type,
+              nullif(btrim(coalesce(j ->> 'area', '')), ''), v_notes, v_actor, v_submission)
+      returning id into v_id;
+    when 'account' then
+      insert into public.accounts (platform, handle, display_name, summary, created_by, source_submission_id)
+      values (btrim(j ->> 'platform'), btrim(j ->> 'handle'),
+              nullif(btrim(coalesce(j ->> 'display_name', '')), ''), v_notes, v_actor, v_submission)
+      returning id into v_id;
+    when 'narcotic' then
+      -- The registry's own client guard does not engage for a definer insert:
+      -- a non-manager's substance lands unidentified / unverified as it would
+      -- through the sheet.
+      insert into public.narcotics (name, category, summary, status, confidence, created_by, source_submission_id)
+      values (btrim(j ->> 'name'), btrim(j ->> 'category'), v_notes,
+              case when private.can_manage_narcotics() then 'reported' else 'unidentified' end,
+              'unverified', v_actor, v_submission)
+      returning id into v_id;
+  end case;
+
+  insert into public.field_claim_links
+    (submission_id, claim_person_id, claim_vehicle_id, claim_org_id, claim_location_id, claim_item_id,
+     person_id, vehicle_id, gang_id, place_id, narcotic_id, account_id, linked_by)
+  values (v_submission,
+          case when p_claim_kind = 'person'   then p_claim end,
+          case when p_claim_kind = 'vehicle'  then p_claim end,
+          case when p_claim_kind = 'org'      then p_claim end,
+          case when p_claim_kind = 'location' then p_claim end,
+          case when p_claim_kind = 'item'     then p_claim end,
+          case when p_kind = 'person'   then v_id end,
+          case when p_kind = 'vehicle'  then v_id end,
+          case when p_kind = 'gang'     then v_id end,
+          case when p_kind = 'place'    then v_id end,
+          case when p_kind = 'narcotic' then v_id end,
+          case when p_kind = 'account'  then v_id end,
+          v_actor);
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_actor, 'FIELD_CLAIM_CONVERTED', 'field_submissions', v_submission,
+          jsonb_build_object('submission_no', v_no, 'claim_kind', p_claim_kind, 'claim_id', p_claim,
+                             'kind', p_kind, 'record_id', v_id,
+                             'despite_duplicate', v_reason is not null and jsonb_array_length(v_matches) > 0));
+  return jsonb_build_object('ok', true, 'id', v_id, 'kind', p_kind);
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.field_submission_counts()
- RETURNS TABLE(submission_id uuid, persons integer, vehicles integer, orgs integer, locations integer, items integer, evidence integer)
+ RETURNS TABLE(submission_id uuid, persons integer, vehicles integer, orgs integer, locations integer, items integer, evidence integer, claims integer, decided integer, validated boolean)
  LANGUAGE sql
  STABLE
  SET search_path TO ''
@@ -10364,8 +10661,17 @@ AS $function$
     (select count(*) from public.field_submission_orgs x where x.submission_id = s.id)::int,
     (select count(*) from public.field_submission_locations x where x.submission_id = s.id)::int,
     (select count(*) from public.field_submission_items x where x.submission_id = s.id)::int,
-    (select count(*) from public.field_submission_evidence x where x.submission_id = s.id)::int
+    (select count(*) from public.field_submission_evidence x where x.submission_id = s.id)::int,
+    c.n::int, d.n::int,
+    (c.n > 0 and d.n >= c.n and s.reliability is not null)
   from public.field_submissions s
+  cross join lateral (select
+      (select count(*) from public.field_submission_persons x where x.submission_id = s.id)
+    + (select count(*) from public.field_submission_vehicles x where x.submission_id = s.id)
+    + (select count(*) from public.field_submission_orgs x where x.submission_id = s.id)
+    + (select count(*) from public.field_submission_locations x where x.submission_id = s.id)
+    + (select count(*) from public.field_submission_items x where x.submission_id = s.id) as n) c
+  cross join lateral (select count(*) as n from public.field_claim_verdicts v where v.submission_id = s.id) d
 $function$
 ;
 
@@ -10691,6 +10997,48 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.field_submission_reject(p_submission uuid, p_reason text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_actor uuid := (select auth.uid()); v public.field_submissions;
+begin
+  if not private.is_active() then
+    perform private.perm_raise('reject', 'field_submission', p_submission, 'not an active member', 'not authorized');
+  end if;
+  if coalesce(btrim(coalesce(p_reason, '')), '') = '' then
+    raise exception 'say why this is being rejected';
+  end if;
+
+  select * into v from public.field_submissions where id = p_submission for update;
+  if not found then raise exception 'no such record'; end if;
+  if not private.field_submission_readable(p_submission) then
+    perform private.perm_raise('reject', 'field_submission', p_submission, 'outside the read wall', 'that record is not in your jurisdiction');
+  end if;
+  if v.status = 'draft' then raise exception 'that record has not been sent yet'; end if;
+  if v.status = 'rejected' then raise exception 'that record is already rejected'; end if;
+  if not private.field_submission_transition_ok(v.status, 'rejected') then
+    raise exception 'a submission cannot go from % to rejected', v.status;
+  end if;
+
+  update public.field_submissions
+     set status = 'rejected',
+         rejected_at = now(), rejected_by = v_actor,
+         updated_at = now()
+   where id = p_submission;
+
+  insert into public.field_submission_reviews (submission_id, author_id, note)
+  values (p_submission, v_actor, 'Rejected: ' || btrim(p_reason));
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_actor, 'FIELD_SUBMISSION_REJECTED', 'field_submissions', p_submission,
+          jsonb_build_object('submission_no', v.submission_no,
+                             'from_status', v.status, 'reason', btrim(p_reason)));
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.field_submission_release(p_submission uuid, p_reason text)
  RETURNS void
  LANGUAGE plpgsql
@@ -10788,10 +11136,23 @@ begin
     union all
     select l.submission_id, 'place', l.place_id
       from public.field_claim_links l where l.place_id is not null
+    union all
+    select l.submission_id, 'narcotic', l.narcotic_id
+      from public.field_claim_links l where l.narcotic_id is not null
+    union all
+    select l.submission_id, 'account', l.account_id
+      from public.field_claim_links l where l.account_id is not null
+    union all
+    select l.submission_id, 'indicator', l.indicator_id
+      from public.field_claim_links l where l.indicator_id is not null
   ),
   linked as (
     select a.kind,
-           coalesce(pe.name, ve.plate, ga.name, pl.name, 'a matched record') as label,
+           case when private.perm_registry_visible(case a.kind when 'organisation' then 'gang' else a.kind end, a.ref)
+                     or (a.kind = 'indicator' and exists (select 1 from public.indicators ii where ii.id = a.ref
+                                                            and private.field_case_visible(ii.case_id)))
+                then coalesce(pe.name, ve.plate, ga.name, pl.name, na.name, ac.handle, ind.value, 'a matched record')
+                else 'a matched record' end as label,
            'linked'::text as basis,
            b.submission_id
       from pins a
@@ -10801,6 +11162,9 @@ begin
       left join public.vehicles ve on a.kind = 'vehicle' and ve.id = a.ref
       left join public.gangs ga on a.kind = 'organisation' and ga.id = a.ref
       left join public.places pl on a.kind = 'place' and pl.id = a.ref
+      left join public.narcotics na on a.kind = 'narcotic' and na.id = a.ref
+      left join public.accounts ac on a.kind = 'account' and ac.id = a.ref
+      left join public.indicators ind on a.kind = 'indicator' and ind.id = a.ref
      where a.submission_id = p_submission
   ),
   signals as (select * from named union all select * from linked)
@@ -10830,22 +11194,29 @@ begin
   if not private.field_submission_readable(p_submission) then
     raise exception 'that record is not in your jurisdiction';
   end if;
-  if v.status <> 'archived' then raise exception 'that record is not archived'; end if;
+  if v.status not in ('archived', 'rejected') then
+    raise exception 'that record is not archived';
+  end if;
+  if v.status = 'rejected' and not private.is_command() then
+    perform private.perm_raise('restore', 'field_submission', p_submission, 'rejected: command only', 'only a Bureau Lead or above can restore a rejected record');
+  end if;
 
   update public.field_submissions
      set status = 'reviewing',
          archived_at = null, archived_by = null,
+         rejected_at = null, rejected_by = null,
          updated_at = now()
    where id = p_submission;
 
   insert into public.field_submission_reviews (submission_id, author_id, note)
   values (p_submission, v_actor,
-          'Restored from the archive' ||
+          case when v.status = 'rejected' then 'Restored after rejection' else 'Restored from the archive' end ||
           coalesce(': ' || nullif(btrim(coalesce(p_reason, '')), ''), ''));
 
   insert into public.audit_log (actor_id, action, entity, entity_id, detail)
   values (v_actor, 'FIELD_SUBMISSION_RESTORED', 'field_submissions', p_submission,
           jsonb_build_object('submission_no', v.submission_no,
+                             'from_status', v.status,
                              'archive_reason', v.archive_reason,
                              'reason', nullif(btrim(coalesce(p_reason, '')), '')));
 end $function$
@@ -11112,7 +11483,7 @@ CREATE OR REPLACE FUNCTION public.field_submission_siu_refer(p_submission uuid, 
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare v_actor uuid := (select auth.uid()); v public.field_submissions;
+declare v_actor uuid := (select auth.uid()); v public.field_submissions; r uuid;
 begin
   if not private.is_active() then raise exception 'not authorized'; end if;
   if not private.field_submission_readable(p_submission) then
@@ -11149,6 +11520,15 @@ begin
   values (v_actor, 'FIELD_SIU_REFERRED', 'field_submissions', p_submission,
           jsonb_build_object('submission_no', v.submission_no,
                              'category', p_category, 'reason', btrim(p_reason)));
+
+  for r in
+    select p.id from public.profiles p
+     where p.active and p.removed_at is null and p.id <> v_actor
+       and coalesce(private.siu_standing(p.id) in
+             ('owner', 'special_agent_in_charge', 'senior_special_agent', 'special_agent'), false)
+  loop
+    perform private.intel_notify(r, p_submission, 'intel_referred', jsonb_build_object('category', p_category));
+  end loop;
 end $function$
 ;
 
@@ -11315,6 +11695,63 @@ begin
   insert into public.audit_log (actor_id, action, entity, entity_id, detail)
   values (v_actor, 'FIELD_SUBMISSION_CASE_UNLINKED', 'field_submissions', l.submission_id,
           jsonb_build_object('case_id', l.case_id, 'reason', btrim(p_reason)));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.field_submission_validate(p_submission uuid, p_note text, p_clear boolean DEFAULT false)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_actor uuid := (select auth.uid()); v public.field_submissions; st record;
+        v_note text := btrim(coalesce(p_note, ''));
+begin
+  if not private.is_active() then
+    perform private.perm_raise('validate', 'field_submission', p_submission, 'not an active member', 'not authorized');
+  end if;
+  if v_note = '' then raise exception 'say why'; end if;
+  if length(v_note) > 2000 then raise exception 'a note is at most 2000 characters'; end if;
+
+  select * into v from public.field_submissions where id = p_submission for update;
+  if not found then raise exception 'no such record'; end if;
+  if not private.field_submission_readable(p_submission) then
+    perform private.perm_raise('validate', 'field_submission', p_submission, 'outside the read wall', 'that record is not in your jurisdiction');
+  end if;
+  if v.status = 'draft' then raise exception 'that record has not been sent yet'; end if;
+  if v.status in ('archived', 'rejected') then raise exception 'that record is closed'; end if;
+
+  if coalesce(p_clear, false) then
+    if v.validated_at is null then raise exception 'that record is not validated'; end if;
+    update public.field_submissions
+       set validated_at = null, validated_by = null, updated_at = now()
+     where id = p_submission;
+    insert into public.field_submission_reviews (submission_id, author_id, note)
+    values (p_submission, v_actor, 'Validation withdrawn: ' || v_note);
+    insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+    values (v_actor, 'FIELD_SUBMISSION_UNVALIDATED', 'field_submissions', p_submission,
+            jsonb_build_object('submission_no', v.submission_no, 'note', v_note,
+                               'previously_by', v.validated_by));
+    return;
+  end if;
+
+  if v.validated_at is not null then raise exception 'that record is already validated'; end if;
+  select * into st from private.field_validation_state(p_submission);
+  if st.p_claims = 0 or st.p_decided < st.p_claims or not coalesce(st.p_graded, false) then
+    raise exception 'validate every claim and grade the source first (% of % claims decided%)',
+      st.p_decided, st.p_claims,
+      case when coalesce(st.p_graded, false) then '' else ', source ungraded' end;
+  end if;
+
+  update public.field_submissions
+     set validated_at = now(), validated_by = v_actor, updated_at = now()
+   where id = p_submission;
+  insert into public.field_submission_reviews (submission_id, author_id, note)
+  values (p_submission, v_actor, 'Validated: ' || v_note);
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_actor, 'FIELD_SUBMISSION_VALIDATED', 'field_submissions', p_submission,
+          jsonb_build_object('submission_no', v.submission_no, 'note', v_note,
+                             'claims', st.p_claims));
 end $function$
 ;
 
@@ -11585,6 +12022,370 @@ begin
     n := n + 1;
   end loop;
   return n;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.intel_group_add(p_group uuid, p_submission uuid, p_note text DEFAULT NULL::text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_actor uuid := (select auth.uid()); g public.intel_groups;
+begin
+  if not private.is_active() then
+    perform private.perm_raise('group', 'field_submission', p_submission, 'not an active member', 'not authorized');
+  end if;
+  select * into g from public.intel_groups where id = p_group for update;
+  if not found or not private.intel_group_readable(p_group) then raise exception 'no such group'; end if;
+  if g.closed_at is not null then raise exception 'that group is closed'; end if;
+  perform private.intel_group_member_ok(p_submission);
+  if exists (select 1 from public.intel_group_members
+              where group_id = p_group and submission_id = p_submission and removed_at is null) then
+    raise exception 'that record is already in this group';
+  end if;
+
+  insert into public.intel_group_members (group_id, submission_id, added_by, note)
+  values (p_group, p_submission, v_actor, nullif(btrim(coalesce(p_note, '')), ''))
+  on conflict (group_id, submission_id) do update
+    set removed_at = null, removed_by = null, remove_reason = null,
+        added_by = excluded.added_by, added_at = now(), note = excluded.note;
+  update public.intel_groups set updated_at = now() where id = p_group;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_actor, 'INTEL_GROUP_MEMBER_ADDED', 'intel_groups', p_group,
+          jsonb_build_object('submission_id', p_submission));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.intel_group_close(p_group uuid, p_reason text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_actor uuid := (select auth.uid()); g public.intel_groups;
+begin
+  if not private.is_active() then
+    perform private.perm_raise('group', 'field_submission', null, 'not an active member', 'not authorized');
+  end if;
+  if coalesce(btrim(coalesce(p_reason, '')), '') = '' then raise exception 'say why'; end if;
+  select * into g from public.intel_groups where id = p_group for update;
+  if not found or not private.intel_group_readable(p_group) then raise exception 'no such group'; end if;
+  if g.closed_at is not null then raise exception 'that group is already closed'; end if;
+  if g.created_by is distinct from v_actor and not private.is_command() then
+    perform private.perm_raise('group', 'field_submission', g.lead_submission_id, 'close: creator or command',
+                               'only the group''s creator or a Bureau Lead or above can close it');
+  end if;
+  update public.intel_groups
+     set closed_at = now(), closed_by = v_actor, close_reason = btrim(p_reason), updated_at = now()
+   where id = p_group;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_actor, 'INTEL_GROUP_CLOSED', 'intel_groups', p_group, jsonb_build_object('reason', btrim(p_reason)));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.intel_group_create(p_title text, p_lead uuid, p_members uuid[] DEFAULT '{}'::uuid[], p_note text DEFAULT NULL::text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_actor uuid := (select auth.uid()); v_id uuid; m uuid; v_title text := btrim(coalesce(p_title, ''));
+begin
+  if not private.is_active() then
+    perform private.perm_raise('group', 'field_submission', p_lead, 'not an active member', 'not authorized');
+  end if;
+  if v_title = '' then raise exception 'give the group a title'; end if;
+  if length(v_title) > 200 then raise exception 'a title is at most 200 characters'; end if;
+  perform private.intel_group_member_ok(p_lead);
+  foreach m in array coalesce(p_members, '{}'::uuid[]) loop
+    perform private.intel_group_member_ok(m);
+  end loop;
+
+  insert into public.intel_groups (title, note, lead_submission_id, created_by)
+  values (v_title, nullif(btrim(coalesce(p_note, '')), ''), p_lead, v_actor)
+  returning id into v_id;
+
+  insert into public.intel_group_members (group_id, submission_id, added_by)
+  select v_id, x, v_actor
+    from unnest(array[p_lead] || coalesce(p_members, '{}'::uuid[])) as x
+  on conflict (group_id, submission_id) do nothing;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_actor, 'INTEL_GROUP_CREATED', 'intel_groups', v_id,
+          jsonb_build_object('title', v_title, 'lead', p_lead,
+                             'members', (select count(*) from public.intel_group_members where group_id = v_id)));
+  return v_id;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.intel_group_link_case(p_group uuid, p_case uuid, p_note text DEFAULT NULL::text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_actor uuid := (select auth.uid()); g public.intel_groups; v_id uuid;
+begin
+  if not private.is_active() then
+    perform private.perm_raise('group', 'field_submission', null, 'not an active member', 'not authorized');
+  end if;
+  select * into g from public.intel_groups where id = p_group for update;
+  if not found or not private.intel_group_readable(p_group) then raise exception 'no such group'; end if;
+  if g.closed_at is not null then raise exception 'that group is closed'; end if;
+  if not private.field_case_visible(p_case) then
+    raise exception 'no such case, or it is not one you have access to';
+  end if;
+  if exists (select 1 from public.intel_group_cases
+              where group_id = p_group and case_id = p_case and unlinked_at is null) then
+    raise exception 'that group is already linked to that case';
+  end if;
+
+  insert into public.intel_group_cases (group_id, case_id, linked_by, note)
+  values (p_group, p_case, v_actor, nullif(btrim(coalesce(p_note, '')), ''))
+  on conflict (group_id, case_id) do update
+    set unlinked_at = null, unlinked_by = null, unlink_reason = null,
+        linked_by = excluded.linked_by, linked_at = now(), note = excluded.note
+  returning id into v_id;
+  update public.intel_groups set updated_at = now() where id = p_group;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_actor, 'INTEL_GROUP_CASE_LINKED', 'intel_groups', p_group,
+          jsonb_build_object('case_id', p_case));
+  return v_id;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.intel_group_remove(p_group uuid, p_submission uuid, p_reason text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_actor uuid := (select auth.uid()); g public.intel_groups;
+begin
+  if not private.is_active() then
+    perform private.perm_raise('group', 'field_submission', p_submission, 'not an active member', 'not authorized');
+  end if;
+  if coalesce(btrim(coalesce(p_reason, '')), '') = '' then raise exception 'say why'; end if;
+  select * into g from public.intel_groups where id = p_group for update;
+  if not found or not private.intel_group_readable(p_group) then raise exception 'no such group'; end if;
+  if g.closed_at is not null then raise exception 'that group is closed'; end if;
+  if g.lead_submission_id = p_submission then
+    raise exception 'the lead record stays in its group — close the group instead';
+  end if;
+  if not exists (select 1 from public.intel_group_members
+                  where group_id = p_group and submission_id = p_submission and removed_at is null) then
+    raise exception 'that record is not in this group';
+  end if;
+
+  update public.intel_group_members
+     set removed_at = now(), removed_by = v_actor, remove_reason = btrim(p_reason)
+   where group_id = p_group and submission_id = p_submission;
+  update public.intel_groups set updated_at = now() where id = p_group;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_actor, 'INTEL_GROUP_MEMBER_REMOVED', 'intel_groups', p_group,
+          jsonb_build_object('submission_id', p_submission, 'reason', btrim(p_reason)));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.intel_group_reopen(p_group uuid, p_reason text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_actor uuid := (select auth.uid()); g public.intel_groups;
+begin
+  if not private.is_active() then
+    perform private.perm_raise('group', 'field_submission', null, 'not an active member', 'not authorized');
+  end if;
+  if coalesce(btrim(coalesce(p_reason, '')), '') = '' then raise exception 'say why'; end if;
+  select * into g from public.intel_groups where id = p_group for update;
+  if not found or not private.intel_group_readable(p_group) then raise exception 'no such group'; end if;
+  if g.closed_at is null then raise exception 'that group is not closed'; end if;
+  if g.created_by is distinct from v_actor and not private.is_command() then
+    perform private.perm_raise('group', 'field_submission', g.lead_submission_id, 'reopen: creator or command',
+                               'only the group''s creator or a Bureau Lead or above can reopen it');
+  end if;
+  update public.intel_groups
+     set closed_at = null, closed_by = null, close_reason = null, updated_at = now()
+   where id = p_group;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_actor, 'INTEL_GROUP_REOPENED', 'intel_groups', p_group, jsonb_build_object('reason', btrim(p_reason)));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.intel_group_suggest(p_submission uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_out jsonb;
+begin
+  if not private.is_active() then return jsonb_build_object('groups', '[]'::jsonb, 'submissions', '[]'::jsonb); end if;
+  if not private.field_submission_readable(p_submission) then
+    raise exception 'that record is not in your jurisdiction';
+  end if;
+
+  with mine as (
+    select 'person' as kind, lower(btrim(p.full_name)) as key, btrim(p.full_name) as label
+      from public.field_submission_persons p
+     where p.submission_id = p_submission and length(btrim(coalesce(p.full_name, ''))) > 1
+    union
+    select 'person', lower(btrim(p.alias)), btrim(p.alias)
+      from public.field_submission_persons p
+     where p.submission_id = p_submission and length(btrim(coalesce(p.alias, ''))) > 1
+    union
+    select 'vehicle', lower(btrim(v.plate)), btrim(v.plate)
+      from public.field_submission_vehicles v
+     where v.submission_id = p_submission and length(btrim(coalesce(v.plate, ''))) > 1
+    union
+    select 'organisation', lower(btrim(o.name)), btrim(o.name)
+      from public.field_submission_orgs o
+     where o.submission_id = p_submission and length(btrim(coalesce(o.name, ''))) > 1
+  ),
+  named as (
+    select x.submission_id, m.label
+      from mine m
+      join (
+        select 'person' as kind, lower(btrim(p.full_name)) as key, p.submission_id from public.field_submission_persons p
+        union all
+        select 'person', lower(btrim(p.alias)), p.submission_id from public.field_submission_persons p
+        union all
+        select 'vehicle', lower(btrim(v.plate)), v.submission_id from public.field_submission_vehicles v
+        union all
+        select 'organisation', lower(btrim(o.name)), o.submission_id from public.field_submission_orgs o
+      ) x on x.kind = m.kind and x.key = m.key
+     where x.submission_id <> p_submission
+  ),
+  pins as (
+    select l.submission_id, 'person' as kind, l.person_id as ref from public.field_claim_links l where l.person_id is not null
+    union all select l.submission_id, 'vehicle', l.vehicle_id from public.field_claim_links l where l.vehicle_id is not null
+    union all select l.submission_id, 'organisation', l.gang_id from public.field_claim_links l where l.gang_id is not null
+    union all select l.submission_id, 'place', l.place_id from public.field_claim_links l where l.place_id is not null
+    union all select l.submission_id, 'narcotic', l.narcotic_id from public.field_claim_links l where l.narcotic_id is not null
+    union all select l.submission_id, 'account', l.account_id from public.field_claim_links l where l.account_id is not null
+    union all select l.submission_id, 'indicator', l.indicator_id from public.field_claim_links l where l.indicator_id is not null
+  ),
+  linked as (
+    select b.submission_id,
+           case when private.perm_registry_visible(case a.kind when 'organisation' then 'gang' else a.kind end, a.ref)
+                     or (a.kind = 'indicator' and exists (select 1 from public.indicators ii where ii.id = a.ref
+                                                            and private.field_case_visible(ii.case_id)))
+                then coalesce(pe.name, ve.plate, ga.name, pl.name, na.name, ac.handle, ind.value, 'a matched record')
+                else 'a matched record' end as label
+      from pins a
+      join pins b on b.kind = a.kind and b.ref = a.ref and b.submission_id <> a.submission_id
+      left join public.persons pe on a.kind = 'person' and pe.id = a.ref
+      left join public.vehicles ve on a.kind = 'vehicle' and ve.id = a.ref
+      left join public.gangs ga on a.kind = 'organisation' and ga.id = a.ref
+      left join public.places pl on a.kind = 'place' and pl.id = a.ref
+      left join public.narcotics na on a.kind = 'narcotic' and na.id = a.ref
+      left join public.accounts ac on a.kind = 'account' and ac.id = a.ref
+      left join public.indicators ind on a.kind = 'indicator' and ind.id = a.ref
+     where a.submission_id = p_submission
+  ),
+  sig as (
+    select distinct z.submission_id, z.label
+      from (select * from named union all select * from linked) z
+      join public.field_submissions s on s.id = z.submission_id
+     where s.deleted_at is null and s.status <> 'draft' and private.field_submission_readable(s.id)
+  ),
+  subs as (
+    select s.id, s.submission_no, s.status, s.submitted_at,
+           (select jsonb_agg(distinct t.label) from sig t where t.submission_id = s.id) as shared
+      from public.field_submissions s
+     where s.id in (select submission_id from sig)
+     order by s.submitted_at desc nulls last
+     limit 20
+  ),
+  grps as (
+    select g.id, g.title, g.updated_at,
+           (select ls.submission_no from public.field_submissions ls where ls.id = g.lead_submission_id) as lead_submission_no,
+           (select count(*) from public.intel_group_members m2 where m2.group_id = g.id and m2.removed_at is null) as members,
+           (select jsonb_agg(distinct t.label) from sig t
+              join public.intel_group_members m3 on m3.submission_id = t.submission_id and m3.group_id = g.id and m3.removed_at is null) as shared
+      from public.intel_groups g
+     where g.closed_at is null
+       and private.field_submission_readable(g.lead_submission_id)
+       and exists (select 1 from public.intel_group_members m join sig t on t.submission_id = m.submission_id
+                    where m.group_id = g.id and m.removed_at is null)
+       and not exists (select 1 from public.intel_group_members m
+                        where m.group_id = g.id and m.submission_id = p_submission and m.removed_at is null)
+     order by g.updated_at desc
+     limit 20
+  )
+  select jsonb_build_object(
+    'groups', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'title', title, 'lead_submission_no', lead_submission_no,
+                                                            'members', members, 'shared', coalesce(shared, '[]'::jsonb)) order by updated_at desc) from grps), '[]'::jsonb),
+    'submissions', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'submission_no', submission_no, 'status', status,
+                                                                 'shared', coalesce(shared, '[]'::jsonb)) order by submitted_at desc nulls last) from subs), '[]'::jsonb))
+    into v_out;
+  return v_out;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.intel_group_summary(p_group uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select case when not private.intel_group_readable(p_group) then null else (
+    select jsonb_build_object(
+      'id', g.id, 'title', g.title, 'note', g.note, 'lead_submission_id', g.lead_submission_id,
+      'created_by', g.created_by, 'created_at', g.created_at, 'closed_at', g.closed_at, 'close_reason', g.close_reason,
+      'members', coalesce((select jsonb_agg(jsonb_build_object(
+                    'submission_id', m.submission_id, 'submission_no', s.submission_no, 'status', s.status,
+                    'added_at', m.added_at, 'note', m.note) order by m.added_at)
+                  from public.intel_group_members m join public.field_submissions s on s.id = m.submission_id
+                 where m.group_id = g.id and m.removed_at is null and private.field_submission_readable(m.submission_id)), '[]'::jsonb),
+      'hidden', (select count(*) from public.intel_group_members m
+                  where m.group_id = g.id and m.removed_at is null and not private.field_submission_readable(m.submission_id)),
+      'claims', (select coalesce(sum(st.p_claims), 0) from public.intel_group_members m
+                  cross join lateral private.field_validation_state(m.submission_id) st
+                 where m.group_id = g.id and m.removed_at is null and private.field_submission_readable(m.submission_id)),
+      'decided', (select coalesce(sum(st.p_decided), 0) from public.intel_group_members m
+                   cross join lateral private.field_validation_state(m.submission_id) st
+                  where m.group_id = g.id and m.removed_at is null and private.field_submission_readable(m.submission_id)),
+      'cases', coalesce((select jsonb_agg(jsonb_build_object('case_id', c.id, 'case_number', c.case_number, 'title', c.title) order by gc.linked_at)
+                  from public.intel_group_cases gc join public.cases c on c.id = gc.case_id
+                 where gc.group_id = g.id and gc.unlinked_at is null and private.field_case_visible(c.id)), '[]'::jsonb))
+    from public.intel_groups g where g.id = p_group) end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.intel_group_unlink_case(p_group uuid, p_case uuid, p_reason text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_actor uuid := (select auth.uid()); g public.intel_groups;
+begin
+  if not private.is_active() then
+    perform private.perm_raise('group', 'field_submission', null, 'not an active member', 'not authorized');
+  end if;
+  if coalesce(btrim(coalesce(p_reason, '')), '') = '' then raise exception 'say why'; end if;
+  select * into g from public.intel_groups where id = p_group for update;
+  if not found or not private.intel_group_readable(p_group) then raise exception 'no such group'; end if;
+  if not exists (select 1 from public.intel_group_cases
+                  where group_id = p_group and case_id = p_case and unlinked_at is null) then
+    raise exception 'that group is not linked to that case';
+  end if;
+
+  update public.intel_group_cases
+     set unlinked_at = now(), unlinked_by = v_actor, unlink_reason = btrim(p_reason)
+   where group_id = p_group and case_id = p_case;
+  update public.intel_groups set updated_at = now() where id = p_group;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_actor, 'INTEL_GROUP_CASE_UNLINKED', 'intel_groups', p_group,
+          jsonb_build_object('case_id', p_case, 'reason', btrim(p_reason)));
 end $function$
 ;
 
@@ -14124,20 +14925,28 @@ CREATE OR REPLACE FUNCTION public.perm_denied_ack(p_action text, p_kind text, p_
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare v_uid uuid := (select auth.uid());
+declare v_uid uuid := (select auth.uid()); v_action text := lower(btrim(coalesce(p_action, ''))); v_kind text := lower(btrim(coalesce(p_kind, '')));
 begin
-  if v_uid is null or p_action is null or p_kind is null then return false; end if;
-  -- Only an account with a profile row can be refused anything worth
-  -- recording; an unknown subject would write an actor-less row.
+  if v_uid is null or v_action = '' or v_kind = '' then return false; end if;
   if not exists (select 1 from public.profiles p where p.id = v_uid) then return false; end if;
+  if not exists (select 1 from public.permission_catalog c where c.action = v_action and (c.kind = v_kind or c.kind = '*')) then
+    return false;
+  end if;
+  if p_id is not null and public.can_record(v_action, v_kind, p_id) then return false; end if;
   if exists (select 1 from public.audit_log a
               where a.actor_id = v_uid and a.action = 'PERMISSION_DENIED'
-                and a.entity = lower(btrim(p_kind)) and a.entity_id is not distinct from p_id
-                and a.detail->>'action' = lower(btrim(p_action))
+                and a.entity = v_kind and a.entity_id is not distinct from p_id
+                and a.detail->>'action' = v_action
                 and a.created_at > now() - interval '1 minute') then
     return false;
   end if;
-  perform private.perm_deny(lower(btrim(p_action)), lower(btrim(p_kind)), p_id, p_reason, 'client_ack');
+  if (select count(*) from public.audit_log a
+       where a.actor_id = v_uid and a.action = 'PERMISSION_DENIED'
+         and a.detail->>'source' = 'client_ack'
+         and a.created_at > now() - interval '10 minutes') >= 20 then
+    return false;
+  end if;
+  perform private.perm_deny(v_action, v_kind, p_id, p_reason, 'client_ack');
   return true;
 end $function$
 ;
@@ -16839,6 +17648,8 @@ begin
   delete from public.report_template_versions where status = 'draft' and created_by = any(ids);
   delete from public.report_template_versions v using public.report_templates t where t.id = v.template_id and t.created_by = any(ids) and not exists (select 1 from public.reports x where x.template_version_id = v.id);
   delete from public.report_templates t where t.created_by = any(ids) and not exists (select 1 from public.report_template_versions v where v.template_id = t.id);
+  delete from public.intel_groups where created_by = any(ids);
+  delete from public.field_submissions where officer_id = any(ids) or created_by = any(ids);
   delete from public.reports where case_id = any(case_ids);
   get diagnostics n_reports = row_count;
   select count(*) into n from public.reports r
@@ -19496,6 +20307,23 @@ begin
     'source_type', p_source_type, 'recorded_by', v_actor));
   return v_id;
 end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.siu_referred_submissions()
+ RETURNS TABLE(id uuid, submission_no text, siu_category text, siu_state text, siu_referred_at timestamp with time zone, siu_referred_by uuid, siu_assigned_to uuid, siu_case_id uuid, jurisdiction text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select s.id, s.submission_no, s.siu_category, s.siu_state, s.siu_referred_at,
+         s.siu_referred_by, s.siu_assigned_to, s.siu_case_id, s.jurisdiction
+    from public.field_submissions s
+   where private.siu_is_agent()
+     and s.deleted_at is null
+     and s.siu_state in ('referred', 'accepted')
+   order by s.siu_referred_at desc nulls last
+   limit 200
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION public.siu_registry_search(p_entity_type text, p_q text)
@@ -22458,6 +23286,58 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.block_direct_intel_review_columns()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if current_user not in ('authenticated', 'anon') then return new; end if;
+  if tg_op = 'INSERT' then
+    -- A record starts clean: no review state, no SIB handling, no grade.
+    if new.status = 'rejected' or new.rejected_at is not null or new.rejected_by is not null
+       or new.validated_at is not null or new.validated_by is not null
+       or new.assigned_to is not null or new.assigned_at is not null
+       or new.siu_state is not null or new.siu_category is not null or new.siu_reason is not null
+       or new.siu_referred_by is not null or new.siu_referred_at is not null
+       or new.siu_assigned_to is not null or new.siu_assigned_at is not null
+       or coalesce(new.siu_sensitive, false) or new.siu_case_id is not null
+       or new.reliability is not null then
+      raise exception 'a record starts without review state — the review actions set it';
+    end if;
+    return new;
+  end if;
+  -- A sent record is never edited by a client session: every change to it is
+  -- a review action (an RPC). The only client UPDATE path is the author's
+  -- draft editor.
+  if old.status <> 'draft' then
+    raise exception 'that record has already been sent; the review state only changes through the review actions';
+  end if;
+  if new.status = 'rejected'
+     or new.rejected_at is distinct from old.rejected_at
+     or new.rejected_by is distinct from old.rejected_by
+     or new.validated_at is distinct from old.validated_at
+     or new.validated_by is distinct from old.validated_by
+     or new.assigned_to is distinct from old.assigned_to
+     or new.assigned_at is distinct from old.assigned_at
+     or new.siu_state is distinct from old.siu_state
+     or new.siu_category is distinct from old.siu_category
+     or new.siu_reason is distinct from old.siu_reason
+     or new.siu_referred_by is distinct from old.siu_referred_by
+     or new.siu_referred_at is distinct from old.siu_referred_at
+     or new.siu_assigned_to is distinct from old.siu_assigned_to
+     or new.siu_assigned_at is distinct from old.siu_assigned_at
+     or new.siu_sensitive is distinct from old.siu_sensitive
+     or new.siu_case_id is distinct from old.siu_case_id
+     or new.reliability is distinct from old.reliability
+     or new.deleted_at is distinct from old.deleted_at
+     or new.archived_at is distinct from old.archived_at then
+    raise exception 'the review state only changes through the review actions';
+  end if;
+  return new;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.block_direct_login_denied()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -24859,6 +25739,38 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.field_claim_pair_ok(p_claim_kind text, p_target_kind text)
+ RETURNS boolean
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  select case p_claim_kind
+    when 'person'   then p_target_kind in ('person', 'account', 'indicator')
+    when 'vehicle'  then p_target_kind in ('vehicle', 'indicator')
+    when 'org'      then p_target_kind in ('gang', 'account', 'indicator')
+    when 'location' then p_target_kind in ('place', 'indicator')
+    when 'item'     then p_target_kind in ('narcotic', 'indicator')
+    else false end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.field_claim_submission(p_kind text, p_claim uuid)
+ RETURNS uuid
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select case p_kind
+    when 'person'   then (select submission_id from public.field_submission_persons where id = p_claim)
+    when 'vehicle'  then (select submission_id from public.field_submission_vehicles where id = p_claim)
+    when 'org'      then (select submission_id from public.field_submission_orgs where id = p_claim)
+    when 'location' then (select submission_id from public.field_submission_locations where id = p_claim)
+    when 'item'     then (select submission_id from public.field_submission_items where id = p_claim)
+    else null end
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.field_evidence_before_insert()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -24911,6 +25823,43 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.field_link_target_ok(p_target_kind text, p_target uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select case
+    when p_target_kind = 'indicator' then
+      exists (select 1 from public.indicators i where i.id = p_target and i.deleted_at is null
+               and private.field_case_visible(i.case_id))
+    when p_target_kind in ('person', 'vehicle', 'gang', 'place', 'narcotic', 'account') then
+      (select st.p_exists and st.p_deleted_at is null from private.soft_delete_state(p_target_kind, p_target) st)
+      and private.perm_registry_visible(p_target_kind, p_target)
+    else false end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.field_message_after_insert()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_to uuid;
+begin
+  if new.from_reviewer then return null; end if;
+  select s.assigned_to into v_to from public.field_submissions s where s.id = new.submission_id;
+  if v_to is null then
+    select m.author_id into v_to from public.field_submission_messages m
+     where m.submission_id = new.submission_id and m.from_reviewer and m.id <> new.id
+     order by m.created_at desc limit 1;
+  end if;
+  perform private.intel_notify(v_to, new.submission_id, 'intel_reply');
+  return null;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.field_message_before_insert()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -24947,6 +25896,35 @@ AS $function$
     'firearms_trafficking', 'public_corruption', 'fugitive',
     'major_crime_scene', 'cross_jurisdiction', 'other_complex')
 $function$
+;
+
+CREATE OR REPLACE FUNCTION private.field_submission_after_change()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare r uuid;
+begin
+  if new.status = 'draft' then
+    delete from public.field_submission_events where submission_id = new.id;
+  else
+    -- A soft-deleted record stays as an UPDATE the read wall filters (a
+    -- realtime DELETE event would hand its key to every subscriber).
+    insert into public.field_submission_events (submission_id, status, assigned_to, siu_state, updated_at)
+    values (new.id, case when new.deleted_at is not null then 'deleted' else new.status end,
+            new.assigned_to, new.siu_state, now())
+    on conflict (submission_id) do update
+      set status = excluded.status, assigned_to = excluded.assigned_to,
+          siu_state = excluded.siu_state, updated_at = excluded.updated_at;
+  end if;
+  if new.status = 'new' and (tg_op = 'INSERT' or old.status = 'draft') then
+    for r in select * from private.intel_reviewers(new.id) loop
+      perform private.intel_notify(r, new.id, 'intel_new');
+    end loop;
+  end if;
+  return null;
+end $function$
 ;
 
 CREATE OR REPLACE FUNCTION private.field_submission_before_insert()
@@ -25001,6 +25979,14 @@ begin
   new.submitted_at := null;
   new.archived_at := null; new.archived_by := null; new.archive_reason := null;
   new.deleted_at := null; new.deleted_by := null; new.delete_reason := null;
+  new.assigned_at := null;
+  new.siu_state := null; new.siu_category := null; new.siu_reason := null;
+  new.siu_referred_by := null; new.siu_referred_at := null;
+  new.siu_assigned_to := null; new.siu_assigned_at := null;
+  new.siu_sensitive := false; new.siu_case_id := null;
+  new.rejected_at := null; new.rejected_by := null;
+  new.validated_at := null; new.validated_by := null;
+  new.reliability := null;
 
   if new.status = 'new' then
     new.submission_no := private.next_field_submission_no();
@@ -25135,7 +26121,11 @@ AS $function$
                                        and s.siu_case_id is not null), 0),
     'messages with the author', nullif((select count(*)
                                           from public.field_submission_messages m
-                                         where m.submission_id = p_submission), 0)
+                                         where m.submission_id = p_submission), 0),
+    'intel groups', nullif((select count(*) from public.intel_group_members m
+                             where m.submission_id = p_submission and m.removed_at is null)
+                         + (select count(*) from public.intel_groups g
+                             where g.lead_submission_id = p_submission), 0)
   ))
 $function$
 ;
@@ -25212,14 +26202,32 @@ CREATE OR REPLACE FUNCTION private.field_submission_transition_ok(p_from text, p
 AS $function$
   select case p_from
     when 'draft' then false
-    when 'new' then p_to in ('reviewing', 'reviewed', 'actionable', 'archived')
-    when 'reviewing' then p_to in ('needs_info', 'reviewed', 'actionable', 'archived')
-    when 'needs_info' then p_to in ('reviewing', 'reviewed', 'actionable', 'archived')
-    when 'reviewed' then p_to in ('reviewing', 'actionable', 'archived')
-    when 'actionable' then p_to in ('reviewing', 'reviewed', 'archived')
+    when 'new' then p_to in ('reviewing', 'reviewed', 'actionable', 'archived', 'rejected')
+    when 'reviewing' then p_to in ('needs_info', 'reviewed', 'actionable', 'archived', 'rejected')
+    when 'needs_info' then p_to in ('reviewing', 'reviewed', 'actionable', 'archived', 'rejected')
+    when 'reviewed' then p_to in ('reviewing', 'actionable', 'archived', 'rejected')
+    when 'actionable' then p_to in ('reviewing', 'reviewed', 'archived', 'rejected')
     when 'archived' then p_to in ('reviewing')
+    when 'rejected' then p_to in ('reviewing')
     else false
   end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.field_validation_state(p_submission uuid, OUT p_claims integer, OUT p_decided integer, OUT p_graded boolean)
+ RETURNS record
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select
+    ((select count(*) from public.field_submission_persons   where submission_id = p_submission)
+   + (select count(*) from public.field_submission_vehicles  where submission_id = p_submission)
+   + (select count(*) from public.field_submission_orgs      where submission_id = p_submission)
+   + (select count(*) from public.field_submission_locations where submission_id = p_submission)
+   + (select count(*) from public.field_submission_items     where submission_id = p_submission))::int,
+    (select count(*) from public.field_claim_verdicts where submission_id = p_submission)::int,
+    (select s.reliability is not null from public.field_submissions s where s.id = p_submission)
 $function$
 ;
 
@@ -25617,6 +26625,95 @@ AS $function$
       and o.status = 'active'
       and ob.bureau = (select division from public.profiles where id = (select auth.uid()))
   ) $function$
+;
+
+CREATE OR REPLACE FUNCTION private.intel_group_member_ok(p_submission uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_status text;
+begin
+  select status into v_status from public.field_submissions where id = p_submission;
+  if v_status is null then raise exception 'no such record'; end if;
+  if not private.field_submission_readable(p_submission) then
+    raise exception 'that record is not in your jurisdiction';
+  end if;
+  if v_status = 'draft' then raise exception 'that record has not been sent yet'; end if;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.intel_group_readable(p_group uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.is_active()
+     and exists (select 1 from public.intel_groups g
+                  where g.id = p_group and private.field_submission_readable(g.lead_submission_id))
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.intel_notify(p_user uuid, p_submission uuid, p_kind text, p_extra jsonb DEFAULT '{}'::jsonb)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare s public.field_submissions; v_actor uuid := (select auth.uid()); v_actor_name text;
+        v_actor_test boolean; v_target_test boolean; v_payload jsonb;
+begin
+  if p_user is null or p_user = v_actor then return; end if;
+  select * into s from public.field_submissions where id = p_submission;
+  if not found then return; end if;
+  if not exists (select 1 from public.profiles p where p.id = p_user) then return; end if;
+  select private.is_test_user(v_actor) or exists (select 1 from auth.users u where u.id = v_actor and u.email like 'rls-test-%@cidportal.test') into v_actor_test;
+  select private.is_test_user(p_user) or exists (select 1 from auth.users u where u.id = p_user and u.email like 'rls-test-%@cidportal.test') into v_target_test;
+  if coalesce(v_actor_test, false) and not coalesce(v_target_test, false) then return; end if;
+  select display_name into v_actor_name from public.profiles where id = v_actor;
+  v_payload := jsonb_build_object(
+    'submission_id', p_submission, 'submission_no', s.submission_no,
+    'jurisdiction', s.jurisdiction, 'actor_id', v_actor, 'actor_name', v_actor_name)
+    || coalesce(p_extra - 'summary' - 'details' - 'reason' - 'title', '{}'::jsonb);
+  if exists (select 1 from public.notifications n
+              where n.user_id = p_user and n.type = p_kind and not n.read
+                and n.created_at > now() - interval '1 hour'
+                and n.payload->>'submission_id' = p_submission::text) then
+    return;
+  end if;
+  -- A submitter looping sends cannot storm command: after ten unread
+  -- intel_new from the same actor in ten minutes the rest are folded away.
+  if p_kind = 'intel_new' and (select count(*) from public.notifications n
+                                 where n.user_id = p_user and n.type = 'intel_new' and not n.read
+                                   and n.created_at > now() - interval '10 minutes'
+                                   and n.payload->>'actor_id' = v_actor::text) >= 10 then
+    return;
+  end if;
+  insert into public.notifications (user_id, type, payload) values (p_user, p_kind, v_payload);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.intel_reviewers(p_submission uuid)
+ RETURNS SETOF uuid
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select p.id
+    from public.field_submissions s
+    join public.profiles p on p.active and p.removed_at is null
+                          and (p.is_owner or p.role in ('bureau_lead', 'deputy_director', 'director'))
+   where s.id = p_submission
+     and p.id is distinct from (select auth.uid())
+     and private.field_jurisdiction_visible_for(p.id, s.jurisdiction)
+     and (not s.siu_sensitive
+          or coalesce(private.siu_standing(p.id) in
+               ('owner', 'special_agent_in_charge', 'senior_special_agent', 'special_agent'), false)
+          or s.siu_referred_by = p.id
+          or s.assigned_to = p.id)
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION private.is_active()
@@ -27069,6 +28166,26 @@ AS $function$
       when 'propose' then private.report_template_proposer()
       when 'publish' then private.report_template_admin()
       else false end
+    -- Phase 6 (P6-01 … P6-08): the intelligence record's own actions.
+    when p_kind = 'field_submission' then (
+      select case p_action
+        when 'read'     then private.field_submission_readable(p_id)
+        when 'reject'   then private.is_active() and private.field_submission_readable(p_id)
+                             and s.status in ('new', 'reviewing', 'needs_info', 'reviewed', 'actionable')
+        when 'restore'  then private.field_submission_readable(p_id)
+                             and ((s.status = 'archived' and private.is_active())
+                                  or (s.status = 'rejected' and private.is_command()))
+        when 'comment'  then private.is_active() and private.field_submission_readable(p_id) and s.status <> 'draft'
+        when 'validate' then private.is_active() and private.field_submission_readable(p_id)
+                             and s.status not in ('draft', 'archived', 'rejected')
+        when 'group'    then private.is_active() and private.field_submission_readable(p_id) and s.status <> 'draft'
+        when 'convert'  then private.is_active() and private.field_submission_readable(p_id) and s.status <> 'draft'
+        when 'link'     then private.is_active() and private.field_submission_readable(p_id) and s.status <> 'draft'
+        when 'assign'   then private.is_command() and private.field_submission_readable(p_id) and s.status <> 'draft'
+        when 'delete'   then private.is_command() and s.deleted_at is null
+        when 'undelete' then private.is_owner() and s.deleted_at is not null
+        else false end
+      from public.field_submissions s where s.id = p_id)
     when p_kind = 'case' and p_action in ('access', 'archive', 'unarchive', 'grant_access', 'delete_child', 'permanent_delete') then case p_action
       when 'access'       then private.can_access_case(p_id)
       when 'archive'      then private.is_command()
@@ -29315,7 +30432,8 @@ CREATE OR REPLACE FUNCTION private.version_protected_columns(p_table text)
  SET search_path TO ''
 AS $function$
   select array['id', 'created_at', 'created_by', 'updated_at', 'archived_at', 'archived_by',
-               'deleted_at', 'deleted_by', 'delete_reason', 'delete_batch', 'last_stale_notified_at']
+               'deleted_at', 'deleted_by', 'delete_reason', 'delete_batch', 'last_stale_notified_at',
+               'source_submission_id']
       || case p_table
            when 'cases' then array['bureau', 'case_number', 'case_authority', 'status', 'closed_at',
                                    'lead_detective_id', 'is_joint_case', 'originating_bureau']
@@ -29326,7 +30444,8 @@ AS $function$
            when 'evidence' then array['case_id', 'collected_by']
            when 'narcotics' then array['status']
            when 'field_submissions' then array['officer_id', 'status', 'submitted_at', 'assigned_to',
-                                               'assigned_at', 'submission_no', 'archive_reason']
+                                               'assigned_at', 'submission_no', 'archive_reason',
+                                               'rejected_at', 'rejected_by', 'validated_at', 'validated_by']
            when 'case_notes' then array['case_id', 'author_id', 'source']
            else '{}'::text[] end
 $function$
@@ -29560,12 +30679,15 @@ CREATE TRIGGER field_evidence_audit AFTER INSERT OR DELETE OR UPDATE ON public.f
 CREATE TRIGGER field_evidence_before_insert BEFORE INSERT ON public.field_submission_evidence FOR EACH ROW EXECUTE FUNCTION private.field_evidence_before_insert();
 CREATE TRIGGER field_submission_items_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_items FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_submission_locations_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_locations FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER field_messages_after_insert AFTER INSERT ON public.field_submission_messages FOR EACH ROW EXECUTE FUNCTION private.field_message_after_insert();
 CREATE TRIGGER field_messages_before_insert BEFORE INSERT ON public.field_submission_messages FOR EACH ROW EXECUTE FUNCTION private.field_message_before_insert();
 CREATE TRIGGER field_submission_messages_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_messages FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_submission_orgs_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_orgs FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_submission_persons_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_persons FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_submission_reviews_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_reviews FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_submission_vehicles_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_vehicles FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER block_direct_intel_review_columns BEFORE INSERT OR UPDATE ON public.field_submissions FOR EACH ROW EXECUTE FUNCTION private.block_direct_intel_review_columns();
+CREATE TRIGGER field_submissions_after_change AFTER INSERT OR UPDATE ON public.field_submissions FOR EACH ROW EXECUTE FUNCTION private.field_submission_after_change();
 CREATE TRIGGER field_submissions_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submissions FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_submissions_before_insert BEFORE INSERT ON public.field_submissions FOR EACH ROW EXECUTE FUNCTION private.field_submission_before_insert();
 CREATE TRIGGER field_submissions_before_update BEFORE UPDATE ON public.field_submissions FOR EACH ROW EXECUTE FUNCTION private.field_submission_before_update();
@@ -29587,6 +30709,7 @@ CREATE TRIGGER gangs_version AFTER UPDATE ON public.gangs FOR EACH ROW EXECUTE F
 CREATE TRIGGER gangs_visibility_forget AFTER DELETE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.siu_visibility_forget('gang');
 CREATE TRIGGER indicators_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.indicators FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER integration_sources_touch BEFORE UPDATE ON public.integration_sources FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER intel_groups_audit AFTER INSERT OR DELETE OR UPDATE ON public.intel_groups FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER trg_guard_justice_membership_request BEFORE UPDATE ON public.justice_membership_requests FOR EACH ROW EXECUTE FUNCTION private.guard_justice_membership_request();
 CREATE TRIGGER trg_touch_justice_membership_requests BEFORE UPDATE ON public.justice_membership_requests FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_touch_justice_memberships BEFORE UPDATE ON public.justice_memberships FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -30289,6 +31412,10 @@ create policy field_submission_cases_sel on public.field_submission_cases
    FROM cases c
   WHERE (c.id = field_submission_cases.case_id))))));
 
+create policy fse_sel on public.field_submission_events
+  as permissive for select to authenticated
+  using (private.field_submission_readable(submission_id));
+
 create policy field_submission_evidence_del on public.field_submission_evidence
   as permissive for delete to authenticated
   using ((private.field_submission_my_draft(submission_id) OR private.is_command()));
@@ -30343,11 +31470,9 @@ create policy field_submission_locations_upd on public.field_submission_location
 
 create policy field_submission_messages_ins on public.field_submission_messages
   as permissive for insert to authenticated
-  with check (((private.is_active() AND (EXISTS ( SELECT 1
+  with check ((private.field_submission_mine(submission_id) AND (EXISTS ( SELECT 1
    FROM field_submissions s
-  WHERE ((s.id = field_submission_messages.submission_id) AND (s.status <> 'draft'::text))))) OR (private.field_submission_mine(submission_id) AND (EXISTS ( SELECT 1
-   FROM field_submissions s
-  WHERE ((s.id = field_submission_messages.submission_id) AND (s.status = 'needs_info'::text)))))));
+  WHERE ((s.id = field_submission_messages.submission_id) AND (s.status = 'needs_info'::text))))));
 
 create policy field_submission_messages_sel on public.field_submission_messages
   as permissive for select to authenticated
@@ -30396,10 +31521,6 @@ create policy field_submission_persons_upd on public.field_submission_persons
 create policy field_submission_reviews_del on public.field_submission_reviews
   as permissive for delete to authenticated
   using (private.is_command());
-
-create policy field_submission_reviews_ins on public.field_submission_reviews
-  as permissive for insert to authenticated
-  with check (private.is_active());
 
 create policy field_submission_reviews_sel on public.field_submission_reviews
   as permissive for select to authenticated
@@ -30542,6 +31663,18 @@ create policy integration_sources_sel on public.integration_sources
   using ((( SELECT private.is_command() AS is_command) OR ( SELECT COALESCE(profiles.is_owner, false) AS "coalesce"
    FROM profiles
   WHERE (profiles.id = ( SELECT auth.uid() AS uid)))));
+
+create policy igc_sel on public.intel_group_cases
+  as permissive for select to authenticated
+  using ((private.intel_group_readable(group_id) AND private.field_case_visible(case_id)));
+
+create policy igm_sel on public.intel_group_members
+  as permissive for select to authenticated
+  using ((private.intel_group_readable(group_id) AND private.field_submission_readable(submission_id)));
+
+create policy ig_sel on public.intel_groups
+  as permissive for select to authenticated
+  using ((private.is_active() AND private.field_submission_readable(lead_submission_id)));
 
 create policy jmrh_sel on public.justice_membership_request_history
   as permissive for select to authenticated
@@ -31767,6 +32900,7 @@ create policy wl_sel on public.watchlist
 --   public.document_suggestions
 --   public.documents
 --   public.evidence
+--   public.field_submission_events
 --   public.gang_members
 --   public.gang_places
 --   public.gang_ranks
@@ -31886,6 +33020,7 @@ create policy wl_sel on public.watchlist
 --   field_siu_enterprise -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   field_siu_followups -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   field_submission_cases -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   field_submission_events -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   field_submission_evidence -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   field_submission_items -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   field_submission_locations -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -31904,6 +33039,9 @@ create policy wl_sel on public.watchlist
 --   indicators -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   integration_events -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   integration_sources -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   intel_group_cases -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   intel_group_members -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   intel_groups -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   justice_membership_request_history -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   justice_membership_requests -> authenticated: DELETE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   justice_memberships -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -32132,6 +33270,7 @@ create policy wl_sel on public.watchlist
 --   private.block_direct_case_archive(): default (PUBLIC)
 --   private.block_direct_case_bureau(): default (PUBLIC)
 --   private.block_direct_case_stage(): default (PUBLIC)
+--   private.block_direct_intel_review_columns(): {postgres=X/postgres}
 --   private.block_direct_login_denied(): default (PUBLIC)
 --   private.block_direct_observation_promote(): {postgres=X/postgres}
 --   private.block_direct_operation_authority(): default (PUBLIC)
@@ -32230,12 +33369,17 @@ create policy wl_sel on public.watchlist
 --   private.entity_suggestion_reviewers(p_proposer uuid): {postgres=X/postgres}
 --   private.field_access_request_before_insert(): default (PUBLIC)
 --   private.field_case_visible(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.field_claim_pair_ok(p_claim_kind text, p_target_kind text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.field_claim_submission(p_kind text, p_claim uuid): {postgres=X/postgres}
 --   private.field_evidence_before_insert(): default (PUBLIC)
 --   private.field_jurisdiction_visible(p_jurisdiction text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.field_jurisdiction_visible_for(p_user uuid, p_jurisdiction text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.field_link_target_ok(p_target_kind text, p_target uuid): {postgres=X/postgres}
+--   private.field_message_after_insert(): {postgres=X/postgres}
 --   private.field_message_before_insert(): default (PUBLIC)
 --   private.field_officer_agency(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.field_siu_category_ok(p_category text): {=X/postgres,postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.field_submission_after_change(): {postgres=X/postgres}
 --   private.field_submission_before_insert(): default (PUBLIC)
 --   private.field_submission_before_update(): default (PUBLIC)
 --   private.field_submission_dependencies(p_submission uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -32244,6 +33388,7 @@ create policy wl_sel on public.watchlist
 --   private.field_submission_on_case(p_submission uuid, p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.field_submission_readable(p_submission uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.field_submission_transition_ok(p_from text, p_to text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.field_validation_state(p_submission uuid, OUT p_claims integer, OUT p_decided integer, OUT p_graded boolean): {postgres=X/postgres}
 --   private.get_routing_ada_for_bureau(p_bureau bureau): default (PUBLIC)
 --   private.guard_document(): default (PUBLIC)
 --   private.guard_justice_membership_request(): default (PUBLIC)
@@ -32259,6 +33404,10 @@ create policy wl_sel on public.watchlist
 --   private.has_joint_access(cid uuid): default (PUBLIC)
 --   private.has_media_break_glass(p_case uuid, p_user uuid): default (PUBLIC)
 --   private.has_op_joint_access(cid uuid): {postgres=X/postgres}
+--   private.intel_group_member_ok(p_submission uuid): {postgres=X/postgres}
+--   private.intel_group_readable(p_group uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.intel_notify(p_user uuid, p_submission uuid, p_kind text, p_extra jsonb): {postgres=X/postgres}
+--   private.intel_reviewers(p_submission uuid): {postgres=X/postgres}
 --   private.is_active(): {=X/postgres,postgres=X/postgres,authenticated=X/postgres}
 --   private.is_active_ada_for_bureau(p_user uuid, p_bureau bureau): default (PUBLIC)
 --   private.is_command(): {=X/postgres,postgres=X/postgres,authenticated=X/postgres}
@@ -32531,6 +33680,8 @@ create policy wl_sel on public.watchlist
 --   public.field_submission_ask(p_submission uuid, p_question text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.field_submission_assign(p_submission uuid, p_user uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.field_submission_claim(p_submission uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.field_submission_comment(p_submission uuid, p_body text, p_visible_to_officer boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.field_submission_convert(p_kind text, p_claim_kind text, p_claim uuid, p_payload jsonb, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.field_submission_counts(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.field_submission_create_case(p_submission uuid, p_bureau text, p_title text, p_summary text, p_lead uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.field_submission_create_observation(p_submission uuid, p_case uuid, p_activity text, p_observed_at timestamp with time zone, p_location text, p_confidence text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -32539,6 +33690,7 @@ create policy wl_sel on public.watchlist
 --   public.field_submission_grade(p_submission uuid, p_urgency text, p_reliability text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.field_submission_link_case(p_submission uuid, p_case uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.field_submission_link_observation(p_submission uuid, p_observation uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.field_submission_reject(p_submission uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.field_submission_release(p_submission uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.field_submission_repeats(p_submission uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.field_submission_restore(p_submission uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -32553,12 +33705,22 @@ create policy wl_sel on public.watchlist
 --   public.field_submission_source_reveal(p_submission uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.field_submission_undelete(p_submission uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.field_submission_unlink_case(p_link uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.field_submission_validate(p_submission uuid, p_note text, p_clear boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.gang_member_add(p_gang uuid, p_person uuid, p_rank text, p_callsign text, p_status text, p_confidence text, p_note text, p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.gang_member_review(p_member uuid, p_status text, p_confidence text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.gang_member_update(p_member uuid, p_rank text, p_callsign text, p_status text, p_confidence text, p_note text, p_case uuid, p_joined_at date, p_left_at date, p_mark_reviewed boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.has_restricted_packet_approval(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.import_legal_warrant(p_case uuid, p_subtype text, p_title text, p_priority text, p_form jsonb, p_narrative text, p_person uuid, p_classification text, p_source_submitted_at timestamp with time zone, p_source_submitter uuid, p_import_key text, p_exhibits jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.import_rollback_by_key(p_import_key text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.intel_group_add(p_group uuid, p_submission uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.intel_group_close(p_group uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.intel_group_create(p_title text, p_lead uuid, p_members uuid[], p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.intel_group_link_case(p_group uuid, p_case uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.intel_group_remove(p_group uuid, p_submission uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.intel_group_reopen(p_group uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.intel_group_suggest(p_submission uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.intel_group_summary(p_group uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.intel_group_unlink_case(p_group uuid, p_case uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.issue_legal_request(p_request uuid, p_expires_at timestamp with time zone, p_response_deadline timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.joint_case_add_members(p_case uuid, p_members jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.joint_case_end(p_case uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -32732,6 +33894,7 @@ create policy wl_sel on public.watchlist
 --   public.siu_promote_inquiry(p_case uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.siu_reconcile_resolve(p_id uuid, p_resolution text, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.siu_record_intelligence(p_case uuid, p_note_type text, p_body text, p_severity text, p_siu_case uuid, p_subject_person uuid, p_source_type text, p_source_reliability text, p_info_credibility text, p_review_days integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.siu_referred_submissions(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.siu_registry_search(p_entity_type text, p_q text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.siu_release_control(p_case uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.siu_released_intelligence(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}

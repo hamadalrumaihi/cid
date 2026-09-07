@@ -39,6 +39,11 @@ export const RECORD_PARAM: Partial<Record<ToolId, string>> = {
   gangs: 'gang',
   places: 'place',
   narcotics: 'drug',
+  // List-level like places: FieldReviewView reads `?submission=` as a
+  // mount-time seed and selects that record. The generic `?record=` form
+  // (notifications, SIB cross-links) is translated to it by openHref and by
+  // the URL mirror (workspace/model mirrorParams).
+  'field-review': 'submission',
 }
 
 /** Tools whose record param maps to a dedicated workspace RECORD TAB (a
