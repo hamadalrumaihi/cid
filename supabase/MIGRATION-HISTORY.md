@@ -682,6 +682,50 @@ visibility row carries the flag, a test-created twin is queued without a
 notification, a real-created twin is queued with the notifications, the
 cleanup body carries the sweep.
 
+**P3-03 Case notes.**
+`20261021120000_case_notes.sql` (applied as `case_notes`, then
+`case_notes_policy_fix` — the policies call `private.case_note_command`, a
+client-executable definer helper, because `is_siu_case` /
+`siu_case_command` are not — and `case_notes_version_table` —
+`record_versions_table_check` widened): the table, RLS, touch / audit /
+version / soft-delete-freeze triggers, an author-case-source freeze, the
+legacy backfill of `cases.notes` (one `source='legacy'` note per case,
+authored by the lead else the creator, `CASE_NOTES_BACKFILLED` audit row),
+the frozen `cases.notes` column (`P0403`), `case_note_mention`, two catalog
+rows, the realtime publication. Verified at apply time in a rolled-back
+transaction: a detective's own note, the forged author and the restricted
+flag refused `42501`, the frozen column `P0403`, an edit versioned
+(`body_md+pinned`), `can_record` edit / soft_delete true for the author,
+the mention sent, the director's restricted note counted by the director
+and absent for the detective, the soft delete, a cross-bureau detective
+reading nothing.
+
+**P3-04 Related cases and the activity feed.**
+`20261022120000_case_links_audit_feed.sql` (applied as `case_links`,
+`case_links_kinds` — the nine helpers spliced with `pg_get_functiondef` to
+register the `case_note` / `case_link` kinds, since the SQL-language
+helpers must see both tables — and `case_audit_feed_update_only` —
+`changed_fields` on UPDATE rows only): `case_links`, RLS, audit trigger,
+realtime, `case_audit_feed`, two catalog rows. Verified at apply time: a
+link to an unreadable case refused `42501`, the feed listing the case
+INSERT, the detective's notes and the link with the field chips on the
+UPDATE row, no `body_md` in any detail, the director's restricted note
+absent from the detective's feed, a cross-bureau detective reading nothing.
+
+**P3-05 Archived cases read-only at RLS.**
+`20261023120000_archived_read_only.sql` (applied as `archived_read_only`
+— 36 policies re-emitted from the live catalog with
+`private.case_writable(case_id)` in place of `can_access_case(case_id)`,
+`cases_upd` refusing an archived row, the catalog wording —
+`archived_read_only_perm` — `perm_registry_edit` / `_delete` case-child
+arms spliced — and `archived_read_only_rpcs` — `report_finalize`,
+`signoff_submit`, `signoff_decide`, `create_legal_request` spliced with
+the guard). Verified at apply time: a live write and `can_record` true;
+after `case_archive` the detective still reads, a task insert `42501`, a
+task and a case update matching zero rows, a note insert `42501`,
+`can_record` false, `soft_delete` `denied`, the three RPCs raising
+"this case is archived"; after `case_restore` the insert succeeds.
+
 | Version (live) | Name | Repo file |
 |---|---|---|
 | applied via MCP (`entity_normalization`, `entity_normalization_phone_fix`) | entity_normalization | `20261014120000_entity_normalization.sql` |
@@ -691,6 +735,9 @@ cleanup body carries the sweep.
 | applied via MCP (`entity_observations`) | entity_observations | `20261018120000_entity_observations.sql` |
 | applied via MCP (`entity_crossref`) | entity_crossref | `20261019120000_entity_crossref.sql` |
 | applied via MCP (`entity_test_hygiene`, `entity_test_hygiene_cleanup`) | entity_test_hygiene | `20261020120000_entity_test_hygiene.sql` |
+| applied via MCP (`case_notes`, `case_notes_policy_fix`, `case_notes_version_table`) | case_notes | `20261021120000_case_notes.sql` |
+| applied via MCP (`case_links`, `case_links_kinds`, `case_audit_feed_update_only`) | case_links_audit_feed | `20261022120000_case_links_audit_feed.sql` |
+| applied via MCP (`archived_read_only`, `archived_read_only_perm`, `archived_read_only_rpcs`) | archived_read_only | `20261023120000_archived_read_only.sql` |
 | applied via MCP (`record_versions`) | record_versions | `20261011120000_record_versions.sql` |
 | applied via MCP (`case_access_grant_expiry`) | case_access_grant_expiry | `20261012120000_case_access_grant_expiry.sql` |
 | applied via MCP (`permanent_delete_record`, `permanent_delete_record_preview_fix`) | permanent_delete_record | `20261013120000_permanent_delete_record.sql` |

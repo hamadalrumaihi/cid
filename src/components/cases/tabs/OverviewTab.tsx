@@ -13,6 +13,7 @@ import { caseLink } from '@/lib/caseLinks'
 import { searchMemberHits, type EntityHit } from '@/lib/entitySearch'
 import { fmtDate } from '@/lib/format'
 import { CaseProvenance } from '../CaseProvenance'
+import { RelatedCasesPanel } from '../sections/RelatedCasesPanel'
 import { useAuth } from '@/lib/auth'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useAction } from '@/lib/useAction'
@@ -112,6 +113,8 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
           {/* Why this investigation exists. Renders nothing when the case was
               not built on intelligence, which is most of them. */}
           <CaseProvenance caseId={c.id} />
+          {/* case_links both ways (P3-04); an archived case refuses the writes. */}
+          <RelatedCasesPanel c={c} canEdit={canEdit && !c.archived_at} />
           <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-semibold text-white">Assigned Officers</h3>

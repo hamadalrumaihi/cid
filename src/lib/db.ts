@@ -63,6 +63,9 @@ export const SOFT_DELETE_KIND = {
   cases: 'case', reports: 'report', media: 'media', evidence: 'evidence', case_tasks: 'case_task',
   case_messages: 'case_message', case_intel_links: 'case_intel_link', case_blockers: 'case_blocker',
   rico_cases: 'rico_case', predicate_acts: 'predicate_act',
+  // Phase 3 (20261021120000 / 20261022120000): authored case notes and
+  // case-to-case links soft-delete like the other case children.
+  case_notes: 'case_note', case_links: 'case_link',
 } as const satisfies Partial<Record<TableName, string>>
 export type SoftDeleteTable = keyof typeof SOFT_DELETE_KIND
 /** Kinds whose soft_delete requires a reason (the parent records and the

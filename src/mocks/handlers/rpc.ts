@@ -12,6 +12,7 @@ import type { Database, Tables } from '@/lib/database.types'
 import { CASE_PREFIX, PERMANENT_BUREAUS } from '@/lib/roles'
 import { supabaseBaseUrl } from '../env'
 import { getDenial, getRows, getRpcOverride, getSession, mockId, seedRows, type MockTableName } from '../store'
+import { CASE_WORKSPACE_RPCS } from './caseWorkspace'
 import { ENTITY_RPCS } from './entity'
 import { postgrestError, shapeNetwork } from './postgrest'
 
@@ -79,6 +80,7 @@ export const SOFT_DELETE_TABLE: Record<string, MockTableName> = {
   case: 'cases', report: 'reports', media: 'media', evidence: 'evidence', case_task: 'case_tasks',
   case_message: 'case_messages', case_intel_link: 'case_intel_links', case_blocker: 'case_blockers',
   rico_case: 'rico_cases', predicate_act: 'predicate_acts',
+  case_note: 'case_notes', case_link: 'case_links',
 }
 const SOFT_DELETE_REASON_REQUIRED = new Set([
   'person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker',
@@ -175,6 +177,9 @@ export const rpcHandlers = [
         // Phase 2 entity layer (suggest / duplicates / crossref / merge /
         // suggestions / reconcile) — see ./entity.ts.
         if (fn in ENTITY_RPCS) return HttpResponse.json(ENTITY_RPCS[fn](args) as Parameters<typeof HttpResponse.json>[0])
+        // Phase 3 case workspace (activity feed / mentions / history) — see
+        // ./caseWorkspace.ts.
+        if (fn in CASE_WORKSPACE_RPCS) return HttpResponse.json(CASE_WORKSPACE_RPCS[fn](args) as Parameters<typeof HttpResponse.json>[0])
         return postgrestError(404, 'PGRST202',
           `Could not find the function public.${fn} in the schema cache — add a handler in src/mocks/handlers/rpc.ts or use scenarios.rpcResult().`)
     }

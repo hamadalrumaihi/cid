@@ -9,6 +9,7 @@ import { searchMemberHits } from '@/lib/entitySearch'
 import { timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
+import { useTabDirty } from '@/components/workspace/WorkspaceProvider'
 import { SaveState } from '@/components/ui/SaveState'
 import { notify } from '@/lib/notify'
 import { officerName, activeProfiles, useProfilesStore } from '@/lib/profiles'
@@ -47,6 +48,7 @@ export function ChatTab({ c }: { c: CaseRow }) {
   // (userDrafts: server copy or local mirror, whichever is newer); keep the
   // stash current while typing; clear it on successful send.
   const composerDraft = useDraftState(`chat:${c.id}`)
+  useTabDirty(`chat:${c.id}`) // workspace tab dot while the flush is pending
   useEffect(() => {
     let live = true
     void loadDraft<string>(`chat:${c.id}`).then((d) => {

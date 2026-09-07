@@ -283,7 +283,27 @@ service account syncs).
   `.github/workflows/ci.yml`. Move it to a Vercel environment variable and
   a GitHub Actions secret, then rotate the key. This needs FiveManage +
   Vercel/GitHub dashboard access.
-## 9. Integration (dormant)
+## 9. Realtime
+
+Case views subscribe per case since P3-08 (`useCaseTableVersion(table, caseId)`
+in `src/lib/realtime.ts`): one `rt_<table>_<caseId>` channel per child table
+with a `case_id=eq.<id>` filter, instead of the fourteen whole-table channels
+`CaseDetail` used to hold. Cost per case open is unchanged (the workflow
+snapshot is the same 11 parallel reads + the legal-hold and operation-link
+reads, plus what each visited section fetches); what changes is the
+background refetch rate. Reasoned, not browser-measured: before, ANY change
+to media / reports / tasks / legal requests / blockers / assignments / intel
+links / surveillance / extractions / holds / op-links on ANY case re-ran that
+13-query snapshot in every open case view (a bureau uploading 20 photos to
+one case cost every other open case view 2 snapshot cycles under the
+debounce — ~26 queries each); after, only the affected case's view refetches
+and the others run zero queries. If the realtime tier refuses a filtered
+subscription (`CHANNEL_ERROR` / `TIMED_OUT`), the table falls back to its
+whole-table channel and logs `[realtime] filtered channel for <table>
+refused` once per session — a burst of those in the browser console after a
+deploy means the table left the publication (`npm run check:realtime`).
+
+## 10. Integration (dormant)
 
 The FiveM/city integration surface exists but **nothing is live** — treat it
 as inventory, not operations:

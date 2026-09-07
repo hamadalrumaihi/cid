@@ -315,3 +315,44 @@ export function legalRequestRow(
     ...overrides,
   }
 }
+
+/** An authored case note (20261021120000, P3-03). `author_id` defaults to
+ *  null so a fixture must name the author when the restricted-note reading
+ *  matters (the handler hides restricted_to_command rows from a session that
+ *  is neither command / owner nor the author). */
+export function caseNoteRow(overrides: Partial<Tables<'case_notes'>> & Pick<Tables<'case_notes'>, 'case_id'>): Tables<'case_notes'> {
+  return {
+    author_id: null,
+    body_md: 'Mock note body.',
+    created_at: mockTimestamp(),
+    delete_batch: null,
+    delete_reason: null,
+    deleted_at: null,
+    deleted_by: null,
+    id: mockId(),
+    pinned: false,
+    restricted_to_command: false,
+    source: 'manual',
+    updated_at: mockTimestamp(),
+    ...overrides,
+  }
+}
+
+/** A relationship between two cases (20261022120000, P3-04): one live link
+ *  per pair and direction, never self — the builder demands both ends. */
+export function caseLinkRow(
+  overrides: Partial<Tables<'case_links'>> & Pick<Tables<'case_links'>, 'case_id' | 'related_case_id'>,
+): Tables<'case_links'> {
+  return {
+    created_at: mockTimestamp(),
+    created_by: null,
+    delete_batch: null,
+    delete_reason: null,
+    deleted_at: null,
+    deleted_by: null,
+    id: mockId(),
+    kind: 'related',
+    note: null,
+    ...overrides,
+  }
+}

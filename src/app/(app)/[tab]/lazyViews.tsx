@@ -23,8 +23,8 @@ export const RicoView = lazy('rico', () => import('@/components/rico/RicoView').
 export const HeatmapView = lazy('heatmap', () => import('@/components/heatmap/HeatmapView').then((m) => m.HeatmapView))
 export const DevDocsView = lazy('devdocs', () => import('@/components/devdocs/DevDocsView').then((m) => m.DevDocsView))
 export const OwnerView = lazy('owner', () => import('@/components/owner/OwnerView').then((m) => m.OwnerView))
-// The Investigative Tools workspace. The 14 tool views themselves are NOT
-// imported here anymore — they live in the workspace's own lazy registry
-// (components/tools/toolRegistry) so they aren't double-shipped; their old
-// routes render ToolTabRedirect instead.
-export const ToolsView = lazy('tools', () => import('@/components/tools/ToolsView').then((m) => m.ToolsView))
+// The unified workspace (/workspace, and /tools which renders the same
+// view). The 14 tool views themselves are NOT imported here — they live in
+// the workspace's own lazy registry (components/tools/toolRegistry) so they
+// aren't double-shipped; their old routes render ToolTabRedirect instead.
+export const WorkspaceView = lazy('workspace', () => import('@/components/workspace/WorkspaceView').then((m) => m.WorkspaceView))

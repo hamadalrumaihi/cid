@@ -29,6 +29,7 @@ import { RelatedRecordPicker } from '@/components/shared/RelatedRecordPicker'
 import { SignatureViewer, type SignatureItem } from '@/components/shared/SignatureViewer'
 import { VersionViewer } from '@/components/shared/VersionViewer'
 import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
+import { useTabDirty } from '@/components/workspace/WorkspaceProvider'
 import { SaveState } from '@/components/ui/SaveState'
 import { toast } from '@/lib/toast'
 import { WarrantPrintButton } from './WarrantPrint'
@@ -103,6 +104,7 @@ export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: C
   // and cleared on a successful save. Closing/cancelling keeps the draft.
   const draftKey = (template: string, report?: ReportRow) => (report ? `report:edit:${report.id}` : `report:${c.id}:${template}`)
   const editorDraft = useDraftState(editing ? draftKey(editing.template, editing.report) : '')
+  useTabDirty(editing ? draftKey(editing.template, editing.report) : '') // workspace tab dot while the flush is pending
   const openEditor = async (template: string, report?: ReportRow) => {
     const d = await loadDraft<FormValues>(draftKey(template, report))
     const base = report ? parseFormValues(report.fields) : seed()

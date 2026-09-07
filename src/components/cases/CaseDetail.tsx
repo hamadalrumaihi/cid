@@ -31,7 +31,7 @@ import { canChangeResponsibleBureau, canSetResponsibleBureau, countViewerActiona
 import { officerName, activeProfiles } from '@/lib/profiles'
 import { setCaseLead, setCaseStatus } from '@/lib/services/cases'
 import { loadCaseChargeTotals } from '@/lib/caseCharges'
-import { useTableVersion } from '@/lib/realtime'
+import { useCaseTableVersion, useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { useNow } from '@/lib/useNow'
 import { LEGAL_LIST_COLS, buildLegalViewer, useMyProsecutorBureaus } from '@/components/justice/legalShared'
@@ -60,6 +60,9 @@ import { TasksTab } from './tabs/TasksTab'
 import { SignoffTab } from './tabs/SignoffTab'
 import { ChatTab } from './tabs/ChatTab'
 import { TimelineTab } from './tabs/TimelineTab'
+import { EntitySection } from './sections/EntitySection'
+import { NotesSection } from './sections/NotesSection'
+import { ActivitySection } from './sections/ActivitySection'
 import type { CaseRow } from './tabs/shared'
 
 // RicoView renders the same tracker outside the case screen.
@@ -110,7 +113,31 @@ export interface WorkflowRows {
   extractions: number
 }
 
-export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () => void; onChanged: () => void }) {
+/** What the shell reports when no case row is available (embedded mode hands
+ *  this to `whenMissing` so the workspace can draw the P3-07 states). */
+export interface CaseMissingInfo {
+  /** The id loaded at least once this visit (then vanished on refetch). */
+  everLoaded: boolean
+  /** The fetch threw (not an empty result). */
+  error: unknown
+  retry: () => void
+}
+
+export interface CaseDetailProps {
+  id: string
+  onBack: () => void
+  onChanged: () => void
+  /** Workspace tab mode: the section comes from `section` (no URL writes —
+   *  the workspace provider mirrors the URL), `setTab` reports through
+   *  `onSectionChange`, and a missing row renders `whenMissing`. Standalone
+   *  use (no `embedded`) keeps the `?case=&tab=` URL behaviour. */
+  embedded?: boolean
+  section?: string | null
+  onSectionChange?: (section: string) => void
+  whenMissing?: (info: CaseMissingInfo) => React.ReactNode
+}
+
+export function CaseDetail({ id, onBack, onChanged, embedded = false, section, onSectionChange, whenMissing }: CaseDetailProps) {
   const sp = useSearchParams()
   const auth = useAuth()
   const { profile, canEdit: authCanEdit, canDelete: authCanDelete, isCommand, isOwner } = auth
@@ -138,7 +165,8 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const [deleteOpen, setDeleteOpen] = useState(false)
   const casesV = useTableVersion('cases')
   // Legacy ?tab=evidence (old links/notifications/search hits) maps to media.
-  const requestedTab = normalizeCaseTab(sp.get('tab'))
+  // Embedded (workspace tab): the section is provider state passed as a prop.
+  const requestedTab = normalizeCaseTab(embedded ? section : sp.get('tab'))
   const urlTab = (requestedTab && TABS.includes(requestedTab as TabId) ? requestedTab : 'overview') as TabId
   // Same-page section switching is local state synced to the URL through the
   // native history API (Next keeps useSearchParams in step with it). A router
@@ -153,7 +181,11 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     setAdoptedKey(`${id}:${urlTab}`)
     setTabOverride(null)
   }
-  const tab = tabOverride ?? urlTab
+  const tab = embedded ? urlTab : (tabOverride ?? urlTab)
+  // Embedded: a thrown fetch is reported to whenMissing (ErrorNotice + retry)
+  // instead of only toasting.
+  const [loadError, setLoadError] = useState<unknown>(null)
+  const [retryTick, setRetryTick] = useState(0)
 
   // Stale-while-revalidate (the useRegistry idiom): once THIS id has loaded,
   // realtime-bump refetches must not blank the screen back to the skeleton —
@@ -167,6 +199,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     try {
       const rows = await withRetry(() => list('cases', { eq: { id } }))
       setCase(rows[0] ?? null)
+      setLoadError(null)
       loadedIdRef.current = id
       if (rows[0]) {
         setEverLoadedId(id)
@@ -175,13 +208,15 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         if (firstLoadOfId) pushRecent('case', rows[0].id)
       }
     } catch (e) {
+      setLoadError(e)
       toast(e instanceof Error ? e.message : e, 'danger')
     } finally {
       setLoading(false)
     }
   }, [id])
 
-  useEffect(() => { queueMicrotask(() => { void fetchCase() }) }, [fetchCase, casesV])
+  // retryTick: the embedded missing-state's Retry re-runs the fetch.
+  useEffect(() => { queueMicrotask(() => { void fetchCase() }) }, [fetchCase, casesV, retryTick])
 
   // "Seen" marker for the Overview recap — stamped when LEAVING the CASE
   // (unmount or navigating to another case). It used to live on OverviewTab's
@@ -216,6 +251,8 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
 
   const setTab = (next: TabId) => {
     tabScroll.current.set(tab, window.scrollY)
+    // Embedded: the workspace provider owns the section (and the URL).
+    if (embedded) { onSectionChange?.(next); return }
     setTabOverride(next)
     const params = new URLSearchParams(sp.toString())
     params.set('case', id)
@@ -250,16 +287,17 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     setWf(null)
     setHold(null)
   }
-  const vM = useTableVersion('media')
-  const vR = useTableVersion('reports')
-  const vT = useTableVersion('case_tasks')
-  const vL = useTableVersion('legal_requests')
-  const vB = useTableVersion('case_blockers')
-  const vRi = useTableVersion('rico_cases')
-  const vAsg = useTableVersion('case_assignments')
-  const vIn = useTableVersion('case_intel_links')
-  const vSv = useTableVersion('surveillance_targets')
-  const vEx = useTableVersion('record_extractions')
+  // Case-scoped channels (P3-08): only THIS case's rows move these counters.
+  const vM = useCaseTableVersion('media', id)
+  const vR = useCaseTableVersion('reports', id)
+  const vT = useCaseTableVersion('case_tasks', id)
+  const vL = useCaseTableVersion('legal_requests', id)
+  const vB = useCaseTableVersion('case_blockers', id)
+  const vRi = useCaseTableVersion('rico_cases', id)
+  const vAsg = useCaseTableVersion('case_assignments', id)
+  const vIn = useCaseTableVersion('case_intel_links', id)
+  const vSv = useCaseTableVersion('surveillance_targets', id)
+  const vEx = useCaseTableVersion('record_extractions', id)
   const fetchWorkflow = useCallback(async () => {
     try {
       const [tasks, reports, legal, media, blockers, rico, assignments, chargeTotals, intelLinks, surveillanceTargets, extractions] = await Promise.all([
@@ -293,7 +331,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   // Legal hold — its own tiny fetch (independent of the workflow snapshot).
   // RLS lets command + anyone who can access the case read it; a denied read
   // just leaves the banner off.
-  const vH = useTableVersion('legal_holds')
+  const vH = useCaseTableVersion('legal_holds', id)
   const fetchHold = useCallback(async () => {
     try {
       const rows = await list('legal_holds', { eq: { case_id: id }, order: 'placed_at', ascending: false })
@@ -306,7 +344,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   // "Joint via Operation …" chip. Permanent rows (survive op closure and
   // manual removal); best-effort, the header renders without them.
   const [opLinks, setOpLinks] = useState<OpCaseLinkRow[]>([])
-  const vOpLinks = useTableVersion('operation_case_links')
+  const vOpLinks = useCaseTableVersion('operation_case_links', id)
   const opsLoaded = useOperationsStore((s) => s.loaded)
   const fetchOpsStore = useOperationsStore((s) => s.fetch)
   useEffect(() => { if (!opsLoaded) void fetchOpsStore() }, [opsLoaded, fetchOpsStore])
@@ -356,6 +394,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
 
   if (loading) return <DetailSkeleton />
   if (!c) {
+    if (whenMissing) return <>{whenMissing({ everLoaded: everLoadedId === id, error: loadError, retry: () => setRetryTick((n) => n + 1) })}</>
     return (
       <p className="rounded-lg border border-white/10 bg-ink-900/50 p-6 text-slate-300">
         {everLoadedId === id
@@ -471,9 +510,14 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   // refuses a cross-department write by matching ZERO ROWS rather than
   // erroring, so leaving Edit visible would let it appear to save and change
   // nothing. See siuCaseReadOnly().
+  // An archived case is read-only (RLS refuses the writes since P3-05 —
+  // private.case_writable); every editor honours the same flag so nothing
+  // appears to save and then changes nothing. Command's Restore stays in the
+  // header (canArchive), which is how the case leaves this state.
   const readOnly = siu.caseReadOnly(c)
-  const canEdit = authCanEdit && !readOnly
-  const canDelete = authCanDelete && !readOnly
+  const archived = !!c.archived_at
+  const canEdit = authCanEdit && !readOnly && !archived
+  const canDelete = authCanDelete && !readOnly && !archived
 
   const caseDept = caseDepartment(c)
   const caseTerms = termsFor(caseDept)
@@ -556,7 +600,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       {caseDept === 'cid' && <ReleasedIntelligence caseId={c.id} />}
       {c.archived_at && (
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">
-          This case is archived — it is hidden from the working views. Command can restore it from the header menu.
+          This case is archived — read-only and hidden from the working views. Command can restore it from the header menu.
         </p>
       )}
       {hold && (
@@ -606,7 +650,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       {/* Sticky tab strip — tucks directly under the shell header via the
           shared --app-header-h token; z-10 stays below the header's z-30 so
           the header owns the seam (no gap, no overlap). */}
-      <div className="sticky top-[var(--app-header-h)] z-10 -mx-4 border-b border-white/10 bg-ink-950/90 px-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className="sticky-below-header z-10 -mx-4 border-b border-white/10 bg-ink-950/90 px-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         {narrow ? (
           /* Phones: the 14-tab strip was 4-5 screen widths of horizontal
              scrolling — a select-style switcher (current section + count,
@@ -659,8 +703,16 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
               />
             )}
             {t === 'graph' && <CaseGraphTab c={c} />}
+            {/* Phase 3 sections — an archived case refuses every write at RLS,
+                so their editors close with it (P3-05). */}
+            {t === 'people' && <EntitySection c={c} kind="person" canEdit={canEdit && !c.archived_at} />}
+            {t === 'vehicles' && <EntitySection c={c} kind="vehicle" canEdit={canEdit && !c.archived_at} />}
+            {t === 'gangs' && <EntitySection c={c} kind="gang" canEdit={canEdit && !c.archived_at} />}
+            {t === 'locations' && <EntitySection c={c} kind="place" canEdit={canEdit && !c.archived_at} />}
+            {t === 'notes' && <NotesSection c={c} canEdit={canEdit && !c.archived_at} />}
+            {t === 'activity' && <ActivitySection c={c} />}
             {t === 'media' && <MediaTab c={c} canEdit={canEdit} canDelete={canDelete} holdActive={!!hold} />}
-            {t === 'intel' && <IntelTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
+            {t === 'intel' && <IntelTab c={c} canEdit={canEdit && !c.archived_at} />}
             {t === 'surveillance' && <SurveillanceTab c={c} />}
             {t === 'extractions' && <ExtractionsTab c={c} canEdit={canEdit} />}
             {t === 'charges' && <ChargesTab c={c} canEdit={canEdit} onChanged={fetchCase} />}

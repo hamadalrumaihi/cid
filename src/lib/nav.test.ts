@@ -19,17 +19,23 @@ describe('nav — Investigative Tools consolidation', () => {
     expect(TAB_LABEL.tools).toBe('Investigative Tools')
   })
 
-  it("the CID intel category is exactly ['tools']", () => {
+  it("registers the 'workspace' leaf (the unified workspace) in PAGE_META and TAB_LABEL", () => {
+    expect(isValidTab('workspace')).toBe(true)
+    expect(PAGE_META.workspace.title).toBe('Workspace')
+    expect(TAB_LABEL.workspace).toBe('Workspace')
+  })
+
+  it("the CID intel category is exactly ['workspace']", () => {
     const intel = NAV_CATEGORIES.find((c) => c.id === 'intel')
     expect(intel).toBeTruthy()
-    expect(intel!.tabs).toEqual(['tools'])
+    expect(intel!.tabs).toEqual(['workspace'])
     expect(intel!.label).toBe('Investigative Tools')
   })
 
-  it("the SIU siu-intel category is exactly ['tools'] (CID parity)", () => {
+  it("the SIU siu-intel category is exactly ['workspace'] (CID parity)", () => {
     const intel = SIU_NAV_CATEGORIES.find((c) => c.id === 'siu-intel')
     expect(intel).toBeTruthy()
-    expect(intel!.tabs).toEqual(['tools'])
+    expect(intel!.tabs).toEqual(['workspace'])
   })
 
   it('all 14 legacy Intelligence tabs remain valid — deep links must resolve', () => {
@@ -45,9 +51,10 @@ describe('nav — Investigative Tools consolidation', () => {
     }
   })
 
-  it('derived maps follow: tools belongs to intel, and intel opens on tools', () => {
+  it('derived maps follow: workspace and tools belong to intel, and intel opens on the workspace', () => {
+    expect(TAB_CATEGORY.workspace).toBe('intel')
     expect(TAB_CATEGORY.tools).toBe('intel')
-    expect(CAT_DEFAULT.intel).toBe('tools')
+    expect(CAT_DEFAULT.intel).toBe('workspace')
   })
 
   it("legacy Intelligence tabs map to 'intel' (their routes redirect into /tools)", () => {
