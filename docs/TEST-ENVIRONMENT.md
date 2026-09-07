@@ -98,6 +98,7 @@ Verified live, in rolled-back transactions:
 | `role_events` where a fixture acted on a **real** member | survives, reported |
 | the real case itself | untouched |
 | fixture's own case + report + target + operation | all removed, `leaked: []` |
+| `report_templates` row keyed `rls_test_v187a` (Phase 5, `tests/rls/v187a.test.ts`) | **not swept** (cleanup removes fixture-authored *draft* versions only); the suite retires it (`active=false`) in teardown so it never lingers in a real picker — a deliberate, documented residue |
 | real member / null uid calling cleanup | refused by the caller gate |
 
 **`RLS_TEST_PASSWORD_*` can now be enabled.**

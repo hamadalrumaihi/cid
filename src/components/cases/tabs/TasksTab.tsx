@@ -2,13 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Field, Input } from '@/components/ui/Field'
 import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { uiPrompt } from '@/components/ui/dialog'
 import { CalendarIcon } from '@/components/shell/icons'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
-import { insert, list, update, deleteWithUndo } from '@/lib/db'
+import { insert, list, rpc, update, deleteWithUndo } from '@/lib/db'
+import { isBureauCommandFor } from '@/lib/permissions'
 import { deadlineInfo } from '@/lib/deadlines'
 import { caseLink } from '@/lib/caseLinks'
 import { copyText } from '@/lib/format'
@@ -21,7 +24,8 @@ import { toast } from '@/lib/toast'
 import { type CaseRow, type TaskRow } from './shared'
 
 /** Urgency buckets — overdue first, then due within 48h, then the rest of the
- *  open work; completed tasks collapse out of the way. The case follow-up
+ *  open work; completed AND waived tasks collapse out of the way (RB4: a task
+ *  counts as open only while not done and not waived). The case follow-up
  *  (set from the header's Follow-up button) files into the same buckets so
  *  one list carries everything with a date on it. */
 type Bucket = 'overdue' | 'soon' | 'open' | 'done'
@@ -39,14 +43,27 @@ const bucketOf = (done: boolean, due: string | null, now: number): Bucket => {
   return 'open'
 }
 
-function TaskItem({ t, c, canEdit, canDelete, holdActive, highlight, refCb, onToggle, refresh }: {
-  t: TaskRow; c: CaseRow; canEdit: boolean; canDelete: boolean; holdActive: boolean; highlight: boolean
-  refCb: (el: HTMLDivElement | null) => void; onToggle: (t: TaskRow) => void; refresh: () => void
+function TaskItem({ t, c, canEdit, canDelete, canWaive, holdActive, highlight, refCb, onToggle, onWaive, onUnwaive, refresh }: {
+  t: TaskRow; c: CaseRow; canEdit: boolean; canDelete: boolean; canWaive: boolean; holdActive: boolean; highlight: boolean
+  refCb: (el: HTMLDivElement | null) => void; onToggle: (t: TaskRow) => void; onWaive: (t: TaskRow) => void; onUnwaive: (t: TaskRow) => void; refresh: () => void
 }) {
+  const waived = !!t.waived_at
+  const closed = t.done || waived
   return (
     <div ref={refCb} className={`flex items-center gap-3 rounded-lg border bg-ink-950/50 p-3 ${highlight ? 'border-badge-400/60 ring-1 ring-badge-400/40' : 'border-white/10'}`}>
       <input type="checkbox" checked={t.done} disabled={!canEdit} aria-label={`Mark task ${t.done ? 'open' : 'done'}: ${t.title}`} onChange={() => onToggle(t)} />
-      <div className="min-w-0 flex-1"><p className={`font-semibold ${t.done ? 'text-slate-500 line-through' : 'text-white'}`}>{t.title}</p><p className="text-xs text-slate-500">{officerName(t.assignee) || 'Unassigned'}{t.done && t.due ? ` - due ${t.due}` : ''}{!t.done && t.due && <DeadlineChip at={t.due} kind="due" className="ml-2" />}</p></div>
+      <div className="min-w-0 flex-1">
+        <p className={`font-semibold ${closed ? 'text-slate-500 line-through' : 'text-white'}`}>{t.title}</p>
+        <p className="text-xs text-slate-500">
+          {officerName(t.assignee) || 'Unassigned'}{closed && t.due ? ` - due ${t.due}` : ''}{!closed && t.due && <DeadlineChip at={t.due} kind="due" className="ml-2" />}
+          {waived && <Badge tone="warn" className="ml-2" title={t.waive_reason ? `Waived: ${t.waive_reason}` : 'Waived'}>Waived</Badge>}
+        </p>
+      </div>
+      {/* Waive / unwaive (RB4) — mirrors of case_task_waive / case_task_unwaive;
+          the RPCs decide. A waived task no longer blocks a closure report. */}
+      {canWaive && !t.done && (waived
+        ? <Button size="sm" variant="ghost" className="min-h-[44px] sm:min-h-0" aria-label={`Unwaive task: ${t.title}`} onClick={() => onUnwaive(t)}>Unwaive</Button>
+        : <Button size="sm" variant="ghost" className="min-h-[44px] sm:min-h-0" aria-label={`Waive task: ${t.title}`} title="Waive this task with a reason — it stops counting as open" onClick={() => onWaive(t)}>Waive</Button>)}
       <Button size="sm" variant="ghost" className="min-h-[44px] sm:min-h-0" aria-label={`Copy link to task: ${t.title}`} onClick={() => copyText(`${window.location.origin}${caseLink(c.id, 'tasks', { task: t.id })}`, 'Task link')}>Link</Button>
       {canDelete && (holdActive
         ? <span title="A legal hold preserves this case's tasks" className="text-sm font-bold text-rose-300/50">Held</span>
@@ -141,22 +158,46 @@ export function TasksTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
     if (res.error) toast(res.error.message, 'danger')
     else void refresh()
   }
+  // Waive authority mirror (contract §2 case_task_waive): the case lead, a
+  // Bureau Lead of the case bureau (JTF: any), Deputy Director+, or the Owner,
+  // on a writable case. The RPC is the authority; this only shows the button.
+  const canWaive = canEdit && !!profile && (
+    !!profile.is_owner
+    || (!!c.lead_detective_id && c.lead_detective_id === profile.id)
+    || isBureauCommandFor(profile, c.bureau)
+    || (profile.role === 'bureau_lead' && c.bureau === 'JTF')
+  )
+  const waive = async (t: TaskRow) => {
+    const reason = await uiPrompt(`Why is “${t.title}” being waived? It will stop counting as open work (a closure report can then be submitted without it).`, { title: 'Waive task', placeholder: 'Reason (required)…', confirmText: 'Waive task' })
+    if (reason === null) return
+    if (!reason.trim()) { toast('A reason is required to waive a task.', 'warn'); return }
+    const res = await rpc('case_task_waive', { p_task: t.id, p_reason: reason.trim() })
+    if (res.error) toast(res.error.message, 'danger')
+    else { toast('Task waived.', 'success'); void refresh() }
+  }
+  const unwaive = async (t: TaskRow) => {
+    const res = await rpc('case_task_unwaive', { p_task: t.id })
+    if (res.error) toast(res.error.message, 'danger')
+    else { toast('Task reopened — it counts as open again.', 'success'); void refresh() }
+  }
 
   if (err) return <ErrorNotice message={err} onRetry={() => void refresh()} />
 
   // The due-ordered fetch (earliest first, undated last) is preserved inside
-  // each bucket, so the sharpest deadline always tops its group.
+  // each bucket, so the sharpest deadline always tops its group. Waived
+  // tasks file with the completed ones.
   const grouped: Record<Bucket, TaskRow[]> = { overdue: [], soon: [], open: [], done: [] }
-  for (const t of tasks) grouped[bucketOf(t.done, t.due, now)].push(t)
+  for (const t of tasks) grouped[bucketOf(t.done || !!t.waived_at, t.due, now)].push(t)
+  const waivedCount = grouped.done.filter((t) => !t.done && !!t.waived_at).length
   const followBucket = c.follow_up_at ? bucketOf(false, c.follow_up_at, now) : null
   const done = grouped.done
   // A ?task= deep link into the completed group opens it so the target row
   // exists to scroll to (derived, not stateful); the toggle still overrides.
   const doneVisible = showDone ?? (!!taskParam && done.some((t) => t.id === taskParam))
   const item = (t: TaskRow) => (
-    <TaskItem key={t.id} t={t} c={c} canEdit={canEdit} canDelete={canDelete} holdActive={holdActive}
+    <TaskItem key={t.id} t={t} c={c} canEdit={canEdit} canDelete={canDelete} canWaive={canWaive} holdActive={holdActive}
       highlight={t.id === taskParam} refCb={(el) => { rowRefs.current[t.id] = el }}
-      onToggle={(x) => void toggle(x)} refresh={() => void refresh()} />
+      onToggle={(x) => void toggle(x)} onWaive={(x) => void waive(x)} onUnwaive={(x) => void unwaive(x)} refresh={() => void refresh()} />
   )
   return (
     <div className="space-y-3">
@@ -185,7 +226,7 @@ export function TasksTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
       {done.length > 0 && (
         <section className="space-y-2">
           <button onClick={() => setShowDone(!doneVisible)} aria-expanded={doneVisible} className="flex min-h-[40px] items-center gap-1.5 text-[13px] font-semibold text-slate-400 hover:text-slate-200">
-            Completed <span className="font-normal text-slate-500">({done.length})</span> <span aria-hidden>{doneVisible ? '▴' : '▾'}</span>
+            {waivedCount ? 'Completed / waived' : 'Completed'} <span className="font-normal text-slate-500">({done.length})</span> <span aria-hidden>{doneVisible ? '▴' : '▾'}</span>
           </button>
           {doneVisible && done.map(item)}
         </section>

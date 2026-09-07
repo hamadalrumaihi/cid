@@ -70,6 +70,7 @@ import {
 } from './ProfileAssets'
 import { BoloStateBadge, LegalSection, ManageBoloModal } from './ProfileLegal'
 import { PersonAccountsSection } from './PersonAccountsSection'
+import { ReportMentions } from '@/components/cases/tabs/reports/ReportMentions'
 import { PersonDuplicatesModal } from './PersonMergeModal'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
 import { PinButton } from '@/components/shared/PinButton'
@@ -491,9 +492,12 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
                 : <Notice text="Loading associates…" />
             )}
             {section === 'cases' && (
-              slices.cases
-                ? <CasesSection data={slices.cases} canEdit={mayEdit} onAttach={() => setAttachOpen(true)} onRefresh={refresh} />
-                : <Notice text="Loading cases…" />
+              <div className="space-y-4">
+                {slices.cases
+                  ? <CasesSection data={slices.cases} canEdit={mayEdit} onAttach={() => setAttachOpen(true)} onRefresh={refresh} />
+                  : <Notice text="Loading cases…" />}
+                <ReportMentions kind="person" refId={p.id} />
+              </div>
             )}
             {section === 'legal' && <LegalSection legal={legal} today={today} now={now} />}
             {section === 'accounts' && <PersonAccountsSection personId={p.id} />}

@@ -34,6 +34,9 @@ export const PAGE_META: Record<string, PageMeta> = {
   records:    { title: 'CID Records', sub: 'Live shared division records' },
   announce:   { title: 'Announcements', sub: 'Division-wide notices from command staff' },
   'case-files': { title: 'Case Files — Attachments', sub: 'Files uploaded and linked per case' },
+  // Phase 5 report builder: the template catalog's admin surface. Visible in
+  // the strip for Bureau Lead+ / Owner (Subtabs mirror); the RPCs decide.
+  'report-templates': { title: 'Report Templates', sub: 'Report forms — versions, required fields & review rules (command staff)' },
   heatmap:    { title: 'Commander Heatmap', sub: 'Gang turf, places, raids & case concentration by area' },
   inbox:      { title: 'My Dashboard', sub: 'Your work at a glance' },
   action:     { title: 'Action Center', sub: 'Prioritized work requiring your attention across cases, command, and personnel' },
@@ -91,7 +94,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
   // the app's default landing (src/app/page.tsx), so the Command category
   // opens there. Division Overview (the shared dashboard) follows it.
   { id: 'command',   label: 'Command',      tabs: ['inbox', 'action', 'command', 'analytics', 'announce', 'heatmap', 'personnel'] },
-  { id: 'cases',     label: 'Cases',        tabs: ['cases', 'operations', 'legal', 'case-files', 'rico'] },
+  { id: 'cases',     label: 'Cases',        tabs: ['cases', 'operations', 'legal', 'case-files', 'rico', 'report-templates'] },
   // The 14 intelligence tabs now live INSIDE the unified workspace
   // (/workspace) — the old leaf routes (and /tools) still resolve and land
   // there, so nothing is lost; the category is just one nav item now.
@@ -134,7 +137,7 @@ export const SIU_NAV_CATEGORIES: NavCategory[] = [
   // tab for tab, in CID's order.
   { id: 'siu-unit',      label: 'Bureau',       tabs: ['siu'] },
   { id: 'siu-command',   label: 'Command',      tabs: ['inbox', 'action', 'command', 'analytics', 'announce', 'heatmap', 'personnel'] },
-  { id: 'siu-cases',     label: 'Cases',        tabs: ['cases', 'operations', 'legal', 'case-files', 'rico'] },
+  { id: 'siu-cases',     label: 'Cases',        tabs: ['cases', 'operations', 'legal', 'case-files', 'rico', 'report-templates'] },
   { id: 'siu-intel',     label: 'Investigative Tools', tabs: ['workspace'] },
   { id: 'siu-ref',       label: 'Reference',    tabs: ['penal', 'sops', 'guide', 'devdocs'] },
   { id: 'siu-oversight', label: 'Oversight',    tabs: ['calendar', 'shifts', 'audit'] },
@@ -151,7 +154,7 @@ export const SIU_TAB_LABEL: Record<string, string> = {
 
 export const TAB_LABEL: Record<string, string> = {
   command: 'Division Overview', analytics: 'Analytics', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
-  cases: 'Case Files', operations: 'Operations', legal: 'Legal Requests', 'case-files': 'Attachments', rico: 'RICO',
+  cases: 'Case Files', operations: 'Operations', legal: 'Legal Requests', 'case-files': 'Attachments', rico: 'RICO', 'report-templates': 'Report Templates',
   persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', accounts: 'Accounts', indicators: 'Indicators', 'field-review': 'Intelligence',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
   media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide', devdocs: 'Developer Handbook',

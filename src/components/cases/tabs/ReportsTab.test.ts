@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { collectReportPersonIds } from './ReportsTab'
+import { collectReportPersonIds, sealSignatureItems } from './ReportsTab'
 import { FORM_SCHEMAS, type FormSchema } from '@/lib/forms'
 
 /** The read view resolves ONLY the person ids a report's fields actually
@@ -51,5 +51,42 @@ describe('collectReportPersonIds', () => {
       det_name: 'Det. Marsh',
       _det_name_person_id: 'should-not-appear',
     })).toEqual([])
+  })
+})
+
+/** Sealed reports show BOTH signatures (author seal + reviewer approval) and
+ *  every superseded pair a reopen preserved in fields._reopen_log — the
+ *  contract's report_reopen keeps prev_signature AND prev_reviewer_signature
+ *  per entry, so both must surface (superseded) and neither may be dropped. */
+describe('sealSignatureItems', () => {
+  const author = { officer: 'Det. Marsh', signer_id: 'u1', badge: '1201', signed_at: '2026-09-01T10:00:00Z', typed: 'Det. Marsh' }
+  const reviewer = { officer: 'Lt. Cole', signer_id: 'u2', badge: '0400', signed_at: '2026-09-02T10:00:00Z', typed: 'Lt. Cole', role: 'bureau_lead' }
+
+  it('lists the author seal then the reviewer approval with its role', () => {
+    const items = sealSignatureItems({ signature: author, reviewer_signature: reviewer, fields: {} })
+    expect(items.map((i) => [i.id, i.action, i.role ?? null, i.superseded ?? false])).toEqual([
+      ['current', 'report seal', null, false],
+      ['reviewer', 'review approval', 'bureau_lead', false],
+    ])
+    expect(items[1].badge).toBe('0400')
+  })
+
+  it('a draft (no signatures) yields nothing; a self-sealed report has only the author', () => {
+    expect(sealSignatureItems({ signature: null, reviewer_signature: null, fields: {} })).toEqual([])
+    expect(sealSignatureItems({ signature: author, reviewer_signature: null, fields: {} }).map((i) => i.id)).toEqual(['current'])
+  })
+
+  it('reopen log entries surface both previous signatures as superseded, in order', () => {
+    const fields = { _reopen_log: [
+      { at: '2026-09-03T00:00:00Z', by: 'u9', reason: 'typo', prev_signature: author, prev_reviewer_signature: reviewer },
+      { at: '2026-09-04T00:00:00Z', prev_signature: author }, // self-seal era: no reviewer
+      'garbage', // malformed entries are skipped, never crash
+    ] }
+    const items = sealSignatureItems({ signature: null, reviewer_signature: null, fields })
+    expect(items.map((i) => [i.id, i.superseded, i.at])).toEqual([
+      ['prev-0', true, '2026-09-03T00:00:00Z'],
+      ['prev-rev-0', true, '2026-09-03T00:00:00Z'],
+      ['prev-1', true, '2026-09-04T00:00:00Z'],
+    ])
   })
 })

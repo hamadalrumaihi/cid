@@ -26,15 +26,25 @@ import {
 } from '../store'
 import { visibleCaseNotes } from './caseWorkspace'
 import { visibleLegalRows } from './legal'
+import { ensureReportTemplates, pinReportTemplateVersion, reportUpdateGuard, visibleReportRows } from './reports'
 
 /** Per-table read predicates the wall applies BEYOND the scenario switches
  *  (rlsRestricted / permissionDenied): case_notes hides a note restricted to
  *  command from a session that is neither command nor its author
  *  (20261021120000 case_notes_sel); the Phase 4 legal tables read only for
- *  requests the session can view (can_view_legal_request, ./legal.ts).
- *  Other tables read unfiltered. */
+ *  requests the session can view (can_view_legal_request, ./legal.ts); the
+ *  Phase 5 report tables read for active members (templates) or through the
+ *  parent report (entities / exports, ./reports.ts). Other tables read
+ *  unfiltered. */
 function readable(table: MockTableName, rows: MockRow[]): MockRow[] {
-  return table === 'case_notes' ? visibleCaseNotes(rows) : visibleLegalRows(table, rows)
+  if (table === 'case_notes') return visibleCaseNotes(rows)
+  return visibleReportRows(table, visibleLegalRows(table, rows))
+}
+
+/** Tables whose rows the migrations SEED: an empty mock store answers like
+ *  the migrated database (the 14 report templates, published). */
+function ensureSeeded(table: MockTableName): void {
+  if (table === 'report_templates' || table === 'report_template_versions') ensureReportTemplates()
 }
 
 /* ---- shared helpers (used by rpc/auth/fivemanage handlers too) ----------- */
@@ -185,6 +195,7 @@ async function handleTable(request: Request, table: MockTableName): Promise<Resp
 
   if (method === 'GET' || method === 'HEAD') {
     if (denial === 'grant') return grantDenied(table)
+    ensureSeeded(table)
     // RLS filtering on reads is silent: the wall hides rows, it never errors.
     const visible = denial === 'rls' ? [] : applyFilters(readable(table, getRows(table)), q)
     const ordered = applyOrder(visible, q)
@@ -205,7 +216,12 @@ async function handleTable(request: Request, table: MockTableName): Promise<Resp
     if (denial === 'grant') return grantDenied(table)
     if (denial === 'rls') return rlsInsertViolation(table) // INSERT under RLS is a loud 403, not zero rows
     const body = (await request.json()) as MockRow | MockRow[]
-    const rows = (Array.isArray(body) ? body : [body]).map((r) => ({ id: mockId(), ...r }))
+    // BEFORE INSERT triggers the wall applies: reports_template_pin
+    // (20261028120000) fills template_version_id from the published version
+    // of a known template key.
+    const rows = (Array.isArray(body) ? body : [body])
+      .map((r) => ({ id: mockId(), ...r }))
+      .map((r) => (table === 'reports' ? pinReportTemplateVersion(r) : r))
     setRows(table, [...getRows(table), ...rows])
     if (!wantsRepresentation(request)) return new HttpResponse(null, { status: 201 })
     return HttpResponse.json(project(rows, q.select), { status: 201 })
@@ -218,6 +234,15 @@ async function handleTable(request: Request, table: MockTableName): Promise<Resp
     // status, empty representation, NO error. db.ts callers detect the block
     // only by data.length === 0.
     const matched = denial === 'rls' ? [] : applyFilters(getRows(table), q)
+    // block_direct_report_finalize (20261029120000): the workflow columns
+    // are RPC-only and a submitted / sealed report's fields are locked — a
+    // raised trigger, not the silent zero-row shape.
+    if (table === 'reports') {
+      for (const row of matched) {
+        const refusal = reportUpdateGuard(row, patch)
+        if (refusal) return postgrestError(403, 'P0403', refusal)
+      }
+    }
     const matchedIds = new Set(matched)
     setRows(table, getRows(table).map((row) => (matchedIds.has(row) ? { ...row, ...patch } : row)))
     if (!wantsRepresentation(request)) return new HttpResponse(null, { status: 204 })

@@ -16,6 +16,7 @@ import { CASE_WORKSPACE_RPCS } from './caseWorkspace'
 import { ENTITY_RPCS } from './entity'
 import { LEGAL_RPCS, LegalRpcError } from './legal'
 import { postgrestError, shapeNetwork } from './postgrest'
+import { REPORT_RPCS, ReportRpcError } from './reports'
 
 type Fns = Database['public']['Functions']
 
@@ -189,6 +190,16 @@ export const rpcHandlers = [
             return HttpResponse.json(LEGAL_RPCS[fn](args) as Parameters<typeof HttpResponse.json>[0])
           } catch (e) {
             if (e instanceof LegalRpcError) return postgrestError(400, e.code, e.message)
+            throw e
+          }
+        }
+        // Phase 5 report builder (templates, review flow, entities, exports,
+        // task waivers) — see ./reports.ts. Same raise → 400 mapping.
+        if (fn in REPORT_RPCS) {
+          try {
+            return HttpResponse.json(REPORT_RPCS[fn](args) as Parameters<typeof HttpResponse.json>[0])
+          } catch (e) {
+            if (e instanceof ReportRpcError) return postgrestError(400, e.code, e.message)
             throw e
           }
         }

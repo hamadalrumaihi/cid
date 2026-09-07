@@ -4,6 +4,7 @@
  *  headings come from ONE pass, so these tests pin both at once. */
 import { describe, expect, it } from 'vitest'
 import { isValidElement, type ReactElement, type ReactNode } from 'react'
+import { EntityLink } from '@/components/ui/EntityLink'
 import { renderDocumentMarkdown, renderMarkdown } from './markdown'
 
 /** Depth-first flatten of a ReactNode tree into elements. */
@@ -111,5 +112,48 @@ describe('inline links', () => {
     for (const md of ['[x](javascript:alert(1))', '[x](data:text/html,hi)', '[x](ftp://host/file)']) {
       expect(elements(renderMarkdown(md)).some((e) => e.type === 'a')).toBe(false)
     }
+  })
+})
+
+describe('narrative mentions (P5-05)', () => {
+  const P = '11111111-2222-4333-8444-555555555555'
+  const V = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+  const md = `Met [person:${P}] near [vehicle:${V}].`
+  const texts = (node: ReactNode): string => {
+    const out: string[] = []
+    const walk = (n: ReactNode) => {
+      if (typeof n === 'string') out.push(n)
+      else if (Array.isArray(n)) n.forEach(walk)
+      else if (isValidElement(n)) walk((n.props as { children?: ReactNode }).children)
+    }
+    walk(node)
+    return out.join('')
+  }
+
+  it('without a resolver the token text is left exactly as before', () => {
+    expect(texts(renderMarkdown(md))).toBe(md)
+    expect(elements(renderMarkdown(md)).some((e) => e.type === EntityLink)).toBe(false)
+  })
+
+  it('a resolved token renders an EntityLink with the label; a null one "Restricted record"; the id never prints', () => {
+    const nodes = renderMarkdown(md, { mentions: { [`person:${P}`]: 'John Doe', [`vehicle:${V}`]: null } })
+    const link = elements(nodes).find((e) => e.type === EntityLink)
+    expect(link).toBeDefined()
+    expect(link!.props).toMatchObject({ kind: 'person', id: P, label: 'John Doe' })
+    const t = texts(nodes)
+    expect(t).toContain('Restricted record')
+    expect(t).not.toContain(P)
+    expect(t).not.toContain(V)
+  })
+
+  it('an unresolved (absent) token shows a placeholder, not the id', () => {
+    const t = texts(renderMarkdown(md, { mentions: {} }))
+    expect(t).toContain('Resolving record…')
+    expect(t).not.toContain(P)
+  })
+
+  it('doc mode threads the resolver through headings, lists, quotes and tables', () => {
+    const { nodes } = renderDocumentMarkdown(`# About [person:${P}]\n\n- [person:${P}]\n\n> [person:${P}]\n\n| a | b |\n|---|---|\n| [person:${P}] | x |`, { mentions: { [`person:${P}`]: 'John Doe' } })
+    expect(elements(nodes).filter((e) => e.type === EntityLink)).toHaveLength(4)
   })
 })

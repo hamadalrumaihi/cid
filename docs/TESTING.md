@@ -31,6 +31,7 @@ pure functions and the client mirrors of server workflow logic. Highlights
 | `src/lib/safeUrl.test.ts` | URL sanitization (external-link guards) |
 | `src/lib/schemas.test.ts` | zod form schemas |
 | `src/components/ui/csvCell.test.ts` | CSV export cell escaping (formula-injection guard) |
+| `src/mocks/handlers/reports.test.ts` | the Phase 5 mock contract (templates seed + admin, review flow, entities, exports, task waivers) — see [TESTING-MOCKS.md](TESTING-MOCKS.md) |
 
 ## Live RLS / RPC suite
 
@@ -49,6 +50,9 @@ per-release `v1xx.test.ts` file for each new security surface. Key files
 | `tests/rls/v116.test.ts` | unified role/department matrix: requestable roles, approval authority per rank, frozen privileged profile columns, justice-identity separation from CID rank |
 | `tests/rls/v166.test.ts` | SIB Phase 1: CID→SIB denial at every rank (rows, counts, children, search, roster, audit), RPC refusal under the build gate, RPC-only case-authority columns, compartment mechanics, a CID regression guard on the re-emitted `can_access_case` chokepoints, and the case-child **delete wall** (CID command cannot destroy an SIB investigation's reports/tasks/blockers/media, while CID deletion on a CID case is unchanged). A second lane (`RLS_TEST_SIU_RELEASED=1` + two SIB agent fixtures) asserts the post-release production model — SIB reading CID read-only, compartment exclusion between agents, and the SOP chain of command (the Director of CID holds oversight standing: reads standard investigations, is shut out of restricted/compartmented, holds personnel authority, and has no field authority) |
 | `tests/rls/v167.test.ts` | SIB §14/§15/Phase 3: a takeover removes the case, its children and its search hits from CID at every rank while preserving the case number, bureau, lead detective and report authorship — and returning control restores all of it; a release reaches its addressee only, carries no origin field, and the recipient reads zero rows from `siu_disclosures`; all six tradecraft tables are invisible and unwritable to CID; `siu_export_case` never emits a source codename, legend or intercept content at any scope even for the Owner; the oversight report is counts-only and closed to CID |
+| `tests/rls/v187a.test.ts` | Phase 5 report templates: the seeded catalog readable by any active member (14 keys, one published version each, `review_required` false only for the legal drafting forms), propose (Bureau Lead) vs publish / new key / update (Director), one draft per template, a publish superseding the previous version while an existing report keeps its pin, malformed schemas raising, discard authority, the `reports_template_pin` trigger, retired keys refusing `report_create` |
+| `tests/rls/v187b.test.ts` | Phase 5 review flow: required keys read from the pinned version, the trigger-frozen workflow columns, submit → return (note) → resubmit → approve with both signatures in `report_versions`, reopen with a reason and the logged seal break, `report_finalize` refusing review-required templates, `arrest_warrant` self-sealing, the `case_closure` open-task gate with `case_task_waive` / `_unwaive`, and the four notification kinds queried as their recipients |
+| `tests/rls/v187c.test.ts` | Phase 5 entities + exports: `report_entities_set` (author / case editor; readable refs only; same-case charges; replace semantics; locked once submitted; source rows untouched; no client writes), "mentioned in reports" as a filtered list, `report_record_export` receipts (pdf / docx / md, 10-char code, draft vs sealed version number, outsider denied) and the Owner-visible `REPORT_EXPORTED` / `REPORT_ENTITIES_SET` audit rows |
 
 Non-negotiable conventions (every file in the suite):
 
@@ -65,7 +69,7 @@ Run the live RLS suite **after every change that touches RLS policies, definer R
 
 Two backing environments (spec headers document each spec's exact scope):
 
-- **Live-fixture specs** — most of `tests/e2e/` (smoke, feature flows, justice/legal, accessibility, per-domain specs — see the directory) runs against the live project with the same `rls-test-*` fixtures and `rls_test_cleanup()` as the RLS suite (sign-in helper: `tests/e2e/liveAuth.ts`). The app's UI is OAuth-only; tests mint a session via the password grant and seed supabase-js's localStorage key. Side-effect safety is engineered in (e.g. a `page.route` guard hard-aborts any `publish_announcement` whose audience isn't `specific_members`).
+- **Live-fixture specs** — most of `tests/e2e/` (smoke, feature flows, justice/legal, the Phase 5 report builder — `reports.spec.ts` + `reportFixtures.ts` —, accessibility, per-domain specs — see the directory) runs against the live project with the same `rls-test-*` fixtures and `rls_test_cleanup()` as the RLS suite (sign-in helper: `tests/e2e/liveAuth.ts`). The app's UI is OAuth-only; tests mint a session via the password grant and seed supabase-js's localStorage key. Side-effect safety is engineered in (e.g. a `page.route` guard hard-aborts any `publish_announcement` whose audience isn't `specific_members`).
 - **Dedicated-test-project specs** — `roles.spec.ts` (per-role navigation contract) and the visual suite run against the seeded non-production project; setup, seeding (`npm run test:seed`), and prod-guards are in [TEST-ENVIRONMENT.md](TEST-ENVIRONMENT.md).
 
 Environment knobs:

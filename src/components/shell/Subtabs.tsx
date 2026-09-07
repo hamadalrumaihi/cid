@@ -13,11 +13,13 @@ import { useNav } from './useNav'
 
 export function Subtabs() {
   const { activeCategory, activeTab, navigate } = useNav()
-  const { isOwner } = useAuth()
+  const { isOwner, isCommand } = useAuth()
   const def = NAV_CATEGORIES.find((c) => c.id === activeCategory)
   if (!def) return null // standalone leaves (feedback) hide the strip
 
-  const tabs = def.tabs.filter((t) => (t !== 'audit' && t !== 'devdocs') || isOwner)
+  // report-templates: Bureau Lead+ / Owner (mirror of the template RPCs'
+  // proposer gate — the view itself and the RPCs re-check).
+  const tabs = def.tabs.filter((t) => ((t !== 'audit' && t !== 'devdocs') || isOwner) && (t !== 'report-templates' || isCommand || isOwner))
   // A one-tab category (Investigative Tools) needs no strip — the single leaf
   // IS the category, so a one-button tablist would be noise.
   if (tabs.length <= 1) return null

@@ -815,6 +815,69 @@ resubmission landing in `submitted_to_judge` with `content_changed: true` and
 the `fast_lane_content_changed` timeline row; evidence refused on an archived
 case; the SIB responsible-party resolver running.
 
+**P5-01 / P5-02 / P5-06 report templates.**
+`20261028120000_report_templates.sql` (applied as `report_templates`):
+`report_templates` + `report_template_versions` (the FormSchema as jsonb,
+`required` / `advisory` keys, `review_required`, draft → published →
+superseded with one published and one draft per template), the seed of all
+14 forms (the eight existing plus incident_followup, interview,
+arrest_report, search_report, case_closure, warrant_return) as published
+version 1 (`review_required` false for the four legal drafting forms),
+`private.report_schema_keys` (the server-side shape validator),
+`reports.template_version_id` (BEFORE INSERT trigger `reports_template_pin`;
+nullable because the v180 fixture inserts template 'initial'), the review
+columns, `report_versions.reviewer_signature`, `report_template_save` /
+`_publish` / `_discard` / `_update` (Director / DD / Owner publish, Bureau
+Lead proposes), `report_create` refusing an unknown or retired template,
+`rls_test_cleanup` spliced. Verified at apply time in a rolled-back
+transaction: 14 published, a detective's draft `denied`, the director's
+draft becoming version 2 and superseding version 1 on publish while an
+existing report kept version 1, a bad field type refused, a new key created
+and retired, a direct insert with the legacy key keeping NULL and a known
+key pinned, a direct insert on the tables `42501`.
+
+**P5-03 / P5-04 / P5-07 review flow, entities, exports.**
+`20261029120000_report_review.sql` (applied as `report_review`, then
+`report_review_entity_exists` — `report_entities_set` checks a registry
+reference exists and is live through `private.soft_delete_state`, not only
+that the kind is visible — then `report_review_fixes`, the security-review
+follow-up: `report_entities` media rows hidden from a reader who cannot see
+the media, `report_reviewers` compartment-aware on SIU cases,
+`report_seal_checks` refusing a version that is not this template's or is
+still a draft, the signature badge taken from the profile, `report_finalize`
+author-only, `report_reopen` needing a writable case, entity snapshots
+capped at 8 KB, the export code a random 10-character receipt rather than a
+hash of the report, `can_waive_task` scoped to the case's bureau, the
+`reports_template_pin` trigger pinning only an active template,
+`report_template_save` refusing to overwrite another proposer's pending
+draft, `report_schema_keys` capping a schema at 200 KB, and
+`block_direct_report_finalize` rebound BEFORE INSERT OR UPDATE so a direct
+insert cannot forge a sealed, reviewed or foreign-author report and the
+identity columns are frozen): `report_entities` and `report_exports` (SELECT
+through the parent report, ON DELETE CASCADE), `case_tasks` waive columns,
+`private.can_review_report` / `can_reopen_report` / `report_reviewers` /
+`report_notify` / `report_required_gaps` / `report_seal_checks` /
+`report_seal`, `report_submit` (author, required keys, the closure gate,
+typed signature; self-seal templates seal on submit), `report_review`
+(SrDet+ never the author; return with a note, approve seals with both
+signatures), `report_finalize` (self-seal templates only), `report_reopen`
+with a required reason (the 1-arg signature dropped), `report_entities_set`,
+`report_record_export`, `case_task_waive` / `_unwaive`, the widened
+`block_direct_report_finalize` and `block_direct_task_waive` triggers, the
+protected-columns list, `perm_dispatch` arms `report.submit/review/reopen/
+export` and `report_template.propose/publish` with six catalog rows.
+Verified at apply time in a rolled-back transaction: submit refused for
+missing required fields (labels named), a direct status change refused, a
+person + timeline entity set, a bogus id refused, a draft export with a code,
+submit → `submitted` (fields and entities locked, the author refused to
+review), the director's return with a note, resubmit, approve → sealed
+with the reviewer's typed signature and role, a version row carrying it,
+a sealed export with a version number, reopen refused without a reason and
+recorded with one, an arrest-warrant draft self-sealing on submit,
+`report_finalize` refused on a review-required template, a closure report
+refused with an open task, a direct waive refused, the director waiving and
+the closure submitting, reviewers and the author notified.
+
 | Version (live) | Name | Repo file |
 |---|---|---|
 | applied via MCP (`entity_normalization`, `entity_normalization_phone_fix`) | entity_normalization | `20261014120000_entity_normalization.sql` |
@@ -831,6 +894,8 @@ case; the SIB responsible-party resolver running.
 | applied via MCP (`legal_reroute`, `legal_reroute_v_rank_fix`, `legal_review_fixes`) | legal_reroute | `20261025120000_legal_reroute.sql` |
 | applied via MCP (`legal_rpcs`, `legal_review_fixes`) | legal_rpcs | `20261026120000_legal_rpcs.sql` |
 | applied via MCP (`legal_sweeps`, `legal_review_fixes`) | legal_sweeps | `20261027120000_legal_sweeps.sql` |
+| applied via MCP (`report_templates`) | report_templates | `20261028120000_report_templates.sql` |
+| applied via MCP (`report_review`, `report_review_entity_exists`, `report_review_fixes`) | report_review | `20261029120000_report_review.sql` |
 | applied via MCP (`record_versions`) | record_versions | `20261011120000_record_versions.sql` |
 | applied via MCP (`case_access_grant_expiry`) | case_access_grant_expiry | `20261012120000_case_access_grant_expiry.sql` |
 | applied via MCP (`permanent_delete_record`, `permanent_delete_record_preview_fix`) | permanent_delete_record | `20261013120000_permanent_delete_record.sql` |

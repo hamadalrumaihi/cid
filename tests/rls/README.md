@@ -140,6 +140,58 @@ the judge / AG passwords (issue #299).
   `justice_set_coverage` refusal. **legal.test.ts** asserts the queue hand-off
   and runs its fulfilment chains behind the judge fixture.
 
+### Report builder, Phase 5 (`tests/rls/v187a` … `v187c`)
+
+Portal Improvements P5-01 … P5-07 (migrations `20261028120000_report_templates`
+→ `20261029120000_report_review`): templates are a server catalog, every
+report pins the version it was written under, and a narrative report is
+submitted by its author and sealed by a reviewer who is never the author.
+CID fixtures only — lsb (author, MCB detective), lead (MCB Bureau Lead:
+proposer / reviewer / reopener), director (publisher), bcb (SCB detective —
+the outsider), owner (audit reads). Required keys are read from the seeded
+version at test time, never assumed; templates for the flow legs are
+`incident_followup` (review required) and `arrest_warrant` (self-seal).
+
+- **v187a** (P5-01 / P5-02): the 14 seeded keys readable by any active
+  member with one published version each (`required` / `advisory` arrays;
+  `review_required` false only for `arrest_warrant` / `search_warrant` /
+  `wiretap_warrant` / `subpoena`); no client writes on either table; a
+  Detective is denied `report_template_save`; the lead proposes a draft on
+  an existing key (a second save replaces it) but cannot publish or create
+  a key; the director creates, publishes, re-publishes (previous version
+  superseded, the earlier report keeps its pin) and retires; malformed
+  schemas raise; discard is author-or-admin; `report_create` with an
+  unknown key raises; a direct INSERT is pinned by the trigger.
+  **Namespace note:** templates are not swept by `rls_test_cleanup` (only
+  fixture-authored *draft* versions are), so the suite administers ONE
+  fixed key, `rls_test_v187a`, re-activating it at the start and retiring
+  it (`active=false`) in `afterAll`. Its published / superseded versions
+  accumulate across runs by design; the seeded 14 are never modified.
+- **v187b** (P5-03): missing required keys raise with their labels; the
+  workflow columns are trigger-frozen; submit → `submitted` with the author
+  signature and locked fields; review never by the author or another
+  bureau; return needs a note; the author edits and resubmits; approve →
+  `finalized` + `approved` with both signatures in `report_versions`;
+  reopen needs a reason (Bureau Lead of the bureau) and logs the seal break;
+  `report_finalize` refuses review-required templates; `arrest_warrant`
+  self-seals on submit (and still on `report_finalize`); `case_closure`
+  refuses submit while a task is open until `case_task_waive` (lead, reason
+  required) or done; `report_submitted` reached the lead, `report_returned`
+  / `report_finalized` / `report_reopened` reached the author (queried as
+  the recipient — `notifications` is under RLS).
+- **v187c** (P5-04 / P5-07): `report_entities_set` by the author (person,
+  same-case charge, timeline_event); an unreadable case ref (bcb's case),
+  a charge on another case, an unknown kind, a timeline_event with a ref
+  all raise; bcb denied; source rows untouched; no client writes; reads
+  follow the report ("mentioned in reports" = list by kind + ref_id); a
+  case-writable editor may replace the set; locked once submitted.
+  `report_record_export` pdf / md / docx receipts (10-char code, null
+  version for a draft, the sealed number after approval); invalid format
+  raises; bcb denied; `report_exports` reads follow the report; the Owner
+  sees `REPORT_EXPORTED` / `REPORT_ENTITIES_SET` in `audit_log`. Cleanup
+  runs as lsb AND bcb (each sweeps its own case); the person row is removed
+  by the lead.
+
 ### DOJ legal review (v1.13.0 — `tests/rls/legal.test.ts`; historical model)
 
 37 assertions covering the DOJ Legal Review System (see

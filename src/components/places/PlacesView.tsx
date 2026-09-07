@@ -24,6 +24,7 @@ import { uiConfirm } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { ReportMentions } from '@/components/cases/tabs/reports/ReportMentions'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
@@ -511,6 +512,7 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, observationCo
         </div>
       )}
       {observationCount > 0 && <PlaceObservations placeId={place.id} count={observationCount} />}
+      <PlaceReportMentions placeId={place.id} />
       {photos.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {photos.map((p) => {
@@ -582,6 +584,26 @@ function PlaceObservations({ placeId, count }: { placeId: string; count: number 
           <ObservationHistory kind="place" refId={placeId} />
         </div>
       )}
+    </div>
+  )
+}
+
+/** "Mentioned in reports" (P5-04) as a lazy expandable — places have no
+ *  dossier view, so the section only mounts (and queries) once opened. */
+function PlaceReportMentions({ placeId }: { placeId: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="inline-flex min-h-[40px] items-center gap-1.5 rounded text-[11px] font-semibold text-slate-400 transition hover:text-slate-200 sm:min-h-0"
+      >
+        <span aria-hidden>{open ? '▾' : '▸'}</span>
+        Mentioned in reports
+      </button>
+      {open && <ReportMentions kind="place" refId={placeId} className="mt-2" />}
     </div>
   )
 }

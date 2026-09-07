@@ -37,6 +37,7 @@ import { LinkEditPopover, LinkStatusBadge } from '@/components/shared/LinkEditPo
 import { PinButton } from '@/components/shared/PinButton'
 import { RecordPeekButton } from '@/components/shared/RecordPeekButton'
 import { CrossrefList } from '@/components/shared/CrossrefList'
+import { ReportMentions } from '@/components/cases/tabs/reports/ReportMentions'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
 import { useToolNav } from '@/components/tools/useToolNav'
 import {
@@ -555,6 +556,7 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
             <VehiclePhotosPanel vehicleId={id} />
             <EntityLegalPanel exhibitType="vehicle" sourceId={id} noun="vehicle" />
             <LinkedCasesPanel vehicleId={v.id} />
+            <ReportMentions kind="vehicle" refId={v.id} />
             {/* Verified-observation history (RLS-trimmed — restricted or
                 out-of-scope rows simply never arrive). */}
             <Card>

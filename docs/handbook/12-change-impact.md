@@ -11,7 +11,7 @@
 | `useAuth` shape / capability booleans | ~40 consumers, Gate branches | canEdit/canDelete gate every button |
 | An RLS policy or `private.*` helper | The matching UI gates, `useNavBadges.canReviewCase`, zero-rows checks | UI mirrors must match or users see phantom buttons/badges |
 | Sign-off RPCs / routing | `lib/signoff.ts` labels, CaseDetail Sign-off tab, `useNavBadges`, `notifText` types | Vocabulary + mirror + notifications track the server states |
-| `FORM_SCHEMAS` field keys | Saved `reports.fields` JSON (old reports must still render), `formToText`, warrant matching | Field keys ARE the storage format |
+| `FORM_SCHEMAS` field keys | Saved `reports.fields` JSON (old reports must still render), the seeded `report_template_versions` (a schema change is a NEW published version — reports keep the one they pinned), `reportMarkdown` / `reportPdfSpec` exports, warrant matching | Field keys ARE the storage format |
 | A case-satellite FK / cascade | `CaseDetail` delete config; `GangsView`/`PlacesView`/`PersonsView` children/setNullRefs | Undo restores exactly what the config lists |
 | `Store` keys | The legacy vanilla app, `page.tsx` deep-link shim, the pre-hydration `PREF_APPLIER` | Shared localStorage blob = cross-app contract |
 | A status vocabulary (values or labels) | `lib/status.ts` domain + its source vocabulary (`signoff`/`forms`/`caseCharges`/…), `ui/StatusBadge` call sites, `lib/status.test.ts` | The registry is the single presentation source; a value missing from its domain renders a bare fallback chip |

@@ -504,13 +504,17 @@ create table public.case_tasks (
   deleted_at timestamp with time zone,
   deleted_by uuid,
   delete_reason text,
-  delete_batch uuid
+  delete_batch uuid,
+  waived_at timestamp with time zone,
+  waived_by uuid,
+  waive_reason text
 );
 alter table public.case_tasks add constraint case_tasks_assignee_fkey FOREIGN KEY (assignee) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.case_tasks add constraint case_tasks_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
 alter table public.case_tasks add constraint case_tasks_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
 alter table public.case_tasks add constraint case_tasks_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.case_tasks add constraint case_tasks_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES case_tasks(id) ON DELETE CASCADE;
+alter table public.case_tasks add constraint case_tasks_waived_by_fkey FOREIGN KEY (waived_by) REFERENCES profiles(id);
 alter table public.case_tasks add constraint case_tasks_pkey PRIMARY KEY (id);
 alter table public.case_tasks enable row level security;
 
@@ -3522,6 +3526,83 @@ alter table public.record_versions add constraint record_versions_pkey PRIMARY K
 alter table public.record_versions add constraint record_versions_version_key UNIQUE (table_name, record_id, version_no);
 alter table public.record_versions enable row level security;
 
+create table public.report_entities (
+  id uuid not null default gen_random_uuid(),
+  report_id uuid not null,
+  kind text not null,
+  ref_id uuid,
+  role text,
+  label text not null,
+  snapshot jsonb not null default '{}'::jsonb,
+  edited boolean not null default false,
+  inserted_by uuid,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.report_entities add constraint report_entities_check CHECK (((kind = 'timeline_event'::text) = (ref_id IS NULL)));
+alter table public.report_entities add constraint report_entities_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'vehicle'::text, 'gang'::text, 'place'::text, 'evidence'::text, 'media'::text, 'officer'::text, 'charge'::text, 'legal_request'::text, 'case'::text, 'timeline_event'::text])));
+alter table public.report_entities add constraint report_entities_inserted_by_fkey FOREIGN KEY (inserted_by) REFERENCES profiles(id);
+alter table public.report_entities add constraint report_entities_report_id_fkey FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE;
+alter table public.report_entities add constraint report_entities_pkey PRIMARY KEY (id);
+alter table public.report_entities enable row level security;
+
+create table public.report_exports (
+  id uuid not null default gen_random_uuid(),
+  report_id uuid not null,
+  version_number integer,
+  format text not null,
+  verification_code text not null,
+  exported_by uuid,
+  exported_at timestamp with time zone not null default now()
+);
+alter table public.report_exports add constraint report_exports_format_check CHECK ((format = ANY (ARRAY['pdf'::text, 'docx'::text, 'md'::text])));
+alter table public.report_exports add constraint report_exports_exported_by_fkey FOREIGN KEY (exported_by) REFERENCES profiles(id);
+alter table public.report_exports add constraint report_exports_report_id_fkey FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE;
+alter table public.report_exports add constraint report_exports_pkey PRIMARY KEY (id);
+alter table public.report_exports enable row level security;
+
+create table public.report_template_versions (
+  id uuid not null default gen_random_uuid(),
+  template_id uuid not null,
+  version_number integer not null,
+  schema jsonb not null,
+  required text[] not null default '{}'::text[],
+  advisory text[] not null default '{}'::text[],
+  review_required boolean not null default true,
+  status text not null default 'draft'::text,
+  change_summary text,
+  created_by uuid,
+  created_at timestamp with time zone not null default now(),
+  published_by uuid,
+  published_at timestamp with time zone,
+  superseded_at timestamp with time zone
+);
+alter table public.report_template_versions add constraint report_template_versions_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'superseded'::text])));
+alter table public.report_template_versions add constraint report_template_versions_version_number_check CHECK ((version_number >= 1));
+alter table public.report_template_versions add constraint report_template_versions_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
+alter table public.report_template_versions add constraint report_template_versions_published_by_fkey FOREIGN KEY (published_by) REFERENCES profiles(id);
+alter table public.report_template_versions add constraint report_template_versions_template_id_fkey FOREIGN KEY (template_id) REFERENCES report_templates(id) ON DELETE RESTRICT;
+alter table public.report_template_versions add constraint report_template_versions_pkey PRIMARY KEY (id);
+alter table public.report_template_versions add constraint report_template_versions_template_id_version_number_key UNIQUE (template_id, version_number);
+alter table public.report_template_versions enable row level security;
+
+create table public.report_templates (
+  id uuid not null default gen_random_uuid(),
+  key text not null,
+  name text not null,
+  description text,
+  is_default boolean not null default false,
+  sort_order integer not null default 100,
+  active boolean not null default true,
+  created_by uuid,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.report_templates add constraint report_templates_key_check CHECK ((key ~ '^[a-z][a-z0-9_]{1,63}$'::text));
+alter table public.report_templates add constraint report_templates_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
+alter table public.report_templates add constraint report_templates_pkey PRIMARY KEY (id);
+alter table public.report_templates add constraint report_templates_key_key UNIQUE (key);
+alter table public.report_templates enable row level security;
+
 create table public.report_versions (
   id uuid not null default gen_random_uuid(),
   report_id uuid not null,
@@ -3529,7 +3610,8 @@ create table public.report_versions (
   fields jsonb not null,
   signature jsonb,
   created_by uuid,
-  created_at timestamp with time zone not null default now()
+  created_at timestamp with time zone not null default now(),
+  reviewer_signature jsonb
 );
 alter table public.report_versions add constraint report_versions_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
 alter table public.report_versions add constraint report_versions_report_id_fkey FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE;
@@ -3553,12 +3635,24 @@ create table public.reports (
   deleted_at timestamp with time zone,
   deleted_by uuid,
   delete_reason text,
-  delete_batch uuid
+  delete_batch uuid,
+  template_version_id uuid,
+  review_status text not null default 'draft'::text,
+  submitted_at timestamp with time zone,
+  submitted_by uuid,
+  reviewed_by uuid,
+  reviewed_at timestamp with time zone,
+  review_note text,
+  reviewer_signature jsonb
 );
+alter table public.reports add constraint reports_review_status_check CHECK ((review_status = ANY (ARRAY['draft'::text, 'submitted'::text, 'returned'::text, 'approved'::text])));
 alter table public.reports add constraint reports_author_id_fkey FOREIGN KEY (author_id) REFERENCES profiles(id);
 alter table public.reports add constraint reports_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
 alter table public.reports add constraint reports_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
 alter table public.reports add constraint reports_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES reports(id);
+alter table public.reports add constraint reports_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES profiles(id);
+alter table public.reports add constraint reports_submitted_by_fkey FOREIGN KEY (submitted_by) REFERENCES profiles(id);
+alter table public.reports add constraint reports_template_version_id_fkey FOREIGN KEY (template_version_id) REFERENCES report_template_versions(id);
 alter table public.reports add constraint reports_pkey PRIMARY KEY (id);
 alter table public.reports enable row level security;
 
@@ -5252,6 +5346,11 @@ CREATE INDEX record_extractions_case_idx ON public.record_extractions USING btre
 CREATE INDEX record_extractions_created_by_idx ON public.record_extractions USING btree (created_by);
 CREATE INDEX record_versions_created_idx ON public.record_versions USING btree (created_at);
 CREATE INDEX record_versions_record_idx ON public.record_versions USING btree (table_name, record_id, version_no DESC);
+CREATE INDEX report_entities_ref_idx ON public.report_entities USING btree (kind, ref_id) WHERE (ref_id IS NOT NULL);
+CREATE INDEX report_entities_report_id_idx ON public.report_entities USING btree (report_id);
+CREATE INDEX report_exports_report_id_idx ON public.report_exports USING btree (report_id);
+CREATE UNIQUE INDEX report_template_versions_one_draft_idx ON public.report_template_versions USING btree (template_id) WHERE (status = 'draft'::text);
+CREATE UNIQUE INDEX report_template_versions_one_published_idx ON public.report_template_versions USING btree (template_id) WHERE (status = 'published'::text);
 CREATE INDEX report_versions_created_by_idx ON public.report_versions USING btree (created_by);
 CREATE INDEX report_versions_report_idx ON public.report_versions USING btree (report_id);
 CREATE INDEX reports_author_id_fkey_idx ON public.reports USING btree (author_id);
@@ -5259,6 +5358,8 @@ CREATE INDEX reports_case_id_idx ON public.reports USING btree (case_id);
 CREATE INDEX reports_delete_batch_idx ON public.reports USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
 CREATE INDEX reports_deleted_at_idx ON public.reports USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX reports_parent_id_fkey_idx ON public.reports USING btree (parent_id);
+CREATE INDEX reports_review_status_idx ON public.reports USING btree (case_id, review_status) WHERE (review_status = 'submitted'::text);
+CREATE INDEX reports_template_version_id_idx ON public.reports USING btree (template_version_id);
 CREATE INDEX restricted_access_grants_decided_by_idx ON public.restricted_access_grants USING btree (decided_by);
 CREATE INDEX restricted_access_grants_lookup ON public.restricted_access_grants USING btree (case_id, user_id, expires_at);
 CREATE UNIQUE INDEX restricted_access_grants_pending_uidx ON public.restricted_access_grants USING btree (case_id, user_id) WHERE (status = 'pending'::text);
@@ -6956,6 +7057,54 @@ AS $function$
      and private.can_access_case(p_case)
    order by a.created_at desc
 $function$
+;
+
+CREATE OR REPLACE FUNCTION public.case_task_unwaive(p_task uuid)
+ RETURNS case_tasks
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); t public.case_tasks;
+begin
+  select * into t from public.case_tasks where id = p_task for update;
+  if not found or t.deleted_at is not null then raise exception 'task not found'; end if;
+  if not private.can_waive_task(t.case_id, v_uid) then
+    perform private.perm_deny('waive', 'case_task', p_task, 'not_authority');
+    raise exception 'only the case lead, command or the Owner may restore a waived task';
+  end if;
+  if t.waived_at is null then return t; end if;
+  update public.case_tasks set waived_at = null, waived_by = null, waive_reason = null
+   where id = p_task returning * into t;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'TASK_UNWAIVED', 'case_tasks', p_task, jsonb_build_object('case_id', t.case_id));
+  return t;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.case_task_waive(p_task uuid, p_reason text)
+ RETURNS case_tasks
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); t public.case_tasks;
+        v_reason text := left(nullif(btrim(coalesce(p_reason, '')), ''), 500);
+begin
+  select * into t from public.case_tasks where id = p_task for update;
+  if not found or t.deleted_at is not null then raise exception 'task not found'; end if;
+  if v_reason is null then raise exception 'a reason is required to waive a task'; end if;
+  if not private.can_waive_task(t.case_id, v_uid) then
+    perform private.perm_deny('waive', 'case_task', p_task, 'not_authority');
+    raise exception 'only the case lead, command or the Owner may waive a task';
+  end if;
+  if t.done then raise exception 'a completed task does not need waiving'; end if;
+  update public.case_tasks set waived_at = now(), waived_by = v_uid, waive_reason = v_reason
+   where id = p_task returning * into t;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'TASK_WAIVED', 'case_tasks', p_task, jsonb_build_object('case_id', t.case_id, 'reason', v_reason));
+  return t;
+end $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.case_timeline(p_case uuid)
@@ -14773,13 +14922,22 @@ declare
   v_kind public.report_kind;
   v_seq int;
   v_rt text;
+  v_ver uuid;
 begin
   if not private.is_active() or not private.can_access_case(p_case) then
     raise exception 'case not found or not accessible';
   end if;
+  if not private.case_writable(p_case) then
+    raise exception 'this case is archived — restore it before adding a report';
+  end if;
   if nullif(btrim(coalesce(p_template, '')), '') is null then
     raise exception 'a report template is required';
   end if;
+  select v.id into v_ver
+    from public.report_templates t
+    join public.report_template_versions v on v.template_id = t.id and v.status = 'published'
+   where t.key = btrim(p_template) and t.active;
+  if v_ver is null then raise exception 'unknown report template'; end if;
   if p_kind is not null then
     if p_kind not in ('initial', 'supplemental', 'followup') then
       raise exception 'invalid report kind';
@@ -14797,16 +14955,79 @@ begin
     from public.reports x
    where x.case_id = p_case and x.template = btrim(p_template) and x.kind = v_kind;
 
-  insert into public.reports (case_id, template, kind, seq, fields, author_id)
+  insert into public.reports (case_id, template, kind, seq, fields, author_id, template_version_id)
   values (p_case, btrim(p_template), v_kind, v_seq,
-          coalesce(p_fields, '{}'::jsonb), v_uid)
+          coalesce(p_fields, '{}'::jsonb), v_uid, v_ver)
   returning * into r;
 
   insert into public.audit_log (actor_id, action, entity, entity_id, detail)
   values (v_uid, 'REPORT_CREATED', 'reports', r.id,
           jsonb_build_object('case_id', p_case, 'template', r.template,
-                             'kind', r.kind, 'seq', r.seq));
+                             'kind', r.kind, 'seq', r.seq, 'template_version_id', v_ver));
   return r;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.report_entities_set(p_report uuid, p_items jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); r public.reports; x jsonb; v_kind text; v_ref uuid;
+        v_n integer := 0; v_ok boolean; v_label text;
+begin
+  select * into r from public.reports where id = p_report for update;
+  if not found or r.deleted_at is not null then raise exception 'report not found'; end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' then raise exception 'p_items must be an array'; end if;
+  if r.finalized or r.review_status not in ('draft', 'returned') then
+    return private.report_denied('edit', p_report, 'locked', 'a submitted or sealed report''s contents are locked');
+  end if;
+  if not (private.is_active() and private.case_writable(r.case_id)
+          and (r.author_id = v_uid or private.can_access_case(r.case_id))) then
+    return private.report_denied('edit', p_report, 'case_not_writable',
+      'this case is not writable (no access, archived or deleted)');
+  end if;
+  delete from public.report_entities where report_id = p_report;
+  for x in select * from jsonb_array_elements(p_items) loop
+    if jsonb_typeof(x) <> 'object' then raise exception 'each item must be an object'; end if;
+    v_kind := x->>'kind';
+    v_label := left(btrim(coalesce(x->>'label', '')), 300);
+    if v_label = '' then raise exception 'each item needs a label'; end if;
+    v_ref := nullif(btrim(coalesce(x->>'ref_id', '')), '')::uuid;
+    if length(coalesce(x->'snapshot', '{}'::jsonb)::text) > 8000 then raise exception 'snapshot too large (8 KB limit)'; end if;
+    if v_kind = 'timeline_event' then
+      if v_ref is not null then raise exception 'a timeline event carries no ref_id'; end if;
+      v_ok := true;
+    elsif v_ref is null then
+      raise exception '% needs a ref_id', coalesce(v_kind, 'item');
+    elsif v_kind in ('person', 'vehicle', 'gang', 'place', 'evidence', 'media') then
+      -- visibility alone says nothing about a made-up id: the record must exist and be live too.
+      select st.p_exists and st.p_deleted_at is null and private.perm_registry_visible(v_kind, v_ref)
+        into v_ok from private.soft_delete_state(v_kind, v_ref) st;
+    elsif v_kind = 'officer' then
+      v_ok := exists (select 1 from public.profiles p where p.id = v_ref);
+    elsif v_kind = 'charge' then
+      v_ok := exists (select 1 from public.case_charges cc where cc.id = v_ref and cc.case_id = r.case_id);
+    elsif v_kind = 'legal_request' then
+      v_ok := private.can_view_legal_request(v_ref, v_uid);
+    elsif v_kind = 'case' then
+      v_ok := exists (select 1 from public.cases c where c.id = v_ref and c.deleted_at is null) and private.can_read_case(v_ref);
+    else
+      raise exception 'unknown entity kind %', coalesce(v_kind, '(none)');
+    end if;
+    if not coalesce(v_ok, false) then
+      raise exception '% % not found or not accessible', v_kind, v_ref;
+    end if;
+    insert into public.report_entities (report_id, kind, ref_id, role, label, snapshot, edited, inserted_by)
+    values (p_report, v_kind, v_ref, left(nullif(btrim(coalesce(x->>'role', '')), ''), 40), v_label,
+            case when jsonb_typeof(x->'snapshot') = 'object' then x->'snapshot' else '{}'::jsonb end,
+            coalesce((x->>'edited')::boolean, false), v_uid);
+    v_n := v_n + 1;
+  end loop;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'REPORT_ENTITIES_SET', 'reports', p_report, jsonb_build_object('count', v_n));
+  return jsonb_build_object('ok', true, 'count', v_n);
 end $function$
 ;
 
@@ -14816,75 +15037,337 @@ CREATE OR REPLACE FUNCTION public.report_finalize(p_report uuid, p_badge text DE
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare r public.reports; v_uid uuid := (select auth.uid()); v_name text; v_num integer;
+declare r public.reports; v_uid uuid := (select auth.uid()); v public.report_template_versions;
 begin
   select * into r from public.reports where id = p_report for update;
-  if not found then raise exception 'report not found'; end if;
+  if not found or r.deleted_at is not null then raise exception 'report not found'; end if;
   if r.finalized then raise exception 'report already finalized'; end if;
+  if r.author_id is distinct from v_uid then
+    perform private.perm_deny('submit', 'report', p_report, 'not_author');
+    raise exception 'only the report''s author may finalize it';
+  end if;
   if not (private.is_active() and private.can_access_case(r.case_id)) then
+    perform private.perm_deny('submit', 'report', p_report, 'no_case_access');
     raise exception 'not permitted to finalize this report'; end if;
   if not private.case_writable(r.case_id) then
     raise exception 'this case is archived — restore it before finalizing a report'; end if;
-  select display_name into v_name from public.profiles where id = v_uid;
-  update public.reports
-    set finalized = true,
-        signature = jsonb_build_object(
-          'officer', coalesce(v_name, 'Officer'),
-          'signer_id', v_uid,
-          'badge', nullif(btrim(coalesce(p_badge,'')), ''),
-          'signed_at', now()
-        ),
-        updated_at = now()
-    where id = p_report returning * into r;
-  select coalesce(max(version_number), 0) + 1 into v_num
-    from public.report_versions where report_id = p_report;
-  insert into public.report_versions (report_id, version_number, fields, signature, created_by)
-  values (p_report, v_num, r.fields, r.signature, v_uid);
-  return r;
+  v := private.report_seal_checks(r);
+  if v.review_required then
+    raise exception 'this template requires review — submit the report for review';
+  end if;
+  return private.report_seal(p_report, private.report_signature(v_uid, p_badge, null, null), null, true);
 end $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.report_reopen(p_report uuid)
+CREATE OR REPLACE FUNCTION public.report_record_export(p_report uuid, p_format text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); r public.reports; v_num integer; v_code text; v_id uuid;
+begin
+  select * into r from public.reports where id = p_report;
+  if not found then raise exception 'report not found'; end if;
+  if p_format not in ('pdf', 'docx', 'md') then raise exception 'format must be pdf, docx or md'; end if;
+  if not ((r.deleted_at is null or private.is_owner()) and private.can_read_case(r.case_id)) then
+    return private.report_denied('export', p_report, 'not_visible', 'not authorized to export this report');
+  end if;
+  select max(version_number) into v_num from public.report_versions where report_id = p_report;
+  -- a receipt, not a hash: minted per export, so a code proves an export was recorded
+  v_code := upper(left(md5(gen_random_uuid()::text || p_report::text), 10));
+  insert into public.report_exports (report_id, version_number, format, verification_code, exported_by)
+  values (p_report, v_num, p_format, v_code, v_uid) returning id into v_id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'REPORT_EXPORTED', 'reports', p_report,
+          jsonb_build_object('export_id', v_id, 'format', p_format, 'version_number', v_num,
+                             'verification_code', v_code, 'sealed', r.finalized));
+  return jsonb_build_object('ok', true, 'id', v_id, 'version_number', v_num, 'verification_code', v_code);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.report_reopen(p_report uuid, p_reason text DEFAULT NULL::text)
  RETURNS reports
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare
-  r public.reports;
-  v_uid uuid := (select auth.uid());
-  v_role text;
-  v_div text;
+declare r public.reports; v_uid uuid := (select auth.uid());
+        v_reason text := left(nullif(btrim(coalesce(p_reason, '')), ''), 500);
 begin
-  select * into r from public.reports where id = p_report;
-  if not found then raise exception 'report not found'; end if;
-  select role::text, division::text into v_role, v_div
-    from public.profiles where id = v_uid and active;
-  if v_role is null or v_role not in ('bureau_lead', 'deputy_director', 'director') then
-    raise exception 'only bureau lead and above may reopen a finalized report';
-  end if;
-  -- Bureau leads unseal only their own bureau's reports (JTF cases are
-  -- shared, mirroring can_access_case); deputy director+ are unrestricted.
-  if v_role = 'bureau_lead'
-     and (select bureau::text from public.cases where id = r.case_id) not in ('JTF', v_div) then
-    raise exception 'bureau leads may only reopen reports in their own bureau';
-  end if;
+  select * into r from public.reports where id = p_report for update;
+  if not found or r.deleted_at is not null then raise exception 'report not found'; end if;
+  if v_reason is null then raise exception 'a reason is required to reopen a sealed report'; end if;
   if not r.finalized then raise exception 'report is not finalized'; end if;
+  if not private.can_reopen_report(p_report, v_uid) then
+    perform private.perm_deny('reopen', 'report', p_report, 'not_authority');
+    raise exception 'only a Bureau Lead over this bureau, a Deputy Director, a Director or the Owner may reopen a sealed report';
+  end if;
+  if not private.case_writable(r.case_id) then
+    raise exception 'this case is archived — restore it before reopening a report';
+  end if;
   update public.reports
      set finalized = false,
-         signature = null,
+         review_status = 'draft',
+         signature = null, reviewer_signature = null,
+         reviewed_by = null, reviewed_at = null, review_note = null,
+         submitted_at = null, submitted_by = null,
          fields = coalesce(fields, '{}'::jsonb) || jsonb_build_object(
            '_reopen_log',
            coalesce(fields->'_reopen_log', '[]'::jsonb) || jsonb_build_array(jsonb_build_object(
-             'at', now(),
-             'by', v_uid,
-             'prev_signature', signature
-           ))
-         ),
+             'at', now(), 'by', v_uid, 'reason', v_reason,
+             'prev_signature', signature, 'prev_reviewer_signature', reviewer_signature))),
          updated_at = now()
    where id = p_report
   returning * into r;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'REPORT_REOPENED', 'reports', p_report,
+          jsonb_build_object('case_id', r.case_id, 'reason', v_reason));
+  perform private.report_notify(r.author_id, p_report, 'report_reopened', v_reason);
   return r;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.report_review(p_report uuid, p_decision text, p_note text DEFAULT NULL::text, p_signature text DEFAULT NULL::text, p_badge text DEFAULT NULL::text)
+ RETURNS reports
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); r public.reports; v_sig jsonb;
+        v_role text; v_note text := left(nullif(btrim(coalesce(p_note, '')), ''), 2000);
+begin
+  if p_decision not in ('approve', 'return') then raise exception 'decision must be approve or return'; end if;
+  select * into r from public.reports where id = p_report for update;
+  if not found or r.deleted_at is not null then raise exception 'report not found'; end if;
+  if r.review_status <> 'submitted' then raise exception 'report is not awaiting review'; end if;
+  if not private.can_review_report(p_report, v_uid) then
+    perform private.perm_deny('review', 'report', p_report,
+      case when r.author_id = v_uid then 'own_report' else 'not_reviewer' end);
+    raise exception 'only a Senior Detective or above with access to the case, and never the author, may review this report';
+  end if;
+  if p_decision = 'return' then
+    if v_note is null then raise exception 'a note is required to return a report'; end if;
+    update public.reports
+       set review_status = 'returned', review_note = v_note, reviewed_by = v_uid, reviewed_at = now(),
+           updated_at = now()
+     where id = p_report returning * into r;
+    insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+    values (v_uid, 'REPORT_RETURNED', 'reports', p_report,
+            jsonb_build_object('case_id', r.case_id, 'note', left(v_note, 300)));
+    perform private.report_notify(r.author_id, p_report, 'report_returned', v_note);
+    return r;
+  end if;
+  perform private.report_seal_checks(r);
+  select role::text into v_role from public.profiles where id = v_uid;
+  v_sig := private.report_signature(v_uid, p_badge, p_signature, v_role);
+  update public.reports set review_note = v_note where id = p_report;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'REPORT_APPROVED', 'reports', p_report,
+          jsonb_build_object('case_id', r.case_id, 'note', left(coalesce(v_note, ''), 300)));
+  return private.report_seal(p_report, null, v_sig, false);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.report_submit(p_report uuid, p_signature text DEFAULT NULL::text, p_badge text DEFAULT NULL::text)
+ RETURNS reports
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); r public.reports; v public.report_template_versions;
+        v_sig jsonb; u uuid; v_n integer := 0;
+begin
+  select * into r from public.reports where id = p_report for update;
+  if not found or r.deleted_at is not null then raise exception 'report not found'; end if;
+  if r.author_id is distinct from v_uid then
+    perform private.perm_deny('submit', 'report', p_report, 'not_author');
+    raise exception 'only the report''s author may submit it';
+  end if;
+  if r.finalized then raise exception 'report already sealed'; end if;
+  if r.review_status not in ('draft', 'returned') then raise exception 'report is already awaiting review'; end if;
+  if not (private.is_active() and private.case_writable(r.case_id)) then
+    perform private.perm_deny('submit', 'report', p_report, 'case_not_writable');
+    raise exception 'this case is not writable (no access, archived or deleted)';
+  end if;
+  v := private.report_seal_checks(r);
+  v_sig := private.report_signature(v_uid, p_badge, p_signature, null);
+  if v.review_required then
+    update public.reports
+       set review_status = 'submitted', submitted_at = now(), submitted_by = v_uid,
+           signature = v_sig, review_note = null, reviewed_by = null, reviewed_at = null,
+           reviewer_signature = null, updated_at = now()
+     where id = p_report returning * into r;
+    insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+    values (v_uid, 'REPORT_SUBMITTED', 'reports', p_report,
+            jsonb_build_object('case_id', r.case_id, 'template', r.template, 'template_version_id', r.template_version_id));
+    foreach u in array private.report_reviewers(r.case_id, v_uid) loop
+      v_n := v_n + 1;
+      perform private.report_notify(u, p_report, 'report_submitted',
+        'A ' || coalesce(v.schema->>'title', r.template) || ' awaits your review.');
+    end loop;
+    if v_n = 0 then
+      insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+      values (v_uid, 'REPORT_REVIEW_UNCOVERED', 'reports', p_report, jsonb_build_object('case_id', r.case_id));
+    end if;
+    return r;
+  end if;
+  return private.report_seal(p_report, v_sig, null, true);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.report_template_discard(p_version uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v public.report_template_versions;
+begin
+  select * into v from public.report_template_versions where id = p_version for update;
+  if not found then raise exception 'version not found'; end if;
+  if v.status <> 'draft' then raise exception 'only a draft version can be discarded'; end if;
+  if not (v.created_by = v_uid or private.report_template_admin()) then
+    return private.report_template_denied('propose', v.template_id, 'not_author',
+      'only the draft''s author or a Director may discard it');
+  end if;
+  delete from public.report_template_versions where id = p_version;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'REPORT_TEMPLATE_DISCARDED', 'report_templates', v.template_id,
+          jsonb_build_object('version_id', p_version, 'version_number', v.version_number));
+  return jsonb_build_object('ok', true);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.report_template_publish(p_version uuid, p_note text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v public.report_template_versions; v_prev uuid;
+begin
+  select * into v from public.report_template_versions where id = p_version for update;
+  if not found then raise exception 'version not found'; end if;
+  if not private.report_template_admin() then
+    return private.report_template_denied('publish', v.template_id, 'not_admin',
+      'only a Director, Deputy Director or the Owner may publish a template version');
+  end if;
+  if v.status <> 'draft' then raise exception 'only a draft version can be published'; end if;
+  select id into v_prev from public.report_template_versions
+   where template_id = v.template_id and status = 'published' for update;
+  if v_prev is not null then
+    update public.report_template_versions set status = 'superseded', superseded_at = now() where id = v_prev;
+  end if;
+  update public.report_template_versions
+     set status = 'published', published_by = v_uid, published_at = now(),
+         change_summary = coalesce(left(nullif(btrim(coalesce(p_note, '')), ''), 500), change_summary)
+   where id = p_version;
+  update public.report_templates set updated_at = now() where id = v.template_id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'REPORT_TEMPLATE_PUBLISHED', 'report_templates', v.template_id,
+          jsonb_build_object('version_id', p_version, 'version_number', v.version_number,
+                             'superseded_version_id', v_prev, 'note', left(coalesce(p_note, ''), 500)));
+  return jsonb_build_object('ok', true, 'version_id', p_version, 'superseded_version_id', v_prev);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.report_template_save(p_key text, p_name text, p_schema jsonb, p_required jsonb, p_advisory jsonb DEFAULT '[]'::jsonb, p_review_required boolean DEFAULT true, p_change_summary text DEFAULT NULL::text, p_description text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); t public.report_templates; v_keys text[];
+        v_req text[]; v_adv text[]; v_ver uuid; v_num integer; v_key text := lower(btrim(coalesce(p_key, '')));
+        v_name text := left(btrim(coalesce(p_name, '')), 120);
+begin
+  if v_key !~ '^[a-z][a-z0-9_]{1,63}$' then raise exception 'the template key must be snake_case (a–z, 0–9, _)'; end if;
+  if v_name = '' then raise exception 'a template name is required'; end if;
+  v_keys := private.report_schema_keys(p_schema);
+  v_req := private.report_key_list(p_required, v_keys, 'required');
+  v_adv := private.report_key_list(p_advisory, v_keys, 'advisory');
+  select * into t from public.report_templates where key = v_key for update;
+  if not found then
+    if not private.report_template_admin() then
+      return private.report_template_denied('publish', null, 'not_admin',
+        'only a Director, Deputy Director or the Owner may create a report template');
+    end if;
+    insert into public.report_templates (key, name, description, created_by)
+    values (v_key, v_name, left(nullif(btrim(coalesce(p_description, '')), ''), 500), v_uid)
+    returning * into t;
+  elsif not private.report_template_proposer() then
+    return private.report_template_denied('propose', t.id, 'not_proposer',
+      'only a Bureau Lead or above may propose a template version');
+  end if;
+  select id into v_ver from public.report_template_versions
+   where template_id = t.id and status = 'draft' for update;
+  if v_ver is not null and not private.report_template_admin()
+     and exists (select 1 from public.report_template_versions d where d.id = v_ver and d.created_by is distinct from v_uid) then
+    return private.report_template_denied('propose', t.id, 'not_draft_author',
+      'another proposer''s draft is pending — only its author or a Director may replace it');
+  end if;
+  if v_ver is not null then
+    update public.report_template_versions
+       set schema = p_schema, required = v_req, advisory = v_adv,
+           review_required = coalesce(p_review_required, true),
+           change_summary = left(nullif(btrim(coalesce(p_change_summary, '')), ''), 500),
+           created_by = v_uid, created_at = now()
+     where id = v_ver;
+    select version_number into v_num from public.report_template_versions where id = v_ver;
+  else
+    select coalesce(max(version_number), 0) + 1 into v_num
+      from public.report_template_versions where template_id = t.id;
+    insert into public.report_template_versions
+      (template_id, version_number, schema, required, advisory, review_required, status, change_summary, created_by)
+    values (t.id, v_num, p_schema, v_req, v_adv, coalesce(p_review_required, true), 'draft',
+            left(nullif(btrim(coalesce(p_change_summary, '')), ''), 500), v_uid)
+    returning id into v_ver;
+  end if;
+  if private.report_template_admin() then
+    update public.report_templates
+       set name = v_name,
+           description = coalesce(left(nullif(btrim(coalesce(p_description, '')), ''), 500), description)
+     where id = t.id;
+  end if;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'REPORT_TEMPLATE_DRAFTED', 'report_templates', t.id,
+          jsonb_build_object('key', v_key, 'version_id', v_ver, 'version_number', v_num,
+                             'required', to_jsonb(v_req), 'review_required', coalesce(p_review_required, true)));
+  return jsonb_build_object('ok', true, 'template_id', t.id, 'version_id', v_ver, 'version_number', v_num);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.report_template_update(p_template uuid, p_patch jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); t public.report_templates;
+begin
+  select * into t from public.report_templates where id = p_template for update;
+  if not found then raise exception 'template not found'; end if;
+  if p_patch is null or jsonb_typeof(p_patch) <> 'object' then raise exception 'p_patch must be an object'; end if;
+  if not private.report_template_admin() then
+    return private.report_template_denied('publish', p_template, 'not_admin',
+      'only a Director, Deputy Director or the Owner may change a template');
+  end if;
+  if p_patch ? 'name' and btrim(coalesce(p_patch->>'name', '')) = '' then raise exception 'a template name is required'; end if;
+  if coalesce((p_patch->>'is_default')::boolean, false) then
+    update public.report_templates set is_default = false where is_default and id <> p_template;
+  end if;
+  update public.report_templates
+     set name = case when p_patch ? 'name' then left(btrim(p_patch->>'name'), 120) else name end,
+         description = case when p_patch ? 'description' then left(nullif(btrim(coalesce(p_patch->>'description', '')), ''), 500) else description end,
+         active = case when p_patch ? 'active' then coalesce((p_patch->>'active')::boolean, active) else active end,
+         sort_order = case when p_patch ? 'sort_order' then coalesce((p_patch->>'sort_order')::integer, sort_order) else sort_order end,
+         is_default = case when p_patch ? 'is_default' then coalesce((p_patch->>'is_default')::boolean, is_default) else is_default end
+   where id = p_template;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'REPORT_TEMPLATE_UPDATED', 'report_templates', p_template,
+          jsonb_build_object('patch', p_patch));
+  return jsonb_build_object('ok', true);
 end $function$
 ;
 
@@ -16353,6 +16836,9 @@ begin
   delete from public.predicate_acts where rico_case_id in (select id from public.rico_cases where case_id = any(case_ids));
   delete from public.rico_cases where case_id = any(case_ids);
 
+  delete from public.report_template_versions where status = 'draft' and created_by = any(ids);
+  delete from public.report_template_versions v using public.report_templates t where t.id = v.template_id and t.created_by = any(ids) and not exists (select 1 from public.reports x where x.template_version_id = v.id);
+  delete from public.report_templates t where t.created_by = any(ids) and not exists (select 1 from public.report_template_versions v where v.template_id = t.id);
   delete from public.reports where case_id = any(case_ids);
   get diagnostics n_reports = row_count;
   select count(*) into n from public.reports r
@@ -22044,15 +22530,52 @@ CREATE OR REPLACE FUNCTION private.block_direct_report_finalize()
  SET search_path TO ''
 AS $function$
 begin
-  if current_user in ('authenticated','anon') then
-    if new.finalized is distinct from old.finalized
-       or new.signature is distinct from old.signature then
-      raise exception 'reports can only be finalized via report_finalize()';
+  if current_user not in ('authenticated','anon') then return new; end if;
+  if tg_op = 'INSERT' then
+    -- A direct insert is a plain draft by its author on the template's
+    -- published version — nothing sealed, reviewed or foreign can be forged.
+    if new.finalized or new.review_status <> 'draft'
+       or new.signature is not null or new.reviewer_signature is not null
+       or new.submitted_at is not null or new.submitted_by is not null
+       or new.reviewed_by is not null or new.reviewed_at is not null or new.review_note is not null then
+      raise exception 'a report is created as a draft — the review state only changes through report_submit / report_review';
     end if;
-    if old.finalized
-       and coalesce(new.fields, '{}'::jsonb) is distinct from coalesce(old.fields, '{}'::jsonb) then
-      raise exception 'a finalized report''s contents are locked (use warrant_set_status() for the warrant lifecycle)';
+    if new.author_id is distinct from (select auth.uid()) then
+      raise exception 'a report''s author is the account that creates it';
     end if;
+    if new.template_version_id is not null and new.template_version_id is distinct from (
+         select v.id from public.report_templates t
+           join public.report_template_versions v on v.template_id = t.id and v.status = 'published'
+          where t.key = new.template and t.active) then
+      raise exception 'a report pins the published version of its template';
+    end if;
+    return new;
+  end if;
+  -- UPDATE: identity and review state are fixed; contents lock once submitted.
+  if new.author_id is distinct from old.author_id or new.template is distinct from old.template
+     or new.case_id is distinct from old.case_id or new.kind is distinct from old.kind
+     or new.seq is distinct from old.seq or new.parent_id is distinct from old.parent_id then
+    raise exception 'a report''s author, template, case, kind, sequence and parent are fixed';
+  end if;
+  if new.finalized is distinct from old.finalized
+     or new.signature is distinct from old.signature
+     or new.reviewer_signature is distinct from old.reviewer_signature
+     or new.review_status is distinct from old.review_status
+     or new.submitted_at is distinct from old.submitted_at
+     or new.submitted_by is distinct from old.submitted_by
+     or new.reviewed_by is distinct from old.reviewed_by
+     or new.reviewed_at is distinct from old.reviewed_at
+     or new.review_note is distinct from old.review_note
+     or new.template_version_id is distinct from old.template_version_id then
+    raise exception 'the review state of a report only changes through report_submit / report_review / report_finalize / report_reopen';
+  end if;
+  if old.finalized
+     and coalesce(new.fields, '{}'::jsonb) is distinct from coalesce(old.fields, '{}'::jsonb) then
+    raise exception 'a finalized report''s contents are locked (use warrant_set_status() for the warrant lifecycle)';
+  end if;
+  if not old.finalized and old.review_status in ('submitted', 'approved')
+     and coalesce(new.fields, '{}'::jsonb) is distinct from coalesce(old.fields, '{}'::jsonb) then
+    raise exception 'a submitted report''s contents are locked until it is returned';
   end if;
   return new;
 end $function$
@@ -22189,6 +22712,22 @@ begin
      or new.delete_batch is distinct from old.delete_batch then
     raise exception 'soft-delete columns are written only by soft_delete() / restore_record()'
       using errcode = 'P0403';
+  end if;
+  return new;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.block_direct_task_waive()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if current_user in ('authenticated','anon')
+     and (new.waived_at is distinct from old.waived_at
+          or new.waived_by is distinct from old.waived_by
+          or new.waive_reason is distinct from old.waive_reason) then
+    raise exception 'a task is waived through case_task_waive()';
   end if;
   return new;
 end $function$
@@ -22827,6 +23366,25 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.can_reopen_report(p_report uuid, p_user uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select exists (
+    select 1 from public.reports r
+      join public.cases c on c.id = r.case_id
+      join public.profiles p on p.id = p_user
+     where r.id = p_report and r.deleted_at is null and r.finalized
+       and p_user = (select auth.uid())
+       and p.removed_at is null
+       and (coalesce(p.is_owner, false)
+            or (p.active and p.role in ('deputy_director', 'director'))
+            or (p.active and p.role = 'bureau_lead' and (c.bureau = 'JTF' or c.bureau = p.division))))
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.can_resolve_doc_sync()
  RETURNS boolean
  LANGUAGE sql
@@ -22929,6 +23487,25 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.can_review_report(p_report uuid, p_user uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select exists (
+    select 1 from public.reports r
+      join public.profiles p on p.id = p_user
+     where r.id = p_report and r.deleted_at is null
+       and r.author_id is distinct from p_user
+       and p_user = (select auth.uid())
+       and p.removed_at is null
+       and (coalesce(p.is_owner, false)
+            or (p.active and p.role in ('senior_detective', 'bureau_lead', 'deputy_director', 'director')))
+       and private.can_access_case(r.case_id))
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.can_set_legal_observer(p_request uuid, p_user uuid)
  RETURNS boolean
  LANGUAGE sql
@@ -22973,6 +23550,23 @@ AS $function$
           and private.is_active()
           and p_user = (select auth.uid())
           and private.can_access_case(r.case_id))))
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.can_waive_task(p_case uuid, p_user uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.case_writable(p_case)
+     and exists (
+       select 1 from public.cases c join public.profiles p on p.id = p_user
+        where c.id = p_case and p.removed_at is null
+          and (coalesce(p.is_owner, false)
+               or c.lead_detective_id = p_user
+               or (p.active and p.role in ('deputy_director', 'director'))
+               or (p.active and p.role = 'bureau_lead' and (c.bureau = 'JTF' or c.bureau = p.division))))
 $function$
 ;
 
@@ -23191,6 +23785,17 @@ AS $function$
            when 'special_investigations' then 8000000
            else 4000000
          end::bigint
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.case_open_task_count(p_case uuid)
+ RETURNS integer
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select count(*)::integer from public.case_tasks t
+   where t.case_id = p_case and t.deleted_at is null and not t.done and t.waived_at is null
 $function$
 ;
 
@@ -26448,6 +27053,22 @@ AS $function$
                               and exists (select 1 from public.legal_requests r where r.id = p_id
                                            and r.review_status = 'submitted_to_judge')
       else false end
+    -- Phase 5 (P5-02/03/07): the report flow and the template administration.
+    when p_kind = 'report' and p_action in ('submit', 'review', 'reopen', 'export') then case p_action
+      when 'submit' then exists (select 1 from public.reports r where r.id = p_id
+                                  and r.deleted_at is null and r.author_id = (select auth.uid())
+                                  and not r.finalized and r.review_status in ('draft', 'returned')
+                                  and private.case_writable(r.case_id))
+      when 'review' then private.can_review_report(p_id, (select auth.uid()))
+                         and exists (select 1 from public.reports r where r.id = p_id and r.review_status = 'submitted')
+      when 'reopen' then private.can_reopen_report(p_id, (select auth.uid()))
+      when 'export' then exists (select 1 from public.reports r where r.id = p_id
+                                  and (r.deleted_at is null or private.is_owner()) and private.can_read_case(r.case_id))
+      else false end
+    when p_kind = 'report_template' then case p_action
+      when 'propose' then private.report_template_proposer()
+      when 'publish' then private.report_template_admin()
+      else false end
     when p_kind = 'case' and p_action in ('access', 'archive', 'unarchive', 'grant_access', 'delete_child', 'permanent_delete') then case p_action
       when 'access'       then private.can_access_case(p_id)
       when 'archive'      then private.is_command()
@@ -27055,6 +27676,323 @@ begin
     perform private.job_end(v_run, 'failed', jsonb_build_object('error', sqlerrm));
     raise;
   end;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.report_denied(p_action text, p_report uuid, p_reason text, p_message text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  perform private.perm_deny(p_action, 'report', p_report, p_reason);
+  return jsonb_build_object('ok', false, 'code', 'denied', 'message', p_message);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.report_key_list(p_list jsonb, p_keys text[], p_what text)
+ RETURNS text[]
+ LANGUAGE plpgsql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+declare v_out text[] := '{}'; x text;
+begin
+  if p_list is null or jsonb_typeof(p_list) = 'null' then return v_out; end if;
+  if jsonb_typeof(p_list) <> 'array' then raise exception '% must be an array of field keys', p_what; end if;
+  for x in select jsonb_array_elements_text(p_list) loop
+    if not (x = any(p_keys)) then raise exception '% key % is not in the schema', p_what, x; end if;
+    if not (x = any(v_out)) then v_out := v_out || x; end if;
+  end loop;
+  return v_out;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.report_notify(p_user uuid, p_report uuid, p_kind text, p_reason text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare r public.reports; v_actor uuid := (select auth.uid()); v_actor_name text;
+        v_actor_test boolean; v_target_test boolean; v_case_number text; v_title text;
+begin
+  if p_user is null or p_user = v_actor then return; end if;
+  select * into r from public.reports where id = p_report;
+  if not found then return; end if;
+  select private.is_test_user(v_actor) or exists (select 1 from auth.users u where u.id = v_actor and u.email like 'rls-test-%@cidportal.test') into v_actor_test;
+  select private.is_test_user(p_user) or exists (select 1 from auth.users u where u.id = p_user and u.email like 'rls-test-%@cidportal.test') into v_target_test;
+  if coalesce(v_actor_test, false) and not coalesce(v_target_test, false) then return; end if;
+  select display_name into v_actor_name from public.profiles where id = v_actor;
+  select case_number into v_case_number from public.cases where id = r.case_id;
+  select t.name into v_title from public.report_templates t where t.key = r.template;
+  insert into public.notifications (user_id, type, payload)
+  values (p_user, p_kind, jsonb_build_object(
+    'report_id', p_report, 'case_id', r.case_id, 'case_number', v_case_number,
+    'template', r.template, 'title', coalesce(v_title, r.template),
+    'reason', left(p_reason, 500), 'actor_id', v_actor, 'actor_name', v_actor_name));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.report_required_gaps(p_schema jsonb, p_required text[], p_fields jsonb)
+ RETURNS text[]
+ LANGUAGE plpgsql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+declare k text; v jsonb; v_out text[] := '{}'; v_label text; s jsonb; f jsonb;
+begin
+  foreach k in array coalesce(p_required, '{}'::text[]) loop
+    v := coalesce(p_fields, '{}'::jsonb) -> k;
+    if v is null or jsonb_typeof(v) = 'null'
+       or (jsonb_typeof(v) = 'string' and btrim(v #>> '{}') = '')
+       or (jsonb_typeof(v) = 'array' and jsonb_array_length(v) = 0) then
+      v_label := null;
+      for s in select * from jsonb_array_elements(coalesce(p_schema->'sections', '[]'::jsonb)) loop
+        if s->>'type' = 'kv' then
+          for f in select * from jsonb_array_elements(s->'fields') loop
+            if f->>'key' = k then v_label := f->>'label'; end if;
+          end loop;
+        elsif s->>'type' = 'textarea' and s->>'key' = k then v_label := s->>'label';
+        elsif s->>'type' = 'grid' and s->>'id' = k then v_label := s->>'label';
+        end if;
+      end loop;
+      v_out := v_out || coalesce(v_label, k);
+    end if;
+  end loop;
+  return v_out;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.report_reviewers(p_case uuid, p_exclude uuid)
+ RETURNS uuid[]
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce(array_agg(distinct p.id), '{}'::uuid[])
+    from public.profiles p
+    join public.cases c on c.id = p_case
+   where p.active and p.removed_at is null and p.id is distinct from p_exclude
+     -- an SIU case tells only the people inside its compartment
+     and (not private.is_siu_case(p_case) or private.siu_in_compartment(p_case, p.id))
+     and (p.role in ('deputy_director', 'director')
+          or (p.role = 'bureau_lead' and (c.bureau = 'JTF' or c.bureau = p.division))
+          or (p.role = 'senior_detective'
+              and (c.lead_detective_id = p.id
+                   or exists (select 1 from public.case_assignments a
+                               where a.case_id = p_case and a.officer_id = p.id and a.removed_at is null))))
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.report_schema_keys(p_schema jsonb)
+ RETURNS text[]
+ LANGUAGE plpgsql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+declare s jsonb; f jsonb; v_keys text[] := '{}'; v_ids text[] := '{}'; v_type text; v_k text;
+        v_ftypes text[] := array['text', 'date', 'money', 'select', 'textarea', 'checks'];
+begin
+  if p_schema is null or jsonb_typeof(p_schema) <> 'object' then raise exception 'schema must be an object'; end if;
+  if length(p_schema::text) > 200000 then raise exception 'schema is too large (200 KB limit)'; end if;
+  if btrim(coalesce(p_schema->>'title', '')) = '' then raise exception 'schema.title is required'; end if;
+  if jsonb_typeof(p_schema->'subtitle') is distinct from 'string' then raise exception 'schema.subtitle must be a string'; end if;
+  if jsonb_typeof(p_schema->'sections') <> 'array' or jsonb_array_length(p_schema->'sections') = 0 then
+    raise exception 'schema.sections must be a non-empty array';
+  end if;
+  for s in select * from jsonb_array_elements(p_schema->'sections') loop
+    if jsonb_typeof(s) <> 'object' then raise exception 'each section must be an object'; end if;
+    if btrim(coalesce(s->>'id', '')) = '' or btrim(coalesce(s->>'label', '')) = '' then
+      raise exception 'every section needs an id and a label';
+    end if;
+    if (s->>'id') = any(v_ids) then raise exception 'duplicate section id %', s->>'id'; end if;
+    v_ids := v_ids || (s->>'id');
+    v_type := s->>'type';
+    if v_type = 'kv' then
+      if jsonb_typeof(s->'fields') <> 'array' or jsonb_array_length(s->'fields') = 0 then
+        raise exception 'kv section % needs fields', s->>'id';
+      end if;
+      for f in select * from jsonb_array_elements(s->'fields') loop
+        v_k := f->>'key';
+        if btrim(coalesce(v_k, '')) = '' or btrim(coalesce(f->>'label', '')) = '' then
+          raise exception 'every field in section % needs a key and a label', s->>'id';
+        end if;
+        if not (coalesce(f->>'type', '') = any(v_ftypes)) then
+          raise exception 'field % has an unknown type %', v_k, f->>'type';
+        end if;
+        if f->>'type' in ('select', 'checks') and jsonb_typeof(f->'opts') <> 'array' then
+          raise exception 'field % needs opts', v_k;
+        end if;
+        if f ? 'opts' and exists (select 1 from jsonb_array_elements(f->'opts') o where jsonb_typeof(o) <> 'string') then
+          raise exception 'field % opts must be strings', v_k;
+        end if;
+        if v_k = any(v_keys) then raise exception 'duplicate field key %', v_k; end if;
+        v_keys := v_keys || v_k;
+      end loop;
+    elsif v_type = 'grid' then
+      if jsonb_typeof(s->'cols') <> 'array' or jsonb_array_length(s->'cols') = 0 then
+        raise exception 'grid section % needs cols', s->>'id';
+      end if;
+      for f in select * from jsonb_array_elements(s->'cols') loop
+        if btrim(coalesce(f->>'key', '')) = '' or btrim(coalesce(f->>'label', '')) = '' then
+          raise exception 'every column in section % needs a key and a label', s->>'id';
+        end if;
+        if f ? 'type' and not (coalesce(f->>'type', '') = any(v_ftypes)) then
+          raise exception 'column % has an unknown type %', f->>'key', f->>'type';
+        end if;
+      end loop;
+      if (s->>'id') = any(v_keys) then raise exception 'grid id % collides with a field key', s->>'id'; end if;
+      v_keys := v_keys || (s->>'id');
+    elsif v_type = 'textarea' then
+      v_k := s->>'key';
+      if btrim(coalesce(v_k, '')) = '' then raise exception 'textarea section % needs a key', s->>'id'; end if;
+      if v_k = any(v_keys) then raise exception 'duplicate field key %', v_k; end if;
+      v_keys := v_keys || v_k;
+    elsif v_type = 'note' then
+      if btrim(coalesce(s->>'text', '')) = '' then raise exception 'note section % needs text', s->>'id'; end if;
+    else
+      raise exception 'section % has an unknown type %', s->>'id', coalesce(v_type, '(none)');
+    end if;
+  end loop;
+  return v_keys;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.report_seal(p_report uuid, p_author_sig jsonb, p_reviewer_sig jsonb, p_self boolean)
+ RETURNS reports
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); r public.reports; v_num integer; v_lead uuid;
+begin
+  update public.reports
+     set finalized = true,
+         review_status = 'approved',
+         signature = coalesce(p_author_sig, signature),
+         reviewer_signature = p_reviewer_sig,
+         reviewed_by = case when p_self then reviewed_by else v_uid end,
+         reviewed_at = case when p_self then reviewed_at else now() end,
+         updated_at = now()
+   where id = p_report returning * into r;
+  select coalesce(max(version_number), 0) + 1 into v_num from public.report_versions where report_id = p_report;
+  insert into public.report_versions (report_id, version_number, fields, signature, reviewer_signature, created_by)
+  values (p_report, v_num, r.fields, r.signature, r.reviewer_signature, v_uid);
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'REPORT_FINALIZED', 'reports', p_report,
+          jsonb_build_object('case_id', r.case_id, 'template', r.template, 'version_number', v_num,
+                             'self_sealed', p_self, 'template_version_id', r.template_version_id));
+  if p_self then
+    select lead_detective_id into v_lead from public.cases where id = r.case_id;
+    perform private.report_notify(v_lead, p_report, 'report_finalized',
+      'A ' || coalesce((select name from public.report_templates where key = r.template), r.template) || ' was sealed on your case.');
+  else
+    perform private.report_notify(r.author_id, p_report, 'report_finalized', 'Your report was approved and sealed.');
+  end if;
+  return r;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.report_seal_checks(r reports)
+ RETURNS report_template_versions
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v public.report_template_versions; v_gaps text[]; v_open integer;
+begin
+  if r.template_version_id is null then
+    raise exception 'this report has no published template — pick a template';
+  end if;
+  select * into v from public.report_template_versions where id = r.template_version_id;
+  if v.status not in ('published', 'superseded')
+     or v.template_id is distinct from (select t.id from public.report_templates t where t.key = r.template) then
+    raise exception 'this report is pinned to a version that is not a published version of its template';
+  end if;
+  v_gaps := private.report_required_gaps(v.schema, v.required, r.fields);
+  if coalesce(array_length(v_gaps, 1), 0) > 0 then
+    raise exception 'required fields missing: %', array_to_string(v_gaps, ', ');
+  end if;
+  if r.template = 'case_closure' then
+    v_open := private.case_open_task_count(r.case_id);
+    if v_open > 0 then
+      raise exception '% open task(s) must be done or waived before closure', v_open;
+    end if;
+  end if;
+  return v;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.report_signature(p_user uuid, p_badge text, p_typed text, p_role text)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select jsonb_build_object(
+    'officer', coalesce(p.display_name, 'Officer'),
+    'signer_id', p_user,
+    'badge', coalesce(nullif(btrim(coalesce(p.badge_number, '')), ''), nullif(btrim(coalesce(p_badge, '')), '')),
+    'signed_at', now(),
+    'typed', coalesce(nullif(btrim(coalesce(p_typed, '')), ''), p.display_name, 'Officer'))
+    || case when p_role is null then '{}'::jsonb else jsonb_build_object('role', p_role) end
+  from public.profiles p where p.id = p_user
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.report_template_admin()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.is_owner()
+      or exists (select 1 from public.profiles p
+                  where p.id = (select auth.uid()) and p.active and p.removed_at is null
+                    and p.role in ('deputy_director', 'director'))
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.report_template_denied(p_action text, p_id uuid, p_reason text, p_message text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  perform private.perm_deny(p_action, 'report_template', p_id, p_reason);
+  return jsonb_build_object('ok', false, 'code', 'denied', 'message', p_message);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.report_template_proposer()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.report_template_admin()
+      or exists (select 1 from public.profiles p
+                  where p.id = (select auth.uid()) and p.active and p.removed_at is null
+                    and p.role = 'bureau_lead')
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.reports_template_pin()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if new.template_version_id is null then
+    select v.id into new.template_version_id
+      from public.report_templates t
+      join public.report_template_versions v on v.template_id = t.id and v.status = 'published'
+     where t.key = new.template and t.active;
+  end if;
+  return new;
 end $function$
 ;
 
@@ -28382,7 +29320,9 @@ AS $function$
            when 'cases' then array['bureau', 'case_number', 'case_authority', 'status', 'closed_at',
                                    'lead_detective_id', 'is_joint_case', 'originating_bureau']
            when 'reports' then array['case_id', 'author_id', 'finalized', 'signature', 'seq', 'kind',
-                                     'parent_id', 'template']
+                                     'parent_id', 'template', 'template_version_id', 'review_status',
+                                     'submitted_at', 'submitted_by', 'reviewed_by', 'reviewed_at',
+                                     'review_note', 'reviewer_signature']
            when 'evidence' then array['case_id', 'collected_by']
            when 'narcotics' then array['status']
            when 'field_submissions' then array['officer_id', 'status', 'submitted_at', 'assigned_to',
@@ -28564,6 +29504,7 @@ CREATE TRIGGER case_notes_touch BEFORE UPDATE ON public.case_notes FOR EACH ROW 
 CREATE TRIGGER case_notes_version AFTER UPDATE ON public.case_notes FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER case_tasks_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_tasks FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER case_tasks_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.case_tasks FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
+CREATE TRIGGER case_tasks_block_direct_waive BEFORE UPDATE ON public.case_tasks FOR EACH ROW EXECUTE FUNCTION private.block_direct_task_waive();
 CREATE TRIGGER case_tasks_touch BEFORE UPDATE ON public.case_tasks FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER case_templates_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_templates FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER case_templates_touch BEFORE UPDATE ON public.case_templates FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -28729,12 +29670,17 @@ CREATE TRIGGER profiles_guard BEFORE UPDATE ON public.profiles FOR EACH ROW EXEC
 CREATE TRIGGER profiles_touch BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER raid_compensations_audit AFTER INSERT OR DELETE OR UPDATE ON public.raid_compensations FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER raid_compensations_touch BEFORE UPDATE ON public.raid_compensations FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER report_exports_immutable BEFORE DELETE OR UPDATE ON public.report_exports FOR EACH ROW EXECUTE FUNCTION private.block_legal_immutable();
+CREATE TRIGGER report_template_versions_audit AFTER INSERT OR DELETE OR UPDATE ON public.report_template_versions FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER report_templates_audit AFTER INSERT OR DELETE OR UPDATE ON public.report_templates FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER report_templates_touch BEFORE UPDATE ON public.report_templates FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER report_versions_immutable BEFORE UPDATE ON public.report_versions FOR EACH ROW EXECUTE FUNCTION private.block_report_version_update();
 CREATE TRIGGER reports_audit AFTER INSERT OR DELETE OR UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER reports_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
+CREATE TRIGGER reports_template_pin BEFORE INSERT ON public.reports FOR EACH ROW EXECUTE FUNCTION private.reports_template_pin();
 CREATE TRIGGER reports_touch BEFORE UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER reports_version AFTER UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION private.version_row('report');
-CREATE TRIGGER trg_block_direct_report_finalize BEFORE UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION private.block_direct_report_finalize();
+CREATE TRIGGER trg_block_direct_report_finalize BEFORE INSERT OR UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION private.block_direct_report_finalize();
 CREATE TRIGGER rico_cases_audit AFTER INSERT OR DELETE OR UPDATE ON public.rico_cases FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER rico_cases_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.rico_cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER rico_cases_touch BEFORE UPDATE ON public.rico_cases FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -30304,6 +31250,28 @@ create policy record_versions_sel on public.record_versions
   as permissive for select to authenticated
   using (private.version_visible(table_name, record_id));
 
+create policy re_sel on public.report_entities
+  as permissive for select to authenticated
+  using (((EXISTS ( SELECT 1
+   FROM reports r
+  WHERE ((r.id = report_entities.report_id) AND (private.is_live(r.deleted_at) OR private.is_owner()) AND private.can_read_case(r.case_id)))) AND ((kind <> 'media'::text) OR (EXISTS ( SELECT 1
+   FROM media m
+  WHERE (m.id = report_entities.ref_id))))));
+
+create policy rex_sel on public.report_exports
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM reports r
+  WHERE ((r.id = report_exports.report_id) AND (private.is_live(r.deleted_at) OR private.is_owner()) AND private.can_read_case(r.case_id)))));
+
+create policy rtv_sel on public.report_template_versions
+  as permissive for select to authenticated
+  using ((private.is_active() OR private.is_owner()));
+
+create policy rt_sel on public.report_templates
+  as permissive for select to authenticated
+  using ((private.is_active() OR private.is_owner()));
+
 create policy report_versions_sel on public.report_versions
   as permissive for select to authenticated
   using ((EXISTS ( SELECT 1
@@ -31002,6 +31970,10 @@ create policy wl_sel on public.watchlist
 --   record_extraction_facts -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   record_extractions -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   record_versions -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   report_entities -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   report_exports -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   report_template_versions -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   report_templates -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   report_versions -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   reports -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   restricted_access_grants -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -31170,6 +32142,7 @@ create policy wl_sel on public.watchlist
 --   private.block_direct_siu_hidden_flag(): {postgres=X/postgres}
 --   private.block_direct_siu_note_grading(): default (PUBLIC)
 --   private.block_direct_soft_delete(): {postgres=X/postgres}
+--   private.block_direct_task_waive(): default (PUBLIC)
 --   private.block_intel_link_change_under_hold(): {postgres=X/postgres}
 --   private.block_legal_immutable(): default (PUBLIC)
 --   private.block_report_version_update(): default (PUBLIC)
@@ -31210,6 +32183,7 @@ create policy wl_sel on public.watchlist
 --   private.can_read_case(p_cid uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.can_read_case_number(cn text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.can_read_case_row(p_bureau bureau, p_lead uuid, p_created_by uuid, p_cid uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.can_reopen_report(p_report uuid, p_user uuid): {postgres=X/postgres}
 --   private.can_resolve_doc_sync(): default (PUBLIC)
 --   private.can_review_as_ada(p_request uuid, p_user uuid): default (PUBLIC)
 --   private.can_review_as_ag(p_request uuid, p_user uuid): default (PUBLIC)
@@ -31217,9 +32191,11 @@ create policy wl_sel on public.watchlist
 --   private.can_review_as_da(p_request uuid, p_user uuid): default (PUBLIC)
 --   private.can_review_as_judge(p_request uuid, p_user uuid): default (PUBLIC)
 --   private.can_review_justice_role(p_reviewer uuid, p_role text): {postgres=X/postgres,authenticated=X/postgres}
+--   private.can_review_report(p_report uuid, p_user uuid): {postgres=X/postgres}
 --   private.can_set_legal_observer(p_request uuid, p_user uuid): {postgres=X/postgres}
 --   private.can_view_document(p_class text, p_owner uuid): {postgres=X/postgres}
 --   private.can_view_legal_request(p_request uuid, p_user uuid): {postgres=X/postgres,authenticated=X/postgres}
+--   private.can_waive_task(p_case uuid, p_user uuid): {postgres=X/postgres}
 --   private.case_charge_before_insert(): default (PUBLIC)
 --   private.case_charge_before_update(): default (PUBLIC)
 --   private.case_charge_court_read(p_case uuid, p_status text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -31229,6 +32205,7 @@ create policy wl_sel on public.watchlist
 --   private.case_note_command(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.case_notes_freeze(): {postgres=X/postgres}
 --   private.case_number_base(p_bureau text): default (PUBLIC)
+--   private.case_open_task_count(p_case uuid): {postgres=X/postgres}
 --   private.case_service_notify(p_recipient uuid, p_type text, p_payload jsonb): {postgres=X/postgres,service_role=X/postgres}
 --   private.case_writable(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.cid_role_rank(p_role app_role): default (PUBLIC)
@@ -31378,6 +32355,19 @@ create policy wl_sel on public.watchlist
 --   private.prosecutor_bureaus_of(p_user uuid): {postgres=X/postgres,authenticated=X/postgres}
 --   private.record_versions_prune(p_keep integer, p_age interval): {postgres=X/postgres}
 --   private.record_versions_prune_job(): {postgres=X/postgres}
+--   private.report_denied(p_action text, p_report uuid, p_reason text, p_message text): {postgres=X/postgres}
+--   private.report_key_list(p_list jsonb, p_keys text[], p_what text): {postgres=X/postgres}
+--   private.report_notify(p_user uuid, p_report uuid, p_kind text, p_reason text): {postgres=X/postgres}
+--   private.report_required_gaps(p_schema jsonb, p_required text[], p_fields jsonb): {postgres=X/postgres}
+--   private.report_reviewers(p_case uuid, p_exclude uuid): {postgres=X/postgres}
+--   private.report_schema_keys(p_schema jsonb): {postgres=X/postgres}
+--   private.report_seal(p_report uuid, p_author_sig jsonb, p_reviewer_sig jsonb, p_self boolean): {postgres=X/postgres}
+--   private.report_seal_checks(r reports): {postgres=X/postgres}
+--   private.report_signature(p_user uuid, p_badge text, p_typed text, p_role text): {postgres=X/postgres}
+--   private.report_template_admin(): {postgres=X/postgres}
+--   private.report_template_denied(p_action text, p_id uuid, p_reason text, p_message text): {postgres=X/postgres}
+--   private.report_template_proposer(): {postgres=X/postgres}
+--   private.reports_template_pin(): default (PUBLIC)
 --   private.rls_test_cleanup_surveillance(ids uuid[], case_ids uuid[]): {postgres=X/postgres}
 --   private.role(): {=X/postgres,postgres=X/postgres,authenticated=X/postgres}
 --   private.signoff_assert_decider(c cases, p_uid uuid, p_role app_role): default (PUBLIC)
@@ -31484,6 +32474,8 @@ create policy wl_sel on public.watchlist
 --   public.case_set_stage(p_case uuid, p_stage text, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_set_status(p_case uuid, p_status text, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_stage_history(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.case_task_unwaive(p_task uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.case_task_waive(p_task uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_timeline(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.change_member_role(p_target uuid, p_new_role app_role, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.cid_touch_updated_at(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -31657,8 +32649,16 @@ create policy wl_sel on public.watchlist
 --   public.reject_transfer(p_id uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.remove_legal_exhibit(p_exhibit uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.report_create(p_case uuid, p_template text, p_kind text, p_fields jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.report_entities_set(p_report uuid, p_items jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.report_finalize(p_report uuid, p_badge text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
---   public.report_reopen(p_report uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.report_record_export(p_report uuid, p_format text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.report_reopen(p_report uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.report_review(p_report uuid, p_decision text, p_note text, p_signature text, p_badge text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.report_submit(p_report uuid, p_signature text, p_badge text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.report_template_discard(p_version uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.report_template_publish(p_version uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.report_template_save(p_key text, p_name text, p_schema jsonb, p_required jsonb, p_advisory jsonb, p_review_required boolean, p_change_summary text, p_description text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.report_template_update(p_template uuid, p_patch jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.request_transfer(p_target uuid, p_to_bureau bureau, p_reason text, p_to_role app_role): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.resolve_case_originating_bureau(p_case uuid, p_bureau bureau, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.resolve_document_sync(p_document uuid, p_resolution text, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}

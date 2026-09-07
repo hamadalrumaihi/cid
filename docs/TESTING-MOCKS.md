@@ -28,7 +28,9 @@ The mock reproduces the **wire contract** `src/lib/db.ts` documents, not the who
 - RLS INSERT is the loud exception (403 / `42501` row-level-security violation); revoked grants are loud on every verb (403 / `42501`);
 - filter surface: `eq` / `is` / `in` / `or=(…ilike…)` (what `ilikeAny()` emits) / `order(.nullsfirst)` / `limit` / `select` projection. A query shape beyond that means the parser in `src/mocks/handlers/postgrest.ts` needs extending — it will fail loudly, never silently.
 
-Server-authoritative RPCs (finalize, sign-off, roster) are **deliberately not re-implemented** — pin an outcome with `rpcResult(fn, value)`; unknown RPCs answer PostgREST's real 404 `PGRST202` so a spec that needs a new handler fails loudly.
+Server-authoritative RPCs (sign-off, roster) are **deliberately not re-implemented** — pin an outcome with `rpcResult(fn, value)`; unknown RPCs answer PostgREST's real 404 `PGRST202` so a spec that needs a new handler fails loudly.
+
+Where a plan phase ships a *contract* (return shapes + refusal semantics), the handlers answer that contract from the mock DB without becoming a second server: `handlers/legal.ts` (Phase 4) and `handlers/reports.ts` (Phase 5 — the template catalog seeded from `src/lib/forms.ts` with the migration's `review_required` rule and `REQUIRED` map, `report_template_save / publish / discard / update`, `report_create / submit / review / finalize / reopen`, `report_entities_set`, `report_record_export`, `case_task_waive / unwaive`). Row-returning RPCs **raise** (a `ReportRpcError` → PostgREST 400 with the server's message) exactly where the server raises — missing required fields, the `case_closure` open-task gate, a reopen without a reason, a review-required template on `report_finalize`; the jsonb RPCs answer `{ok:false, code:'denied', message}` for authority refusals and raise only on hard validation (a malformed schema, an unreadable ref). The four Phase 5 tables are RPC-only (every write → 403 / `42501`), templates read for active members, entities / exports read through the parent report, and a direct PATCH of `reports` runs the `block_direct_report_finalize` mirror (`reportUpdateGuard`: workflow columns refused, `fields` locked once submitted / sealed, 403 / `P0403`) while a direct INSERT is pinned to the published version (`pinReportTemplateVersion`). `handlers/reports.test.ts` pins all of it.
 
 ## What it cannot mock: realtime
 
@@ -57,6 +59,7 @@ Every row builder returns a **complete Row typed from `src/lib/database.types.ts
 | `permissionDenied(table)` | revoked grant: every verb 403 / `42501` |
 | `rlsRestricted(table)` | the silent wall: reads `[]`, UPDATE/DELETE zero-row, INSERT 403 |
 | `rpcResult(fn, value)` | pin a (typed) RPC result |
+| `reportTemplateRow()` / `reportTemplateVersionRow()` / `reportEntityRow()` / `reportExportRow()` | Phase 5 rows — a (typically retired) extra template + version, an inserted / mentioned record, an export receipt. The 14 seeded templates need no builder: `handlers/reports.ts` seeds them lazily (`ensureReportTemplates()` on the first read or report RPC), so an empty store answers like the migrated database |
 
 Everything resets between tests (`resetMockStore()` in `tests/msw/setup.ts`): rows, denials, sessions, latency, RPC overrides, deterministic ids.
 

@@ -28,6 +28,7 @@ import { ActionMenu } from '@/components/ui/ActionMenu'
 import { RestrictToSiuButton } from '@/components/siu/RestrictToSiu'
 import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
+import { ReportMentions } from '@/components/cases/tabs/reports/ReportMentions'
 import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTimeline'
 import { ConfidenceBadge, StaleIntelBadge } from '@/components/ui/IntelBadges'
 import { EntityLink } from '@/components/ui/EntityLink'
@@ -655,7 +656,12 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
         {section === 'vehicles' && <VehiclesSection vehicles={vehicles} />}
         {section === 'accounts' && <GangAccountsPanel gangId={gang.id} canEdit={canEdit} />}
         {section === 'narcotics' && <GangNarcoticsPanel gangId={gang.id} canEdit={canEdit} />}
-        {section === 'cases' && <CasesSection links={intelLinks} cases={linkedCases} indirect={indirectCases} canEdit={canEdit} onAttach={() => setAttachOpen(true)} onUnlink={(l) => void unlinkCase(l)} />}
+        {section === 'cases' && (
+          <div className="space-y-4">
+            <CasesSection links={intelLinks} cases={linkedCases} indirect={indirectCases} canEdit={canEdit} onAttach={() => setAttachOpen(true)} onUnlink={(l) => void unlinkCase(l)} />
+            <ReportMentions kind="gang" refId={gang.id} />
+          </div>
+        )}
         {section === 'observations' && (
           <Card pad="lg">
             <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-300">Surveillance history</h3>
