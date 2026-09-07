@@ -1,7 +1,7 @@
 -- ============================================================
 -- CID Portal — live schema snapshot (REFERENCE ONLY)
 -- ============================================================
--- Generated 2026-09-06 from the live Supabase project `cid`
+-- Generated 2026-09-07 from the live Supabase project `cid`
 -- via scripts/schema-dump.sql (Postgres catalog queries) and
 -- scripts/build-schema-snapshot.mjs. Do not edit by hand: re-run the
 -- dump + build after applying migrations (see supabase/README.md).
@@ -1933,6 +1933,32 @@ alter table public.justice_memberships add constraint justice_memberships_user_i
 alter table public.justice_memberships add constraint justice_memberships_pkey PRIMARY KEY (user_id);
 alter table public.justice_memberships enable row level security;
 
+create table public.legal_expiry_defaults (
+  subtype text not null,
+  days integer not null
+);
+alter table public.legal_expiry_defaults add constraint legal_expiry_defaults_days_check CHECK (((days >= 1) AND (days <= 365)));
+alter table public.legal_expiry_defaults add constraint legal_expiry_defaults_pkey PRIMARY KEY (subtype);
+alter table public.legal_expiry_defaults enable row level security;
+
+create table public.legal_export_log (
+  id uuid not null default gen_random_uuid(),
+  legal_request_id uuid not null,
+  version_id uuid,
+  format text not null,
+  kind text not null,
+  verification_code text not null,
+  exported_by uuid,
+  exported_at timestamp with time zone not null default now()
+);
+alter table public.legal_export_log add constraint legal_export_log_format_check CHECK ((format = ANY (ARRAY['pdf'::text, 'docx'::text])));
+alter table public.legal_export_log add constraint legal_export_log_kind_check CHECK ((kind = ANY (ARRAY['instrument'::text, 'packet'::text])));
+alter table public.legal_export_log add constraint legal_export_log_exported_by_fkey FOREIGN KEY (exported_by) REFERENCES profiles(id);
+alter table public.legal_export_log add constraint legal_export_log_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES legal_requests(id) ON DELETE RESTRICT;
+alter table public.legal_export_log add constraint legal_export_log_version_id_fkey FOREIGN KEY (version_id) REFERENCES legal_request_versions(id);
+alter table public.legal_export_log add constraint legal_export_log_pkey PRIMARY KEY (id);
+alter table public.legal_export_log enable row level security;
+
 create table public.legal_holds (
   id uuid not null default gen_random_uuid(),
   case_id uuid,
@@ -1957,7 +1983,7 @@ create table public.legal_request_actions (
   id uuid not null default gen_random_uuid(),
   legal_request_id uuid not null,
   version_id uuid,
-  actor_id uuid not null,
+  actor_id uuid,
   action text not null,
   from_status text,
   to_status text,
@@ -1970,6 +1996,56 @@ alter table public.legal_request_actions add constraint legal_request_actions_le
 alter table public.legal_request_actions add constraint legal_request_actions_version_id_fkey FOREIGN KEY (version_id) REFERENCES legal_request_versions(id);
 alter table public.legal_request_actions add constraint legal_request_actions_pkey PRIMARY KEY (id);
 alter table public.legal_request_actions enable row level security;
+
+create table public.legal_request_charges (
+  id uuid not null default gen_random_uuid(),
+  legal_request_id uuid not null,
+  case_charge_id uuid not null,
+  snap_code text,
+  snap_offense text not null,
+  snap_charge_class text not null,
+  snap_penal_title text,
+  counts integer not null default 1,
+  added_by uuid,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.legal_request_charges add constraint legal_request_charges_counts_check CHECK (((counts >= 1) AND (counts <= 999)));
+alter table public.legal_request_charges add constraint legal_request_charges_added_by_fkey FOREIGN KEY (added_by) REFERENCES profiles(id);
+alter table public.legal_request_charges add constraint legal_request_charges_case_charge_id_fkey FOREIGN KEY (case_charge_id) REFERENCES case_charges(id) ON DELETE RESTRICT;
+alter table public.legal_request_charges add constraint legal_request_charges_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES legal_requests(id) ON DELETE RESTRICT;
+alter table public.legal_request_charges add constraint legal_request_charges_pkey PRIMARY KEY (id);
+alter table public.legal_request_charges add constraint legal_request_charges_legal_request_id_case_charge_id_key UNIQUE (legal_request_id, case_charge_id);
+alter table public.legal_request_charges enable row level security;
+
+create table public.legal_request_comment_versions (
+  id uuid not null default gen_random_uuid(),
+  comment_id uuid not null,
+  body text not null,
+  edited_by uuid,
+  edited_at timestamp with time zone not null default now()
+);
+alter table public.legal_request_comment_versions add constraint legal_request_comment_versions_comment_id_fkey FOREIGN KEY (comment_id) REFERENCES legal_request_comments(id) ON DELETE CASCADE;
+alter table public.legal_request_comment_versions add constraint legal_request_comment_versions_edited_by_fkey FOREIGN KEY (edited_by) REFERENCES profiles(id);
+alter table public.legal_request_comment_versions add constraint legal_request_comment_versions_pkey PRIMARY KEY (id);
+alter table public.legal_request_comment_versions enable row level security;
+
+create table public.legal_request_comments (
+  id uuid not null default gen_random_uuid(),
+  legal_request_id uuid not null,
+  author_id uuid not null,
+  parent_id uuid,
+  body text not null,
+  created_at timestamp with time zone not null default now(),
+  edited_at timestamp with time zone,
+  deleted_at timestamp with time zone,
+  deleted_by uuid
+);
+alter table public.legal_request_comments add constraint legal_request_comments_author_id_fkey FOREIGN KEY (author_id) REFERENCES profiles(id);
+alter table public.legal_request_comments add constraint legal_request_comments_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id);
+alter table public.legal_request_comments add constraint legal_request_comments_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES legal_requests(id) ON DELETE RESTRICT;
+alter table public.legal_request_comments add constraint legal_request_comments_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES legal_request_comments(id);
+alter table public.legal_request_comments add constraint legal_request_comments_pkey PRIMARY KEY (id);
+alter table public.legal_request_comments enable row level security;
 
 create table public.legal_request_exhibits (
   id uuid not null default gen_random_uuid(),
@@ -2007,6 +2083,39 @@ alter table public.legal_request_participants add constraint legal_request_parti
 alter table public.legal_request_participants add constraint legal_request_participants_pkey PRIMARY KEY (legal_request_id, user_id, participant_role);
 alter table public.legal_request_participants enable row level security;
 
+create table public.legal_request_reminders (
+  id uuid not null default gen_random_uuid(),
+  legal_request_id uuid not null,
+  kind text not null,
+  stage text,
+  sent_at timestamp with time zone not null default now(),
+  recipients uuid[] not null default '{}'::uuid[]
+);
+alter table public.legal_request_reminders add constraint legal_request_reminders_kind_check CHECK ((kind = ANY (ARRAY['nudge'::text, 'escalate'::text, 'unissued'::text, 'expiring'::text, 'expired'::text, 'deadline_passed'::text])));
+alter table public.legal_request_reminders add constraint legal_request_reminders_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES legal_requests(id) ON DELETE RESTRICT;
+alter table public.legal_request_reminders add constraint legal_request_reminders_pkey PRIMARY KEY (id);
+alter table public.legal_request_reminders add constraint legal_request_reminders_legal_request_id_kind_stage_key UNIQUE (legal_request_id, kind, stage);
+alter table public.legal_request_reminders enable row level security;
+
+create table public.legal_request_revision_items (
+  id uuid not null default gen_random_uuid(),
+  legal_request_id uuid not null,
+  action_id uuid,
+  field text,
+  note text not null,
+  created_by uuid,
+  created_at timestamp with time zone not null default now(),
+  resolved_at timestamp with time zone,
+  resolved_by uuid,
+  resolution_note text
+);
+alter table public.legal_request_revision_items add constraint legal_request_revision_items_action_id_fkey FOREIGN KEY (action_id) REFERENCES legal_request_actions(id);
+alter table public.legal_request_revision_items add constraint legal_request_revision_items_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
+alter table public.legal_request_revision_items add constraint legal_request_revision_items_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES legal_requests(id) ON DELETE RESTRICT;
+alter table public.legal_request_revision_items add constraint legal_request_revision_items_resolved_by_fkey FOREIGN KEY (resolved_by) REFERENCES profiles(id);
+alter table public.legal_request_revision_items add constraint legal_request_revision_items_pkey PRIMARY KEY (id);
+alter table public.legal_request_revision_items enable row level security;
+
 create table public.legal_request_signatures (
   id uuid not null default gen_random_uuid(),
   legal_request_id uuid not null,
@@ -2024,6 +2133,25 @@ alter table public.legal_request_signatures add constraint legal_request_signatu
 alter table public.legal_request_signatures add constraint legal_request_signatures_version_id_fkey FOREIGN KEY (version_id) REFERENCES legal_request_versions(id);
 alter table public.legal_request_signatures add constraint legal_request_signatures_pkey PRIMARY KEY (id);
 alter table public.legal_request_signatures enable row level security;
+
+create table public.legal_request_target_decisions (
+  id uuid not null default gen_random_uuid(),
+  legal_request_id uuid not null,
+  version_id uuid,
+  exhibit_id uuid,
+  target_key text not null,
+  decision text not null,
+  reasoning text,
+  decided_by uuid,
+  decided_at timestamp with time zone not null default now()
+);
+alter table public.legal_request_target_decisions add constraint legal_request_target_decisions_decision_check CHECK ((decision = ANY (ARRAY['approved'::text, 'denied'::text])));
+alter table public.legal_request_target_decisions add constraint legal_request_target_decisions_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES profiles(id);
+alter table public.legal_request_target_decisions add constraint legal_request_target_decisions_exhibit_id_fkey FOREIGN KEY (exhibit_id) REFERENCES legal_request_exhibits(id);
+alter table public.legal_request_target_decisions add constraint legal_request_target_decisions_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES legal_requests(id) ON DELETE RESTRICT;
+alter table public.legal_request_target_decisions add constraint legal_request_target_decisions_version_id_fkey FOREIGN KEY (version_id) REFERENCES legal_request_versions(id);
+alter table public.legal_request_target_decisions add constraint legal_request_target_decisions_pkey PRIMARY KEY (id);
+alter table public.legal_request_target_decisions enable row level security;
 
 create table public.legal_request_versions (
   id uuid not null default gen_random_uuid(),
@@ -2128,7 +2256,10 @@ create table public.legal_requests (
   queue_entered_at timestamp with time zone,
   amends_request_id uuid,
   superseded_by_id uuid,
-  cid_reviewed_role text
+  cid_reviewed_role text,
+  stage_entered_at timestamp with time zone default now(),
+  nudged_at timestamp with time zone,
+  escalated_at timestamp with time zone
 );
 alter table public.legal_requests add constraint legal_requests_approval_route_check CHECK ((approval_route = ANY (ARRAY['da'::text, 'ag'::text, 'judge'::text])));
 alter table public.legal_requests add constraint legal_requests_check CHECK ((((request_type = 'warrant'::text) AND (subtype = ANY (ARRAY['arrest_warrant'::text, 'search_warrant'::text]))) OR ((request_type = 'subpoena'::text) AND (subtype <> ALL (ARRAY['arrest_warrant'::text, 'search_warrant'::text])))));
@@ -2142,7 +2273,7 @@ alter table public.legal_requests add constraint legal_requests_priority_check C
 alter table public.legal_requests add constraint legal_requests_recipient_type_check CHECK ((recipient_type = ANY (ARRAY['player'::text, 'entity'::text])));
 alter table public.legal_requests add constraint legal_requests_request_type_check CHECK ((request_type = ANY (ARRAY['warrant'::text, 'subpoena'::text])));
 alter table public.legal_requests add constraint legal_requests_responsible_bureau_check CHECK ((responsible_bureau = ANY (ARRAY['major_crimes'::bureau, 'street_crimes'::bureau])));
-alter table public.legal_requests add constraint legal_requests_review_status_check CHECK ((review_status = ANY (ARRAY['not_submitted'::text, 'cid_supervisor_review'::text, 'returned_by_cid'::text, 'siu_command_review'::text, 'returned_by_siu_command'::text, 'submitted_to_doj'::text, 'ada_review'::text, 'returned_by_ada'::text, 'submitted_to_da'::text, 'da_review'::text, 'returned_by_da'::text, 'submitted_to_ag'::text, 'ag_review'::text, 'returned_by_ag'::text, 'submitted_to_judge'::text, 'judicial_review'::text, 'returned_by_judge'::text, 'approved'::text, 'denied'::text, 'withdrawn'::text, 'prosecutor_queue'::text, 'prosecutor_review'::text, 'returned_by_prosecutor'::text, 'declined'::text, 'cancelled'::text, 'superseded'::text])));
+alter table public.legal_requests add constraint legal_requests_review_status_check CHECK ((review_status = ANY (ARRAY['not_submitted'::text, 'cid_supervisor_review'::text, 'returned_by_cid'::text, 'siu_command_review'::text, 'returned_by_siu_command'::text, 'submitted_to_doj'::text, 'ada_review'::text, 'returned_by_ada'::text, 'submitted_to_da'::text, 'da_review'::text, 'returned_by_da'::text, 'submitted_to_ag'::text, 'ag_review'::text, 'returned_by_ag'::text, 'submitted_to_judge'::text, 'judicial_review'::text, 'returned_by_judge'::text, 'approved'::text, 'partially_approved'::text, 'denied'::text, 'withdrawn'::text, 'prosecutor_queue'::text, 'prosecutor_review'::text, 'returned_by_prosecutor'::text, 'declined'::text, 'cancelled'::text, 'superseded'::text])));
 alter table public.legal_requests add constraint legal_requests_service_status_check CHECK ((service_status = ANY (ARRAY['not_served'::text, 'service_attempted'::text, 'served'::text, 'service_failed'::text, 'waived'::text])));
 alter table public.legal_requests add constraint legal_requests_subtype_check CHECK ((subtype = ANY (ARRAY['arrest_warrant'::text, 'search_warrant'::text, 'testimony'::text, 'document_production'::text, 'medical_records'::text, 'financial_records'::text, 'phone_records'::text, 'surveillance_cctv'::text, 'employment_records'::text, 'housing_records'::text, 'social_media_accounts'::text, 'other'::text])));
 alter table public.legal_requests add constraint legal_requests_amends_request_id_fkey FOREIGN KEY (amends_request_id) REFERENCES legal_requests(id);
@@ -4851,6 +4982,7 @@ CREATE INDEX justice_membership_request_history_actor_id_idx ON public.justice_m
 CREATE INDEX justice_membership_request_history_request_id_idx ON public.justice_membership_request_history USING btree (request_id);
 CREATE INDEX justice_membership_requests_decided_by_idx ON public.justice_membership_requests USING btree (decided_by);
 CREATE INDEX justice_memberships_approved_by_idx ON public.justice_memberships USING btree (approved_by);
+CREATE INDEX legal_export_log_request_idx ON public.legal_export_log USING btree (legal_request_id, exported_at);
 CREATE UNIQUE INDEX legal_holds_active_case_uidx ON public.legal_holds USING btree (case_id) WHERE ((lifted_at IS NULL) AND (case_id IS NOT NULL));
 CREATE UNIQUE INDEX legal_holds_active_request_uidx ON public.legal_holds USING btree (legal_request_id) WHERE ((lifted_at IS NULL) AND (legal_request_id IS NOT NULL));
 CREATE INDEX legal_holds_case_idx ON public.legal_holds USING btree (case_id) WHERE (case_id IS NOT NULL);
@@ -4860,15 +4992,19 @@ CREATE INDEX legal_holds_request_idx ON public.legal_holds USING btree (legal_re
 CREATE INDEX legal_request_actions_actor_id_idx ON public.legal_request_actions USING btree (actor_id);
 CREATE INDEX legal_request_actions_version_id_idx ON public.legal_request_actions USING btree (version_id);
 CREATE INDEX lra_request_idx ON public.legal_request_actions USING btree (legal_request_id, created_at);
+CREATE INDEX legal_request_comment_versions_comment_idx ON public.legal_request_comment_versions USING btree (comment_id, edited_at);
+CREATE INDEX legal_request_comments_request_idx ON public.legal_request_comments USING btree (legal_request_id, created_at);
 CREATE INDEX legal_request_exhibits_added_by_idx ON public.legal_request_exhibits USING btree (added_by);
 CREATE INDEX legal_request_exhibits_version_id_idx ON public.legal_request_exhibits USING btree (version_id);
 CREATE INDEX lre_request_idx ON public.legal_request_exhibits USING btree (legal_request_id);
 CREATE INDEX legal_request_participants_added_by_idx ON public.legal_request_participants USING btree (added_by);
 CREATE INDEX legal_request_participants_removed_by_idx ON public.legal_request_participants USING btree (removed_by);
 CREATE INDEX lrp_user_idx ON public.legal_request_participants USING btree (user_id) WHERE (removed_at IS NULL);
+CREATE INDEX legal_request_revision_items_open_idx ON public.legal_request_revision_items USING btree (legal_request_id) WHERE (resolved_at IS NULL);
 CREATE INDEX legal_request_signatures_legal_request_id_idx ON public.legal_request_signatures USING btree (legal_request_id);
 CREATE INDEX legal_request_signatures_signer_id_idx ON public.legal_request_signatures USING btree (signer_id);
 CREATE INDEX legal_request_signatures_version_id_idx ON public.legal_request_signatures USING btree (version_id);
+CREATE INDEX legal_request_target_decisions_request_idx ON public.legal_request_target_decisions USING btree (legal_request_id);
 CREATE INDEX legal_request_versions_created_by_idx ON public.legal_request_versions USING btree (created_by);
 CREATE INDEX lrv_request_idx ON public.legal_request_versions USING btree (legal_request_id);
 CREATE INDEX legal_requests_ada_idx ON public.legal_requests USING btree (assigned_ada_id) WHERE (assigned_ada_id IS NOT NULL);
@@ -4886,6 +5022,7 @@ CREATE UNIQUE INDEX legal_requests_import_key_key ON public.legal_requests USING
 CREATE INDEX legal_requests_imported_by_idx ON public.legal_requests USING btree (imported_by);
 CREATE INDEX legal_requests_issued_by_idx ON public.legal_requests USING btree (issued_by);
 CREATE INDEX legal_requests_judge_idx ON public.legal_requests USING btree (assigned_judge_id) WHERE (assigned_judge_id IS NOT NULL);
+CREATE INDEX legal_requests_judicial_queue_idx ON public.legal_requests USING btree (submitted_to_judge_at) WHERE (review_status = 'submitted_to_judge'::text);
 CREATE INDEX legal_requests_person_id_idx ON public.legal_requests USING btree (person_id);
 CREATE INDEX legal_requests_person_name_snapshot_trgm ON public.legal_requests USING gin (person_name_snapshot gin_trgm_ops);
 CREATE INDEX legal_requests_prosecutor_idx ON public.legal_requests USING btree (assigned_prosecutor_id) WHERE (assigned_prosecutor_id IS NOT NULL);
@@ -4899,6 +5036,7 @@ CREATE INDEX legal_requests_revoked_by_idx ON public.legal_requests USING btree 
 CREATE INDEX legal_requests_served_by_idx ON public.legal_requests USING btree (served_by);
 CREATE INDEX legal_requests_source_report_id_idx ON public.legal_requests USING btree (source_report_id);
 CREATE INDEX legal_requests_source_submitter_id_idx ON public.legal_requests USING btree (source_submitter_id);
+CREATE INDEX legal_requests_stage_idx ON public.legal_requests USING btree (stage_entered_at) WHERE (review_status = ANY (ARRAY['cid_supervisor_review'::text, 'siu_command_review'::text, 'submitted_to_judge'::text, 'judicial_review'::text]));
 CREATE INDEX legal_requests_superseded_fkey_idx ON public.legal_requests USING btree (superseded_by_id) WHERE (superseded_by_id IS NOT NULL);
 CREATE INDEX legal_requests_title_trgm ON public.legal_requests USING gin (title gin_trgm_ops);
 CREATE INDEX legal_seized_items_added_by_idx ON public.legal_seized_items USING btree (added_by);
@@ -5881,12 +6019,9 @@ begin
     raise exception 'request is not awaiting judicial assignment';
   end if;
   if not (coalesce(private.justice_role_effective(v_uid) = 'attorney_general', false)
-          or private.owner_flag(v_uid)
-          or (coalesce(private.justice_role_effective(v_uid) = 'prosecutor', false)
-              and exists (select 1 from public.legal_request_signatures s
-                           where s.legal_request_id = p_request
-                             and s.signer_id = v_uid and s.action = 'prosecutor_decision'))) then
-    raise exception 'not authorized to assign a Judge';
+          or private.owner_flag(v_uid)) then
+    perform private.perm_deny('assign_judge', 'legal', p_request, 'not_ag');
+    raise exception 'only the Attorney General (or the Owner) may assign a Judge';
   end if;
   if private.justice_role_effective(p_judge) is distinct from 'judge' then
     raise exception 'the assignee must be an active Judge';
@@ -5898,14 +6033,18 @@ begin
     raise exception 'conflict of interest: the assignee participated in this case as an investigator — recusal required';
   end if;
   update public.legal_requests
-     set assigned_judge_id = p_judge, review_status = 'judicial_review'
+     set assigned_judge_id = p_judge, review_status = 'judicial_review',
+         submitted_to_judge_at = coalesce(submitted_to_judge_at, now())
    where id = p_request returning * into r;
   perform private.legal_add_participant(p_request, p_judge, 'judicial_reviewer');
   perform private.legal_log(p_request, r.current_version_id, 'judge_assigned',
     'submitted_to_judge', 'judicial_review', null, null);
-  perform private.legal_audit(p_request, 'LEGAL_JUDGE_ASSIGNED', jsonb_build_object('judge', p_judge));
+  perform private.legal_audit(p_request, 'LEGAL_JUDGE_ASSIGNED',
+    jsonb_build_object('judge', p_judge, 'owner_fallback', not coalesce(private.justice_role_effective(v_uid) = 'attorney_general', false)));
   perform private.legal_notify(p_judge, p_request, 'legal_request',
     'A ' || r.request_type || ' request was assigned to you for judicial review.');
+  perform private.legal_notify(r.created_by, p_request, 'legal_update',
+    'A judge was assigned to your ' || r.request_type || ' request.');
   return r;
 end $function$
 ;
@@ -7044,6 +7183,7 @@ declare v_uid uuid := (select auth.uid()); r public.legal_requests; v_cap text;
 begin
   -- `is distinct from` on purpose: a NULL justice role must fail this gate.
   if private.justice_role_effective(v_uid) is distinct from 'judge' then
+    perform private.perm_deny('claim', 'legal', p_request, 'not_judge');
     raise exception 'only an active Judge may claim a request';
   end if;
   select * into r from public.legal_requests where id = p_request for update;
@@ -7052,18 +7192,21 @@ begin
     raise exception 'request is not awaiting judicial review';
   end if;
   if r.classification = 'sealed' then
-    raise exception 'sealed requests require formal judicial assignment';
+    raise exception 'sealed requests are assigned by the Attorney General';
   end if;
   if r.assigned_judge_id is not null then
     raise exception 'request already has an assigned judge';
   end if;
   if private.legal_is_prosecution_side(p_request, v_uid) then
+    perform private.perm_deny('claim', 'legal', p_request, 'prosecution_side');
     raise exception 'conflict of role: you acted on the prosecution side of this request';
   end if;
   if r.created_by = v_uid then
+    perform private.perm_deny('claim', 'legal', p_request, 'own_request');
     raise exception 'conflict of interest: you created this request';
   end if;
   if private.legal_is_conflicted(p_request, v_uid) then
+    perform private.perm_deny('claim', 'legal', p_request, 'conflicted');
     raise exception 'conflict of interest: you participated in this case as an investigator — recusal required';
   end if;
   v_cap := private.legal_capacity(v_uid, 'doj');
@@ -7098,7 +7241,8 @@ begin
     if not (coalesce(v_uid = r.assigned_judge_id, false)
             and coalesce(private.justice_role_of(v_uid) = 'judge', false))
        and not private.can_manage_legal_assignment(p_request, v_uid) then
-      raise exception 'only the assigned Judge, DOJ management, or the Owner may revoke';
+      perform private.perm_deny('revoke', 'legal', p_request, 'not_bench');
+      raise exception 'only the assigned Judge, the Attorney General, or the Owner may revoke';
     end if;
     if btrim(coalesce(p_note, '')) = '' then raise exception 'a revocation reason is required'; end if;
     update public.legal_requests
@@ -7116,6 +7260,7 @@ begin
   if p_outcome = 'expired' then
     if not (private.can_fulfil_legal(p_request, v_uid)
             or private.can_manage_legal_assignment(p_request, v_uid)) then
+      perform private.perm_deny('close', 'legal', p_request, 'not_fulfiller');
       raise exception 'not authorized';
     end if;
     if r.expires_at is null or r.expires_at > now() then
@@ -7129,12 +7274,12 @@ begin
     return r;
   end if;
 
-  -- closed
   if not (private.can_fulfil_legal(p_request, v_uid)
           or private.can_manage_legal_assignment(p_request, v_uid)) then
+    perform private.perm_deny('close', 'legal', p_request, 'not_fulfiller');
     raise exception 'not authorized';
   end if;
-  if r.review_status not in ('approved', 'denied', 'withdrawn') then
+  if r.review_status not in ('approved', 'partially_approved', 'denied', 'withdrawn') then
     raise exception 'only decided or withdrawn requests can be closed';
   end if;
   update public.legal_requests
@@ -7699,13 +7844,15 @@ begin
 end $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.decide_legal_request_as_judge(p_request uuid, p_decision text, p_note text DEFAULT NULL::text, p_conditions text DEFAULT NULL::text, p_expires_at timestamp with time zone DEFAULT NULL::timestamp with time zone, p_signature text DEFAULT NULL::text)
+CREATE OR REPLACE FUNCTION public.decide_legal_request_as_judge(p_request uuid, p_decision text, p_note text DEFAULT NULL::text, p_conditions text DEFAULT NULL::text, p_expires_at timestamp with time zone DEFAULT NULL::timestamp with time zone, p_signature text DEFAULT NULL::text, p_target_decisions jsonb DEFAULT NULL::jsonb, p_revision_items jsonb DEFAULT NULL::jsonb)
  RETURNS legal_requests
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
 declare v_uid uuid := (select auth.uid()); r public.legal_requests; v_ver uuid; v_cap text;
+        v_action uuid; v_items integer := 0; x jsonb; v_key text; v_exhibit uuid; v_dec text;
+        v_denied integer := 0; v_approved integer := 0; v_status text; v_days integer; v_expires timestamptz;
 begin
   select * into r from public.legal_requests where id = p_request for update;
   if not found then raise exception 'request not found'; end if;
@@ -7713,6 +7860,7 @@ begin
     raise exception 'request is not under judicial review';
   end if;
   if r.assigned_judge_id is distinct from v_uid then
+    perform private.perm_deny('decide', 'legal', p_request, 'not_assigned_judge');
     raise exception 'only the assigned judge may decide this request';
   end if;
   if private.legal_is_prosecution_side(p_request, v_uid) then
@@ -7728,10 +7876,11 @@ begin
        set review_status = 'returned_by_judge', document_status = 'reopened',
            assigned_judge_id = null
      where id = p_request returning * into r;
-    perform private.legal_log(p_request, r.current_version_id, 'returned_by_judge',
+    v_action := private.legal_log_id(p_request, r.current_version_id, 'returned_by_judge',
       'judicial_review', 'returned_by_judge', p_note, 'capacity: ' || v_cap);
+    v_items := private.legal_revision_items_add(p_request, v_action, p_revision_items);
     perform private.legal_audit(p_request, 'LEGAL_RETURNED_BY_JUDGE',
-      jsonb_build_object('note', left(p_note, 200), 'capacity', v_cap));
+      jsonb_build_object('note', left(p_note, 200), 'capacity', v_cap, 'revision_items', v_items));
     perform private.legal_notify(r.created_by, p_request, 'legal_update',
       'Your ' || r.request_type || ' request was returned by the judge.');
     return r;
@@ -7740,26 +7889,74 @@ begin
   if btrim(coalesce(p_note, '')) = '' then
     raise exception 'a judicial decision requires recorded reasoning';
   end if;
+
+  if p_decision = 'approve' and p_target_decisions is not null then
+    if jsonb_typeof(p_target_decisions) <> 'array' then raise exception 'target decisions must be an array'; end if;
+    delete from public.legal_request_target_decisions
+     where legal_request_id = p_request and version_id is null;
+    for x in select * from jsonb_array_elements(p_target_decisions) loop
+      v_key := btrim(coalesce(x->>'target_key', ''));
+      v_dec := coalesce(x->>'decision', '');
+      if v_dec not in ('approved', 'denied') then raise exception 'each target decision is approved or denied'; end if;
+      v_exhibit := null;
+      if v_key = 'subject' then
+        if r.person_id is null then raise exception 'this request has no subject target'; end if;
+      elsif v_key like 'exhibit:%' then
+        v_exhibit := substr(v_key, 9)::uuid;
+        if not exists (select 1 from public.legal_request_exhibits e
+                        where e.id = v_exhibit and e.legal_request_id = p_request) then
+          raise exception 'target % is not an exhibit of this request', v_key;
+        end if;
+      else
+        raise exception 'unknown target key %', v_key;
+      end if;
+      if v_dec = 'denied' and btrim(coalesce(x->>'reasoning', '')) = '' then
+        raise exception 'a denied target needs its own reasoning';
+      end if;
+      insert into public.legal_request_target_decisions
+        (legal_request_id, exhibit_id, target_key, decision, reasoning, decided_by)
+      values (p_request, v_exhibit, v_key, v_dec, left(nullif(btrim(coalesce(x->>'reasoning', '')), ''), 2000), v_uid);
+      if v_dec = 'denied' then v_denied := v_denied + 1; else v_approved := v_approved + 1; end if;
+    end loop;
+    if v_denied > 0 and v_approved = 0 then
+      raise exception 'deny the request instead of denying every target';
+    end if;
+  end if;
+  v_status := case when p_decision = 'deny' then 'denied'
+                   when v_denied > 0 then 'partially_approved' else 'approved' end;
+
+  if p_decision = 'approve' and r.request_type = 'warrant' then
+    select d.days into v_days from public.legal_expiry_defaults d where d.subtype = r.subtype;
+    v_expires := coalesce(p_expires_at, r.expires_at, now() + make_interval(days => coalesce(v_days, 14)));
+  else
+    v_expires := coalesce(p_expires_at, r.expires_at);
+  end if;
+
   update public.legal_requests
-     set review_status = case p_decision when 'approve' then 'approved' else 'denied' end,
+     set review_status = v_status,
          decision = case p_decision when 'approve' then 'approved' else 'denied' end,
          decision_note = p_note,
          judicial_conditions = nullif(btrim(coalesce(p_conditions, '')), ''),
-         expires_at = coalesce(p_expires_at, expires_at),
+         expires_at = v_expires,
          decided_by = v_uid, decided_at = now()
    where id = p_request returning * into r;
-  v_ver := private.legal_freeze_version(p_request, case p_decision when 'approve' then 'judicial_approval' else 'denied' end);
+  v_ver := private.legal_freeze_version(p_request,
+    case p_decision when 'approve' then 'judicial_approval' else 'denied' end);
   select * into r from public.legal_requests where id = p_request;
   perform private.legal_sign(p_request, v_ver, 'judge_decision', p_signature);
   perform private.legal_log(p_request, v_ver, r.review_status,
     'judicial_review', r.review_status, p_note, 'capacity: ' || v_cap);
-  perform private.legal_audit(p_request, 'LEGAL_JUDGE_DECISION',
-    jsonb_build_object('version', v_ver, 'decision', p_decision,
-                       'conditions', r.judicial_conditions is not null, 'capacity', v_cap));
+  perform private.legal_audit(p_request,
+    case when v_status = 'partially_approved' then 'LEGAL_PARTIALLY_APPROVED' else 'LEGAL_JUDGE_DECISION' end,
+    jsonb_build_object('version', v_ver, 'decision', p_decision, 'status', v_status,
+                       'targets_approved', v_approved, 'targets_denied', v_denied,
+                       'conditions', r.judicial_conditions is not null,
+                       'expires_at', r.expires_at, 'capacity', v_cap));
   perform private.legal_notify(r.created_by, p_request, 'legal_decision',
     'Your ' || r.request_type || ' request was ' ||
-    case p_decision when 'approve' then 'approved by the judge and is ready to issue.'
-                    else 'denied by the judge.' end);
+    case v_status when 'approved' then 'approved by the judge and is ready to issue.'
+                  when 'partially_approved' then 'partially approved by the judge — only the approved targets may be executed.'
+                  else 'denied by the judge.' end);
   return r;
 end $function$
 ;
@@ -11248,31 +11445,37 @@ CREATE OR REPLACE FUNCTION public.issue_legal_request(p_request uuid, p_expires_
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare v_uid uuid := (select auth.uid()); r public.legal_requests; v_ver uuid;
+declare v_uid uuid := (select auth.uid()); r public.legal_requests; v_ver uuid; v_days integer;
 begin
   select * into r from public.legal_requests where id = p_request for update;
   if not found then raise exception 'request not found'; end if;
-  if r.review_status <> 'approved' then
+  if r.review_status not in ('approved', 'partially_approved') then
     raise exception 'only an approved request can be issued';
   end if;
   if r.fulfilment_status <> 'unissued' then raise exception 'request is already issued'; end if;
   if not private.can_fulfil_legal(p_request, v_uid) then
+    perform private.perm_deny('issue', 'legal', p_request, 'not_case_member');
     raise exception 'only an authorized CID member on this case may record issue';
   end if;
+  select d.days into v_days from public.legal_expiry_defaults d where d.subtype = r.subtype;
   update public.legal_requests
      set fulfilment_status = 'issued', issued_by = v_uid, issued_at = now(),
          expires_at = coalesce(expires_at, p_expires_at),
-         response_deadline = coalesce(p_response_deadline, response_deadline)
+         response_deadline = case when request_type = 'subpoena'
+                                  then coalesce(p_response_deadline, response_deadline,
+                                                now() + make_interval(days => coalesce(v_days, 14)))
+                                  else coalesce(p_response_deadline, response_deadline) end
    where id = p_request returning * into r;
   v_ver := private.legal_freeze_version(p_request, 'issued');
   select * into r from public.legal_requests where id = p_request;
   perform private.legal_log(p_request, v_ver, 'issued', 'unissued', 'issued', null, null);
   perform private.legal_audit(p_request, 'LEGAL_ISSUED',
-    jsonb_build_object('expires_at', r.expires_at, 'response_deadline', r.response_deadline));
+    jsonb_build_object('expires_at', r.expires_at, 'response_deadline', r.response_deadline,
+                       'partial', r.review_status = 'partially_approved'));
   perform private.mdt_project(p_request, 'wanted');
   perform private.legal_notify(r.created_by, p_request, 'legal_update',
     'Your ' || r.request_type || ' has been issued.');
-  perform private.legal_notify(r.assigned_ada_id, p_request, 'legal_update',
+  perform private.legal_notify(r.assigned_judge_id, p_request, 'legal_update',
     'An approved ' || r.request_type || ' has been issued.');
   return r;
 end $function$
@@ -11367,14 +11570,14 @@ declare v_uid uuid := (select auth.uid()); m public.justice_memberships;
         me public.profiles; t public.profiles; v_cid_authority boolean;
         v_ag boolean; v_tr uuid; v_led int := 0; v_is_test boolean; rec record;
 begin
-  if p_role not in ('prosecutor', 'judge', 'attorney_general') then
-    raise exception 'role must be prosecutor, judge, or attorney_general';
+  if p_role in ('prosecutor', 'assistant_district_attorney', 'district_attorney') then
+    raise exception 'the prosecutor role is retired — grant per-request observer access instead';
   end if;
-  if p_role = 'prosecutor' and (p_bureau is null or p_bureau not in ('major_crimes', 'street_crimes')) then
-    raise exception 'a prosecutor needs a home bureau: Major Crimes or Street Crimes';
+  if p_role not in ('judge', 'attorney_general') then
+    raise exception 'role must be judge or attorney_general';
   end if;
-  if p_role <> 'prosecutor' and p_bureau is not null then
-    raise exception 'only prosecutors carry a home bureau';
+  if p_bureau is not null then
+    raise exception 'judges and the Attorney General carry no home bureau';
   end if;
   select * into me from public.profiles where id = v_uid;
   v_ag := coalesce(private.justice_role_effective(v_uid) = 'attorney_general', false);
@@ -11382,9 +11585,11 @@ begin
     or (coalesce(me.active, false) and me.role in ('deputy_director', 'director'));
   if p_role = 'attorney_general' then
     if not coalesce(me.is_owner, false) then
+      perform private.perm_deny('appoint', 'justice', p_user, 'not_owner');
       raise exception 'only the Owner may appoint an Attorney General';
     end if;
   elsif not (v_ag or v_cid_authority) then
+    perform private.perm_deny('appoint', 'justice', p_user, 'not_authority');
     raise exception 'only the Attorney General, Deputy Director+, or Owner may appoint DOJ members';
   end if;
   if p_user = v_uid and not coalesce(me.is_owner, false) then
@@ -11407,7 +11612,7 @@ begin
        reason, requested_by, cid_decided_by, cid_decided_at,
        doj_decided_by, doj_decided_at, effective_by, effective_at,
        handover)
-    values (p_user, 'cid_to_doj', 'effective', p_role, p_bureau, t.role::text, t.division::text,
+    values (p_user, 'cid_to_doj', 'effective', p_role, null, t.role::text, t.division::text,
             coalesce(nullif(btrim(coalesce(p_reason, '')), ''), 'Direct DOJ assignment'),
             v_uid, v_uid, now(), v_uid, now(), v_uid, now(),
             jsonb_build_object('direct', true, 'led_cases_open', v_led,
@@ -11452,24 +11657,22 @@ begin
     (user_id, agency, justice_role, active, approved_by, approved_at,
      ended_at, expires_at, prosecutor_bureau)
   values (p_user, case when p_role = 'judge' then 'judiciary' else 'doj' end,
-          p_role, true, v_uid, now(), null, null,
-          case when p_role = 'prosecutor' then p_bureau end)
+          p_role, true, v_uid, now(), null, null, null)
   on conflict (user_id) do update
     set agency = excluded.agency, justice_role = excluded.justice_role,
         active = true, approved_by = excluded.approved_by, approved_at = excluded.approved_at,
         ended_at = null, expires_at = null,
-        prosecutor_bureau = excluded.prosecutor_bureau;
+        prosecutor_bureau = null;
   select * into m from public.justice_memberships where user_id = p_user;
   insert into public.audit_log (actor_id, action, entity, entity_id, detail)
   values (v_uid, 'JUSTICE_APPOINTED', 'justice_memberships', p_user,
-          jsonb_build_object('role', p_role, 'bureau', p_bureau,
+          jsonb_build_object('role', p_role,
                              'direct', coalesce(t.active, false),
                              'transfer', v_tr, 'led_cases_open', v_led,
                              'reason', left(coalesce(p_reason, ''), 300)));
   insert into public.notifications (user_id, type, payload)
   values (p_user, 'justice_membership_update', jsonb_build_object(
     'reason', 'You were appointed ' || replace(p_role, '_', ' ')
-      || coalesce(' (' || private.bureau_label(p_bureau::text) || ' queue)', '')
       || case when coalesce(t.active, false)
               then ' — your CID membership has ended and your DOJ access is active now.'
               else ' in the DOJ legal-review workspace.' end));
@@ -11684,6 +11887,45 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.legal_add_evidence_and_exhibit(p_request uuid, p_title text, p_type media_type, p_external_url text, p_category text DEFAULT NULL::text, p_rationale text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); r public.legal_requests; v_media uuid;
+        e public.legal_request_exhibits; v_title text := left(btrim(coalesce(p_title, '')), 200);
+        v_url text := btrim(coalesce(p_external_url, ''));
+begin
+  select * into r from public.legal_requests where id = p_request;
+  if not found then raise exception 'request not found'; end if;
+  if v_title = '' then raise exception 'a title is required'; end if;
+  if v_url !~* '^https?://' then raise exception 'the media URL must use http:// or https://'; end if;
+  if p_category is not null and p_category not in
+     ('scene', 'people', 'vehicles', 'places', 'surveillance', 'documents', 'report_media', 'other') then
+    raise exception 'invalid media category';
+  end if;
+  if not private.can_edit_legal_draft(p_request, v_uid) then
+    return private.legal_denied('edit', p_request, 'not_editable',
+      'evidence can only be added while the request is editable');
+  end if;
+  if not (private.is_active() and private.case_writable(r.case_id)) then
+    return private.legal_denied('edit', p_request, 'case_not_writable',
+      'this request''s case is not writable (no access, archived or deleted)');
+  end if;
+  insert into public.media (title, type, external_url, kind, case_id, uploaded_by, category)
+  values (v_title, p_type, v_url, 'legal_upload', r.case_id, v_uid, p_category)
+  returning id into v_media;
+  e := public.add_legal_exhibit(p_request, 'case_media', v_media, v_title,
+         jsonb_build_object('url', v_url, 'media_type', p_type::text, 'legal_upload', true),
+         p_rationale);
+  perform private.legal_log(p_request, null, 'evidence_added', null, null, v_title, null);
+  perform private.legal_audit(p_request, 'LEGAL_EVIDENCE_ADDED',
+    jsonb_build_object('media_id', v_media, 'exhibit_id', e.id, 'media_type', p_type::text));
+  return jsonb_build_object('ok', true, 'media_id', v_media, 'exhibit_id', e.id);
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.legal_admin_cancel(p_request uuid, p_reason text)
  RETURNS legal_requests
  LANGUAGE plpgsql
@@ -11695,12 +11937,13 @@ begin
   if btrim(coalesce(p_reason, '')) = '' then raise exception 'a reason is required'; end if;
   select * into r from public.legal_requests where id = p_request for update;
   if not found then raise exception 'request not found'; end if;
-  if r.review_status in ('approved', 'denied', 'withdrawn', 'declined', 'cancelled', 'superseded') then
+  if r.review_status in ('approved', 'partially_approved', 'denied', 'withdrawn', 'declined', 'cancelled', 'superseded') then
     raise exception 'decided or terminal requests cannot be cancelled';
   end if;
   if not (private.can_approve_legal(p_request, v_uid)
           or coalesce(private.justice_role_effective(v_uid) = 'attorney_general', false)
           or private.owner_flag(v_uid)) then
+    perform private.perm_deny('cancel', 'legal', p_request, 'not_command');
     raise exception 'not authorized to cancel this request';
   end if;
   update public.legal_requests
@@ -11713,6 +11956,78 @@ begin
   perform private.legal_notify(r.created_by, p_request, 'legal_update',
     'Your ' || r.request_type || ' request was cancelled: ' || p_reason);
   return r;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.legal_amend(p_request uuid, p_reason text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); s public.legal_requests; n public.legal_requests;
+        v_reason text := left(btrim(coalesce(p_reason, '')), 2000); v_archived timestamptz;
+        v_exhibits integer := 0; v_charges integer := 0;
+begin
+  select * into s from public.legal_requests where id = p_request;
+  if not found then raise exception 'request not found'; end if;
+  if v_reason = '' then raise exception 'a reason is required'; end if;
+  if s.review_status not in ('approved', 'partially_approved', 'denied', 'superseded', 'withdrawn', 'cancelled') then
+    raise exception 'only a decided or closed request can be amended — edit the draft instead';
+  end if;
+  if not private.can_amend_legal(p_request, v_uid) then
+    return private.legal_denied('amend', p_request, 'no_case_access',
+      'amending needs active membership, access to the case and sight of the request');
+  end if;
+  select archived_at into v_archived from public.cases where id = s.case_id;
+  if v_archived is not null then
+    raise exception 'this case is archived — restore it before amending a legal request';
+  end if;
+
+  insert into public.legal_requests
+    (request_type, subtype, case_id, source_report_id, source_report_seq, created_by,
+     responsible_bureau, classification, priority, title, form_data, narrative,
+     person_id, person_name_snapshot, citizen_id_snapshot, recipient_type, recipient_name,
+     case_number_snapshot, case_title_snapshot, approval_route, amends_request_id)
+  values
+    (s.request_type, s.subtype, s.case_id, s.source_report_id, s.source_report_seq, v_uid,
+     private.legal_resolve_bureau(s.case_id), s.classification, s.priority, s.title,
+     private.legal_form_public(s.form_data), s.narrative,
+     s.person_id, s.person_name_snapshot, s.citizen_id_snapshot, s.recipient_type, s.recipient_name,
+     s.case_number_snapshot, s.case_title_snapshot,
+     coalesce(s.approval_route, private.legal_default_route(s.request_type, s.subtype)), p_request)
+  returning * into n;
+
+  perform private.legal_add_participant(n.id, v_uid, 'requesting_investigator');
+
+  insert into public.legal_request_exhibits
+    (legal_request_id, exhibit_type, source_id, display_title, snapshot_metadata, added_by, rationale)
+  select n.id, e.exhibit_type, e.source_id, e.display_title, e.snapshot_metadata, v_uid, e.rationale
+    from public.legal_request_exhibits e
+   where e.legal_request_id = p_request
+   order by e.created_at;
+  get diagnostics v_exhibits = row_count;
+
+  insert into public.legal_request_charges
+    (legal_request_id, case_charge_id, snap_code, snap_offense, snap_charge_class,
+     snap_penal_title, counts, added_by)
+  select n.id, c.case_charge_id, c.snap_code, c.snap_offense, c.snap_charge_class,
+         c.snap_penal_title, c.counts, v_uid
+    from public.legal_request_charges c
+   where c.legal_request_id = p_request;
+  get diagnostics v_charges = row_count;
+
+  perform private.legal_log(n.id, null, 'created', null, 'not_submitted', null, null);
+  perform private.legal_log(n.id, null, 'amended_from', null, null,
+    'Amends ' || s.request_number || ': ' || v_reason, null);
+  perform private.legal_audit(n.id, 'LEGAL_AMENDED', jsonb_build_object(
+    'source_id', p_request, 'source_number', s.request_number,
+    'source_status', s.review_status, 'reason', left(v_reason, 300),
+    'exhibits', v_exhibits, 'charges', v_charges));
+  perform private.legal_audit(n.id, 'LEGAL_CREATED', jsonb_build_object(
+    'type', n.request_type, 'subtype', n.subtype, 'case_id', n.case_id,
+    'bureau', n.responsible_bureau, 'amends', p_request));
+  return jsonb_build_object('ok', true, 'id', n.id, 'request_number', n.request_number);
 end $function$
 ;
 
@@ -11815,6 +12130,107 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.legal_comment(p_request uuid, p_body text, p_parent uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); r public.legal_requests;
+        v_body text := left(btrim(coalesce(p_body, '')), 4000); v_id uuid;
+        v_parent public.legal_request_comments; rec record; v_actor text;
+begin
+  select * into r from public.legal_requests where id = p_request;
+  if not found then raise exception 'request not found'; end if;
+  if v_body = '' then raise exception 'a comment body is required'; end if;
+  if not private.legal_can_comment(p_request, v_uid) then
+    return private.legal_denied('comment', p_request, 'not_participant',
+      'only participants and reviewers of this request may comment');
+  end if;
+  if p_parent is not null then
+    select * into v_parent from public.legal_request_comments where id = p_parent;
+    if not found or v_parent.legal_request_id <> p_request then
+      raise exception 'parent comment not found on this request';
+    end if;
+    if v_parent.deleted_at is not null then raise exception 'cannot reply to a deleted comment'; end if;
+  end if;
+  insert into public.legal_request_comments (legal_request_id, author_id, parent_id, body)
+  values (p_request, v_uid, p_parent, v_body) returning id into v_id;
+  perform private.legal_audit(p_request, 'LEGAL_COMMENTED',
+    jsonb_build_object('comment_id', v_id, 'parent_id', p_parent));
+  select display_name into v_actor from public.profiles where id = v_uid;
+  for rec in
+    select distinct s.u from (
+      select r.created_by as u
+      union select p.user_id from public.legal_request_participants p
+             where p.legal_request_id = p_request and p.removed_at is null
+      union select r.assigned_judge_id
+    ) s where s.u is not null and s.u <> v_uid
+  loop
+    perform private.legal_notify(rec.u, p_request, 'legal_comment',
+      coalesce(v_actor, 'Someone') || ' commented on ' || r.request_number || ': ' || left(v_body, 140),
+      jsonb_build_object('comment_id', v_id));
+  end loop;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.legal_comment_delete(p_comment uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); c public.legal_request_comments;
+begin
+  select * into c from public.legal_request_comments where id = p_comment for update;
+  if not found then raise exception 'comment not found'; end if;
+  if c.deleted_at is not null then return jsonb_build_object('ok', true); end if;
+  if not (c.author_id = v_uid
+          or coalesce(private.justice_role_effective(v_uid) = 'attorney_general', false)
+          or private.owner_flag(v_uid)) then
+    return private.legal_denied('comment', c.legal_request_id, 'not_author',
+      'only the author, the Attorney General or the Owner may delete a comment');
+  end if;
+  insert into public.legal_request_comment_versions (comment_id, body, edited_by)
+  values (c.id, c.body, v_uid);
+  update public.legal_request_comments
+     set body = '', deleted_at = now(), deleted_by = v_uid
+   where id = c.id;
+  perform private.legal_audit(c.legal_request_id, 'LEGAL_COMMENT_DELETED',
+    jsonb_build_object('comment_id', c.id, 'author_id', c.author_id,
+                       'by_author', c.author_id = v_uid));
+  return jsonb_build_object('ok', true);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.legal_comment_edit(p_comment uuid, p_body text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); c public.legal_request_comments;
+        v_body text := left(btrim(coalesce(p_body, '')), 4000);
+begin
+  select * into c from public.legal_request_comments where id = p_comment for update;
+  if not found then raise exception 'comment not found'; end if;
+  if v_body = '' then raise exception 'a comment body is required'; end if;
+  if c.deleted_at is not null then raise exception 'a deleted comment cannot be edited'; end if;
+  if c.author_id <> v_uid then
+    return private.legal_denied('comment', c.legal_request_id, 'not_author',
+      'only the author may edit a comment');
+  end if;
+  if c.body = v_body then return jsonb_build_object('ok', true); end if;
+  insert into public.legal_request_comment_versions (comment_id, body, edited_by)
+  values (c.id, c.body, v_uid);
+  update public.legal_request_comments set body = v_body, edited_at = now() where id = c.id;
+  perform private.legal_audit(c.legal_request_id, 'LEGAL_COMMENT_EDITED',
+    jsonb_build_object('comment_id', c.id));
+  return jsonb_build_object('ok', true);
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.legal_hold_lift(p_hold uuid, p_reason text DEFAULT NULL::text)
  RETURNS legal_holds
  LANGUAGE plpgsql
@@ -11875,10 +12291,10 @@ declare v_uid uuid := (select auth.uid()); r public.legal_requests;
 begin
   select * into r from public.legal_requests where id = p_request;
   if not found then raise exception 'request not found'; end if;
-  if not (coalesce(r.assigned_ada_id = v_uid, false)
-          or coalesce(r.assigned_judge_id = v_uid, false)
-          or coalesce(private.justice_role_of(v_uid) in ('district_attorney', 'attorney_general'), false)
+  if not (coalesce(r.assigned_judge_id = v_uid, false)
+          or coalesce(private.justice_role_effective(v_uid) = 'attorney_general', false)
           or private.owner_flag(v_uid)) then
+    perform private.perm_deny('read_internal_notes', 'legal', p_request, 'not_bench');
     raise exception 'not authorized';
   end if;
   return query
@@ -11903,10 +12319,10 @@ begin
   if not found then raise exception 'original request not found'; end if;
   select * into n from public.legal_requests where id = p_new;
   if not found then raise exception 'replacement request not found'; end if;
-  if o.review_status not in ('approved', 'denied', 'declined') then
+  if o.review_status not in ('approved', 'partially_approved', 'denied', 'declined') then
     raise exception 'only decided requests can be superseded';
   end if;
-  if n.review_status <> 'approved' then
+  if n.review_status not in ('approved', 'partially_approved') then
     raise exception 'the replacement must be an approved request';
   end if;
   if n.case_id is distinct from o.case_id then
@@ -11915,6 +12331,7 @@ begin
   if not (private.can_approve_legal(p_old, v_uid)
           or coalesce(private.justice_role_effective(v_uid) = 'attorney_general', false)
           or private.owner_flag(v_uid)) then
+    perform private.perm_deny('supersede', 'legal', p_old, 'not_command');
     raise exception 'not authorized to supersede this request';
   end if;
   update public.legal_requests
@@ -11929,7 +12346,43 @@ begin
   perform private.legal_log(p_old, o.current_version_id, 'superseded', null, 'superseded', p_reason, null);
   perform private.legal_audit(p_old, 'LEGAL_SUPERSEDED',
     jsonb_build_object('by', p_new, 'reason', left(p_reason, 300)));
+  perform private.mdt_project(p_old, 'revoked');
+  perform private.legal_notify(o.created_by, p_old, 'legal_update',
+    'Your ' || o.request_type || ' request ' || o.request_number || ' was superseded by ' || n.request_number || '.');
   return o;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.legal_record_export(p_request uuid, p_format text, p_kind text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); r public.legal_requests; v_id uuid; v_code text;
+begin
+  select * into r from public.legal_requests where id = p_request;
+  if not found then raise exception 'request not found'; end if;
+  if p_format not in ('pdf', 'docx') then raise exception 'format must be pdf or docx'; end if;
+  if p_kind not in ('instrument', 'packet') then raise exception 'kind must be instrument or packet'; end if;
+  if not private.can_view_legal_request(p_request, v_uid) then
+    return private.legal_denied('export', p_request, 'not_visible', 'not authorized to export this request');
+  end if;
+  if p_kind = 'instrument' and r.review_status not in ('approved', 'partially_approved') then
+    raise exception 'the instrument can only be exported once the request is approved';
+  end if;
+  v_code := upper(left(md5(coalesce(r.current_version_id::text, '') || p_request::text), 10));
+  insert into public.legal_export_log
+    (legal_request_id, version_id, format, kind, verification_code, exported_by)
+  values (p_request, r.current_version_id, p_format, p_kind, v_code, v_uid)
+  returning id into v_id;
+  perform private.legal_log(p_request, r.current_version_id, 'exported', null, null,
+    upper(p_format) || ' ' || p_kind || ' · ' || v_code, null);
+  perform private.legal_audit(p_request, 'LEGAL_EXPORTED', jsonb_build_object(
+    'export_id', v_id, 'format', p_format, 'kind', p_kind,
+    'version_id', r.current_version_id, 'verification_code', v_code));
+  return jsonb_build_object('ok', true, 'id', v_id, 'version_id', r.current_version_id,
+                            'verification_code', v_code);
 end $function$
 ;
 
@@ -12033,6 +12486,31 @@ begin
   perform private.legal_audit(p_request, 'LEGAL_PROSECUTOR_UNASSIGNED',
     jsonb_build_object('reason', left(coalesce(p_reason, ''), 300)));
   return r;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.legal_revision_resolve(p_item uuid, p_note text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); i public.legal_request_revision_items;
+begin
+  select * into i from public.legal_request_revision_items where id = p_item for update;
+  if not found then raise exception 'revision item not found'; end if;
+  if i.resolved_at is not null then return jsonb_build_object('ok', true); end if;
+  if not private.can_edit_legal_draft(i.legal_request_id, v_uid) then
+    return private.legal_denied('edit', i.legal_request_id, 'not_editable',
+      'revision items are resolved by the creator while the request is editable');
+  end if;
+  update public.legal_request_revision_items
+     set resolved_at = now(), resolved_by = v_uid,
+         resolution_note = left(nullif(btrim(coalesce(p_note, '')), ''), 2000)
+   where id = p_item;
+  perform private.legal_audit(i.legal_request_id, 'LEGAL_REVISION_RESOLVED',
+    jsonb_build_object('item_id', p_item, 'field', i.field));
+  return jsonb_build_object('ok', true);
 end $function$
 ;
 
@@ -12150,6 +12628,137 @@ begin
     jsonb_build_object('item', s.item, 'disposition', p_disposition,
                        'note', nullif(btrim(coalesce(p_note, '')), '')));
   return s;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.legal_set_charges(p_request uuid, p_items jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); r public.legal_requests; x jsonb;
+        cc public.case_charges; v_counts integer; v_ids uuid[] := '{}'; v_n integer := 0;
+        v_removed integer := 0;
+begin
+  select * into r from public.legal_requests where id = p_request for update;
+  if not found then raise exception 'request not found'; end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' then
+    raise exception 'charges must be an array of {case_charge_id, counts}';
+  end if;
+  if not private.can_edit_legal_draft(p_request, v_uid) then
+    return private.legal_denied('set_charges', p_request, 'not_editable',
+      'charges can only change while the request is editable');
+  end if;
+  for x in select * from jsonb_array_elements(p_items) loop
+    if jsonb_typeof(x) <> 'object' or nullif(btrim(coalesce(x->>'case_charge_id', '')), '') is null then
+      raise exception 'each charge needs a case_charge_id';
+    end if;
+    select * into cc from public.case_charges where id = (x->>'case_charge_id')::uuid;
+    if not found or cc.case_id <> r.case_id then
+      raise exception 'charge % does not belong to this request''s case', x->>'case_charge_id';
+    end if;
+    if cc.id = any(v_ids) then continue; end if;
+    v_counts := coalesce(nullif(btrim(coalesce(x->>'counts', '')), '')::integer, cc.counts, 1);
+    if v_counts < 1 or v_counts > 999 then raise exception 'counts must be between 1 and 999'; end if;
+    v_ids := v_ids || cc.id;
+    insert into public.legal_request_charges
+      (legal_request_id, case_charge_id, snap_code, snap_offense, snap_charge_class,
+       snap_penal_title, counts, added_by)
+    values (p_request, cc.id, cc.snap_code, cc.snap_offense, cc.snap_charge_class,
+            cc.snap_penal_title, v_counts, v_uid)
+    on conflict (legal_request_id, case_charge_id) do update
+      set counts = excluded.counts, snap_code = excluded.snap_code,
+          snap_offense = excluded.snap_offense, snap_charge_class = excluded.snap_charge_class,
+          snap_penal_title = excluded.snap_penal_title;
+    v_n := v_n + 1;
+  end loop;
+  delete from public.legal_request_charges
+   where legal_request_id = p_request and not (case_charge_id = any(v_ids));
+  get diagnostics v_removed = row_count;
+  perform private.legal_log(p_request, null, 'charges_set', null, null,
+    v_n || ' charge' || case when v_n = 1 then '' else 's' end, null);
+  perform private.legal_audit(p_request, 'LEGAL_CHARGES_SET',
+    jsonb_build_object('count', v_n, 'removed', v_removed, 'case_charge_ids', to_jsonb(v_ids)));
+  return jsonb_build_object('ok', true, 'count', v_n);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.legal_set_observer(p_request uuid, p_user uuid, p_active boolean DEFAULT true, p_reason text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); r public.legal_requests; v_name text;
+        v_reason text := left(nullif(btrim(coalesce(p_reason, '')), ''), 500);
+begin
+  select * into r from public.legal_requests where id = p_request for update;
+  if not found then raise exception 'request not found'; end if;
+  if p_user is null then raise exception 'an observer is required'; end if;
+  if not private.can_set_legal_observer(p_request, v_uid) then
+    return private.legal_denied('observe', p_request, 'not_command',
+      'only the creator, command or the Attorney General may change observers');
+  end if;
+  -- A sealed request is walled off even from case members; re-opening it to
+  -- one more person is a command / Attorney General decision, never the
+  -- creator's alone.
+  if r.classification = 'sealed' and not private.legal_is_command_authority(p_request, v_uid) then
+    return private.legal_denied('observe', p_request, 'sealed_not_command',
+      'observers on a sealed request are granted by command or the Attorney General');
+  end if;
+  if p_user = r.created_by then raise exception 'the creator is already a participant'; end if;
+  select display_name into v_name from public.profiles p
+   where p.id = p_user and p.removed_at is null
+     and (p.active or private.justice_role_of(p.id) is not null);
+  if not found then raise exception 'the observer must be an active member or justice member'; end if;
+  if coalesce(p_active, true) then
+    if private.is_legal_participant(p_request, p_user)
+       and exists (select 1 from public.legal_request_participants x
+                    where x.legal_request_id = p_request and x.user_id = p_user
+                      and x.participant_role = 'observer' and x.removed_at is null) then
+      return jsonb_build_object('ok', true);
+    end if;
+    perform private.legal_add_participant(p_request, p_user, 'observer');
+    perform private.legal_log(p_request, null, 'observer_added', null, null,
+      coalesce(v_name, 'Observer') || coalesce(' — ' || v_reason, ''), null);
+    perform private.legal_notify(p_user, p_request, 'legal_observer',
+      'You were added as an observer on ' || r.request_number || '.'
+      || coalesce(' ' || v_reason, ''));
+  else
+    if not exists (select 1 from public.legal_request_participants x
+                    where x.legal_request_id = p_request and x.user_id = p_user
+                      and x.participant_role = 'observer' and x.removed_at is null) then
+      return jsonb_build_object('ok', true);
+    end if;
+    perform private.legal_end_participant(p_request, p_user, 'observer');
+    perform private.legal_log(p_request, null, 'observer_removed', null, null,
+      coalesce(v_name, 'Observer') || coalesce(' — ' || v_reason, ''), null);
+  end if;
+  perform private.legal_audit(p_request, 'LEGAL_OBSERVER_SET',
+    jsonb_build_object('user_id', p_user, 'active', coalesce(p_active, true), 'reason', v_reason));
+  return jsonb_build_object('ok', true);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.legal_sweep_run()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_reminders jsonb; v_expiry jsonb;
+begin
+  if not private.is_owner() then
+    perform private.perm_deny('sweep', 'legal', null, 'not_owner');
+    return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'only the Owner may run the legal sweep');
+  end if;
+  v_reminders := private.legal_reminder_sweep();
+  v_expiry := private.legal_expiry_sweep();
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values ((select auth.uid()), 'LEGAL_SWEEP_RUN', 'legal_requests', null,
+          jsonb_build_object('reminders', v_reminders, 'expiry', v_expiry));
+  return jsonb_build_object('ok', true, 'reminders', v_reminders, 'expiry', v_expiry);
 end $function$
 ;
 
@@ -15187,17 +15796,16 @@ begin
 end $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.review_legal_request_as_cid(p_request uuid, p_decision text, p_note text DEFAULT NULL::text, p_override_reason text DEFAULT NULL::text, p_signature text DEFAULT NULL::text)
+CREATE OR REPLACE FUNCTION public.review_legal_request_as_cid(p_request uuid, p_decision text, p_note text DEFAULT NULL::text, p_override_reason text DEFAULT NULL::text, p_signature text DEFAULT NULL::text, p_revision_items jsonb DEFAULT NULL::jsonb)
  RETURNS legal_requests
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
 declare v_uid uuid := (select auth.uid()); r public.legal_requests; v_ver uuid;
-        v_exhibits integer; v_prosecutors integer := 0; rec record;
+        v_exhibits integer; v_action uuid; v_items integer := 0;
         me public.profiles; c public.cases; v_fallback boolean; v_jtf_any boolean;
-        v_siu boolean; v_stage text; v_returned text; v_ags integer := 0;
-        v_rank text;
+        v_siu boolean; v_stage text; v_returned text; v_rank text; v_judges integer;
 begin
   select * into r from public.legal_requests where id = p_request for update;
   if not found then raise exception 'request not found'; end if;
@@ -15208,6 +15816,7 @@ begin
     raise exception 'request is not awaiting % review', case when v_siu then 'SIB command' else 'CID' end;
   end if;
   if not private.can_approve_legal(p_request, v_uid) then
+    perform private.perm_deny('approve', 'legal', p_request, 'not_approver');
     raise exception 'only % may decide this request',
       case when v_siu then 'SIB command' else 'Bureau Lead or above' end;
   end if;
@@ -15215,7 +15824,7 @@ begin
   select * into me from public.profiles where id = v_uid;
   select * into c from public.cases where id = r.case_id;
   v_rank := case when coalesce(me.is_owner, false) and me.role is null then 'owner'
-                 else me.role end;
+                 else me.role::text end;
   v_jtf_any := (not v_siu) and (me.role = 'bureau_lead' and c.bureau = 'JTF' and me.division <> r.responsible_bureau);
   v_fallback := (not v_siu) and not (me.role = 'bureau_lead' and me.division = r.responsible_bureau) and not v_jtf_any;
 
@@ -15224,12 +15833,13 @@ begin
     update public.legal_requests
        set review_status = v_returned, document_status = 'reopened'
      where id = p_request returning * into r;
-    perform private.legal_log(p_request, r.current_version_id, v_returned,
+    v_action := private.legal_log_id(p_request, r.current_version_id, v_returned,
       v_stage, v_returned, p_note, null);
+    v_items := private.legal_revision_items_add(p_request, v_action, p_revision_items);
     perform private.legal_audit(p_request,
       case when v_siu then 'LEGAL_RETURNED_BY_SIU_COMMAND' else 'LEGAL_RETURNED_BY_CID' end,
       jsonb_build_object('note', left(p_note, 200), 'fallback', v_fallback,
-                         'jtf_any_lead', v_jtf_any, 'actor_rank', v_rank));
+                         'jtf_any_lead', v_jtf_any, 'actor_rank', v_rank, 'revision_items', v_items));
     perform private.legal_notify(r.created_by, p_request, 'legal_update',
       'Your ' || r.request_type || ' request was returned by '
       || case when v_siu then 'SIB command' else 'CID review' end || '.');
@@ -15265,67 +15875,24 @@ begin
     raise exception 'at least one supporting item is required (or record an override reason)';
   end if;
 
-  if v_siu then
-    update public.legal_requests
-       set cid_reviewed_by = v_uid, cid_reviewed_at = now(),
-           cid_reviewed_role = v_rank,
-           review_status = 'ag_review',
-           submitted_to_doj_at = coalesce(submitted_to_doj_at, now()),
-           queue_entered_at = now(),
-           assigned_prosecutor_id = null, prosecutor_claimed_at = null
-     where id = p_request returning * into r;
-    v_ver := private.legal_freeze_version(p_request, 'siu_command_approved');
-    select * into r from public.legal_requests where id = p_request;
-    perform private.legal_sign(p_request, v_ver, 'siu_command_approval', p_signature);
-    perform private.legal_add_participant(p_request, v_uid, 'cid_supervisor');
-    perform private.legal_log(p_request, v_ver, 'siu_command_approved',
-      'siu_command_review', 'ag_review', p_note,
-      nullif(btrim(coalesce(p_override_reason, '')), ''));
-    if v_exhibits = 0 then
-      perform private.legal_log(p_request, v_ver, 'packet_override', null, null,
-        'Approved without supporting items: ' || p_override_reason, null);
-    end if;
-    perform private.legal_audit(p_request, 'LEGAL_APPROVED_BY_SIU_COMMAND',
-      jsonb_build_object('version', v_ver, 'packet_override', v_exhibits = 0,
-                         'to', 'ag_review', 'actor_rank', v_rank));
-    perform private.legal_notify(r.created_by, p_request, 'legal_update',
-      'Your ' || r.request_type || ' request passed SIB command review and is with the Attorney General.');
-    for rec in
-      select p.id from public.profiles p
-       where coalesce(private.justice_role_effective(p.id) = 'attorney_general', false)
-    loop
-      v_ags := v_ags + 1;
-      perform private.legal_notify(rec.id, p_request, 'legal_request',
-        'An SIB ' || r.request_type || ' request awaits Attorney General review.');
-    end loop;
-    if v_ags = 0 then
-      for rec in
-        select p.id from public.profiles p where p.is_owner and p.removed_at is null
-      loop
-        perform private.legal_notify(rec.id, p_request, 'legal_coverage',
-          'An SIB legal request is with the Attorney General, and no Attorney General is seated.');
-      end loop;
-      perform private.legal_audit(p_request, 'LEGAL_AG_UNCOVERED',
-        jsonb_build_object('version', v_ver));
-    end if;
-    return r;
-  end if;
-
   update public.legal_requests
      set cid_reviewed_by = v_uid, cid_reviewed_at = now(),
          cid_reviewed_role = v_rank,
-         review_status = 'prosecutor_queue',
+         review_status = 'submitted_to_judge',
          submitted_to_doj_at = coalesce(submitted_to_doj_at, now()),
+         submitted_to_judge_at = now(),
          queue_entered_at = now(),
-         assigned_prosecutor_id = null, prosecutor_claimed_at = null
+         assigned_prosecutor_id = null, prosecutor_claimed_at = null,
+         assigned_judge_id = null
    where id = p_request returning * into r;
-  v_ver := private.legal_freeze_version(p_request, 'cid_approved');
+  v_ver := private.legal_freeze_version(p_request, case when v_siu then 'siu_command_approved' else 'cid_approved' end);
   select * into r from public.legal_requests where id = p_request;
-  perform private.legal_sign(p_request, v_ver, 'cid_supervisor_approval', p_signature);
+  perform private.legal_sign(p_request, v_ver,
+    case when v_siu then 'siu_command_approval' else 'cid_supervisor_approval' end, p_signature);
   perform private.legal_add_participant(p_request, v_uid, 'cid_supervisor');
-  perform private.legal_log(p_request, v_ver, 'cid_approved',
-    'cid_supervisor_review', 'prosecutor_queue', p_note,
-    nullif(btrim(coalesce(p_override_reason, '')), ''));
+  perform private.legal_log(p_request, v_ver, case when v_siu then 'siu_command_approved' else 'cid_approved' end,
+    v_stage, 'submitted_to_judge', p_note, nullif(btrim(coalesce(p_override_reason, '')), ''));
+  perform private.legal_log(p_request, v_ver, 'submitted_to_judge', v_stage, 'submitted_to_judge', null, null);
   if v_jtf_any then
     perform private.legal_log(p_request, v_ver, 'command_fallback', null, null,
       'Approved by a Bureau Lead from another bureau, permitted because the case is JTF.', null);
@@ -15337,34 +15904,22 @@ begin
     perform private.legal_log(p_request, v_ver, 'packet_override', null, null,
       'Approved without supporting items: ' || p_override_reason, null);
   end if;
-  perform private.legal_audit(p_request, 'LEGAL_APPROVED_BY_COMMAND',
+  perform private.legal_audit(p_request,
+    case when v_siu then 'LEGAL_APPROVED_BY_SIU_COMMAND' else 'LEGAL_APPROVED_BY_COMMAND' end,
     jsonb_build_object('version', v_ver, 'bureau', r.responsible_bureau,
-                       'packet_override', v_exhibits = 0, 'to', 'prosecutor_queue',
+                       'packet_override', v_exhibits = 0, 'to', 'submitted_to_judge',
                        'fallback', v_fallback, 'jtf_any_lead', v_jtf_any,
                        'actor_rank', v_rank));
+  perform private.legal_audit(p_request, 'LEGAL_SUBMITTED_TO_JUDGE',
+    jsonb_build_object('version', v_ver, 'siu', v_siu, 'sealed', r.classification = 'sealed'));
   perform private.legal_notify(r.created_by, p_request, 'legal_update',
-    'Your ' || r.request_type || ' request passed CID review and entered the ' || private.bureau_label(r.responsible_bureau::text) || ' prosecutor queue.');
-  if r.classification <> 'sealed' then
-    for rec in
-      select m.user_id from public.justice_memberships m
-       where m.active and (m.expires_at is null or m.expires_at > now())
-         and m.justice_role in ('prosecutor', 'assistant_district_attorney', 'district_attorney')
-         and r.responsible_bureau = any (private.prosecutor_bureaus_of(m.user_id))
-    loop
-      v_prosecutors := v_prosecutors + 1;
-      perform private.legal_notify(rec.user_id, p_request, 'legal_request',
-        'A ' || r.request_type || ' request entered the ' || private.bureau_label(r.responsible_bureau::text) || ' prosecutor queue.');
-    end loop;
-  end if;
-  if v_prosecutors = 0 then
-    for rec in
-      select p.id from public.profiles p
-       where (p.is_owner and p.removed_at is null)
-          or coalesce(private.justice_role_effective(p.id) = 'attorney_general', false)
-    loop
-      perform private.legal_notify(rec.id, p_request, 'legal_coverage',
-        'The ' || private.bureau_label(r.responsible_bureau::text) || ' prosecutor queue has no covering prosecutor.');
-    end loop;
+    'Your ' || r.request_type || ' request passed '
+    || case when v_siu then 'SIB command review' else 'CID review' end
+    || ' and entered the judicial queue.');
+  v_judges := private.legal_notify_judges(p_request,
+    'A ' || r.request_type || ' request entered the judicial queue.');
+  if v_judges = 0 and r.classification <> 'sealed' then
+    perform private.legal_audit(p_request, 'LEGAL_JUDGE_QUEUE_UNCOVERED', jsonb_build_object('version', v_ver));
   end if;
   return r;
 end $function$
@@ -15685,6 +16240,13 @@ begin
   leaked := leaked || private.rls_test_cleanup_surveillance(ids, case_ids);
 
   delete from public.mdt_wanted_projections where legal_request_id = any(legal_ids);
+  delete from public.legal_export_log where legal_request_id = any(legal_ids);
+  delete from public.legal_request_reminders where legal_request_id = any(legal_ids);
+  delete from public.legal_request_target_decisions where legal_request_id = any(legal_ids);
+  delete from public.legal_request_revision_items where legal_request_id = any(legal_ids);
+  delete from public.legal_request_comment_versions where comment_id in (select id from public.legal_request_comments where legal_request_id = any(legal_ids));
+  delete from public.legal_request_comments where legal_request_id = any(legal_ids);
+  delete from public.legal_request_charges where legal_request_id = any(legal_ids);
   delete from public.legal_request_signatures where legal_request_id = any(legal_ids);
   delete from public.legal_request_exhibits where legal_request_id = any(legal_ids);
   delete from public.legal_request_participants where legal_request_id = any(legal_ids);
@@ -19952,12 +20514,17 @@ CREATE OR REPLACE FUNCTION public.submit_legal_request_to_cid(p_request uuid, p_
  SET search_path TO ''
 AS $function$
 declare v_uid uuid := (select auth.uid()); r public.legal_requests; v_ver uuid; sup record;
-        v_fast boolean; v_from text; v_n int := 0; v_siu boolean; c public.cases;
+        v_fast boolean; v_from text; v_n int := 0; v_siu boolean; c public.cases; v_open int;
+        v_signed_hash text; v_new_hash text; v_changed boolean := false;
 begin
   select * into r from public.legal_requests where id = p_request for update;
   if not found then raise exception 'request not found'; end if;
-  if r.created_by <> v_uid then raise exception 'only the requesting investigator may submit'; end if;
+  if r.created_by <> v_uid then
+    perform private.perm_deny('submit', 'legal', p_request, 'not_creator');
+    raise exception 'only the requesting investigator may submit';
+  end if;
   if not private.can_edit_legal_draft(p_request, v_uid) then
+    perform private.perm_deny('submit', 'legal', p_request, 'not_editable');
     raise exception 'this request is not in an editable state';
   end if;
   if btrim(coalesce(r.title, '')) = '' or btrim(coalesce(r.narrative, '')) = '' then
@@ -19973,17 +20540,30 @@ begin
        and nullif(btrim(coalesce(r.form_data->>'search_targets', '')), '') is null then
       raise exception 'a search warrant requires a subject or at least one search target';
     end if;
+    -- P4-04: the standard the judge is asked to apply, and the statement
+    -- that meets it, are part of the request — not of the reviewer's notes.
+    if coalesce(r.form_data->>'standard_of_proof', '') not in ('probable_cause', 'reasonable_suspicion') then
+      raise exception 'a warrant requires a standard of proof (probable cause or reasonable suspicion)';
+    end if;
+    if btrim(coalesce(r.form_data->>'pc_statement', '')) = '' then
+      raise exception 'a warrant requires a probable-cause statement';
+    end if;
   end if;
   if r.request_type = 'subpoena' and r.recipient_type = 'entity'
      and btrim(coalesce(r.recipient_name, '')) = '' then
     raise exception 'a recipient is required';
   end if;
+  if r.review_status like 'returned_by_%' and btrim(coalesce(p_change_summary, '')) = '' then
+    raise exception 'a change summary is required when resubmitting';
+  end if;
 
   v_siu := private.legal_is_siu(p_request);
   select * into c from public.cases where id = r.case_id;
   v_from := r.review_status;
-  v_fast := (not v_siu)
-            and v_from in ('returned_by_judge', 'returned_by_prosecutor')
+  -- The judicial fast lane (L11): a judge-returned request goes straight
+  -- back to the bench unless the investigator declares a material change.
+  -- The retired prosecutor return keeps the same treatment for history.
+  v_fast := v_from in ('returned_by_judge', 'returned_by_prosecutor')
             and not coalesce(p_material_change, false);
 
   if r.review_status like 'returned_by_%' and r.assigned_judge_id is not null then
@@ -19997,30 +20577,39 @@ begin
   update public.legal_requests
      set responsible_bureau = private.legal_resolve_bureau(r.case_id)
    where id = p_request;
+  select count(*) into v_open from public.legal_request_revision_items
+   where legal_request_id = p_request and resolved_at is null;
 
   if v_fast then
-    v_ver := private.legal_freeze_version(p_request, 'prosecutor_queue', p_change_summary);
+    v_ver := private.legal_freeze_version(p_request, 'submitted_to_judge', p_change_summary);
+    -- The investigator's "no material change" is a declaration, not a proof:
+    -- compare the new frozen content against the version that carries the
+    -- command signature and make any drift visible to the bench and the audit.
+    select v.content_hash into v_signed_hash
+      from public.legal_request_signatures sg
+      join public.legal_request_versions v on v.id = sg.version_id
+     where sg.legal_request_id = p_request
+       and sg.action in ('cid_supervisor_approval', 'siu_command_approval')
+     order by sg.signed_at desc limit 1;
+    select content_hash into v_new_hash from public.legal_request_versions where id = v_ver;
+    v_changed := v_signed_hash is not null and v_new_hash is distinct from v_signed_hash;
     update public.legal_requests
-       set document_status = 'finalized', review_status = 'prosecutor_queue',
-           queue_entered_at = now(),
+       set document_status = 'finalized', review_status = 'submitted_to_judge',
+           submitted_to_judge_at = now(), queue_entered_at = now(),
            assigned_prosecutor_id = null, prosecutor_claimed_at = null,
            submitted_to_cid_at = coalesce(submitted_to_cid_at, now())
      where id = p_request returning * into r;
-    perform private.legal_log(p_request, v_ver, 'resubmitted_to_prosecutor',
-      v_from, 'prosecutor_queue', p_change_summary, null);
-    perform private.legal_audit(p_request, 'LEGAL_RESUBMITTED_TO_PROSECUTOR',
-      jsonb_build_object('version', v_ver, 'from', v_from));
-    for sup in
-      select m.user_id from public.justice_memberships m
-       where m.active and (m.expires_at is null or m.expires_at > now())
-         and m.justice_role in ('prosecutor', 'assistant_district_attorney', 'district_attorney')
-         and r.responsible_bureau = any (private.prosecutor_bureaus_of(m.user_id))
-         and r.classification <> 'sealed'
-    loop
-      v_n := v_n + 1;
-      perform private.legal_notify(sup.user_id, p_request, 'legal_request',
-        'A corrected ' || r.request_type || ' request re-entered the ' || private.bureau_label(r.responsible_bureau::text) || ' prosecutor queue.');
-    end loop;
+    perform private.legal_log(p_request, v_ver, 'resubmitted_to_judge',
+      v_from, 'submitted_to_judge', p_change_summary, null);
+    if v_changed then
+      perform private.legal_log(p_request, v_ver, 'fast_lane_content_changed', null, null,
+        'Content changed since the command-approved version; resubmitted to the judge without renewed bureau review.', null);
+    end if;
+    perform private.legal_audit(p_request, 'LEGAL_RESUBMITTED_TO_JUDGE',
+      jsonb_build_object('version', v_ver, 'from', v_from, 'unresolved_items', v_open,
+                         'content_changed', v_changed, 'signed_hash', v_signed_hash, 'new_hash', v_new_hash));
+    perform private.legal_notify_judges(p_request,
+      'A corrected ' || r.request_type || ' request re-entered the judicial queue.');
     return r;
   end if;
 
@@ -20036,9 +20625,10 @@ begin
            submitted_to_cid_at = now()
      where id = p_request returning * into r;
     perform private.legal_log(p_request, v_ver, 'submitted_to_siu_command',
-      v_from, 'siu_command_review', null, null);
+      v_from, 'siu_command_review', p_change_summary, null);
     perform private.legal_audit(p_request, 'LEGAL_SUBMITTED_TO_SIU_COMMAND',
-      jsonb_build_object('version', v_ver, 'material_change', coalesce(p_material_change, false)));
+      jsonb_build_object('version', v_ver, 'material_change', coalesce(p_material_change, false),
+                         'unresolved_items', v_open));
     for sup in
       select m.user_id from public.siu_memberships m
        where m.active and m.ended_at is null
@@ -20074,9 +20664,10 @@ begin
      set document_status = 'finalized', review_status = 'cid_supervisor_review',
          submitted_to_cid_at = now()
    where id = p_request returning * into r;
-  perform private.legal_log(p_request, v_ver, 'submitted_to_cid', v_from, 'cid_supervisor_review', null, null);
+  perform private.legal_log(p_request, v_ver, 'submitted_to_cid', v_from, 'cid_supervisor_review', p_change_summary, null);
   perform private.legal_audit(p_request, 'LEGAL_SUBMITTED_TO_CID',
-    jsonb_build_object('version', v_ver, 'material_change', coalesce(p_material_change, false)));
+    jsonb_build_object('version', v_ver, 'material_change', coalesce(p_material_change, false),
+                       'unresolved_items', v_open));
   for sup in
     select p.id from public.profiles p
     where p.active and p.removed_at is null and p.id <> v_uid
@@ -20908,16 +21499,19 @@ declare v_uid uuid := (select auth.uid()); r public.legal_requests; v_from text;
 begin
   select * into r from public.legal_requests where id = p_request for update;
   if not found then raise exception 'request not found'; end if;
-  if r.created_by <> v_uid then raise exception 'only the requesting investigator may withdraw'; end if;
-  if r.review_status in ('approved', 'denied', 'withdrawn') then
+  if r.created_by <> v_uid then
+    perform private.perm_deny('withdraw', 'legal', p_request, 'not_creator');
+    raise exception 'only the requesting investigator may withdraw';
+  end if;
+  if r.review_status in ('approved', 'partially_approved', 'denied', 'withdrawn',
+                         'declined', 'cancelled', 'superseded') then
     raise exception 'decided requests cannot be withdrawn';
   end if;
   v_from := r.review_status;
   update public.legal_requests set review_status = 'withdrawn' where id = p_request returning * into r;
   perform private.legal_log(p_request, r.current_version_id, 'withdrawn', v_from, 'withdrawn', p_note, null);
   perform private.legal_audit(p_request, 'LEGAL_WITHDRAWN', null);
-  perform private.legal_notify(r.assigned_ada_id, p_request, 'legal_update', 'A request was withdrawn by CID.');
-  perform private.legal_notify(r.assigned_judge_id, p_request, 'legal_update', 'A request was withdrawn by CID.');
+  perform private.legal_notify(r.assigned_judge_id, p_request, 'legal_update', 'A request was withdrawn by the investigator.');
   return r;
 end $function$
 ;
@@ -21781,6 +22375,23 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.can_amend_legal(p_request uuid, p_user uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select exists (
+    select 1 from public.legal_requests r
+     where r.id = p_request
+       and r.review_status in ('approved', 'partially_approved', 'denied', 'superseded', 'withdrawn', 'cancelled')
+       and p_user = (select auth.uid())
+       and private.is_active()
+       and private.can_access_case(r.case_id)
+       and private.can_view_legal_request(p_request, p_user))
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.can_announce()
  RETURNS boolean
  LANGUAGE sql
@@ -22080,7 +22691,7 @@ CREATE OR REPLACE FUNCTION private.can_manage_legal_assignment(p_request uuid, p
  STABLE SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-  select coalesce(private.justice_role_of(p_user) in ('district_attorney', 'attorney_general'), false)
+  select coalesce(private.justice_role_effective(p_user) = 'attorney_general', false)
       or private.owner_flag(p_user)
 $function$
 ;
@@ -22318,6 +22929,17 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.can_set_legal_observer(p_request uuid, p_user uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.legal_is_command_authority(p_request, p_user)
+      or exists (select 1 from public.legal_requests r where r.id = p_request and r.created_by = p_user)
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.can_view_document(p_class text, p_owner uuid)
  RETURNS boolean
  LANGUAGE sql
@@ -22340,35 +22962,11 @@ AS $function$
       r.created_by = p_user
       or private.is_legal_participant(p_request, p_user)
       or private.owner_flag(p_user)
-      or (r.submitted_to_doj_at is not null
+      or (r.submitted_to_judge_at is not null
           and coalesce(private.justice_role_effective(p_user) = 'attorney_general', false))
-      or (r.submitted_to_doj_at is not null
-          and not private.legal_is_siu(p_request)
-          and private.justice_role_of(p_user) = 'district_attorney')
-      or (r.review_status in ('prosecutor_queue', 'prosecutor_review',
-                              'submitted_to_judge', 'returned_by_prosecutor', 'declined')
-          and r.classification <> 'sealed'
-          and not private.legal_is_siu(p_request)
-          and coalesce(private.justice_role_effective(p_user) = 'prosecutor', false)
-          and r.responsible_bureau = any (private.prosecutor_bureaus_of(p_user)))
       or (r.review_status in ('submitted_to_judge', 'judicial_review')
           and r.classification <> 'sealed'
           and coalesce(private.justice_role_effective(p_user) = 'judge', false))
-      or (r.submitted_to_doj_at is not null
-          and r.classification <> 'sealed'
-          and r.approval_route = 'judge'
-          and private.justice_role_of(p_user) = 'judge')
-      or (r.submitted_to_doj_at is not null
-          and r.classification <> 'sealed'
-          and not private.legal_is_siu(p_request)
-          and exists (
-            select 1 from public.prosecutor_bureau_assignments a
-            join public.justice_memberships m on m.user_id = a.prosecutor_id
-            where a.prosecutor_id = p_user
-              and a.bureau = r.responsible_bureau
-              and a.ends_at is null and a.starts_at <= now()
-              and m.active
-              and m.justice_role in ('assistant_district_attorney', 'district_attorney')))
       or (r.review_status in ('cid_supervisor_review', 'siu_command_review')
           and private.can_review_as_cid(p_request, p_user))
       or (r.classification = 'standard'
@@ -24707,6 +25305,18 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.legal_attorneys_general()
+ RETURNS uuid[]
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce(array_agg(p.id), '{}'::uuid[]) from public.profiles p
+   where p.removed_at is null
+     and coalesce(private.justice_role_effective(p.id) = 'attorney_general', false)
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.legal_audit(p_request uuid, p_action text, p_detail jsonb)
  RETURNS void
  LANGUAGE sql
@@ -24715,6 +25325,33 @@ CREATE OR REPLACE FUNCTION private.legal_audit(p_request uuid, p_action text, p_
 AS $function$
   insert into public.audit_log (actor_id, action, entity, entity_id, detail)
   values ((select auth.uid()), p_action, 'legal_requests', p_request, p_detail)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.legal_audit_system(p_request uuid, p_action text, p_detail jsonb)
+ RETURNS void
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (null, p_action, 'legal_requests', p_request, coalesce(p_detail, '{}'::jsonb) || '{"system": true}'::jsonb)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.legal_can_comment(p_request uuid, p_user uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select p_user is not null
+     and private.can_view_legal_request(p_request, p_user)
+     and (exists (select 1 from public.legal_requests r where r.id = p_request and r.created_by = p_user)
+          or private.is_legal_participant(p_request, p_user)
+          or private.can_approve_legal(p_request, p_user)
+          or coalesce(private.justice_role_effective(p_user) = 'attorney_general', false)
+          or private.owner_flag(p_user))
 $function$
 ;
 
@@ -24770,6 +25407,29 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.legal_denied(p_action text, p_request uuid, p_reason text, p_message text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  perform private.perm_deny(p_action, 'legal', p_request, p_reason);
+  return jsonb_build_object('ok', false, 'code', 'denied', 'message', p_message);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.legal_directors()
+ RETURNS uuid[]
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce(array_agg(p.id), '{}'::uuid[]) from public.profiles p
+   where p.active and p.removed_at is null and p.role in ('deputy_director', 'director')
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.legal_end_participant(p_request uuid, p_user uuid, p_role text)
  RETURNS void
  LANGUAGE sql
@@ -24783,13 +25443,93 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.legal_expiry_sweep()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare rec record; u uuid; v_recips uuid[]; v_sent uuid[];
+        n_expired integer := 0; n_deadline integer := 0;
+begin
+  for rec in
+    select r.* from public.legal_requests r
+     where r.request_type = 'warrant' and r.fulfilment_status = 'issued'
+       and r.expires_at is not null and r.expires_at < now()
+     order by r.expires_at
+     limit 200
+  loop
+    update public.legal_requests set fulfilment_status = 'expired' where id = rec.id;
+    perform private.legal_log_system(rec.id, 'expired',
+      'Expired ' || to_char(rec.expires_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI') || ' UTC without execution');
+    perform private.legal_audit_system(rec.id, 'LEGAL_EXPIRED', jsonb_build_object(
+      'expires_at', rec.expires_at, 'issued_at', rec.issued_at));
+    perform private.mdt_project(rec.id, 'expired');
+    v_recips := array[rec.created_by] || rec.issued_by;
+    v_sent := '{}';
+    foreach u in array v_recips loop
+      if u is null or u = any(v_sent) then continue; end if;
+      if private.legal_notify_system(u, rec.id, 'legal_expired',
+           'The ' || replace(rec.subtype, '_', ' ') || ' ' || rec.request_number || ' expired without execution.',
+           jsonb_build_object('expires_at', rec.expires_at)) then
+        v_sent := v_sent || u;
+      end if;
+    end loop;
+    insert into public.legal_request_reminders (legal_request_id, kind, stage, recipients)
+    values (rec.id, 'expired', 'issued', v_sent)
+    on conflict (legal_request_id, kind, stage) do nothing;
+    n_expired := n_expired + 1;
+  end loop;
+
+  for rec in
+    select r.* from public.legal_requests r
+     where r.request_type = 'subpoena'
+       and r.fulfilment_status in ('issued', 'served', 'compliance_pending')
+       and r.response_deadline is not null and r.response_deadline < now()
+       and not exists (select 1 from public.legal_request_reminders x
+                        where x.legal_request_id = r.id and x.kind = 'deadline_passed' and x.stage = 'issued')
+     order by r.response_deadline
+     limit 200
+  loop
+    v_sent := '{}';
+    if private.legal_notify_system(rec.created_by, rec.id, 'legal_deadline_passed',
+         'The response deadline on subpoena ' || rec.request_number || ' has passed ('
+         || to_char(rec.response_deadline at time zone 'UTC', 'YYYY-MM-DD') || ').',
+         jsonb_build_object('response_deadline', rec.response_deadline)) then
+      v_sent := v_sent || rec.created_by;
+    end if;
+    insert into public.legal_request_reminders (legal_request_id, kind, stage, recipients)
+    values (rec.id, 'deadline_passed', 'issued', v_sent);
+    perform private.legal_log_system(rec.id, 'deadline_passed',
+      'Response deadline passed ' || to_char(rec.response_deadline at time zone 'UTC', 'YYYY-MM-DD'));
+    perform private.legal_audit_system(rec.id, 'LEGAL_REMINDED', jsonb_build_object(
+      'kind', 'deadline_passed', 'recipients', to_jsonb(v_sent), 'response_deadline', rec.response_deadline));
+    n_deadline := n_deadline + 1;
+  end loop;
+
+  return jsonb_build_object('expired', n_expired, 'deadline_passed', n_deadline);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.legal_form_public(p_form jsonb)
+ RETURNS jsonb
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  select coalesce((select jsonb_object_agg(e.key, e.value)
+                     from jsonb_each(coalesce(p_form, '{}'::jsonb)) e
+                    where e.key not like '\_%'), '{}'::jsonb)
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.legal_freeze_version(p_request uuid, p_stage text, p_change_summary text DEFAULT NULL::text)
  RETURNS uuid
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare r public.legal_requests; v_num integer; v_id uuid; v_manifest jsonb;
+declare r public.legal_requests; v_num integer; v_id uuid; v_manifest jsonb; v_charges jsonb; v_targets jsonb;
 begin
   select * into r from public.legal_requests where id = p_request for update;
   select coalesce(max(version_number), 0) + 1 into v_num
@@ -24801,6 +25541,18 @@ begin
          '[]'::jsonb)
     into v_manifest
     from public.legal_request_exhibits e where e.legal_request_id = p_request;
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'case_charge_id', c.case_charge_id, 'code', c.snap_code, 'offense', c.snap_offense,
+           'class', c.snap_charge_class, 'title', c.snap_penal_title, 'counts', c.counts)
+           order by c.snap_code nulls last, c.created_at), '[]'::jsonb)
+    into v_charges
+    from public.legal_request_charges c where c.legal_request_id = p_request;
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'target_key', d.target_key, 'exhibit_id', d.exhibit_id, 'decision', d.decision,
+           'reasoning', d.reasoning) order by d.decided_at, d.target_key), '[]'::jsonb)
+    into v_targets
+    from public.legal_request_target_decisions d
+   where d.legal_request_id = p_request and d.version_id is null;
   insert into public.legal_request_versions
     (legal_request_id, version_number, form_data, narrative, packet_manifest,
      created_by, submitted_stage, content_hash, change_summary, returned_from)
@@ -24811,15 +25563,32 @@ begin
             '_person_id', r.person_id, '_person_name', r.person_name_snapshot,
             '_recipient_type', r.recipient_type, '_recipient_name', r.recipient_name,
             '_case_number', r.case_number_snapshot, '_case_title', r.case_title_snapshot,
-            '_responsible_bureau', r.responsible_bureau),
+            '_responsible_bureau', r.responsible_bureau,
+            '_charges', v_charges)
+          || case when v_targets <> '[]'::jsonb then jsonb_build_object('_target_decisions', v_targets) else '{}'::jsonb end,
           r.narrative, v_manifest, coalesce((select auth.uid()), r.created_by), p_stage,
-          md5(coalesce(r.form_data::text, '') || coalesce(r.narrative, '') || v_manifest::text),
+          md5(coalesce(r.form_data::text, '') || coalesce(r.narrative, '') || v_manifest::text || v_charges::text),
           nullif(btrim(coalesce(p_change_summary, '')), ''),
           case when r.review_status like 'returned_by_%' then r.review_status end)
   returning id into v_id;
   update public.legal_requests set current_version_id = v_id where id = p_request;
+  update public.legal_request_target_decisions set version_id = v_id
+   where legal_request_id = p_request and version_id is null;
   return v_id;
 end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.legal_is_command_authority(p_request uuid, p_user uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select p_user is not null and (
+    private.can_approve_legal(p_request, p_user)
+    or coalesce(private.justice_role_effective(p_user) = 'attorney_general', false)
+    or private.owner_flag(p_user))
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION private.legal_is_conflicted(p_request uuid, p_user uuid)
@@ -24896,6 +25665,18 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.legal_judges()
+ RETURNS uuid[]
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce(array_agg(m.user_id), '{}'::uuid[]) from public.justice_memberships m
+    join public.profiles p on p.id = m.user_id and p.removed_at is null
+   where private.justice_role_of(m.user_id) = 'judge'
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.legal_log(p_request uuid, p_version uuid, p_action text, p_from text, p_to text, p_public text, p_internal text)
  RETURNS void
  LANGUAGE sql
@@ -24906,6 +25687,33 @@ AS $function$
     (legal_request_id, version_id, actor_id, action, from_status, to_status, public_note, internal_note)
   values (p_request, p_version, (select auth.uid()), p_action, p_from, p_to,
           nullif(btrim(coalesce(p_public, '')), ''), nullif(btrim(coalesce(p_internal, '')), ''))
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.legal_log_id(p_request uuid, p_version uuid, p_action text, p_from text, p_to text, p_public text, p_internal text)
+ RETURNS uuid
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  insert into public.legal_request_actions
+    (legal_request_id, version_id, actor_id, action, from_status, to_status, public_note, internal_note)
+  values (p_request, p_version, (select auth.uid()), p_action, p_from, p_to,
+          nullif(btrim(coalesce(p_public, '')), ''), nullif(btrim(coalesce(p_internal, '')), ''))
+  returning id
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.legal_log_system(p_request uuid, p_action text, p_note text)
+ RETURNS void
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  insert into public.legal_request_actions
+    (legal_request_id, version_id, actor_id, action, public_note)
+  select r.id, r.current_version_id, null, p_action, nullif(btrim(coalesce(p_note, '')), '')
+    from public.legal_requests r where r.id = p_request
 $function$
 ;
 
@@ -24937,6 +25745,227 @@ begin
       'request_type', r.request_type, 'title', r.title,
       'reason', p_reason, 'actor_id', v_actor, 'actor_name', v_actor_name) || coalesce(p_extra, '{}'::jsonb));
   end if;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.legal_notify_judges(p_request uuid, p_reason text)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare r public.legal_requests; rec record; v_n integer := 0; v_ags integer := 0; v_siu boolean;
+begin
+  select * into r from public.legal_requests where id = p_request;
+  v_siu := private.legal_is_siu(p_request);
+  if r.classification <> 'sealed' then
+    for rec in
+      select m.user_id from public.justice_memberships m
+       where private.justice_role_of(m.user_id) = 'judge'
+    loop
+      v_n := v_n + 1;
+      perform private.legal_notify(rec.user_id, p_request, 'legal_request', p_reason);
+    end loop;
+  end if;
+  if r.classification = 'sealed' or v_siu then
+    for rec in
+      select p.id from public.profiles p
+       where coalesce(private.justice_role_effective(p.id) = 'attorney_general', false)
+    loop
+      v_ags := v_ags + 1;
+      perform private.legal_notify(rec.id, p_request, 'legal_request',
+        case when r.classification = 'sealed'
+             then 'A sealed ' || r.request_type || ' request awaits your judicial assignment.'
+             else 'An SIB ' || r.request_type || ' request entered the judicial queue.' end);
+    end loop;
+    if v_ags = 0 and r.classification = 'sealed' then
+      for rec in select p.id from public.profiles p where p.is_owner and p.removed_at is null loop
+        perform private.legal_notify(rec.id, p_request, 'legal_coverage',
+          'A sealed legal request awaits judicial assignment, and no Attorney General is seated.');
+      end loop;
+      perform private.legal_audit(p_request, 'LEGAL_AG_UNCOVERED', jsonb_build_object('stage', 'submitted_to_judge'));
+    end if;
+  end if;
+  return v_n;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.legal_notify_system(p_user uuid, p_request uuid, p_kind text, p_reason text, p_extra jsonb DEFAULT '{}'::jsonb)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare r public.legal_requests; v_creator_test boolean; v_target_test boolean;
+begin
+  if p_user is null then return false; end if;
+  select * into r from public.legal_requests where id = p_request;
+  if not found then return false; end if;
+  if not exists (select 1 from public.profiles p where p.id = p_user and p.removed_at is null) then
+    return false;
+  end if;
+  v_creator_test := private.is_test_user(r.created_by)
+    or exists (select 1 from auth.users u where u.id = r.created_by and u.email like 'rls-test-%@cidportal.test');
+  v_target_test := private.is_test_user(p_user)
+    or exists (select 1 from auth.users u where u.id = p_user and u.email like 'rls-test-%@cidportal.test');
+  if v_creator_test and not v_target_test then return false; end if;
+  if r.classification = 'sealed' then
+    insert into public.notifications (user_id, type, payload)
+    values (p_user, p_kind, jsonb_build_object(
+      'request_id', p_request, 'sealed', true, 'system', true,
+      'reason', 'A sealed legal request requires your attention.'));
+  else
+    insert into public.notifications (user_id, type, payload)
+    values (p_user, p_kind, jsonb_build_object(
+      'request_id', p_request, 'request_number', r.request_number,
+      'request_type', r.request_type, 'title', r.title,
+      'reason', p_reason, 'system', true) || coalesce(p_extra, '{}'::jsonb));
+  end if;
+  return true;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.legal_owners()
+ RETURNS uuid[]
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce(array_agg(p.id), '{}'::uuid[]) from public.profiles p
+   where p.is_owner and p.removed_at is null
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.legal_reminder_sweep()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare rec record; u uuid; v_recips uuid[]; v_sent uuid[]; v_stage_label text;
+        n_nudged integer := 0; n_escalated integer := 0; n_unissued integer := 0; n_expiring integer := 0;
+begin
+  -- 48 h nudge
+  for rec in
+    select r.* from public.legal_requests r
+     where r.review_status in ('cid_supervisor_review', 'siu_command_review', 'submitted_to_judge', 'judicial_review')
+       and r.stage_entered_at < now() - interval '48 hours'
+       and not exists (select 1 from public.legal_request_reminders x
+                        where x.legal_request_id = r.id and x.kind = 'nudge' and x.stage = r.review_status)
+     order by r.stage_entered_at
+     limit 200
+  loop
+    v_stage_label := replace(rec.review_status, '_', ' ');
+    v_recips := private.legal_stage_responsible(rec.id);
+    v_sent := '{}';
+    foreach u in array coalesce(v_recips, '{}'::uuid[]) loop
+      if u = any(v_sent) then continue; end if;
+      if private.legal_notify_system(u, rec.id, 'legal_nudge',
+           'The ' || rec.request_type || ' request ' || rec.request_number
+           || ' has been awaiting action (' || v_stage_label || ') for over 48 hours.',
+           jsonb_build_object('stage', rec.review_status)) then
+        v_sent := v_sent || u;
+      end if;
+    end loop;
+    insert into public.legal_request_reminders (legal_request_id, kind, stage, recipients)
+    values (rec.id, 'nudge', rec.review_status, v_sent);
+    update public.legal_requests set nudged_at = now() where id = rec.id;
+    perform private.legal_log_system(rec.id, 'nudged',
+      'Reminder sent after 48 hours awaiting ' || v_stage_label);
+    perform private.legal_audit_system(rec.id, 'LEGAL_REMINDED', jsonb_build_object(
+      'kind', 'nudge', 'stage', rec.review_status, 'recipients', to_jsonb(v_sent),
+      'stage_entered_at', rec.stage_entered_at));
+    n_nudged := n_nudged + 1;
+  end loop;
+
+  -- 5 d escalation
+  for rec in
+    select r.* from public.legal_requests r
+     where r.review_status in ('cid_supervisor_review', 'siu_command_review', 'submitted_to_judge', 'judicial_review')
+       and r.stage_entered_at < now() - interval '5 days'
+       and not exists (select 1 from public.legal_request_reminders x
+                        where x.legal_request_id = r.id and x.kind = 'escalate' and x.stage = r.review_status)
+     order by r.stage_entered_at
+     limit 200
+  loop
+    v_stage_label := replace(rec.review_status, '_', ' ');
+    v_recips := coalesce(private.legal_stage_escalation(rec.id), '{}'::uuid[]) || rec.created_by;
+    v_sent := '{}';
+    foreach u in array v_recips loop
+      if u = any(v_sent) then continue; end if;
+      if private.legal_notify_system(u, rec.id, 'legal_escalated',
+           'The ' || rec.request_type || ' request ' || rec.request_number
+           || ' has been awaiting action (' || v_stage_label || ') for over 5 days.',
+           jsonb_build_object('stage', rec.review_status)) then
+        v_sent := v_sent || u;
+      end if;
+    end loop;
+    insert into public.legal_request_reminders (legal_request_id, kind, stage, recipients)
+    values (rec.id, 'escalate', rec.review_status, v_sent);
+    update public.legal_requests set escalated_at = now() where id = rec.id;
+    perform private.legal_log_system(rec.id, 'escalated',
+      'Escalated after 5 days awaiting ' || v_stage_label);
+    perform private.legal_audit_system(rec.id, 'LEGAL_ESCALATED', jsonb_build_object(
+      'stage', rec.review_status, 'recipients', to_jsonb(v_sent),
+      'stage_entered_at', rec.stage_entered_at));
+    n_escalated := n_escalated + 1;
+  end loop;
+
+  -- approved but never issued (> 7 d)
+  for rec in
+    select r.* from public.legal_requests r
+     where r.review_status in ('approved', 'partially_approved')
+       and r.fulfilment_status = 'unissued'
+       and r.decided_at < now() - interval '7 days'
+       and not exists (select 1 from public.legal_request_reminders x
+                        where x.legal_request_id = r.id and x.kind = 'unissued' and x.stage = r.review_status)
+     order by r.decided_at
+     limit 200
+  loop
+    v_sent := '{}';
+    if private.legal_notify_system(rec.created_by, rec.id, 'legal_unissued',
+         'Your approved ' || rec.request_type || ' request ' || rec.request_number
+         || ' has not been issued for 7 days.') then
+      v_sent := v_sent || rec.created_by;
+    end if;
+    insert into public.legal_request_reminders (legal_request_id, kind, stage, recipients)
+    values (rec.id, 'unissued', rec.review_status, v_sent);
+    perform private.legal_audit_system(rec.id, 'LEGAL_REMINDED', jsonb_build_object(
+      'kind', 'unissued', 'recipients', to_jsonb(v_sent), 'decided_at', rec.decided_at));
+    n_unissued := n_unissued + 1;
+  end loop;
+
+  -- issued warrant expiring inside 72 h
+  for rec in
+    select r.* from public.legal_requests r
+     where r.request_type = 'warrant' and r.fulfilment_status = 'issued'
+       and r.expires_at is not null
+       and r.expires_at > now() and r.expires_at <= now() + interval '72 hours'
+       and not exists (select 1 from public.legal_request_reminders x
+                        where x.legal_request_id = r.id and x.kind = 'expiring' and x.stage = 'issued')
+     order by r.expires_at
+     limit 200
+  loop
+    v_recips := array[rec.created_by] || rec.issued_by;
+    v_sent := '{}';
+    foreach u in array v_recips loop
+      if u is null or u = any(v_sent) then continue; end if;
+      if private.legal_notify_system(u, rec.id, 'legal_expiring',
+           'The ' || replace(rec.subtype, '_', ' ') || ' ' || rec.request_number || ' expires '
+           || to_char(rec.expires_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI') || ' UTC.',
+           jsonb_build_object('expires_at', rec.expires_at)) then
+        v_sent := v_sent || u;
+      end if;
+    end loop;
+    insert into public.legal_request_reminders (legal_request_id, kind, stage, recipients)
+    values (rec.id, 'expiring', 'issued', v_sent);
+    perform private.legal_audit_system(rec.id, 'LEGAL_REMINDED', jsonb_build_object(
+      'kind', 'expiring', 'recipients', to_jsonb(v_sent), 'expires_at', rec.expires_at));
+    n_expiring := n_expiring + 1;
+  end loop;
+
+  return jsonb_build_object('nudged', n_nudged, 'escalated', n_escalated,
+                            'unissued', n_unissued, 'expiring', n_expiring);
 end $function$
 ;
 
@@ -24991,6 +26020,28 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.legal_revision_items_add(p_request uuid, p_action uuid, p_items jsonb)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_n integer := 0; x jsonb;
+begin
+  if p_items is null or jsonb_typeof(p_items) <> 'array' then return 0; end if;
+  for x in select * from jsonb_array_elements(p_items) loop
+    if jsonb_typeof(x) <> 'object' then raise exception 'each revision item must be an object'; end if;
+    if btrim(coalesce(x->>'note', '')) = '' then continue; end if;
+    insert into public.legal_request_revision_items
+      (legal_request_id, action_id, field, note, created_by)
+    values (p_request, p_action, left(nullif(btrim(coalesce(x->>'field', '')), ''), 80),
+            left(btrim(x->>'note'), 2000), (select auth.uid()));
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.legal_sign(p_request uuid, p_version uuid, p_action text, p_signature text)
  RETURNS void
  LANGUAGE plpgsql
@@ -25007,6 +26058,100 @@ begin
      signer_role_snapshot, signature, action)
   values (p_request, p_version, v_uid, coalesce(v_name, 'Unknown'), coalesce(v_role, 'unknown'),
           coalesce(nullif(btrim(coalesce(p_signature, '')), ''), coalesce(v_name, 'Signed')), p_action);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.legal_stage_clock()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if new.review_status is distinct from old.review_status then
+    new.stage_entered_at := now();
+    new.nudged_at := null;
+    new.escalated_at := null;
+  end if;
+  return new;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.legal_stage_escalation(p_request uuid)
+ RETURNS uuid[]
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select case r.review_status
+           when 'cid_supervisor_review' then private.legal_directors()
+           when 'siu_command_review'    then private.legal_attorneys_general()
+           when 'submitted_to_judge'    then private.legal_attorneys_general() || private.legal_owners()
+           when 'judicial_review'       then private.legal_attorneys_general() || private.legal_owners()
+           else '{}'::uuid[] end
+    from public.legal_requests r where r.id = p_request
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.legal_stage_responsible(p_request uuid)
+ RETURNS uuid[]
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare r public.legal_requests; v_jtf boolean; v_out uuid[] := '{}';
+begin
+  select * into r from public.legal_requests where id = p_request;
+  if not found then return v_out; end if;
+  if r.review_status = 'cid_supervisor_review' then
+    select c.bureau = 'JTF' into v_jtf from public.cases c where c.id = r.case_id;
+    select coalesce(array_agg(p.id), '{}'::uuid[]) into v_out from public.profiles p
+     where p.active and p.removed_at is null and p.role = 'bureau_lead'
+       and (coalesce(v_jtf, false) or p.division = r.responsible_bureau);
+    if coalesce(array_length(v_out, 1), 0) = 0 then v_out := private.legal_directors(); end if;
+  elsif r.review_status = 'siu_command_review' then
+    -- The same reviewer set submit_legal_request_to_cid told: recused SACs
+    -- and, on a compartmented case, SACs outside the compartment never hear
+    -- of the request — not at submission, not from a reminder.
+    select coalesce(array_agg(m.user_id), '{}'::uuid[]) into v_out
+      from public.siu_memberships m
+      join public.profiles p on p.id = m.user_id
+      join public.cases c on c.id = r.case_id
+     where m.active and m.ended_at is null and not m.oversight_only
+       and m.siu_role = 'special_agent_in_charge'
+       and p.removed_at is null
+       and m.user_id <> r.created_by
+       and not private.siu_recused(r.case_id, m.user_id)
+       and (coalesce(c.siu_classification, 'siu') <> 'siu_compartmented'
+            or exists (select 1 from public.siu_compartment_members k
+                        where k.case_id = r.case_id and k.user_id = m.user_id
+                          and k.revoked_at is null));
+  elsif r.review_status = 'submitted_to_judge' then
+    v_out := case when r.classification = 'sealed' then private.legal_attorneys_general()
+                  else private.legal_judges() end;
+  elsif r.review_status = 'judicial_review' then
+    v_out := case when r.assigned_judge_id is null then '{}'::uuid[] else array[r.assigned_judge_id] end;
+  end if;
+  return v_out;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.legal_sweep_job()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_run bigint; v_out jsonb;
+begin
+  v_run := private.job_begin('legal_sweep');
+  begin
+    v_out := jsonb_build_object('reminders', private.legal_reminder_sweep(),
+                                'expiry', private.legal_expiry_sweep());
+    perform private.job_end(v_run, 'succeeded', v_out);
+  exception when others then
+    perform private.job_end(v_run, 'failed', jsonb_build_object('error', sqlerrm));
+    raise;
+  end;
 end $function$
 ;
 
@@ -25283,6 +26428,25 @@ AS $function$
       when 'read'    then private.can_view_legal_request(p_id, (select auth.uid()))
       when 'edit'    then private.can_edit_legal_draft(p_id, (select auth.uid()))
       when 'approve' then private.can_approve_legal(p_id, (select auth.uid()))
+      -- Phase 4 (P4-03 … P4-11): the request-side actions the dossier shows.
+      when 'comment'     then private.legal_can_comment(p_id, (select auth.uid()))
+      when 'set_charges' then private.can_edit_legal_draft(p_id, (select auth.uid()))
+      when 'decide'      then exists (select 1 from public.legal_requests r
+                                       where r.id = p_id and r.review_status = 'judicial_review'
+                                         and r.assigned_judge_id = (select auth.uid()))
+      when 'amend'       then private.can_amend_legal(p_id, (select auth.uid()))
+      when 'supersede'   then private.legal_is_command_authority(p_id, (select auth.uid()))
+                              and exists (select 1 from public.legal_requests r where r.id = p_id
+                                           and r.review_status in ('approved', 'partially_approved', 'denied', 'declined'))
+      when 'cancel'      then private.legal_is_command_authority(p_id, (select auth.uid()))
+                              and exists (select 1 from public.legal_requests r where r.id = p_id
+                                           and r.review_status not in ('approved', 'partially_approved', 'denied',
+                                                                       'withdrawn', 'declined', 'cancelled', 'superseded'))
+      when 'export'      then private.can_view_legal_request(p_id, (select auth.uid()))
+      when 'observe'     then private.can_set_legal_observer(p_id, (select auth.uid()))
+      when 'assign_judge' then private.can_manage_legal_assignment(p_id, (select auth.uid()))
+                              and exists (select 1 from public.legal_requests r where r.id = p_id
+                                           and r.review_status = 'submitted_to_judge')
       else false end
     when p_kind = 'case' and p_action in ('access', 'archive', 'unarchive', 'grant_access', 'delete_child', 'permanent_delete') then case p_action
       when 'access'       then private.can_access_case(p_id)
@@ -27485,9 +28649,15 @@ CREATE TRIGGER integration_sources_touch BEFORE UPDATE ON public.integration_sou
 CREATE TRIGGER trg_guard_justice_membership_request BEFORE UPDATE ON public.justice_membership_requests FOR EACH ROW EXECUTE FUNCTION private.guard_justice_membership_request();
 CREATE TRIGGER trg_touch_justice_membership_requests BEFORE UPDATE ON public.justice_membership_requests FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_touch_justice_memberships BEFORE UPDATE ON public.justice_memberships FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER legal_export_log_immutable BEFORE DELETE OR UPDATE ON public.legal_export_log FOR EACH ROW EXECUTE FUNCTION private.block_legal_immutable();
 CREATE TRIGGER legal_actions_immutable BEFORE DELETE OR UPDATE ON public.legal_request_actions FOR EACH ROW EXECUTE FUNCTION private.block_legal_immutable();
+CREATE TRIGGER legal_request_charges_audit AFTER INSERT OR DELETE OR UPDATE ON public.legal_request_charges FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER legal_comment_versions_immutable BEFORE DELETE OR UPDATE ON public.legal_request_comment_versions FOR EACH ROW EXECUTE FUNCTION private.block_legal_immutable();
+CREATE TRIGGER legal_request_comments_audit AFTER INSERT OR DELETE OR UPDATE ON public.legal_request_comments FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER legal_signatures_immutable BEFORE DELETE OR UPDATE ON public.legal_request_signatures FOR EACH ROW EXECUTE FUNCTION private.block_legal_immutable();
+CREATE TRIGGER legal_target_decisions_immutable BEFORE DELETE OR UPDATE ON public.legal_request_target_decisions FOR EACH ROW EXECUTE FUNCTION private.block_legal_immutable();
 CREATE TRIGGER legal_versions_immutable BEFORE DELETE OR UPDATE ON public.legal_request_versions FOR EACH ROW EXECUTE FUNCTION private.block_legal_immutable();
+CREATE TRIGGER legal_requests_stage_clock BEFORE UPDATE ON public.legal_requests FOR EACH ROW EXECUTE FUNCTION private.legal_stage_clock();
 CREATE TRIGGER legal_requests_version AFTER UPDATE ON public.legal_requests FOR EACH ROW EXECUTE FUNCTION private.version_row('legal_draft');
 CREATE TRIGGER trg_touch_legal_requests BEFORE UPDATE ON public.legal_requests FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_touch_mdt_projections BEFORE UPDATE ON public.mdt_wanted_projections FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -28454,6 +29624,14 @@ create policy jm_sel on public.justice_memberships
   as permissive for select to authenticated
   using (((user_id = ( SELECT auth.uid() AS uid)) OR (private.justice_role() IS NOT NULL) OR private.is_command() OR private.is_owner()));
 
+create policy led_sel on public.legal_expiry_defaults
+  as permissive for select to authenticated
+  using ((private.is_active() OR (private.justice_role() IS NOT NULL) OR private.is_owner()));
+
+create policy lel_sel on public.legal_export_log
+  as permissive for select to authenticated
+  using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
+
 create policy legal_holds_select on public.legal_holds
   as permissive for select to authenticated
   using ((private.is_command() OR ((case_id IS NOT NULL) AND private.can_access_case(case_id)) OR ((legal_request_id IS NOT NULL) AND (EXISTS ( SELECT 1
@@ -28461,6 +29639,20 @@ create policy legal_holds_select on public.legal_holds
   WHERE ((lr.id = legal_holds.legal_request_id) AND private.can_access_case(lr.case_id)))))));
 
 create policy lra_sel on public.legal_request_actions
+  as permissive for select to authenticated
+  using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
+
+create policy lrc_sel on public.legal_request_charges
+  as permissive for select to authenticated
+  using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
+
+create policy lrcv_sel on public.legal_request_comment_versions
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM legal_request_comments c
+  WHERE ((c.id = legal_request_comment_versions.comment_id) AND private.can_view_legal_request(c.legal_request_id, ( SELECT auth.uid() AS uid))))));
+
+create policy lrcm_sel on public.legal_request_comments
   as permissive for select to authenticated
   using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
 
@@ -28472,7 +29664,19 @@ create policy lrp_sel on public.legal_request_participants
   as permissive for select to authenticated
   using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
 
+create policy lrr_sel on public.legal_request_reminders
+  as permissive for select to authenticated
+  using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
+
+create policy lrri_sel on public.legal_request_revision_items
+  as permissive for select to authenticated
+  using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
+
 create policy lrs_sel on public.legal_request_signatures
+  as permissive for select to authenticated
+  using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
+
+create policy lrtd_sel on public.legal_request_target_decisions
   as permissive for select to authenticated
   using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
 
@@ -29603,6 +30807,7 @@ create policy wl_sel on public.watchlist
 --   public.indicators
 --   public.justice_membership_requests
 --   public.justice_memberships
+--   public.legal_request_comments
 --   public.legal_requests
 --   public.media
 --   public.membership_requests
@@ -29734,11 +30939,19 @@ create policy wl_sel on public.watchlist
 --   justice_membership_request_history -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   justice_membership_requests -> authenticated: DELETE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   justice_memberships -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   legal_expiry_defaults -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   legal_export_log -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   legal_holds -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   legal_request_actions -> service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   legal_request_charges -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   legal_request_comment_versions -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   legal_request_comments -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   legal_request_exhibits -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   legal_request_participants -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   legal_request_reminders -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   legal_request_revision_items -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   legal_request_signatures -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   legal_request_target_decisions -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   legal_request_versions -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   legal_requests -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   legal_seized_items -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -29968,6 +31181,7 @@ create policy wl_sel on public.watchlist
 --   private.can_access_case(cid uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.can_access_case_number(cn text): default (PUBLIC)
 --   private.can_access_case_row(p_bureau bureau, p_lead uuid, p_created_by uuid, p_cid uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.can_amend_legal(p_request uuid, p_user uuid): {postgres=X/postgres}
 --   private.can_announce(): default (PUBLIC)
 --   private.can_approve_document(p_category text, p_class text): default (PUBLIC)
 --   private.can_approve_legal(p_request uuid, p_user uuid): {postgres=X/postgres}
@@ -30003,6 +31217,7 @@ create policy wl_sel on public.watchlist
 --   private.can_review_as_da(p_request uuid, p_user uuid): default (PUBLIC)
 --   private.can_review_as_judge(p_request uuid, p_user uuid): default (PUBLIC)
 --   private.can_review_justice_role(p_reviewer uuid, p_role text): {postgres=X/postgres,authenticated=X/postgres}
+--   private.can_set_legal_observer(p_request uuid, p_user uuid): {postgres=X/postgres}
 --   private.can_view_document(p_class text, p_owner uuid): {postgres=X/postgres}
 --   private.can_view_legal_request(p_request uuid, p_user uuid): {postgres=X/postgres,authenticated=X/postgres}
 --   private.case_charge_before_insert(): default (PUBLIC)
@@ -30088,19 +31303,39 @@ create policy wl_sel on public.watchlist
 --   private.justice_role_effective(p_user uuid): {postgres=X/postgres,authenticated=X/postgres}
 --   private.justice_role_of(p_user uuid): {postgres=X/postgres,authenticated=X/postgres}
 --   private.legal_add_participant(p_request uuid, p_user uuid, p_role text): default (PUBLIC)
+--   private.legal_attorneys_general(): {postgres=X/postgres}
 --   private.legal_audit(p_request uuid, p_action text, p_detail jsonb): default (PUBLIC)
+--   private.legal_audit_system(p_request uuid, p_action text, p_detail jsonb): {postgres=X/postgres}
+--   private.legal_can_comment(p_request uuid, p_user uuid): {postgres=X/postgres}
 --   private.legal_capacity(p_user uuid, p_capacity text): {postgres=X/postgres}
 --   private.legal_default_classification(p_type text, p_subtype text): default (PUBLIC)
 --   private.legal_default_route(p_type text, p_subtype text): default (PUBLIC)
+--   private.legal_denied(p_action text, p_request uuid, p_reason text, p_message text): {postgres=X/postgres}
+--   private.legal_directors(): {postgres=X/postgres}
 --   private.legal_end_participant(p_request uuid, p_user uuid, p_role text): default (PUBLIC)
+--   private.legal_expiry_sweep(): {postgres=X/postgres}
+--   private.legal_form_public(p_form jsonb): {postgres=X/postgres}
 --   private.legal_freeze_version(p_request uuid, p_stage text, p_change_summary text): {postgres=X/postgres}
+--   private.legal_is_command_authority(p_request uuid, p_user uuid): {postgres=X/postgres}
 --   private.legal_is_conflicted(p_request uuid, p_user uuid): {postgres=X/postgres,authenticated=X/postgres}
 --   private.legal_is_prosecution_side(p_request uuid, p_user uuid): {postgres=X/postgres}
 --   private.legal_is_siu(p_request uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.legal_judges(): {postgres=X/postgres}
 --   private.legal_log(p_request uuid, p_version uuid, p_action text, p_from text, p_to text, p_public text, p_internal text): default (PUBLIC)
+--   private.legal_log_id(p_request uuid, p_version uuid, p_action text, p_from text, p_to text, p_public text, p_internal text): {postgres=X/postgres}
+--   private.legal_log_system(p_request uuid, p_action text, p_note text): {postgres=X/postgres}
 --   private.legal_notify(p_user uuid, p_request uuid, p_kind text, p_reason text, p_extra jsonb): default (PUBLIC)
+--   private.legal_notify_judges(p_request uuid, p_reason text): {postgres=X/postgres}
+--   private.legal_notify_system(p_user uuid, p_request uuid, p_kind text, p_reason text, p_extra jsonb): {postgres=X/postgres}
+--   private.legal_owners(): {postgres=X/postgres}
+--   private.legal_reminder_sweep(): {postgres=X/postgres}
 --   private.legal_resolve_bureau(p_case uuid): {postgres=X/postgres}
+--   private.legal_revision_items_add(p_request uuid, p_action uuid, p_items jsonb): {postgres=X/postgres}
 --   private.legal_sign(p_request uuid, p_version uuid, p_action text, p_signature text): default (PUBLIC)
+--   private.legal_stage_clock(): {postgres=X/postgres}
+--   private.legal_stage_escalation(p_request uuid): {postgres=X/postgres}
+--   private.legal_stage_responsible(p_request uuid): {postgres=X/postgres}
+--   private.legal_sweep_job(): {postgres=X/postgres}
 --   private.mdt_project(p_request uuid, p_status text): default (PUBLIC)
 --   private.mr_history(p_request uuid, p_action text, p_from text, p_to text, p_note text, p_internal boolean): default (PUBLIC)
 --   private.next_field_submission_no(): {postgres=X/postgres}
@@ -30118,7 +31353,7 @@ create policy wl_sel on public.watchlist
 --   private.perm_case_access(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.perm_case_read(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.perm_deny(p_action text, p_kind text, p_id uuid, p_reason text, p_source text): {postgres=X/postgres,service_role=X/postgres}
---   private.perm_dispatch(p_action text, p_kind text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.perm_dispatch(p_action text, p_kind text, p_id uuid): {postgres=X/postgres,service_role=X/postgres}
 --   private.perm_doj_role(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.perm_is_active(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.perm_is_command(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -30263,7 +31498,7 @@ create policy wl_sel on public.watchlist
 --   public.create_legal_request(p_case uuid, p_request_type text, p_subtype text, p_title text, p_priority text, p_form jsonb, p_narrative text, p_person uuid, p_recipient_type text, p_recipient_name text, p_source_report uuid, p_classification text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.create_notification(p_user_id uuid, p_type text, p_payload jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.decide_document_suggestion(p_suggestion uuid, p_status text, p_note text, p_assigned_editor uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
---   public.decide_legal_request_as_judge(p_request uuid, p_decision text, p_note text, p_conditions text, p_expires_at timestamp with time zone, p_signature text): {postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}
+--   public.decide_legal_request_as_judge(p_request uuid, p_decision text, p_note text, p_conditions text, p_expires_at timestamp with time zone, p_signature text, p_target_decisions jsonb, p_revision_items jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.decide_narcotic_suggestion(p_suggestion uuid, p_status text, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.deny_member_login(p_target uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.document_ack_summary(p_document uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -30273,7 +31508,7 @@ create policy wl_sel on public.watchlist
 --   public.document_sections_index(p_document uuid, p_headings jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.document_sections_stale(p_document uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.document_workflow(p_document uuid, p_action text, p_reason text, p_effective_at timestamp with time zone, p_replacement uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
---   public.doj_bureau_coverage(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.doj_bureau_coverage(): {postgres=X/postgres,service_role=X/postgres}
 --   public.end_ada_bureau_assignment(p_assignment uuid, p_note text): {postgres=X/postgres,service_role=X/postgres}
 --   public.end_field_officer(p_user uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.entity_crossref(p_kind text, p_id uuid, p_limit integer, p_q text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -30338,25 +31573,35 @@ create policy wl_sel on public.watchlist
 --   public.joint_case_remove_member(p_case uuid, p_officer uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.justice_appoint(p_user uuid, p_role text, p_reason text, p_bureau bureau): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.justice_directory(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
---   public.justice_end_coverage(p_coverage uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.justice_end_coverage(p_coverage uuid, p_reason text): {postgres=X/postgres,service_role=X/postgres}
 --   public.justice_membership_request_submit(p_request uuid): {postgres=X/postgres,service_role=X/postgres}
 --   public.justice_membership_request_withdraw(p_request uuid): {postgres=X/postgres,service_role=X/postgres}
 --   public.justice_migration_review(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
---   public.justice_set_coverage(p_user uuid, p_bureau bureau, p_reason text, p_expires_at timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.justice_set_coverage(p_user uuid, p_bureau bureau, p_reason text, p_expires_at timestamp with time zone): {postgres=X/postgres,service_role=X/postgres}
+--   public.legal_add_evidence_and_exhibit(p_request uuid, p_title text, p_type media_type, p_external_url text, p_category text, p_rationale text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.legal_admin_cancel(p_request uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
---   public.legal_assign_prosecutor(p_request uuid, p_prosecutor uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
---   public.legal_claim_prosecutor(p_request uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.legal_amend(p_request uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.legal_assign_prosecutor(p_request uuid, p_prosecutor uuid, p_reason text): {postgres=X/postgres,service_role=X/postgres}
+--   public.legal_claim_prosecutor(p_request uuid): {postgres=X/postgres,service_role=X/postgres}
+--   public.legal_comment(p_request uuid, p_body text, p_parent uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.legal_comment_delete(p_comment uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.legal_comment_edit(p_comment uuid, p_body text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.legal_hold_lift(p_hold uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.legal_hold_place(p_case uuid, p_legal_request uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.legal_internal_notes(p_request uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.legal_mark_superseded(p_old uuid, p_new uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.legal_record_export(p_request uuid, p_format text, p_kind text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.legal_request_case_brief(p_request uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.legal_request_people(p_request uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
---   public.legal_return_to_prosecutor_queue(p_request uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.legal_return_to_prosecutor_queue(p_request uuid, p_reason text): {postgres=X/postgres,service_role=X/postgres}
+--   public.legal_revision_resolve(p_item uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.legal_search(q text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.legal_seized_item_add(p_request uuid, p_item text, p_quantity text, p_category text, p_evidence uuid, p_person uuid, p_vehicle uuid, p_notes text, p_evidence_bag text, p_storage_location text, p_media uuid, p_report uuid, p_disposition text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.legal_seized_item_remove(p_item uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.legal_seized_item_set_disposition(p_item uuid, p_disposition text, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.legal_set_charges(p_request uuid, p_items jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.legal_set_observer(p_request uuid, p_user uuid, p_active boolean, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.legal_sweep_run(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.link_document_suggestion_implementation(p_suggestion uuid, p_version uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.log_restricted_view(p_entity_type text, p_entity uuid, p_action text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.mark_document_suggestion_duplicate(p_suggestion uuid, p_original uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -30429,9 +31674,9 @@ create policy wl_sel on public.watchlist
 --   public.review_justice_membership_request(p_request uuid, p_decision text, p_final_agency text, p_final_role text, p_applicant_note text, p_internal_note text): {postgres=X/postgres,service_role=X/postgres}
 --   public.review_legal_request_as_ada(p_request uuid, p_decision text, p_note text, p_judge uuid, p_signature text): {postgres=X/postgres,service_role=X/postgres}
 --   public.review_legal_request_as_ag(p_request uuid, p_decision text, p_note text, p_signature text): {postgres=X/postgres,service_role=X/postgres}
---   public.review_legal_request_as_cid(p_request uuid, p_decision text, p_note text, p_override_reason text, p_signature text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.review_legal_request_as_cid(p_request uuid, p_decision text, p_note text, p_override_reason text, p_signature text, p_revision_items jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.review_legal_request_as_da(p_request uuid, p_decision text, p_note text, p_signature text): {postgres=X/postgres,service_role=X/postgres}
---   public.review_legal_request_as_prosecutor(p_request uuid, p_decision text, p_note text, p_signature text, p_capacity text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.review_legal_request_as_prosecutor(p_request uuid, p_decision text, p_note text, p_signature text, p_capacity text): {postgres=X/postgres,service_role=X/postgres}
 --   public.review_membership_request(p_request uuid, p_decision text, p_final_bureau bureau, p_final_role app_role, p_applicant_note text, p_internal_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.rls_test_cleanup(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.rls_test_cleanup_visibility(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}

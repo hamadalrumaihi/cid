@@ -12,13 +12,13 @@ import { justiceRoleLabel, type LegalExhibit, type LegalRequest, type LegalSigna
 import { humanize } from '@/lib/legalWorkflow'
 import type { PacketManifestEntry } from '@/lib/schemas'
 import { safeUrl } from '@/lib/safeUrl'
-import { toast } from '@/lib/toast'
+import { humanizeError, toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { uiConfirm } from '@/components/ui/dialog'
 import { RelatedRecordPicker, type RecordSource } from '@/components/shared/RelatedRecordPicker'
 import { SignatureViewer, type SignatureItem } from '@/components/shared/SignatureViewer'
-import type { CaseRecords } from './dossierShared'
+import { exhibitSources, type CaseRecords } from './dossierShared'
 
 /** Slim projection of a request that references this one (reverse lookup —
  *  only what the chip renders; the parent fetch is RLS-trimmed). */
@@ -47,7 +47,7 @@ export function SupportingSection({ r, exhibits, signatures, versions, editable,
     const ok = await uiConfirm(`Remove “${e.display_title}” from the packet?`, { title: 'Remove exhibit', confirmText: 'Remove' })
     if (!ok) return
     const res = await rpc('remove_legal_exhibit', { p_exhibit: e.id })
-    if (res.error) toast(res.error.message, 'danger')
+    if (res.error) toast(humanizeError(res.error.message), 'danger')
     else { toast('Exhibit removed.', 'info'); onChanged() }
   }
 
@@ -166,16 +166,11 @@ function ExhibitPickers({ r, records, onAdded }: { r: LegalRequest; records: Cas
       p_request: r.id, p_type: type, p_source_id: sourceId ?? undefined,
       p_title: title, p_meta: meta ?? {},
     })
-    if (res.error) toast(res.error.message, 'danger')
+    if (res.error) toast(humanizeError(res.error.message), 'danger')
     else { toast('Exhibit added.', 'success'); onAdded() }
   }
 
-  const sources: RecordSource[] = [
-    { kind: 'evidence', label: 'Evidence', options: (records?.evidence ?? []).map((e) => ({ id: e.id, label: `${e.item_code ?? ''} ${e.description ?? e.type ?? 'Evidence'}`.trim() })) },
-    { kind: 'attachment', label: 'Attachments', options: (records?.files ?? []).map((f) => ({ id: f.id, label: f.name })) },
-    { kind: 'finalized_report', label: 'Finalized reports', options: (records?.reports ?? []).filter((x) => x.finalized).map((x) => ({ id: x.id, label: `${x.template} report` })) },
-    { kind: 'case_media', label: 'Case media', options: (records?.media ?? []).map((m) => ({ id: m.id, label: m.title })) },
-  ]
+  const sources: RecordSource[] = exhibitSources(records)
 
   return (
     <Card pad="sm">

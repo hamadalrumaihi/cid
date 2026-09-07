@@ -121,7 +121,8 @@ const SIGNOFF_MEANING: Record<string, string> = {
  * amber; withdrawn → slate; everything else (queues, drafts) → accent. */
 export type LegalTone = 'slate' | 'amber' | 'emerald' | 'rose' | 'blue'
 export function legalReviewTone(status: string): LegalTone {
-  if (status === 'approved') return 'emerald'
+  // A partial approval (P4-07) is still an approval the creator can issue.
+  if (status === 'approved' || status === 'partially_approved') return 'emerald'
   if (status === 'denied' || status.startsWith('returned')) return 'rose'
   if (status.endsWith('_review') || status.startsWith('submitted')) return 'amber'
   if (status === 'withdrawn') return 'slate'

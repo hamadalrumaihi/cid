@@ -39,11 +39,17 @@ low-privilege test accounts and assert that the security wall holds:
 | `rls-test-director@cidportal.test` | **director**, major_crimes, active | Command Center: director keeps broad promote/transfer power |
 | `rls-test-target@cidportal.test` | detective, major_crimes, active | throwaway target the scoping tests promote/transfer and restore |
 | `rls-test-applicant@cidportal.test` | detective, major_crimes, **inactive** | disposable applicant for the membership approval-success path (activated by the test, deactivated + purged in teardown) |
-| `rls-test-ada-lsb / -ada-bcb / -ada-sab@cidportal.test` | active **ADA** (justice), no CID profile | bureau ADA coverage, routing precedence, packet isolation |
-| `rls-test-da@cidportal.test` | active **District Attorney** (justice) | ADA management, DA approval route, membership approvals |
-| `rls-test-ag@cidportal.test` | active **Attorney General** (justice) | AG approval route, DOJ-wide oversight |
-| `rls-test-judge / -judge2@cidportal.test` | active **Judge** (justice) | judicial decisions; judge2 stays unassigned to prove isolation |
-| `rls-test-justice@cidportal.test` | no justice membership | the justice applicant (onboarding → DA approval → deactivation) |
+| `rls-test-judge / -judge2@cidportal.test` | active **Judge** (`justice_memberships`: judiciary / judge), **no active CID profile** — not provisioned, issue #299 | judicial claim (atomic race), decisions incl. partial approval, the judge return fast lane; judge2 stays unassigned to prove isolation and cannot see a sealed assignment |
+| `rls-test-ag@cidportal.test` | active **Attorney General** (`justice_memberships`: doj / attorney_general), no active CID profile — not provisioned, issue #299 | AG oversight of every judge-submitted request (sealed included), `assign_judge` for sealed requests, comment / observer authority, never a decision |
+| `rls-test-justice@cidportal.test` | no membership at all | the first-login Gate (CID-only application form) in `tests/e2e/justice.spec.ts` |
+
+Retired with Portal Improvements P4-01 (the prosecutor stage is gone; Judge +
+Attorney General are the only justice roles): `rls-test-prosecutor` /
+`-prosecutor2` / `-ada-lsb` / `-ada-bcb` / `-ada-sab` / `-da` are **no longer
+needed** — suites that still name them (`v121`, `v140`, `v174`) self-skip and
+document historical surface. Provisioning contract for the three DOJ fixtures:
+[`docs/TEST-ENVIRONMENT.md`](../../docs/TEST-ENVIRONMENT.md#doj-fixture-roster-phase-4)
+and the header of `tests/rls/v163.test.ts`.
 
 Covered: bureau isolation (read, update, insert, child rows), deny-by-default
 for inactive accounts, the sign-off/finalize **lockdown triggers**, RPC caller
@@ -95,7 +101,46 @@ Newer server surface (2026-07-13 migrations):
   mentions clause. Created announcements carry a `[rls-test]` title marker
   and are deleted by their author in `afterAll`.
 
-### DOJ legal review (v1.13.0 — `tests/rls/legal.test.ts`)
+### Legal workflow, Phase 4 (`tests/rls/v186a` … `v186e`, `v163`, `legal.test.ts`)
+
+Portal Improvements P4-01 … P4-12 (migrations `20261024120000_legal_tables` →
+`20261027120000_legal_sweeps`) retired the prosecutor stage: a Bureau Lead
+approve lands in `submitted_to_judge`. The CID fixtures alone (lsb / bcb /
+lead / owner) prove the CID side; every judicial leg is `it.skipIf(!doj)` on
+the judge / AG passwords (issue #299).
+
+- **v186a** (P4-01 / P4-04): a warrant without `standard_of_proof` +
+  `pc_statement` is refused; approve → `submitted_to_judge` with
+  `submitted_to_judge_at` / `stage_entered_at` stamped and no decision; CID
+  actors can neither claim nor assign a judge; `justice_appoint('prosecutor')`
+  answers the retired-role message; the prosecutor RPCs are EXECUTE-revoked
+  (42501). DOJ legs: judge return → change summary required → fast lane back
+  to the judge (material change → CID gate); sealed = AG-assigned only, Owner
+  fallback, judge cannot even read it.
+- **v186b** (P4-03): `legal_set_charges` replaces the set with statute
+  snapshots; another case's charge refused; frozen after submit; bcb reads 0
+  rows; no client writes.
+- **v186c** (P4-05): creator + approver-pool comments, replies, author-only
+  edit with `legal_request_comment_versions`, delete blanks the body, sealed
+  `legal_comment` payloads carry `{request_id, sealed:true}` only and the
+  author is never paged; no client writes.
+- **v186d** (P4-07): `legal_request_target_decisions` RPC-only and hidden
+  from bcb; DOJ: all-denied refused, one denied target → `partially_approved`
+  with rows + `_target_decisions` frozen into the judicial version +
+  defaulted expiry; the creator issues; withdraw refused.
+- **v186e** (P4-10): `legal_sweep_run()` Owner-only, jsonb counts, an
+  immediate second run reports 0 new reminders; `legal_request_reminders` no
+  client write; `legal_expiry_defaults` readable (arrest 30 / search 14 /
+  subpoenas 14) and not writable; `stage_entered_at` trigger-maintained.
+- **v163** is now the judge-only walkthrough (two judges + AG): atomic claim
+  race, assigned-judge-only decision, judge / AG never issue, no direct
+  writes, AG assigns and never decides, deactivation requeues, sealed never on
+  the bench, prosecutor RPCs revoked for justice users, packet isolation.
+  **v165** keeps stages / evidence designation / case brief and only the
+  `justice_set_coverage` refusal. **legal.test.ts** asserts the queue hand-off
+  and runs its fulfilment chains behind the judge fixture.
+
+### DOJ legal review (v1.13.0 — `tests/rls/legal.test.ts`; historical model)
 
 37 assertions covering the DOJ Legal Review System (see
 `docs/DOJ-INTEGRATION.md`): justice identity separation (CID/DOJ/Judge never
@@ -124,8 +169,8 @@ purges fixture-authored documents / narcotics / gangs / places / vehicles /
 persons) means a crash can no longer leak into production. `v144` is the
 regression pin.
 
-The 13 justice fixture passwords (`RLS_TEST_PASSWORD_ADA_LSB/…/JUSTICE`) enable
-this suite; without them it skips. `tests/rls/auth.ts` adds a sign-in backoff so
+The justice fixture passwords (`RLS_TEST_PASSWORD_JUDGE / _JUDGE2 / _AG`,
+`_JUSTICE` for the Gate spec) enable the DOJ legs; without them they skip. `tests/rls/auth.ts` adds a sign-in backoff so
 authenticating ~20 fixtures per run doesn't trip GoTrue's per-IP burst limit.
 
 ### Security dashboard reporter (v1.14 — `tests/rls/securityReporter.ts`)
@@ -177,6 +222,9 @@ RLS_TEST_PASSWORD_LEAD=…    # optional — enables the Command Center scoping 
 RLS_TEST_PASSWORD_DIRECTOR=…
 RLS_TEST_PASSWORD_TARGET=…
 RLS_TEST_PASSWORD_APPLICANT=… # optional — enables the approval-success block
+RLS_TEST_PASSWORD_JUDGE=…     # optional — DOJ legs (judge); not provisioned, issue #299
+RLS_TEST_PASSWORD_JUDGE2=…    # optional — the second judge (v163 race)
+RLS_TEST_PASSWORD_AG=…        # optional — the Attorney General
 # optional overrides: RLS_TEST_SUPABASE_URL, RLS_TEST_ANON_KEY
 ```
 

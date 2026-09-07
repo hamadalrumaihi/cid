@@ -4,15 +4,17 @@
  *  Everything shown here is derived from the rule-based model
  *  (dispositionFor): the human stage (never a raw review_status), who owns the
  *  next action, what that action is called, and whether the viewer may act /
- *  claim / is merely aware. Awareness-only is always visually de-emphasised so
- *  bureau visibility never masquerades as assigned work.
+ *  claim. The reminder sweep's marks (nudged / escalated) and the deadline
+ *  pressures ride as SLA chips (slaChips) so a stalled request reads as
+ *  stalled at a glance.
  *
  *  Reuses the Card surface + DeadlineChip; matches the NarcoticsRegistryCard
  *  idiom (one focusable, keyboard-accessible ≥44px target per record). */
+import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import {
-  activeDeadline, dispositionFor, formatTarget, humanize,
+  activeDeadline, dispositionFor, formatTarget, humanize, slaChips,
   type LegalReqLike, type LegalViewer,
 } from '@/lib/legalWorkflow'
 import { ClassificationBadge } from './legalShared'
@@ -49,8 +51,8 @@ function Meta({ label, value, mono = false }: { label: string; value: string; mo
 }
 
 /** Next-action pill tone. viewerCanAct is the only prominent (solid accent)
- *  state; claimable reads as an outlined "available"; awareness/waiting stay
- *  muted and never look like urgent work. */
+ *  state; claimable reads as an outlined "available"; waiting stays muted and
+ *  never looks like urgent work. */
 function actionTone(d: { viewerCanAct: boolean; viewerCanClaim: boolean }): string {
   // Dark ink on the accent (the SectionTabs active-tab treatment) — white on
   // the user-selectable accent fails the 4.5:1 contrast floor for small text.
@@ -64,6 +66,9 @@ export function LegalRequestCard({
 }: LegalRequestCardProps) {
   const d = dispositionFor(request, viewer, now)
   const deadline = activeDeadline(request)
+  // The DeadlineChip already covers the active deadline's countdown; the SLA
+  // chips add the sweep's marks and the "passed" / "expiring" pressures.
+  const sla = slaChips(request, now)
   const typeLine = request.subtype
     ? `${humanize(request.request_type)} · ${humanize(request.subtype)}`
     : humanize(request.request_type)
@@ -111,10 +116,10 @@ export function LegalRequestCard({
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold ${actionTone(d)}`}>
-          {d.awarenessOnly && <span className="mr-1 text-[13px] leading-none" aria-hidden="true">◦</span>}
           {d.nextAction}
         </span>
         {deadline && <DeadlineChip at={deadline.at} kind={deadline.kind} now={now} />}
+        {sla.map((c) => <Badge key={c.id} tone={c.tone}>{c.label}</Badge>)}
       </div>
     </Card>
   )

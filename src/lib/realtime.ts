@@ -32,13 +32,21 @@ export const useRealtimeStore = create<RtState>((set) => ({
 }))
 
 const registered = new Set<string>()
-/** Case-scoped channels that fell back to the whole-table channel, per
- *  table: their scoped counters are bumped from the table-wide events. */
-const fallbackCases = new Map<string, Set<string>>()
+/** Row-scoped channels that fell back to the whole-table channel, per
+ *  table: their scoped counters (store keys) are bumped from the table-wide
+ *  events. */
+const fallbackKeys = new Map<string, Set<string>>()
 const warnedTables = new Set<string>()
 
+/** Store key for a (table, column, id) counter. The case helpers below keep
+ *  their historical `<table>:<caseId>` key so nothing that reads the store
+ *  directly moves; every other column is namespaced as
+ *  `<table>:<column>=<id>` so two scopes on one table never collide. */
+export const rowVersionKey = (table: string, column: string, id: string): string =>
+  column === 'case_id' ? `${table}:${id}` : `${table}:${column}=${id}`
+
 /** Store key for a (table, caseId) counter — exported for the unit test. */
-export const caseVersionKey = (table: string, caseId: string): string => `${table}:${caseId}`
+export const caseVersionKey = (table: string, caseId: string): string => rowVersionKey(table, 'case_id', caseId)
 
 /** Per-table leading+trailing debounce for the version bumps. Contract: the
  *  FIRST event of a burst bumps immediately (a lone change stays prompt); any
@@ -67,7 +75,7 @@ export function createDebouncedBump(bump: (table: string) => void, waitMs = 300)
 const bumpTable = (table: string): void => {
   const { bump } = useRealtimeStore.getState()
   bump(table)
-  for (const caseId of fallbackCases.get(table) ?? []) bump(caseVersionKey(table, caseId))
+  for (const key of fallbackKeys.get(table) ?? []) bump(key)
 }
 
 const debouncedBump = createDebouncedBump((key) => {
@@ -92,18 +100,21 @@ export function subscribeTable(table: string): void {
   }
 }
 
-/** Subscribe (once per session) to one case's rows of a table. The channel
- *  is `rt_<table>_<caseId>` with a `case_id=eq.<caseId>` filter; only that
- *  case's changes bump `caseVersionKey(table, caseId)`. A refused filtered
- *  subscription falls back to the whole-table channel (logged once per
- *  table) so the view still refreshes — just less selectively. */
-export function subscribeCaseTable(table: string, caseId: string): void {
-  const key = caseVersionKey(table, caseId)
-  if (!isConfigured || typeof window === 'undefined' || !caseId || registered.has(key)) return
+/** Subscribe (once per session) to the rows of a table whose `column`
+ *  equals `id`. The channel is `rt_<table>_<column>_<id>` (the historical
+ *  `rt_<table>_<caseId>` name for case scopes) with a `<column>=eq.<id>`
+ *  filter; only those rows bump `rowVersionKey(table, column, id)`. A refused
+ *  filtered subscription falls back to the whole-table channel (logged once
+ *  per table) so the view still refreshes — just less selectively. P4-05
+ *  generalised the case-only version so the legal dossier can follow one
+ *  request's comments (`legal_request_id=eq.<id>`) with the same mechanics. */
+export function subscribeRowScoped(table: string, column: string, id: string): void {
+  const key = rowVersionKey(table, column, id)
+  if (!isConfigured || typeof window === 'undefined' || !id || registered.has(key)) return
   registered.add(key)
   const fallBack = (status: string) => {
-    if (!fallbackCases.has(table)) fallbackCases.set(table, new Set())
-    fallbackCases.get(table)!.add(caseId)
+    if (!fallbackKeys.has(table)) fallbackKeys.set(table, new Set())
+    fallbackKeys.get(table)!.add(key)
     if (!warnedTables.has(table)) {
       warnedTables.add(table)
       console.warn(`[realtime] filtered channel for ${table} refused (${status}); falling back to the whole-table channel`)
@@ -112,9 +123,10 @@ export function subscribeCaseTable(table: string, caseId: string): void {
   }
   try {
     const client = supabase()
+    const channelName = column === 'case_id' ? `rt_${table}_${id}` : `rt_${table}_${column}_${id}`
     const channel = client
-      .channel(`rt_${table}_${caseId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table, filter: `case_id=eq.${caseId}` }, () => {
+      .channel(channelName)
+      .on('postgres_changes', { event: '*', schema: 'public', table, filter: `${column}=eq.${id}` }, () => {
         debouncedBump(key)
       })
     let fellBack = false
@@ -129,11 +141,17 @@ export function subscribeCaseTable(table: string, caseId: string): void {
   }
 }
 
+/** Subscribe (once per session) to one case's rows of a table — the
+ *  `case_id` specialisation of subscribeRowScoped (P3-08). */
+export function subscribeCaseTable(table: string, caseId: string): void {
+  subscribeRowScoped(table, 'case_id', caseId)
+}
+
 /** Forget local registrations after sign-out — the channels themselves are
  *  torn down by removeAllChannels() in the auth layer. */
 export function resetRealtime(): void {
   registered.clear()
-  fallbackCases.clear()
+  fallbackKeys.clear()
   warnedTables.clear()
 }
 
@@ -144,11 +162,17 @@ export function useTableVersion(table: string): number {
   return useRealtimeStore((s) => s.versions[table] ?? 0)
 }
 
-/** Version counter for one case's rows of a table (P3-08). Registers the
- *  filtered subscription on first mount; moves only for that case (or, after
- *  a fallback, with the whole table). */
-export function useCaseTableVersion(table: string, caseId: string): number {
-  useEffect(() => { subscribeCaseTable(table, caseId) }, [table, caseId])
-  const key = caseVersionKey(table, caseId)
+/** Version counter for the rows of a table where `column = id`. Registers
+ *  the filtered subscription on first mount; moves only for those rows (or,
+ *  after a fallback, with the whole table). */
+export function useRowScopedVersion(table: string, column: string, id: string): number {
+  useEffect(() => { subscribeRowScoped(table, column, id) }, [table, column, id])
+  const key = rowVersionKey(table, column, id)
   return useRealtimeStore((s) => s.versions[key] ?? 0)
+}
+
+/** Version counter for one case's rows of a table (P3-08) — the `case_id`
+ *  specialisation of useRowScopedVersion. */
+export function useCaseTableVersion(table: string, caseId: string): number {
+  return useRowScopedVersion(table, 'case_id', caseId)
 }

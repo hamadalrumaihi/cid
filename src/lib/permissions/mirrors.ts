@@ -21,13 +21,17 @@ export {
 } from '../roles'
 import { isCommandRole } from '../roles'
 
-/** Effective DOJ role (expiry- and legacy-mapping-aware), or null. */
+/** Effective DOJ role (expiry- and legacy-mapping-aware), or null. Only
+ *  'judge' and 'attorney_general' are LIVE roles (L16 / P4-01): 'prosecutor'
+ *  stays in the union because the server still reports it for historical
+ *  memberships, but no UI offers it and it confers no legal-workflow action
+ *  (every prosecutor RPC is EXECUTE-revoked). */
 export type DojRole = 'prosecutor' | 'judge' | 'attorney_general' | null
 
 /** Client mirror of private.justice_role_effective: legacy ADA/DA memberships
- *  act with the effective role 'prosecutor'; historical rows are never
- *  rewritten — only interpreted. The ONE copy (formerly three: capabilities,
- *  legalShared, useActionItems). */
+ *  act with the effective role 'prosecutor' (now history-only); rows are
+ *  never rewritten — only interpreted. The ONE copy (formerly three:
+ *  capabilities, legalShared, useActionItems). */
 export function effectiveDojRole(role: string | null | undefined): DojRole {
   if (role === 'assistant_district_attorney' || role === 'district_attorney' || role === 'prosecutor') return 'prosecutor'
   if (role === 'attorney_general' || role === 'judge') return role

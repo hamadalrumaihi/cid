@@ -125,6 +125,33 @@ The rule that came out of this: **a capability keyed on a CID role attaches to
 every account holding that role, including fixtures.** Ex-officio grants need a
 fixture exclusion; deliberate grants do not.
 
+### DOJ fixture roster (Phase 4)
+
+The legal suites (`tests/rls/legal.test.ts`, `v163`, `v186a` … `v186e`) and
+`tests/e2e/justice.spec.ts` need three **justice-only** fixtures in addition
+to the CID build. They are **not provisioned** (issue #299); every DOJ leg
+`it.skipIf`s cleanly until they are. Since Portal Improvements P4-01 the
+identity model is Judge + Attorney General only, so the former
+`rls-test-prosecutor` / `-prosecutor2` / `-ada-*` / `-da` fixtures are **no
+longer needed** — do not create them.
+
+| Account | `justice_memberships` | Password secret | Proves |
+| --- | --- | --- | --- |
+| `rls-test-judge@cidportal.test` | `agency='judiciary'`, `justice_role='judge'`, active, `expires_at` null, `prosecutor_bureau` null | `RLS_TEST_PASSWORD_JUDGE` | the judicial claim / decision / partial approval / fast-lane legs |
+| `rls-test-judge2@cidportal.test` | same as judge | `RLS_TEST_PASSWORD_JUDGE2` | the atomic-claim race and "unassigned judge cannot decide / see a sealed assignment" |
+| `rls-test-ag@cidportal.test` | `agency='doj'`, `justice_role='attorney_general'`, active, `expires_at` null | `RLS_TEST_PASSWORD_AG` | AG oversight (sealed included), `assign_judge`, comment / observer authority, never a decision |
+
+Provisioning rules (seed script or SQL console on the dedicated test
+project — `justice_appoint` refuses `profiles.is_test` accounts by design and
+that wall must not be weakened): each account is an auth user + profile (the
+`rls-test-%` email marks `is_test=true` via `handle_new_user`) with
+`profiles.active=false` — **never** an active CID member, or every justice
+RPC would run in an acting capacity — not login-denied, not removed; then one
+`justice_memberships` row per the table above. `tests/rls/v163.test.ts`
+verifies this exact shape in `beforeAll` and fails with a provisioning
+message on drift. The Owner fixture remains the `assign_judge` fallback the
+suites exercise when no AG is seated.
+
 ---
 
 ## Rebuilding an isolated environment — migrations are the source of truth

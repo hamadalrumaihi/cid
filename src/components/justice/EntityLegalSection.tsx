@@ -15,7 +15,7 @@ import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import { fmtDate } from '@/lib/format'
 import { fulfilmentLabel, reviewStatusLabel } from '@/lib/justice'
-import { humanize } from '@/lib/legalWorkflow'
+import { humanize, slaChips } from '@/lib/legalWorkflow'
 import { useTableVersion } from '@/lib/realtime'
 import { useNow } from '@/lib/useNow'
 import { Badge } from '@/components/ui/Badge'
@@ -29,12 +29,22 @@ import { Skeleton } from '@/components/ui/Skeleton'
 /** Narrow parent projection — only what the compact row + labels read. */
 const REF_REQUEST_COLS =
   'id,request_number,title,request_type,subtype,review_status,fulfilment_status,'
-  + 'classification,case_id,case_number_snapshot,response_deadline,expires_at,created_at'
+  + 'classification,case_id,case_number_snapshot,response_deadline,expires_at,created_at,'
+  + 'nudged_at,escalated_at'
 
 export type EntityLegalRequest = Pick<Tables<'legal_requests'>,
   | 'id' | 'request_number' | 'title' | 'request_type' | 'subtype'
   | 'review_status' | 'fulfilment_status' | 'classification'
-  | 'case_id' | 'case_number_snapshot' | 'response_deadline' | 'expires_at' | 'created_at'>
+  | 'case_id' | 'case_number_snapshot' | 'response_deadline' | 'expires_at' | 'created_at'
+  | 'nudged_at' | 'escalated_at'>
+
+/** slaChips reads the workflow model's LegalReqLike; the narrow reference row
+ *  carries everything the SLA rules need, the rest reads as null. */
+const slaOf = (r: EntityLegalRequest, now: number) => slaChips({
+  ...r, created_by: '', document_status: '', service_status: '', compliance_status: '',
+  approval_route: 'judge', responsible_bureau: null as never, assigned_ada_id: null, assigned_judge_id: null,
+  submitted_to_doj_at: null,
+}, now)
 
 type ExhibitRef = Pick<Tables<'legal_request_exhibits'>,
   'id' | 'legal_request_id' | 'source_id' | 'rationale' | 'created_at'>
@@ -133,6 +143,9 @@ function LegalRefRow({ r, now }: { r: EntityLegalRef; now: number }) {
         <Badge tone="neutral">{fulfilmentLabel(req.fulfilment_status)}</Badge>
         <DeadlineChip at={req.response_deadline} kind="deadline" now={now} />
         <DeadlineChip at={req.expires_at} kind="expires" now={now} />
+        {slaOf(req, now).filter((c) => c.id === 'escalated' || c.id === 'nudged').map((c) => (
+          <Badge key={c.id} tone={c.tone}>{c.label}</Badge>
+        ))}
         <span>Filed {fmtDate(req.created_at)}</span>
         {req.case_id && (
           <EntityLink kind="case" id={req.case_id} label={req.case_number_snapshot || 'Source case'} title="Open the source case" />

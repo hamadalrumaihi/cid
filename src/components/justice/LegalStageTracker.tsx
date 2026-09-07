@@ -3,26 +3,30 @@
 /** Compact, accessible stage-progress tracker for a legal request.
  *
  *  Presentation only — the stage model is the single source of truth. We render
- *  ONLY the stages the request can traverse (stagesForRequest), mark the current
- *  stage active, and treat the DOJ prosecutorial + judicial paths as PARALLEL
- *  lanes for a Judge-routed, non-sealed request rather than two mandatory
- *  consecutive steps. Status is never signalled by colour alone: every node
- *  carries a check / filled dot / hollow ring plus a screen-reader state word.
+ *  ONLY the stages the request can traverse (stagesForRequest) along the
+ *  Phase 4 spine (draft → bureau review → judicial queue → judicial review →
+ *  issued → execution/service → closed) and mark the current stage active.
+ *  A request parked in a RETIRED status (the removed prosecutor / DA / AG
+ *  pipeline) sits on the slot it used to precede with a "Retired stage" pill,
+ *  so history stays legible without pretending a live lane exists. Status is
+ *  never signalled by colour alone: every node carries a check / filled dot /
+ *  hollow ring plus a screen-reader state word.
  *
  *  Light-tactical identity: slate text, a single amber-accent (bg-badge-500)
  *  active node, thin white/10 connectors. No seals, no gavels. */
 import {
-  STAGE_LABEL, STAGE_ORDER, currentStage, stageDisplayLabel, stageLabel, stagesForRequest,
-  laneThatAdvanced, type LegalReqLike, type StageId,
+  STAGE_ORDER, currentStage, stageDisplayLabel, stageLabel, stagesForRequest,
+  isRetiredReviewStatus, isDecidedApproved, type LegalReqLike, type StageId,
 } from '@/lib/legalWorkflow'
+import { reviewStatusLabel } from '@/lib/justice'
+import { Badge } from '@/components/ui/Badge'
 
-type NodeState = 'complete' | 'active' | 'upcoming' | 'skipped'
+type NodeState = 'complete' | 'active' | 'upcoming'
 
 const STATE_WORD: Record<NodeState, string> = {
   complete: 'completed',
   active: 'current stage',
   upcoming: 'upcoming',
-  skipped: 'not used on this request',
 }
 
 function labelClass(state: NodeState): string {
@@ -40,7 +44,7 @@ function CheckIcon() {
 }
 
 /** Non-colour-only marker: complete → check, active → filled dot in a solid
- *  accent disc, upcoming/skipped → hollow ring. */
+ *  accent disc, upcoming → hollow ring. */
 function Marker({ state }: { state: NodeState }) {
   if (state === 'complete') {
     return (
@@ -63,26 +67,6 @@ function Marker({ state }: { state: NodeState }) {
   )
 }
 
-/** A mini lane row inside the parallel DOJ band. */
-function LaneRow({ label, state }: { label: string; state: NodeState }) {
-  const dot = state === 'active'
-    ? 'bg-badge-500'
-    : state === 'complete'
-      ? 'bg-blue-300'
-      : 'border border-white/20 bg-transparent'
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span aria-hidden="true" className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dot}`} />
-      <span className={state === 'active' ? 'text-xs font-semibold text-white' : state === 'skipped' ? 'text-xs text-slate-500' : 'text-xs text-slate-300'}>
-        {label}
-      </span>
-      <span className="sr-only"> — {STATE_WORD[state]}</span>
-    </span>
-  )
-}
-
-type Item = { kind: 'stage'; stage: StageId } | { kind: 'lanes' }
-
 export function LegalStageTracker({ request, className = '' }: {
   request: LegalReqLike
   className?: string
@@ -90,30 +74,8 @@ export function LegalStageTracker({ request, className = '' }: {
   const stages = stagesForRequest(request)
   const cur = currentStage(request)
   const curIdx = STAGE_ORDER.indexOf(cur)
-  const judgeRouted = (request.approval_route ?? 'judge') === 'judge'
-  const sealed = request.classification === 'sealed'
-  const lane = laneThatAdvanced(request)
-  // Minimal-DOJ requests move SEQUENTIALLY — queue → prosecutorial review →
-  // judicial review — so the legacy parallel-lane band would misread them (a
-  // judge's decision after a prosecutor hand-off is not a "skipped" lane).
-  // The band stays ONLY for legacy evidence: a request parked at the retired
-  // DOJ intake, an ADA-carried request, or a direct judicial claim.
-  const sharedQueuePipeline = !!request.assigned_prosecutor_id
-    || ['prosecutor_queue', 'prosecutor_review', 'returned_by_prosecutor', 'declined']
-      .includes(request.review_status)
-  const legacyIntake = request.review_status === 'submitted_to_doj'
-    || !!request.assigned_ada_id || lane === 'judicial'
-  // Parallel lanes apply only to a LEGACY Judge-routed, non-sealed request; a
-  // sealed request keeps explicit-assignment routing (no open pickup, no split).
-  const parallel = judgeRouted && !sealed && stages.includes('judicial_review')
-    && !sharedQueuePipeline && legacyIntake
-
-  const items: Item[] = []
-  for (const s of stages) {
-    if (parallel && s === 'prosecutorial_review') { items.push({ kind: 'lanes' }); continue }
-    if (parallel && s === 'judicial_review') continue
-    items.push({ kind: 'stage', stage: s })
-  }
+  const retired = isRetiredReviewStatus(request.review_status)
+  const partial = request.review_status === 'partially_approved'
 
   const stageState = (s: StageId): NodeState => {
     const i = STAGE_ORDER.indexOf(s)
@@ -122,33 +84,31 @@ export function LegalStageTracker({ request, className = '' }: {
     return 'upcoming'
   }
 
-  // Parallel band state (lane computed above — it also gates `parallel`).
-  const judIdx = STAGE_ORDER.indexOf('judicial_review')
-  const bandActive = cur === 'prosecutorial_review' || cur === 'judicial_review'
-  const bandPast = curIdx > judIdx
-  const bandState: NodeState = bandPast ? 'complete' : bandActive ? 'active' : 'upcoming'
-  const laneState = (k: 'prosecutorial' | 'judicial'): NodeState => {
-    if (bandPast) return lane === k ? 'complete' : 'skipped'
-    if (bandActive) return lane === k ? 'active' : 'skipped'
-    return 'upcoming'
+  /** Under-label note for the current node: what the slot means for THIS
+   *  request (a retired parking state, a sealed AG assignment, a partial
+   *  approval). Quiet by design — one short line, never a second badge. */
+  const note = (s: StageId): string | null => {
+    if (s !== cur) return null
+    if (retired) return reviewStatusLabel(request.review_status)
+    if (s === 'judicial_queue') {
+      return request.classification === 'sealed' ? 'Sealed · assigned by the Attorney General' : 'Any eligible Judge may claim'
+    }
+    if (partial && isDecidedApproved(request.review_status) && (s === 'issued' || s === 'fulfilment')) return 'Partially approved · narrowed scope'
+    return null
   }
-  const laneNote = lane === 'judicial'
-    ? 'Judicial review claimed directly from DOJ'
-    : lane === 'prosecutorial'
-      ? 'Prosecutorial review began before judicial pickup'
-      : null
 
   return (
     <ol
-      aria-label={`Request progress — current stage: ${stageLabel(request)}`}
+      aria-label={`Request progress — current stage: ${stageLabel(request)}${retired ? ' (retired stage)' : ''}`}
       className={`flex flex-col gap-0 sm:flex-row sm:items-stretch ${className}`}
     >
-      {items.map((item, i) => {
-        const isLast = i === items.length - 1
-        const key = item.kind === 'lanes' ? 'lanes' : item.stage
+      {stages.map((s, i) => {
+        const isLast = i === stages.length - 1
+        const state = stageState(s)
+        const n = note(s)
         return (
           <li
-            key={key}
+            key={s}
             className="relative flex gap-3 pb-5 last:pb-0 sm:flex-1 sm:flex-col sm:items-center sm:gap-2 sm:px-1 sm:pb-0 sm:text-center"
           >
             {/* Mobile: vertical connector down the left rail. */}
@@ -161,31 +121,16 @@ export function LegalStageTracker({ request, className = '' }: {
             )}
 
             <span className="relative z-10 mt-0.5 flex-shrink-0 sm:mt-0">
-              <Marker state={item.kind === 'lanes' ? bandState : stageState(item.stage)} />
+              <Marker state={state} />
             </span>
 
             <div className="min-w-0 sm:mt-0.5">
-              {item.kind === 'stage' ? (
-                <>
-                  <span className={labelClass(stageState(item.stage))}>{stageDisplayLabel(item.stage, request)}</span>
-                  <span className="sr-only"> — {STATE_WORD[stageState(item.stage)]}</span>
-                  {item.stage === 'doj_intake' && parallel && (
-                    <p className="mt-0.5 text-[11px] leading-tight text-slate-400">
-                      Prosecutorial lane · Judicial pickup available
-                    </p>
-                  )}
-                </>
-              ) : (
-                <div className="sm:inline-flex sm:flex-col sm:items-center">
-                  <div className="flex flex-col items-start gap-0.5 sm:items-center">
-                    <LaneRow label={STAGE_LABEL.prosecutorial_review} state={laneState('prosecutorial')} />
-                    <LaneRow label={STAGE_LABEL.judicial_review} state={laneState('judicial')} />
-                  </div>
-                  {laneNote && (
-                    <p className="mt-1 text-[11px] leading-tight text-slate-400">{laneNote}</p>
-                  )}
-                </div>
+              <span className={labelClass(state)}>{stageDisplayLabel(s, request)}</span>
+              <span className="sr-only"> — {STATE_WORD[state]}</span>
+              {state === 'active' && retired && (
+                <Badge tone="warn" className="ml-1.5 align-middle">Retired stage</Badge>
               )}
+              {n && <p className="mt-0.5 text-[11px] leading-tight text-slate-400">{n}</p>}
             </div>
           </li>
         )

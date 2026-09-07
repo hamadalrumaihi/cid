@@ -122,107 +122,122 @@ Reports belong to a case (`private.can_access_case` gates everything). Lifecycle
 ## 5. Warrants & subpoenas (legal review)
 
 > **Status.** The original ADA→DA→AG pipeline was retired 2026-07-22
-> ([`20260808140000`](../supabase/migrations/20260808140000_legal_lead_approval.sql));
-> what runs today is the **revived prosecutor + judicial pipeline** below
-> ([`20260816120000_minimal_doj_revival.sql`](../supabase/migrations/20260816120000_minimal_doj_revival.sql)
-> onward). Only the legacy per-role RPCs (`review_legal_request_as_ada/_as_da/_as_ag`,
-> `set_legal_approval_route`) remain EXECUTE-revoked; historical requests still
-> display their old stages read-only.
+> ([`20260808140000`](../supabase/migrations/20260808140000_legal_lead_approval.sql)),
+> the minimal-DOJ prosecutor queue that replaced it
+> ([`20260816120000`](../supabase/migrations/20260816120000_minimal_doj_revival.sql))
+> was retired by **Portal Improvements Phase 4** (P4-01,
+> [`20261025120000_legal_reroute.sql`](../supabase/migrations/20261025120000_legal_reroute.sql); tables `20261024120000`, RPCs `20261026120000`, sweeps `20261027120000`).
+> What runs today is **Detective → Bureau Lead → Judge** (SIB: **Special Agent →
+> X-1 → Judge**, Attorney General oversight). Every prosecutor RPC
+> (`legal_claim_prosecutor`, `legal_assign_prosecutor`,
+> `review_legal_request_as_prosecutor`, `legal_return_to_prosecutor_queue`,
+> `review_legal_request_as_ag`, `submit_legal_request_to_doj`,
+> `reassign_legal_ada`) is EXECUTE-revoked; the retired stages stay in the
+> `review_status` CHECK and render read-only ("Retired stage — …").
 
-Full narrative in [DOJ-INTEGRATION.md](DOJ-INTEGRATION.md); server surface in [`20260714040000_legal_workflow.sql`](../supabase/migrations/20260714040000_legal_workflow.sql) + [`20260714045000_legal_workflow_review.sql`](../supabase/migrations/20260714045000_legal_workflow_review.sql). `legal_requests` carries three **independent** status dimensions — every legal table is SELECT-only for clients, so all transitions are definer RPCs:
+Full narrative in [DOJ-INTEGRATION.md](DOJ-INTEGRATION.md); server surface in [`20260714040000_legal_workflow.sql`](../supabase/migrations/20260714040000_legal_workflow.sql) + [`20260714045000_legal_workflow_review.sql`](../supabase/migrations/20260714045000_legal_workflow_review.sql) + the Phase 4 migrations `20261024120000` → `20261027120000`; authority in [AUTHORIZATION.md §16](AUTHORIZATION.md#16-the-legal-workflow-phase-4-20261024120000--20261027120000). `legal_requests` carries three **independent** status dimensions — every legal table is SELECT-only for clients, so all transitions are definer RPCs:
 
 - `document_status`: `draft / finalized / reopened`
-- `review_status`: the review pipeline below
+- `review_status`: the review pipeline below (+ `partially_approved` since P4-07)
 - `fulfilment_status`: post-approval lifecycle — one 13-value CHECK shared by both instrument types (`20260714030000_legal_core.sql`): `unissued / issued / executed / returned / expired / revoked / closed / served / compliance_pending / records_received / testimony_completed / non_compliance / return_recorded`. Warrants walk the execute/return arm, subpoenas the serve/comply arm; `service_status` and `compliance_status` are further independent dimensions.
 
-**Active pipeline (both warrants and subpoenas).** CID review hands off to the
-DOJ ([`20260816120000_minimal_doj_revival.sql`](../supabase/migrations/20260816120000_minimal_doj_revival.sql)),
-whose prosecutor queues are **bureau-scoped** since
-[`20260818120000_bureau_queues_stages.sql`](../supabase/migrations/20260818120000_bureau_queues_stages.sql):
-each prosecutor has exactly one home bureau (`justice_memberships.prosecutor_bureau`)
-and claims only their own bureau's queue; the Attorney General oversees all
-three and grants **temporary, audited coverage** (`prosecutor_coverage`) when a
-bureau has no prosecutor — AG status alone never substitutes for coverage.
-Judicial approval terminates at `review_status='approved'`; issuance stays a
-separate CID fulfilment step (`fulfilment_status` stays `unissued` until
-`issue_legal_request`):
+**Active pipeline (both warrants and subpoenas).** The responsible bureau's
+Bureau Lead gates the packet; an approve hands the request **straight to the
+judicial queue** (`submitted_to_judge`), where any active Judge claims it (or
+the Attorney General / Owner assigns it — the only path for a **sealed**
+request). The judge approves in full or **in part** (per-target decisions,
+P4-07), denies, or returns with a structured revision checklist. Judicial
+approval terminates at `review_status='approved' | 'partially_approved'`;
+issuance stays a separate CID fulfilment step (`fulfilment_status` stays
+`unissued` until `issue_legal_request`):
 
 ```mermaid
 stateDiagram-v2
-    [*] --> not_submitted: create_legal_request() — any CID author
-    not_submitted --> cid_supervisor_review: submit_legal_request_to_cid()
-    cid_supervisor_review --> returned_by_cid: review_legal_request_as_cid(return)
-    returned_by_cid --> cid_supervisor_review: resubmit (always CID review)
-    cid_supervisor_review --> prosecutor_queue: review_legal_request_as_cid(approve) — responsible bureau's Lead (JTF case — ANY Lead); DD/Dir/Owner audited fallback
+    [*] --> not_submitted: create_legal_request() — any CID author (charges via legal_set_charges, evidence via legal_add_evidence_and_exhibit)
+    not_submitted --> cid_supervisor_review: submit_legal_request_to_cid() — warrants need standard_of_proof + pc_statement
+    cid_supervisor_review --> returned_by_cid: review_legal_request_as_cid(return, p_revision_items)
+    returned_by_cid --> cid_supervisor_review: resubmit (change summary REQUIRED)
+    cid_supervisor_review --> submitted_to_judge: review_legal_request_as_cid(approve) — responsible bureau's Lead (JTF case — ANY Lead); DD/Dir/Owner audited fallback
     cid_supervisor_review --> denied: review_legal_request_as_cid(deny)
-    prosecutor_queue --> prosecutor_review: legal_claim_prosecutor() — own-bureau/coverage only — or AG legal_assign_prosecutor()
-    prosecutor_review --> submitted_to_judge: review_legal_request_as_prosecutor(approve)
-    prosecutor_review --> returned_by_prosecutor: return to investigator
-    prosecutor_review --> declined: decline (terminal)
-    returned_by_prosecutor --> prosecutor_queue: resubmit — FAST LANE (no repeated CID review)
-    returned_by_prosecutor --> cid_supervisor_review: resubmit with DECLARED material change
-    submitted_to_judge --> judicial_review: claim_legal_request_as_judge() / assign_judge()
-    judicial_review --> approved: decide_legal_request_as_judge(approve — reasoning + conditions)
+    submitted_to_judge --> judicial_review: claim_legal_request_as_judge() — never sealed — or assign_judge() (AG / Owner)
+    judicial_review --> approved: decide_legal_request_as_judge(approve — reasoning + conditions; expires_at defaulted per subtype)
+    judicial_review --> partially_approved: decide_legal_request_as_judge(approve, p_target_decisions with a denied target)
     judicial_review --> denied
-    judicial_review --> returned_by_judge: return to investigator
-    returned_by_judge --> prosecutor_queue: resubmit — FAST LANE
+    judicial_review --> returned_by_judge: return to investigator (p_revision_items)
+    returned_by_judge --> submitted_to_judge: resubmit — FAST LANE (change summary required, no repeated CID review)
     returned_by_judge --> cid_supervisor_review: resubmit with DECLARED material change
     approved --> [*]: CID fulfilment (issue → execute/serve → return → close)
+    partially_approved --> [*]: CID fulfilment — only the approved targets are executable
     denied --> [*]
-    declined --> [*]
 ```
 
+Alongside the graph: any pre-decision request → `withdrawn` (creator,
+`withdraw_legal_request`) or `cancelled` (command / AG / Owner with a reason,
+`legal_admin_cancel`); a decided request → `superseded` (`legal_mark_superseded`,
+the replacement must itself be approved or partially approved); **Amend** is
+never an edit in place — `legal_amend(p_request, p_reason)` clones a decided /
+superseded / withdrawn / cancelled request (type, case, title, form minus the
+frozen `_` keys, narrative, subject, exhibits, charges) into a NEW draft with
+`amends_request_id` set and an `amended_from` timeline row.
+
 Return routing is explicit, never inferred: `submit_legal_request_to_cid(p_request,
-p_change_summary, p_material_change)` sends a corrected judge-/prosecutor-returned
-request **straight back to its bureau's prosecutor queue** unless the investigator
-sets `p_material_change=true` — the declaration is logged
-(`material_change_declared`) and the request re-enters full CID review.
+p_change_summary, p_material_change)` sends a corrected judge-returned request
+**straight back to the judicial queue** unless the investigator sets
+`p_material_change=true` — the declaration is logged (`material_change_declared`)
+and the request re-enters full CID review. Every resubmission from a
+`returned_*` state needs a change summary ("a change summary is required when
+resubmitting"); the reviewer's checklist lives in `legal_request_revision_items`
+and the creator resolves each item (`legal_revision_resolve`) before resubmitting.
 
 Since [`20261001120100_legal_review_records_rank.sql`](../supabase/migrations/20261001120100_legal_review_records_rank.sql)
 every CID-stage decision also records the reviewer's rank **at decision time**
 (`legal_requests.cid_reviewed_role`, plus `actor_rank` in the audit payloads) —
 the review history answers "who acted, and as what" without re-deriving it from
-today's roster.
+today's roster. Since P4-01 `legal_requests.stage_entered_at` restarts on every
+status change (trigger-maintained; `nudged_at` / `escalated_at` cleared with
+it) — the clock the reminder sweep reads.
 
-### The SIB lane ([`20260903170000_siu_legal_lane.sql`](../supabase/migrations/20260903170000_siu_legal_lane.sql))
+### The SIB lane ([`20260903170000_siu_legal_lane.sql`](../supabase/migrations/20260903170000_siu_legal_lane.sql), re-routed by P4-01 / [`20261025120000`](../supabase/migrations/20261025120000_legal_reroute.sql))
 
 A request on a case with `case_authority = 'siu'` runs a **different chain inside
-the same state machine** — it never enters `cid_supervisor_review` or any bureau
-prosecutor queue:
+the same state machine** — it never enters `cid_supervisor_review`:
 
 ```
 Special Agent draft → siu_command_review (X-1 / the case's lead agent; never the author)
-                    → ag_review (Attorney General) → submitted_to_judge → judicial_review → approved
+                    → submitted_to_judge (AG notified — oversight only, no gate) → judicial_review → approved | partially_approved
 ```
 
 - Submission fan-out stays inside the unit (SACs only, compartment- and
   recusal-aware); with no SIB commander seated the **Attorney General** is
   alerted — never CID command.
-- Returns use `returned_by_siu_command`; the judge/prosecutor **fast lane does
-  not apply** to SIB requests — every resubmission re-enters SIB command review.
+- An X-1 approve lands in the judicial queue directly; the Attorney General
+  is notified and holds oversight visibility of the request from that
+  moment (`submitted_to_judge_at`), but never decides. The former `ag_review`
+  stage is retired — the "known gap" (an SIB request stalling at the AG step
+  because `review_legal_request_as_ag` was revoked) is **resolved** by
+  removing the step.
+- Returns use `returned_by_siu_command`; the judge **fast lane does not apply**
+  to SIB requests — every resubmission re-enters SIB command review.
 - Authority is `private.siu_case_command()` (SIB command **or** the
   investigation's lead agent), signature action `siu_command_approval`.
-
-> **Known gap (reported, not yet fixed):** `review_legal_request_as_ag` — the
-> RPC that moves an SIB request out of `ag_review` — has been EXECUTE-revoked
-> since [`20260808140000`](../supabase/migrations/20260808140000_legal_lead_approval.sql)
-> and no migration re-grants it, and no workspace surface lists `ag_review`.
-> An SIB request approved by X-1 currently stalls at the Attorney General step.
 
 Key rules (all server-enforced):
 
 | Stage | Who / RPC |
 | --- | --- |
-| Draft + packet | creator (any CID author): `create_legal_request`, `update_legal_draft`, `add_legal_exhibit` / `remove_legal_exhibit` — reviewers later see **only** the selected exhibits, never the whole case |
-| CID supervisor gate | `submit_legal_request_to_cid` → `review_legal_request_as_cid` (source report finalized, required fields, subject or search targets, valid responsible bureau via `private.legal_resolve_bureau` — for JTF-assigned cases the chain derives it from `originating_bureau` → case-number prefix → lead detective's division → creator's division and persists the answer, [`20260815120000_jtf_legal_routing.sql`](../supabase/migrations/20260815120000_jtf_legal_routing.sql)). **Who decides** ([`20260818120000`](../supabase/migrations/20260818120000_bureau_queues_stages.sql)): an ordinary bureau case — the responsible bureau's Bureau Lead ONLY; a **JTF-assigned case — ANY eligible Bureau Lead**; DD/Director/Owner are the fallback everywhere, and every decision by anyone other than the responsible bureau's own lead is audited with `fallback`/`jtf_any_lead` flags. The creator can never decide. **Approve hands off to the responsible bureau's prosecutor queue** ([`20260816120000_minimal_doj_revival.sql`](../supabase/migrations/20260816120000_minimal_doj_revival.sql)): atomic claim (`legal_claim_prosecutor` — own home bureau or live AG-granted coverage only) or AG assignment (assignee must cover the bureau) → `prosecutor_review` (approve / return / decline) → `submitted_to_judge` → judge claim/assignment → `judicial_review` → approved (reasoning + conditions, frozen judicial version) / denied / returned. If a queue has no covering prosecutor, the approve fan-out alerts the AG + Owner instead. Issuance stays CID-side (`issue_legal_request`, unchanged); conflicts recuse on permanent user IDs; deactivation auto-requeues held work |
-| DOJ case visibility | Prosecutors/judges never gain case access — `legal_request_case_brief(p_request)` returns the concise case summary plus ONLY the material the request references (exhibits, finalized-report content, media metadata), gated by `private.can_view_legal_request` — database-enforced, not a UI convention ([`20260818120000`](../supabase/migrations/20260818120000_bureau_queues_stages.sql)) |
-| Coverage | `justice_set_coverage(p_user, p_bureau, p_reason, p_expires_at?)` / `justice_end_coverage` — AG/Owner only; explicit, dated, expiring, audited (`PROSECUTOR_COVERAGE_GRANTED/ENDED`), endable at any time, never permanent. `private.prosecutor_bureaus_of(u)` = home bureau + live unexpired coverage — the single predicate behind claiming, assignment, visibility, and fan-out |
-| Fulfilment (CID side) | `issue_legal_request`, `record_warrant_execution`, `record_warrant_return`, `record_subpoena_service`, `record_subpoena_compliance`, `close_legal_request`, `withdraw_legal_request` (gated by `private.can_fulfil_legal`) |
+| Draft + packet | creator (any CID author): `create_legal_request`, `update_legal_draft`, `add_legal_exhibit` / `remove_legal_exhibit`, `legal_add_evidence_and_exhibit` (host upload → media row on the case → exhibit, one step), `legal_set_charges` (replaces the request's charge set from the case's own `case_charges`, statute snapshot frozen per row) — reviewers later see **only** the selected exhibits, never the whole case. Warrants carry `form_data.standard_of_proof` (`probable_cause` / `reasonable_suspicion`) and `pc_statement`; submit refuses them otherwise |
+| CID supervisor gate | `submit_legal_request_to_cid` → `review_legal_request_as_cid(p_decision, p_note, p_override_reason, p_signature, p_revision_items)` (source report finalized, required fields, subject or search targets, valid responsible bureau via `private.legal_resolve_bureau` — for JTF-assigned cases the chain derives it from `originating_bureau` → case-number prefix → lead detective's division → creator's division and persists the answer, [`20260815120000_jtf_legal_routing.sql`](../supabase/migrations/20260815120000_jtf_legal_routing.sql)). **Who decides** ([`20260818120000`](../supabase/migrations/20260818120000_bureau_queues_stages.sql)): an ordinary bureau case — the responsible bureau's Bureau Lead ONLY; a **JTF-assigned case — ANY eligible Bureau Lead**; DD/Director/Owner are the fallback everywhere, and every decision by anyone other than the responsible bureau's own lead is audited with `fallback`/`jtf_any_lead` flags. The creator can never decide. **Approve hands off to the judicial queue** (`submitted_to_judge`, `LEGAL_SUBMITTED_TO_JUDGE`; fan-out to every active Judge, sealed → the AG); a return files the checklist |
+| Judicial stage | `claim_legal_request_as_judge` (any active Judge; **sealed requests are assigned by the Attorney General** — never self-claimed) or `assign_judge(p_request, p_judge)` (AG or Owner only; the Owner is the fallback when no AG is seated) → `judicial_review` → `decide_legal_request_as_judge(p_decision, p_note, p_conditions, p_expires_at, p_target_decisions, p_revision_items)`: reasoning mandatory; `p_target_decisions` = `[{target_key, exhibit_id, decision, reasoning}]` (`subject` or `exhibit:<id>`) — any denied target → `partially_approved` (at least one target must be approved, else "deny the request instead of denying every target"); the narrowed scope and the charges are frozen into the judicial version (`form_data._target_decisions`, `_charges`); `expires_at` defaults from `legal_expiry_defaults` (arrest 30 d, search 14 d) when the judge sets none. Conflicts recuse on permanent user IDs; deactivating the holding judge returns the work to the queue |
+| DOJ case visibility | Judges and the AG never gain case access — `legal_request_case_brief(p_request)` returns the concise case summary plus ONLY the material the request references (exhibits, finalized-report content, media metadata), gated by `private.can_view_legal_request` — database-enforced, not a UI convention. A retired prosecutor who must see a request today is a per-request **observer** (`legal_set_observer`, AG / Owner / approver pool / creator), never a role |
+| Comments | `legal_comment(p_request, p_body, p_parent)` / `legal_comment_edit` (author) / `legal_comment_delete` (author, AG, Owner — body blanked, row kept): creator, active participants (judge once claimed, observers), the approver pool, AG when visible, Owner. Prior bodies live in `legal_request_comment_versions`; the `legal_comment` notification carries `{request_id, sealed:true}` for a sealed request and never pages the author |
+| Reminders & expiry | hourly `legal-sweep` cron (:35): > 48 h in a stage → `legal_nudge` to the responsible party; > 5 d → `legal_escalated` to the next authority (+ creator); approved-unissued > 7 d → `legal_unissued`; `expires_at` within 72 h → `legal_expiring`; past → `fulfilment_status='expired'` + `legal_expired`; subpoena `response_deadline` passed → `legal_deadline_passed`. Idempotent through `legal_request_reminders`; `legal_sweep_run()` is the Owner's manual trigger |
+| Exports | `legal_record_export(p_request, p_format pdf\|docx, p_kind instrument\|packet)` — instrument only once approved / partially approved; `verification_code` = short hash of the judicial version; audited (`LEGAL_EXPORTED`, `legal_export_log`); restricted media excluded unless separately approved |
+| Fulfilment (CID side) | `issue_legal_request` (approved **or** partially approved; a subpoena's `response_deadline` defaults from `legal_expiry_defaults`), `record_warrant_execution`, `record_warrant_return`, `record_subpoena_service`, `record_subpoena_compliance`, `close_legal_request`, `withdraw_legal_request` (gated by `private.can_fulfil_legal`); `legal_admin_cancel`, `legal_mark_superseded`, `legal_amend` for the post-decision paths |
 
 <details>
 <summary><strong>Legacy DOJ pipeline (retired 2026-07-22 — historical records only)</strong></summary>
 
-The multi-stage pipeline below is **retired**. Its RPCs (`review_legal_request_as_ada` / `_as_da` / `_as_ag`, `assign_judge`, `decide_legal_request_as_judge`, `claim_legal_request_as_judge`, `submit_legal_request_to_doj`, routing/coverage helpers) are EXECUTE-revoked; historical requests may still display these stages read-only.
+The multi-stage pipeline below is **retired**. Its prosecution-side RPCs (`review_legal_request_as_ada` / `_as_da` / `_as_ag`, `submit_legal_request_to_doj`, `reassign_legal_ada`, routing/coverage helpers) are EXECUTE-revoked — as are the minimal-DOJ prosecutor RPCs that briefly succeeded them (`legal_claim_prosecutor`, `legal_assign_prosecutor`, `review_legal_request_as_prosecutor`, `legal_return_to_prosecutor_queue`); `assign_judge`, `claim_legal_request_as_judge` and `decide_legal_request_as_judge` live on in the current graph. Historical requests may still display these stages read-only ("Retired stage — …").
 
 ```mermaid
 stateDiagram-v2

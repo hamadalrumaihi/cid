@@ -5124,7 +5124,7 @@ export type Database = {
       legal_request_actions: {
         Row: {
           action: string
-          actor_id: string
+          actor_id: string | null
           created_at: string
           from_status: string | null
           id: string
@@ -5136,7 +5136,7 @@ export type Database = {
         }
         Insert: {
           action: string
-          actor_id: string
+          actor_id?: string | null
           created_at?: string
           from_status?: string | null
           id?: string
@@ -5148,7 +5148,7 @@ export type Database = {
         }
         Update: {
           action?: string
-          actor_id?: string
+          actor_id?: string | null
           created_at?: string
           from_status?: string | null
           id?: string
@@ -5494,7 +5494,10 @@ export type Database = {
           source_report_seq: number | null
           submitted_to_cid_at: string | null
           submitted_to_doj_at: string | null
+          stage_entered_at: string | null
           submitted_to_judge_at: string | null
+          nudged_at: string | null
+          escalated_at: string | null
           subtype: string
           superseded_by_id: string | null
           title: string
@@ -5579,7 +5582,10 @@ export type Database = {
           source_report_seq?: number | null
           submitted_to_cid_at?: string | null
           submitted_to_doj_at?: string | null
+          stage_entered_at?: string | null
           submitted_to_judge_at?: string | null
+          nudged_at?: string | null
+          escalated_at?: string | null
           subtype: string
           superseded_by_id?: string | null
           title: string
@@ -5664,7 +5670,10 @@ export type Database = {
           source_report_seq?: number | null
           submitted_to_cid_at?: string | null
           submitted_to_doj_at?: string | null
+          stage_entered_at?: string | null
           submitted_to_judge_at?: string | null
+          nudged_at?: string | null
+          escalated_at?: string | null
           subtype?: string
           superseded_by_id?: string | null
           title?: string
@@ -5734,6 +5743,255 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      legal_expiry_defaults: {
+        Row: {
+          days: number
+          subtype: string
+        }
+        Insert: {
+          days: number
+          subtype: string
+        }
+        Update: {
+          days?: number
+          subtype?: string
+        }
+        Relationships: []
+      }
+      legal_export_log: {
+        Row: {
+          exported_at: string
+          exported_by: string | null
+          format: string
+          id: string
+          kind: string
+          legal_request_id: string
+          verification_code: string
+          version_id: string | null
+        }
+        Insert: {
+          exported_at?: string
+          exported_by?: string | null
+          format: string
+          id?: string
+          kind: string
+          legal_request_id: string
+          verification_code: string
+          version_id?: string | null
+        }
+        Update: {
+          exported_at?: string
+          exported_by?: string | null
+          format?: string
+          id?: string
+          kind?: string
+          legal_request_id?: string
+          verification_code?: string
+          version_id?: string | null
+        }
+        Relationships: []
+      }
+      legal_request_charges: {
+        Row: {
+          added_by: string | null
+          case_charge_id: string
+          counts: number
+          created_at: string
+          id: string
+          legal_request_id: string
+          snap_charge_class: string
+          snap_code: string | null
+          snap_offense: string
+          snap_penal_title: string | null
+        }
+        Insert: {
+          added_by?: string | null
+          case_charge_id: string
+          counts?: number
+          created_at?: string
+          id?: string
+          legal_request_id: string
+          snap_charge_class: string
+          snap_code?: string | null
+          snap_offense: string
+          snap_penal_title?: string | null
+        }
+        Update: {
+          added_by?: string | null
+          case_charge_id?: string
+          counts?: number
+          created_at?: string
+          id?: string
+          legal_request_id?: string
+          snap_charge_class?: string
+          snap_code?: string | null
+          snap_offense?: string
+          snap_penal_title?: string | null
+        }
+        Relationships: []
+      }
+      legal_request_comment_versions: {
+        Row: {
+          body: string
+          comment_id: string
+          edited_at: string
+          edited_by: string | null
+          id: string
+        }
+        Insert: {
+          body: string
+          comment_id: string
+          edited_at?: string
+          edited_by?: string | null
+          id?: string
+        }
+        Update: {
+          body?: string
+          comment_id?: string
+          edited_at?: string
+          edited_by?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
+      legal_request_comments: {
+        Row: {
+          author_id: string
+          body: string
+          created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
+          edited_at: string | null
+          id: string
+          legal_request_id: string
+          parent_id: string | null
+        }
+        Insert: {
+          author_id: string
+          body: string
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          edited_at?: string | null
+          id?: string
+          legal_request_id: string
+          parent_id?: string | null
+        }
+        Update: {
+          author_id?: string
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          edited_at?: string | null
+          id?: string
+          legal_request_id?: string
+          parent_id?: string | null
+        }
+        Relationships: []
+      }
+      legal_request_reminders: {
+        Row: {
+          id: string
+          kind: string
+          legal_request_id: string
+          recipients: string[]
+          sent_at: string
+          stage: string | null
+        }
+        Insert: {
+          id?: string
+          kind: string
+          legal_request_id: string
+          recipients?: string[]
+          sent_at?: string
+          stage?: string | null
+        }
+        Update: {
+          id?: string
+          kind?: string
+          legal_request_id?: string
+          recipients?: string[]
+          sent_at?: string
+          stage?: string | null
+        }
+        Relationships: []
+      }
+      legal_request_revision_items: {
+        Row: {
+          action_id: string | null
+          created_at: string
+          created_by: string | null
+          field: string | null
+          id: string
+          legal_request_id: string
+          note: string
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+        }
+        Insert: {
+          action_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          field?: string | null
+          id?: string
+          legal_request_id: string
+          note: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+        }
+        Update: {
+          action_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          field?: string | null
+          id?: string
+          legal_request_id?: string
+          note?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+        }
+        Relationships: []
+      }
+      legal_request_target_decisions: {
+        Row: {
+          decided_at: string
+          decided_by: string | null
+          decision: string
+          exhibit_id: string | null
+          id: string
+          legal_request_id: string
+          reasoning: string | null
+          target_key: string
+          version_id: string | null
+        }
+        Insert: {
+          decided_at?: string
+          decided_by?: string | null
+          decision: string
+          exhibit_id?: string | null
+          id?: string
+          legal_request_id: string
+          reasoning?: string | null
+          target_key: string
+          version_id?: string | null
+        }
+        Update: {
+          decided_at?: string
+          decided_by?: string | null
+          decision?: string
+          exhibit_id?: string | null
+          id?: string
+          legal_request_id?: string
+          reasoning?: string | null
+          target_key?: string
+          version_id?: string | null
+        }
+        Relationships: []
       }
       legal_seized_items: {
         Row: {
@@ -12197,7 +12455,9 @@ export type Database = {
           p_expires_at?: string
           p_note?: string
           p_request: string
+          p_revision_items?: Json
           p_signature?: string
+          p_target_decisions?: Json
         }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
       }
@@ -12348,6 +12608,58 @@ export type Database = {
       legal_mark_superseded: {
         Args: { p_new: string; p_old: string; p_reason: string }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      legal_add_evidence_and_exhibit: {
+        Args: {
+          p_category?: string
+          p_external_url: string
+          p_rationale?: string
+          p_request: string
+          p_title: string
+          p_type: Database["public"]["Enums"]["media_type"]
+        }
+        Returns: Json
+      }
+      legal_amend: {
+        Args: { p_reason: string; p_request: string }
+        Returns: Json
+      }
+      legal_comment: {
+        Args: { p_body: string; p_parent?: string; p_request: string }
+        Returns: Json
+      }
+      legal_comment_delete: {
+        Args: { p_comment: string }
+        Returns: Json
+      }
+      legal_comment_edit: {
+        Args: { p_body: string; p_comment: string }
+        Returns: Json
+      }
+      legal_record_export: {
+        Args: { p_format: string; p_kind: string; p_request: string }
+        Returns: Json
+      }
+      legal_revision_resolve: {
+        Args: { p_item: string; p_note?: string }
+        Returns: Json
+      }
+      legal_set_charges: {
+        Args: { p_items: Json; p_request: string }
+        Returns: Json
+      }
+      legal_set_observer: {
+        Args: {
+          p_active?: boolean
+          p_reason?: string
+          p_request: string
+          p_user: string
+        }
+        Returns: Json
+      }
+      legal_sweep_run: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
       }
       legal_return_to_prosecutor_queue: {
         Args: { p_reason?: string; p_request: string }
@@ -12598,6 +12910,7 @@ export type Database = {
           p_note?: string
           p_override_reason?: string
           p_request: string
+          p_revision_items?: Json
           p_signature?: string
         }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]

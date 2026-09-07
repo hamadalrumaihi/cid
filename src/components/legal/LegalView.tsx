@@ -10,10 +10,12 @@
  *   - Requests — the canonical card registry (one group per request via
  *     dispositionFor) with simple filters: text search, type/subtype, and
  *     status group.
- *   - DOJ tabs (justice members only — DojWorkspace): the per-role review
- *     Overview landing, the shared prosecutor queue, the judicial queue, held
- *     work, returns, the decided archive, and AG administration. CID-only
- *     members see exactly the two CID views; dual members get both sets.
+ *   - DOJ tabs (judges and the Attorney General only — DojWorkspace): the
+ *     per-role review Overview landing, the judicial queue, sealed
+ *     assignment (AG), held work, returns, the decided archive, and AG
+ *     administration. The prosecutor role is retired (L16): a historical
+ *     prosecutor membership gets no DOJ tabs. CID-only members see exactly
+ *     the two CID views; dual members get both sets.
  *  Creation and revision run through the guided LegalCreateWizard; every
  *  write stays on the existing definer RPCs. Deep link: /legal?request=<id>. */
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
@@ -41,9 +43,8 @@ import { PageHeader, SectionHeader } from '@/components/ui/PageHeader'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
 import { LegalRequestDetail } from '@/components/justice/LegalRequestDetail'
 import { LegalRequestCard } from '@/components/justice/LegalRequestCard'
-import {
-  CardQueueSection, buildLegalViewer, useLegalRequests, useMyProsecutorBureaus,
-} from '@/components/justice/legalShared'
+import { CardQueueSection, useLegalRequests } from '@/components/justice/legalShared'
+import { buildLegalViewer } from '@/components/justice/dossier/legalP4Shim'
 import { DojWorkspace, deriveDojLists, dojViewsForRole, type DojViewId } from '@/components/doj/DojWorkspace'
 import { LegalCreateWizard, type LegalWizardEntry } from './LegalCreateWizard'
 
@@ -121,24 +122,26 @@ function LegalViewInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedViews.loaded])
 
-  // Role-aware mode: an active justice member (effective role — legacy ADA/DA
-  // map to prosecutor) gets the DOJ workspace tabs; an active CID member gets
-  // the investigator views; dual members get both. RLS decides what rows each
-  // mode actually receives — the tabs are presentation only.
+  // Role-aware mode: a live justice member (judge / Attorney General) gets
+  // the DOJ workspace tabs; an active CID member gets the investigator
+  // views; dual members get both. A retired prosecutor membership confers
+  // no tabs (L16). RLS decides what rows each mode actually receives — the
+  // tabs are presentation only.
   const dojRole = useMyJusticeRole()
-  const cidMode = !!auth.profile?.active || !dojRole
-  const dojViews = dojRole ? dojViewsForRole(dojRole) : []
+  const liveDojRole = dojRole === 'judge' || dojRole === 'attorney_general' ? dojRole : null
+  const cidMode = !!auth.profile?.active || !liveDojRole
+  const dojViews = liveDojRole ? dojViewsForRole(liveDojRole) : []
   const validViews: ViewId[] = [...(cidMode ? ['overview', 'requests'] as const : []), ...dojViews.map((v) => v.id)]
   const rawView = params.get('view')
   const view: ViewId = validViews.includes(rawView as ViewId)
     ? (rawView as ViewId)
-    : (cidMode ? 'overview' : dojViews[0]?.id ?? 'queue')
+    : (cidMode ? 'overview' : dojViews[0]?.id ?? 'judicial')
 
   const open = (id: string) => router.push(`/legal?request=${encodeURIComponent(id)}`)
   // The landing stays mounted behind the dossier; refetch on return so
   // in-dossier actions show without relying on the realtime channel.
   const back = () => { router.push('/legal'); reload() }
-  const defaultView: ViewId = cidMode ? 'overview' : dojViews[0]?.id ?? 'queue'
+  const defaultView: ViewId = cidMode ? 'overview' : dojViews[0]?.id ?? 'judicial'
   const setView = (v: ViewId) => {
     const p = new URLSearchParams(params.toString())
     if (v === defaultView) p.delete('view')
@@ -149,16 +152,14 @@ function LegalViewInner() {
 
   // One disposition per request per render — the model resolves the canonical
   // group, claim eligibility, awareness and urgency for this viewer.
-  const prosecutorBureaus = useMyProsecutorBureaus()
-  const viewer = buildLegalViewer(auth, prosecutorBureaus, dojRole, siu.isCommand)
+  const viewer = buildLegalViewer(auth, dojRole, siu.isCommand)
   const now = useNow()
   const entries = useMemo(
     () => requests.map((r) => ({ r, d: dispositionFor(r, viewer, now) })),
     // `viewer` is recreated each render but is fully determined by the auth
-    // fields below + the cached bureau/justice reads; `now` is render-stable
-    // (useNow).
+    // fields below + the justice-role read; `now` is render-stable (useNow).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [requests, now, auth.profile?.id, auth.justiceRole, auth.isOwner, prosecutorBureaus, dojRole],
+    [requests, now, auth.profile?.id, auth.justiceRole, auth.isOwner, siu.isCommand, dojRole],
   )
 
   // DOJ workspace derivations — one pass over the same loaded set.
@@ -231,7 +232,10 @@ function LegalViewInner() {
     return map
   }, [filtered])
 
-  if (openId) return <LegalRequestDetail requestId={openId} onBack={back} />
+  // The guided editor is the only place charges are edited and the landing
+  // for an amended draft (legal_amend) — the dossier hands both off here.
+  const revise = (id: string) => { setWizard({ mode: 'edit', requestId: id }); router.push('/legal') }
+  if (openId) return <LegalRequestDetail requestId={openId} onBack={back} onRevise={revise} />
   if (wizard) {
     return (
       <LegalCreateWizard
@@ -253,8 +257,8 @@ function LegalViewInner() {
 
   const dojCounts: Record<DojViewId, number | undefined> = {
     doj_overview: undefined,
-    queue: dojLists.queue.length,
     judicial: dojLists.judicial.length,
+    sealed: dojLists.sealed.length,
     mine: dojLists.mine.length,
     returned: dojLists.returned.length,
     decided: dojLists.decided.length,
@@ -283,8 +287,8 @@ function LegalViewInner() {
     <div className="space-y-6">
       <PageHeader
         title="Legal Requests"
-        subtitle={dojRole && !auth.profile?.active
-          ? 'Department of Justice legal-review workspace — warrant and subpoena requests from CID cases.'
+        subtitle={liveDojRole && !auth.profile?.active
+          ? 'Department of Justice legal-review workspace — warrant and subpoena requests from CID and SIB cases.'
           : 'Warrant and subpoena requests you filed or can act on.'}
         actions={auth.profile?.active
           ? (
@@ -309,7 +313,7 @@ function LegalViewInner() {
           <EmptyState
             icon={<ScaleIcon className="h-5 w-5" />}
             title="No legal requests yet"
-            hint="File a warrant or subpoena request to start the DOJ review workflow."
+            hint="File a warrant or subpoena request to start the bureau review and judicial workflow."
             {...(auth.profile?.active
               ? { action: { label: 'File legal request', onClick: () => setWizard({ mode: 'create' }) } }
               : {})}
@@ -317,10 +321,10 @@ function LegalViewInner() {
         )}
 
         {/* ── DOJ workspace (justice members) ──────────────────────────────── */}
-        {!loading && isDojView && dojRole && (
+        {!loading && isDojView && liveDojRole && (
           <DojWorkspace
             view={view as DojViewId}
-            role={dojRole}
+            role={liveDojRole}
             myId={auth.profile?.id ?? null}
             lists={dojLists}
             requests={requests}

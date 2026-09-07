@@ -1,18 +1,17 @@
 'use client'
 
-/** Prosecutor / judge picker for AG assignment actions. The pool comes from
- *  the `justice_directory()` definer RPC (the justice-domain name source —
- *  never the CID roster), filtered to ACTIVE members whose EFFECTIVE role
- *  matches the seat being filled (legacy ADA/DA rows count as prosecutors).
- *  The optional reason field is required by the server when reassigning a
- *  claimed request — the caller says so via `reasonRequired`. */
+/** Judge picker for the Attorney General's assignment action (assign_judge —
+ *  AG or Owner; the ONLY path to the bench for a sealed request). The pool
+ *  comes from the `justice_directory()` definer RPC (the justice-domain name
+ *  source — never the CID roster), filtered to ACTIVE judges. The prosecutor
+ *  seat is gone (P4-01): there is no prosecutor queue to assign into. */
 import { useEffect, useState } from 'react'
 import { rpc } from '@/lib/db'
 import { justiceRoleLabel } from '@/lib/justice'
+import { canAssignAsJudge } from '@/lib/legalWorkflow'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
-import { effectiveDojRole } from '@/lib/permissions'
 
 interface DirectoryEntry {
   user_id: string
@@ -22,17 +21,15 @@ interface DirectoryEntry {
 }
 
 export function JusticePickerModal({
-  seat, title, hint, reasonMode = 'optional', busy, excludeIds = [], onSubmit, onClose,
+  title, hint, reasonMode = 'none', busy, excludeIds = [], onSubmit, onClose,
 }: {
-  /** The effective role being seated. */
-  seat: 'prosecutor' | 'judge'
   title: string
   hint?: string
-  /** 'required' when the server demands one (reassigning a claimed request);
-   *  'none' for RPCs that take no reason (assign_judge). */
+  /** assign_judge takes no reason, so the default is 'none'; callers that
+   *  record one elsewhere may ask for an optional or required note. */
   reasonMode?: 'none' | 'optional' | 'required'
   busy: boolean
-  /** Never offer these (e.g. the current holder — the server refuses anyway). */
+  /** Never offer these (e.g. the creator — the server refuses anyway). */
   excludeIds?: readonly string[]
   onSubmit: (v: { userId: string; reason: string }) => void
   onClose: () => void
@@ -55,8 +52,7 @@ export function JusticePickerModal({
 
   const q = query.trim().toLowerCase()
   const options = (pool ?? []).filter((p) =>
-    p.active
-    && effectiveDojRole(p.justice_role) === seat
+    canAssignAsJudge(p)
     && !excludeIds.includes(p.user_id)
     && (!q || p.display_name.toLowerCase().includes(q)))
 
@@ -72,19 +68,19 @@ export function JusticePickerModal({
         <div className="mt-4 space-y-4">
           <div>
             <p className="mb-1 block text-xs font-semibold text-slate-400">
-              {seat === 'prosecutor' ? 'Active prosecutors' : 'Active judges'}
+              Active judges
               <span className="ml-0.5 text-rose-300" aria-hidden>*</span>
             </p>
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Filter by name…"
-              aria-label="Filter members"
+              aria-label="Filter judges"
               autoComplete="off"
             />
             <ul
               role="radiogroup"
-              aria-label={seat === 'prosecutor' ? 'Select a prosecutor' : 'Select a judge'}
+              aria-label="Select a judge"
               className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-white/10 bg-ink-950/70"
             >
               {options.map((p) => (
@@ -108,7 +104,7 @@ export function JusticePickerModal({
                     ? 'Directory unavailable — try again.'
                     : pool === null
                       ? 'Loading directory…'
-                      : `No active ${seat === 'prosecutor' ? 'prosecutors' : 'judges'} available.`}
+                      : 'No active judges available.'}
                 </li>
               )}
             </ul>
@@ -118,7 +114,7 @@ export function JusticePickerModal({
             <Field
               label="Reason"
               required={reasonMode === 'required'}
-              hint={reasonMode === 'required' ? 'Required — this reassigns a claimed request.' : 'Optional — recorded in the request history.'}
+              hint={reasonMode === 'required' ? 'Required — recorded in the request history.' : 'Optional — recorded in the request history.'}
             >
               {(id) => <Textarea id={id} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />}
             </Field>
@@ -132,7 +128,7 @@ export function JusticePickerModal({
             disabled={busy || !ready}
             onClick={() => onSubmit({ userId: selected, reason: reason.trim() })}
           >
-            {busy ? 'Assigning…' : 'Assign'}
+            {busy ? 'Assigning…' : 'Assign judge'}
           </Button>
         </div>
       </div>

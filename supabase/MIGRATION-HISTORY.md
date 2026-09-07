@@ -726,6 +726,95 @@ task and a case update matching zero rows, a note insert `42501`,
 `can_record` false, `soft_delete` `denied`, the three RPCs raising
 "this case is archived"; after `case_restore` the insert succeeds.
 
+**P4-01 / P4-03 / P4-05 / P4-06 / P4-07 / P4-10 / P4-11 tables.**
+`20261024120000_legal_tables.sql` (applied as `legal_tables`): the
+`review_status` CHECK gains `partially_approved`; `stage_entered_at` /
+`nudged_at` / `escalated_at` on `legal_requests` with the stage-clock
+trigger; `legal_request_charges`, `legal_request_comments` +
+`legal_request_comment_versions` (realtime, immutable versions),
+`legal_request_revision_items`, `legal_request_target_decisions`
+(immutable), `legal_expiry_defaults` (seeded: arrest warrant 30 d, the
+rest 14 d), `legal_request_reminders`, `legal_export_log` (immutable) — all
+SELECT-only for `authenticated` through `can_view_legal_request`, written
+by definers alone; `rls_test_cleanup` spliced to sweep them.
+
+**P4-01 / P4-04 / P4-06 / P4-07 re-route.**
+`20261025120000_legal_reroute.sql` (applied as `legal_reroute`, then
+`legal_reroute_v_rank_fix` — `review_legal_request_as_cid` re-applied with
+`me.role::text`; `profiles.role` is the `app_role` enum and the bare CASE
+mis-typed the `'owner'` literal, a fault the pre-Phase-4 body carried too):
+`can_view_legal_request` without the prosecutor / DA / bureau lanes
+(observer participant, AG oversight from `submitted_to_judge_at`, judges for
+the non-sealed queue); CID and SIB approval → `submitted_to_judge` with
+the judge fan-out (`legal_notify_judges`; AG for sealed and SIB; Owners +
+`LEGAL_AG_UNCOVERED` when sealed with no AG); `submit_legal_request_to_cid`
+refusing a warrant without a standard of proof / PC statement and a
+resubmission without a change summary, the judge fast lane; sealed
+self-claim refused; `assign_judge` AG or Owner; `decide_legal_request_as_judge`
+with per-target decisions (`partially_approved`, expiry defaults) and a
+revision checklist; the terminal-set re-emits (withdraw, cancel, supersede,
+issue, close, internal notes); `justice_appoint` judge / AG only; the
+prosecutor RPCs EXECUTE-revoked; in-flight prosecutor-stage rows mapped
+(`LEGAL_JUDGE_QUEUE_MIGRATED`).
+
+**P4-03 / P4-05 / P4-06 / P4-08 / P4-09 / P4-11 RPCs.**
+`20261026120000_legal_rpcs.sql` (applied as `legal_rpcs`): `legal_denied`
+(perm_deny + the `{ok:false, code:'denied'}` shape), `legal_can_comment`,
+`legal_is_command_authority`, `can_set_legal_observer`, `can_amend_legal`,
+`legal_form_public`; `legal_set_charges`, `legal_comment` /
+`legal_comment_edit` / `legal_comment_delete`, `legal_revision_resolve`,
+`legal_add_evidence_and_exhibit`, `legal_amend`, `legal_set_observer`,
+`legal_record_export`; `perm_dispatch` legal arms `comment`, `set_charges`,
+`decide`, `amend`, `supersede`, `cancel`, `export`, `observe`,
+`assign_judge` and their catalog rows (sort 430–510; the `read` rule
+reworded).
+
+**P4-10 sweeps.**
+`20261027120000_legal_sweeps.sql` (applied as `legal_sweeps`):
+`legal_request_actions.actor_id` nullable (system rows); `legal_notify_system`
+(creator-side test suppression, no `auth.uid()`), `legal_log_system`,
+`legal_audit_system`; the responsible-party / escalation resolvers;
+`private.legal_reminder_sweep` (48 h nudge, 5 d escalation, 7 d unissued,
+72 h expiring), `private.legal_expiry_sweep` (warrant expiry + MDT
+`expired`, subpoena deadline passed); cron `legal-sweep` `35 * * * *`
+through `legal_sweep_job`; `legal_sweep_run()` for the Owner.
+
+Verified at apply time in one rolled-back transaction (a detective, a
+director, the Owner, a judge seated for the transaction): a warrant refused
+without a standard of proof and then without a PC statement; charges,
+evidence + exhibit, a comment and its edit, an observer added; the observer
+reading the request and the comment through RLS, commenting, refused
+charges (`denied`); the director's approval landing in `submitted_to_judge`;
+the Owner assigning the judge (`judicial_review`); denying every target
+refused; a partial approval with two target decisions on the judicial
+version, a 30-day expiry and `_charges` / `_target_decisions` in the frozen
+form; an instrument export with its code; issue; the Owner deleting a
+comment (two versions kept); the creator's amendment cloning the exhibit
+and the public form; the expiry sweep marking the issued warrant expired
+(MDT `expired`) and a second run doing nothing; the reminder sweep nudging
+and escalating the stalled amendment once, idempotent on the second run;
+system timeline rows with a null actor.
+
+**Phase 4 security review — `legal_review_fixes`.** Nine functions re-applied
+live from the same repo files after the read-only review:
+`submit_legal_request_to_cid` (the judicial fast lane compares the new
+`content_hash` with the command-signed version and writes
+`fast_lane_content_changed` + `content_changed` on the audit row; `perm_deny`
+on the creator / editable refusals), `claim_legal_request_as_judge`,
+`withdraw_legal_request`, `close_legal_request`, `justice_appoint`
+(`perm_deny` before every authority raise), `private.legal_can_comment`
+(`can_view_legal_request` as the outer conjunct — the approver pool cannot
+post blind on a sealed request), `legal_set_observer` (a sealed request's
+observers are granted by command / the AG only), `legal_add_evidence_and_exhibit`
+(`case_writable`), `private.legal_stage_responsible` (the SIB reminder set
+honours recusal and compartments). Verified in a rolled-back transaction: the
+creator's observer grant on a sealed request `denied` and a director's
+accepted; a case member without sight of the sealed request refused to
+comment; the judge's return, the creator's narrative edit and the fast-lane
+resubmission landing in `submitted_to_judge` with `content_changed: true` and
+the `fast_lane_content_changed` timeline row; evidence refused on an archived
+case; the SIB responsible-party resolver running.
+
 | Version (live) | Name | Repo file |
 |---|---|---|
 | applied via MCP (`entity_normalization`, `entity_normalization_phone_fix`) | entity_normalization | `20261014120000_entity_normalization.sql` |
@@ -738,6 +827,10 @@ task and a case update matching zero rows, a note insert `42501`,
 | applied via MCP (`case_notes`, `case_notes_policy_fix`, `case_notes_version_table`) | case_notes | `20261021120000_case_notes.sql` |
 | applied via MCP (`case_links`, `case_links_kinds`, `case_audit_feed_update_only`) | case_links_audit_feed | `20261022120000_case_links_audit_feed.sql` |
 | applied via MCP (`archived_read_only`, `archived_read_only_perm`, `archived_read_only_rpcs`) | archived_read_only | `20261023120000_archived_read_only.sql` |
+| applied via MCP (`legal_tables`) | legal_tables | `20261024120000_legal_tables.sql` |
+| applied via MCP (`legal_reroute`, `legal_reroute_v_rank_fix`, `legal_review_fixes`) | legal_reroute | `20261025120000_legal_reroute.sql` |
+| applied via MCP (`legal_rpcs`, `legal_review_fixes`) | legal_rpcs | `20261026120000_legal_rpcs.sql` |
+| applied via MCP (`legal_sweeps`, `legal_review_fixes`) | legal_sweeps | `20261027120000_legal_sweeps.sql` |
 | applied via MCP (`record_versions`) | record_versions | `20261011120000_record_versions.sql` |
 | applied via MCP (`case_access_grant_expiry`) | case_access_grant_expiry | `20261012120000_case_access_grant_expiry.sql` |
 | applied via MCP (`permanent_delete_record`, `permanent_delete_record_preview_fix`) | permanent_delete_record | `20261013120000_permanent_delete_record.sql` |

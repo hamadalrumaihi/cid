@@ -8,8 +8,9 @@
 import type { Tables } from '@/lib/database.types'
 import { fmtDate, fmtDateTime } from '@/lib/format'
 import { fulfilmentLabel, reviewStatusLabel, type LegalRequest } from '@/lib/justice'
+import type { LegalChargeRow, TargetDecisionRow } from '@/lib/legalExport'
 import {
-  fulfilmentEvents, humanize, laneThatAdvanced, routingExplanation,
+  fulfilmentEvents, humanize, routingExplanation,
   type FulfilmentEvent, type LegalDisposition, type LegalViewer,
 } from '@/lib/legalWorkflow'
 import { bureauShort } from '@/lib/roles'
@@ -17,18 +18,25 @@ import { Card } from '@/components/ui/Card'
 import { EntityLink } from '@/components/ui/EntityLink'
 import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTimeline'
 import { StatusChip } from '../legalShared'
+import { ChargesBlock } from './ChargesBlock'
 import { Row, type ActionRow } from './dossierShared'
 import { SeizedItemsPanel } from './SeizedItems'
+import { TargetDecisionsReadOnly } from './TargetDecisionPanel'
 
 type NameFn = (id: string | null | undefined) => string
+/** Timeline rows written by the hourly sweep (nudged / escalated / expired /
+ *  deadline_passed) carry no actor — they are the system's, not a member's. */
+const actorName = (name: NameFn, id: string | null | undefined): string => (id ? name(id) : 'System')
 
 /* ── Summary ──────────────────────────────────────────────────────────────── */
-export function SummarySection({ r, name, viewer, disposition, caseLinkable }: {
+export function SummarySection({ r, name, viewer, disposition, caseLinkable, charges }: {
   r: LegalRequest
   name: NameFn
   viewer: LegalViewer
   disposition: LegalDisposition
   caseLinkable: boolean
+  /** legal_request_charges (P4-03) — printed on the approved instrument. */
+  charges: LegalChargeRow[]
 }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -55,17 +63,20 @@ export function SummarySection({ r, name, viewer, disposition, caseLinkable }: {
             : (r.person_name_snapshot ?? '—')}
         </Row>
         <Row label="Requesting detective">{name(r.created_by)}</Row>
-        <Row label="CID supervisor">{name(r.cid_reviewed_by)}</Row>
-        <Row label="Assigned prosecutor">{name(r.assigned_prosecutor_id)}</Row>
-        {r.assigned_ada_id && <Row label="Assigned ADA (legacy)">{name(r.assigned_ada_id)}</Row>}
+        <Row label="Bureau reviewer">{name(r.cid_reviewed_by)}</Row>
+        {/* Prosecutor / ADA columns are history only (P4-01): shown when a
+            pre-remap row still carries one, never as a live seat. */}
+        {r.assigned_prosecutor_id && <Row label="Prosecutor (retired stage)">{name(r.assigned_prosecutor_id)}</Row>}
+        {r.assigned_ada_id && <Row label="Assigned ADA (retired stage)">{name(r.assigned_ada_id)}</Row>}
         <Row label="Assigned Judge">{name(r.assigned_judge_id)}</Row>
       </Card>
       <Card pad="sm">
         <h3 className="mb-1 text-[13px] font-semibold text-white">Timeline</h3>
         <Row label="Created">{fmtDateTime(r.created_at)}</Row>
-        <Row label="Submitted to CID">{fmtDateTime(r.submitted_to_cid_at)}</Row>
-        <Row label="Submitted to DOJ">{fmtDateTime(r.submitted_to_doj_at)}</Row>
+        <Row label="Submitted for bureau review">{fmtDateTime(r.submitted_to_cid_at)}</Row>
+        {r.submitted_to_doj_at && <Row label="Submitted to DOJ (retired stage)">{fmtDateTime(r.submitted_to_doj_at)}</Row>}
         <Row label="Submitted to Judge">{fmtDateTime(r.submitted_to_judge_at)}</Row>
+        {r.stage_entered_at && <Row label="In current stage since">{fmtDateTime(r.stage_entered_at)}</Row>}
         <Row label="Expires">{fmtDateTime(r.expires_at)}</Row>
         {r.request_type === 'subpoena' && <Row label="Response deadline">{fmtDateTime(r.response_deadline)}</Row>}
       </Card>
@@ -81,6 +92,7 @@ export function SummarySection({ r, name, viewer, disposition, caseLinkable }: {
         </p>
         <p className="mt-1 text-sm text-slate-400">{routingExplanation(r, viewer)}</p>
       </Card>
+      <ChargesBlock charges={charges} className="lg:col-span-2" />
     </div>
   )
 }
@@ -101,7 +113,7 @@ export function ReviewSection({ actions, name }: { actions: ActionRow[]; name: N
           <WorkflowTimeline dense entries={returns.map((a): TimelineEntry => ({
             id: a.id,
             title: humanize(a.action),
-            actor: name(a.actor_id),
+            actor: actorName(name, a.actor_id),
             at: a.created_at,
             from: a.from_status ? reviewStatusLabel(a.from_status) : null,
             to: a.to_status ? reviewStatusLabel(a.to_status) : null,
@@ -115,7 +127,7 @@ export function ReviewSection({ actions, name }: { actions: ActionRow[]; name: N
           entries={reviewActions.map((a): TimelineEntry => ({
             id: a.id,
             title: humanize(a.action),
-            actor: name(a.actor_id),
+            actor: actorName(name, a.actor_id),
             at: a.created_at,
             from: a.from_status ? reviewStatusLabel(a.from_status) : null,
             to: a.to_status ? reviewStatusLabel(a.to_status) : null,
@@ -144,13 +156,15 @@ function RequestChip({ label, id, onOpen }: { label: string; id: string; onOpen?
   )
 }
 
-export function DecisionSection({ r, name, onOpenRequest }: {
+export function DecisionSection({ r, name, onOpenRequest, targetDecisions, exhibits }: {
   r: LegalRequest
   name: NameFn
   /** Enables the superseded/amends cross-links. */
   onOpenRequest?: (id: string) => void
+  /** Frozen per-target scope (P4-07), read-only for everyone once decided. */
+  targetDecisions: TargetDecisionRow[]
+  exhibits: Tables<'legal_request_exhibits'>[]
 }) {
-  const lane = laneThatAdvanced(r)
   const hasLinks = !!(r.superseded_by_id || r.amends_request_id)
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -183,18 +197,16 @@ export function DecisionSection({ r, name, onOpenRequest }: {
       </Card>
       <Card pad="sm">
         <h3 className="mb-1 text-[13px] font-semibold text-white">Assignment</h3>
-        <Row label="Assigned prosecutor">{name(r.assigned_prosecutor_id)}</Row>
-        {r.assigned_ada_id && <Row label="Assigned ADA (legacy)">{name(r.assigned_ada_id)}</Row>}
         <Row label="Assigned Judge">{name(r.assigned_judge_id)}</Row>
-        <Row label="CID supervisor">{name(r.cid_reviewed_by)}</Row>
-        {lane && (
-          <p className="mt-2 text-xs text-slate-400">
-            {lane === 'judicial'
-              ? 'Advanced via the judicial lane — claimed directly from DOJ intake without a prosecutor hand-off.'
-              : 'Advanced via the prosecutorial lane.'}
-          </p>
-        )}
+        <Row label="Bureau reviewer">{name(r.cid_reviewed_by)}</Row>
+        {r.assigned_prosecutor_id && <Row label="Prosecutor (retired stage)">{name(r.assigned_prosecutor_id)}</Row>}
+        {r.assigned_ada_id && <Row label="Assigned ADA (retired stage)">{name(r.assigned_ada_id)}</Row>}
       </Card>
+      {targetDecisions.length > 0 && (
+        <div className="lg:col-span-2">
+          <TargetDecisionsReadOnly decisions={targetDecisions} r={r} exhibits={exhibits} name={name} />
+        </div>
+      )}
     </div>
   )
 }
@@ -261,7 +273,7 @@ export function ActivitySection({ actions, participants, name }: {
         <WorkflowTimeline entries={actions.map((a): TimelineEntry => ({
           id: a.id,
           title: humanize(a.action),
-          actor: name(a.actor_id),
+          actor: actorName(name, a.actor_id),
           at: a.created_at,
           from: a.from_status ? reviewStatusLabel(a.from_status) : null,
           to: a.to_status ? reviewStatusLabel(a.to_status) : null,

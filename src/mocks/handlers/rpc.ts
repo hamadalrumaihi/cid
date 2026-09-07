@@ -14,6 +14,7 @@ import { supabaseBaseUrl } from '../env'
 import { getDenial, getRows, getRpcOverride, getSession, mockId, seedRows, type MockTableName } from '../store'
 import { CASE_WORKSPACE_RPCS } from './caseWorkspace'
 import { ENTITY_RPCS } from './entity'
+import { LEGAL_RPCS, LegalRpcError } from './legal'
 import { postgrestError, shapeNetwork } from './postgrest'
 
 type Fns = Database['public']['Functions']
@@ -180,6 +181,17 @@ export const rpcHandlers = [
         // Phase 3 case workspace (activity feed / mentions / history) — see
         // ./caseWorkspace.ts.
         if (fn in CASE_WORKSPACE_RPCS) return HttpResponse.json(CASE_WORKSPACE_RPCS[fn](args) as Parameters<typeof HttpResponse.json>[0])
+        // Phase 4 legal workflow (routing, charges, comments, revision items,
+        // partial approval, amend / observer / export, sweeps) — see ./legal.ts.
+        // A server `raise` surfaces as PostgREST's 400 error shape.
+        if (fn in LEGAL_RPCS) {
+          try {
+            return HttpResponse.json(LEGAL_RPCS[fn](args) as Parameters<typeof HttpResponse.json>[0])
+          } catch (e) {
+            if (e instanceof LegalRpcError) return postgrestError(400, e.code, e.message)
+            throw e
+          }
+        }
         return postgrestError(404, 'PGRST202',
           `Could not find the function public.${fn} in the schema cache — add a handler in src/mocks/handlers/rpc.ts or use scenarios.rpcResult().`)
     }

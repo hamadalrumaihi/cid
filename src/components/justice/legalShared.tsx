@@ -14,7 +14,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { list, rpc } from '@/lib/db'
 import { useTableVersion } from '@/lib/realtime'
 import { useAuth } from '@/lib/auth'
-import { effectiveDojRole, useMyJusticeRole } from '@/lib/permissions'
+import { effectiveDojRole } from '@/lib/permissions'
 import type { LegalViewer } from '@/lib/legalWorkflow'
 import { deadlineInfo, type LegalRequest } from '@/lib/justice'
 import { LEGAL_TONE_CLS, legalReviewTone, type LegalTone } from '@/lib/status'
@@ -76,9 +76,12 @@ export const LEGAL_LIST_COLS =
   'responsible_bureau,assigned_ada_id,assigned_judge_id,person_name_snapshot,' +
   'recipient_name,recipient_type,case_number_snapshot,expires_at,response_deadline,' +
   'submitted_to_doj_at,created_by,priority,created_at,updated_at,current_version_id,' +
-  // minimal-DOJ queue + amendment columns (20260816120000)
+  // historical prosecutor-stage columns (retired by P4-01, still rendered) +
+  // the amendment / supersession links
   'assigned_prosecutor_id,prosecutor_claimed_at,queue_entered_at,submitted_to_judge_at,' +
-  'amends_request_id,superseded_by_id'
+  'amends_request_id,superseded_by_id,' +
+  // SLA columns (P4-10): stage clock + the reminder sweep's marks (slaChips)
+  'stage_entered_at,nudged_at,escalated_at'
 
 /** RLS-scoped legal request loader — every queue filters CLIENT-side over
  *  rows the server already authorized; the queue predicate is presentation. */
@@ -101,109 +104,14 @@ export function useLegalRequests(): { requests: LegalRequest[]; loading: boolean
   return { requests, loading, reload: useCallback(() => setTick((t) => t + 1), []) }
 }
 
-/** The signed-in viewer's LIVE prosecutor bureau assignments — their OWN
- *  `prosecutor_bureau_assignments` rows only (the pba_sel policy always allows
- *  `prosecutor_id = auth.uid()`). Loaded once per user and cached module-wide
- *  so both portals and the dossier share one cheap read; realtime on the table
- *  refreshes it. Feeds LegalViewer.prosecutorBureaus, which activates the
- *  model's bureau-awareness lane (isBureauAwareness). Non-prosecutors skip
- *  the read entirely. */
+/** @deprecated The prosecutor role and its bureau lanes are retired (P4-01,
+ *  L16): there is no bureau-awareness lane to feed any more, so this always
+ *  returns an empty, stable array. Kept as a no-op only so the remaining
+ *  call sites (dossier, case shell) keep compiling until they drop it;
+ *  do not add new callers. */
 const NO_BUREAUS: readonly string[] = []
-let bureauCache: { key: string; value: readonly string[] } | null = null
 export function useMyProsecutorBureaus(): readonly string[] {
-  const { profile, justiceRole } = useAuth()
-  // Live prosecutors read the CURRENT sources: justice_memberships home
-  // bureau + unexpired prosecutor_coverage (the same pair behind the server's
-  // private.prosecutor_bureaus_of). Legacy ADA/DA roles keep the retired
-  // prosecutor_bureau_assignments read so historical views still resolve.
-  // Keyed on the legacy table only would leave a current-role prosecutor with
-  // an always-empty list — the bureau-awareness lane was dead code.
-  const legacy = justiceRole === 'assistant_district_attorney' || justiceRole === 'district_attorney'
-  const key = legacy || justiceRole === 'prosecutor' ? profile?.id ?? null : null
-  const v = useTableVersion(legacy ? 'prosecutor_bureau_assignments' : 'prosecutor_coverage')
-  const [bureaus, setBureaus] = useState<readonly string[]>(
-    () => (key && bureauCache?.key === key ? bureauCache.value : NO_BUREAUS),
-  )
-  useEffect(() => {
-    if (!key) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const now = Date.now()
-        let live: string[]
-        if (legacy) {
-          const rows = await list('prosecutor_bureau_assignments', {
-            select: 'bureau,starts_at,ends_at', eq: { prosecutor_id: key },
-          })
-          live = [...new Set(
-            rows.filter((r) => !r.ends_at && Date.parse(r.starts_at) <= now).map((r) => String(r.bureau)),
-          )]
-        } else {
-          const [memberships, coverage] = await Promise.all([
-            list('justice_memberships', { select: 'prosecutor_bureau', eq: { user_id: key } }),
-            list('prosecutor_coverage', { select: 'bureau,starts_at,ended_at,expires_at', eq: { prosecutor_id: key } }),
-          ])
-          const home = memberships.map((m) => (m.prosecutor_bureau ? String(m.prosecutor_bureau) : null)).filter((b): b is string => !!b)
-          const covered = coverage
-            .filter((c) => !c.ended_at
-              && Date.parse(c.starts_at) <= now
-              && (!c.expires_at || Date.parse(c.expires_at) > now))
-            .map((c) => String(c.bureau))
-          live = [...new Set([...home, ...covered])]
-        }
-        bureauCache = { key, value: live }
-        if (!cancelled) setBureaus(live)
-      } catch { /* transient — the awareness lane just stays quiet */ }
-    })()
-    return () => { cancelled = true }
-  }, [key, legacy, v])
-  return key ? bureaus : NO_BUREAUS
-}
-
-/** The signed-in prosecutor's BUREAU SCOPE (20260818120000): home bureau from
- *  their own justice_memberships row plus LIVE temporary coverage grants from
- *  prosecutor_coverage (self-select is always allowed on both). Presentation
- *  only — the server enforces bureau eligibility on every claim/assign; this
- *  just labels the queue ("Home: MCB", "Coverage: SCB until …"). Non-
- *  prosecutors skip the reads entirely. */
-export interface BureauScope {
-  /** justice_memberships.prosecutor_bureau, or null (legacy row — surfaced to
-   *  the AG via justice_migration_review for manual assignment). */
-  home: string | null
-  /** Live coverage grants: started, not ended, not expired. */
-  coverage: { id: string; bureau: string; expires_at: string | null }[]
-}
-const NO_SCOPE: BureauScope = { home: null, coverage: [] }
-export function useMyBureauScope(): BureauScope {
-  const { profile } = useAuth()
-  const role = useMyJusticeRole()
-  const key = role === 'prosecutor' ? profile?.id ?? null : null
-  const jmV = useTableVersion('justice_memberships')
-  const pcV = useTableVersion('prosecutor_coverage')
-  const [scope, setScope] = useState<BureauScope>(NO_SCOPE)
-  useEffect(() => {
-    if (!key) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const [mRows, cRows] = await Promise.all([
-          list('justice_memberships', { select: 'prosecutor_bureau', eq: { user_id: key } }),
-          list('prosecutor_coverage', {
-            select: 'id,bureau,starts_at,expires_at,ended_at',
-            eq: { prosecutor_id: key }, order: 'starts_at',
-          }),
-        ])
-        const now = Date.now()
-        const coverage = cRows
-          .filter((c) => !c.ended_at && Date.parse(c.starts_at) <= now
-            && (!c.expires_at || Date.parse(c.expires_at) > now))
-          .map((c) => ({ id: c.id, bureau: String(c.bureau), expires_at: c.expires_at }))
-        if (!cancelled) setScope({ home: mRows[0]?.prosecutor_bureau ?? null, coverage })
-      } catch { /* transient — the queue labels just stay quiet */ }
-    })()
-    return () => { cancelled = true }
-  }, [key, jmV, pcV])
-  return key ? scope : NO_SCOPE
+  return NO_BUREAUS
 }
 
 /* The effective-DOJ-role mirror and the viewer's own role hook live in
@@ -212,15 +120,17 @@ export function useMyBureauScope(): BureauScope {
 
 /** Map the app's auth context → the workflow model's viewer. The model NEVER
  *  decides access (RLS + definer RPCs do); this only shapes what an authorised
- *  viewer is shown. Pass `useMyProsecutorBureaus()` so the bureau-awareness
- *  lane (isBureauAwareness) works — it defaults to none. Pass
- *  `useMyJusticeRole()` for the expiry-aware effective role; callers that omit
- *  it fall back to mapping the auth context's active membership (no expiry
- *  check — the server enforces it regardless). */
+ *  viewer is shown. Pass `useMyJusticeRole()` for the expiry-aware effective
+ *  role; callers that omit it fall back to mapping the auth context's active
+ *  membership (no expiry check — the server enforces it regardless).
+ *
+ *  The second positional argument used to carry the viewer's prosecutor
+ *  bureaus; the lane is gone (P4-01) and the value is ignored. It stays in
+ *  the signature so existing four-argument calls keep compiling. */
 export function buildLegalViewer(
   auth: ReturnType<typeof useAuth>,
-  prosecutorBureaus: readonly string[] = [],
-  justiceRole?: 'prosecutor' | 'attorney_general' | 'judge' | null,
+  _retiredProsecutorBureaus?: readonly string[] | null,
+  justiceRole?: LegalViewer['justiceRole'],
   /** SIU command standing, from useSiu().isCommand. Passed in rather than read
    *  here because this builder has no SIU context; omitted it reads as false,
    *  which only ever hides an action the server would have allowed — never the
@@ -235,15 +145,14 @@ export function buildLegalViewer(
     cidDivision: p?.division ?? null,
     justiceRole: justiceRole !== undefined ? justiceRole : effectiveDojRole(auth.justiceRole),
     isOwner: auth.isOwner,
-    prosecutorBureaus,
     siuIsCommand,
   }
 }
 
 /** Card-based queue section — the newer surfaces render requests as accessible
  *  LegalRequestCards (one per row on mobile) instead of the flat chip row.
- *  `hint` renders an explanatory line under the heading (e.g. the judge
- *  parallel pickup lane, the bureau awareness lane). */
+ *  `hint` renders an explanatory line under the heading (e.g. the open
+ *  judicial queue a judge may claim from). */
 export function CardQueueSection({ title, rows, viewer, now, onOpen, empty, hint }: {
   title: string
   rows: LegalRequest[]

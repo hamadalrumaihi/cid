@@ -46,8 +46,8 @@ export type ActionSourceType =
   | 'legal_hold'
   | 'restricted_access'
   | 'unverified_observation' | 'surveillance_expiring'
-  /** DOJ pipeline work for justice-role viewers (prosecutor queue pickups,
-   *  assigned prosecutorial/judicial reviews). `transfer` is reused for
+  /** Judicial pipeline work for justice-role viewers (judge queue pickups,
+   *  assigned judicial reviews, the AG's sealed assignments). `transfer` is reused for
    *  member_transfers stage decisions (distinct `member_transfer:` keys). */
   | 'legal_queue'
   /** Wave-3 queue sections: my server-saved drafts (user_drafts), unclaimed
@@ -122,9 +122,18 @@ export type AcLegal = Pick<Tables<'legal_requests'>,
   | 'created_by' | 'responsible_bureau' | 'assigned_ada_id' | 'assigned_judge_id'
   | 'response_deadline' | 'expires_at' | 'submitted_to_doj_at'
   | 'created_at' | 'updated_at'>
-  // DOJ revival columns (minimal_doj_revival) — optional so existing callers
-  // and fixtures keep compiling; the loader selects them when present.
-  & { assigned_prosecutor_id?: string | null; queue_entered_at?: string | null }
+  // Historical prosecutor-stage columns (retired by P4-01) + the judicial
+  // queue clock — optional so existing callers and fixtures stay valid.
+  & {
+    assigned_prosecutor_id?: string | null
+    queue_entered_at?: string | null
+    submitted_to_judge_at?: string | null
+    /** SLA columns (P4-10): the reminder sweep's marks, cleared on every
+     *  stage change. escalated_at lifts an item by +50, nudged_at by +20. */
+    stage_entered_at?: string | null
+    nudged_at?: string | null
+    escalated_at?: string | null
+  }
 export type AcBlocker = Pick<Tables<'case_blockers'>,
   'id' | 'case_id' | 'title' | 'type' | 'status' | 'owner_id' | 'review_at'
   | 'created_at' | 'updated_at'>
@@ -281,10 +290,10 @@ export interface ActionSources {
   /** Additive (defaults []): pending/expiring surveillance targets (see
    *  AcSurvTarget). */
   survTargets?: AcSurvTarget[]
-  /** Additive (defaults null): the viewer's EFFECTIVE justice role — the
-   *  loader reads justice_memberships (active && expires_at null-or-future)
-   *  and maps legacy ADA/DA titles to 'prosecutor' (the server's
-   *  justice_role_effective mirror). Gates the DOJ-pipeline items. */
+  /** Additive (defaults null): the viewer's EFFECTIVE justice role (the
+   *  server's justice_role_effective mirror). Gates the judicial-pipeline
+   *  items: 'judge' and 'attorney_general' get work; a historical
+   *  'prosecutor' membership is a retired role and gets nothing. */
   justiceRole?: 'prosecutor' | 'judge' | 'attorney_general' | null
   /** Additive (defaults []): open member_transfers rows (see AcMemberTransfer). */
   memberTransfers?: AcMemberTransfer[]
@@ -335,6 +344,8 @@ export const STATUS_BASE: Record<ActionStatus, number> = {
 export const NUDGE = {
   signoffDecide: 40,
   legalExpiring: 60,   // expires_at within 72h (and not yet past)
+  legalEscalated: 50,  // the reminder sweep escalated the stage (> 5 d)
+  legalNudged: 20,     // the reminder sweep nudged the responsible party (> 48 h)
   membership: 20,
   restrictedAccess: 40, // a member is blocked until command decides
 } as const
@@ -708,23 +719,42 @@ export function buildActionItems(s: ActionSources): ActionQueue {
    *     is the single authority for actionability (viewerCanAct), urgency and
    *     the active deadline; no status meaning is hand-rolled here. Included:
    *     requests I filed (waiting / returned to me / expiring) and requests
-   *     whose NEXT ACTION is mine (e.g. CID supervisor review). Excluded:
-   *     bureau-awareness visibility (never assigned work), judge
-   *     claimable pickups (Justice-portal work), and closed/completed rows. */
+   *     whose NEXT ACTION is mine (e.g. bureau review). Excluded: judge
+   *     claimable pickups (branch 7b's work), and closed/completed rows.
+   *     The reminder sweep's marks (P4-10) lift a stalled request: escalated
+   *     +50, nudged +20 — for its creator and its responsible party alike,
+   *     because the escalation notified both. */
   const legalViewer: LegalViewer = s.legalViewer ?? {
     myId: s.me, cidActive: true, cidRole: s.role, justiceRole: null,
-    isOwner: s.isOwner ?? false, prosecutorBureaus: [],
+    isOwner: s.isOwner ?? false,
     // A Bureau Lead only decides their OWN bureau's requests. Without this the
     // fallback viewer showed every lead a review item for every bureau, which
     // can_approve_legal() then refuses.
     cidDivision: s.division,
   }
+  /** SLA lift + the label the row shows for it (escalated wins over nudged;
+   *  both are cleared server-side when the stage moves). */
+  const slaOf = (l: AcLegal): { nudge: number; label: string | null; mark: 'escalated' | 'nudged' | null } => {
+    if (l.escalated_at) return { nudge: NUDGE.legalEscalated, label: 'Escalated', mark: 'escalated' }
+    if (l.nudged_at) return { nudge: NUDGE.legalNudged, label: 'Nudged', mark: 'nudged' }
+    return { nudge: 0, label: null, mark: null }
+  }
+  const jr = s.justiceRole ?? null
+  const judicialViewer = jr === 'judge' || jr === 'attorney_general'
   for (const l of s.legal) {
     const d = dispositionFor(l, legalViewer, s.nowMs)
     if (d.group === 'closed' || d.group === 'completed') continue
-    if (d.awarenessOnly) continue
+    // Claim-shaped judicial work belongs to branch 7b (one item, judge-only).
+    if (d.group === 'available_to_claim') continue
     const isCreator = l.created_by === s.me
     if (!isCreator && !d.viewerCanAct) continue
+    // A judge's or the AG's own bench work (claim / decide / sealed
+    // assignment) is branch 7b's item — richer shape, one dedupe key. Without
+    // this skip the disposition item lands first and 7b's is dropped as a
+    // structural duplicate. An Owner with no justice role keeps the
+    // disposition item ("Assign a Judge") — that IS the L4 fallback.
+    if (!isCreator && judicialViewer
+        && (l.review_status === 'submitted_to_judge' || l.review_status === 'judicial_review')) continue
     const deadline = activeDeadline(l)
     const dl = deadline ? deadlineInfo(deadline.at, deadline.kind, { now: s.nowMs, soonHours: 72, urgentHours: 72 }) : null
     const returned = d.group === 'returned_to_you'
@@ -735,41 +765,45 @@ export function buildActionItems(s: ActionSources): ActionQueue {
             : d.urgency === 'soon' ? 'due_soon' : 'waiting'
     // Warrant-expiry pressure (≤72h out) keeps its documented +60 nudge.
     const expiring = deadline?.kind === 'expires' && d.urgency === 'soon'
+    const sla = slaOf(l)
+    const reason = d.viewerCanAct ? d.nextAction
+      : dl && (dl.overdue || dl.urgent) ? dl.text
+        : d.whyNoAction ?? d.groupLabel
     add({
       id: `legal:${l.id}`, sourceType: 'legal_request', sourceId: l.id,
       title: `${l.request_number} — ${humanize(l.request_type || 'request')}`,
       summary: l.case_number_snapshot ? `Case ${l.case_number_snapshot}` : 'Legal request',
-      reason: d.viewerCanAct ? d.nextAction
-        : dl && (dl.overdue || dl.urgent) ? dl.text
-          : d.whyNoAction ?? d.groupLabel,
+      reason: sla.label ? `${sla.label} — ${reason}` : reason,
       status, dueAt: deadline?.at ?? null,
-      createdAt: l.created_at, updatedAt: l.updated_at, waitingSince: l.created_at,
+      createdAt: l.created_at, updatedAt: l.updated_at, waitingSince: l.stage_entered_at ?? l.created_at,
       ownerId: s.me, responsibleRole: !isCreator && d.viewerCanAct ? s.role : null,
       caseId: l.case_id, caseNumber: l.case_number_snapshot,
       bureau: l.responsible_bureau,
       deepLink: `/legal?request=${encodeURIComponent(l.id)}`,
       isPersonalItem: isCreator, isCommandItem: !isCreator && d.viewerCanAct,
       isWaitingOnCurrentUser: d.viewerCanAct,
-      nudge: expiring ? NUDGE.legalExpiring : 0,
+      nudge: (expiring ? NUDGE.legalExpiring : 0) + sla.nudge,
+      sourceMetadata: sla.mark ? { sla: sla.mark } : {},
       dedupeKey: `legal:${l.id}`,
     })
   }
 
-  /* 7b · DOJ pipeline (minimal_doj_revival) — work for justice-role viewers.
-   *      Prosecutors: unclaimed prosecutor_queue rows (shared queue pickup)
-   *      and prosecutor_review rows assigned to them. Judges: unassigned
-   *      submitted_to_judge rows (judicial queue) and reviews assigned to
-   *      them. Sealed rows never surface as open pickups (formal assignment
-   *      only — the claim RPCs' bar, mirrored); creators are excluded (their
-   *      view is branch 7's waiting lane + the conflict-of-interest bar).
-   *      Assigned-review items reuse the `legal:<id>` dedupe key so they can
-   *      never double up with a branch-7 item for the same request. */
-  const jr = s.justiceRole ?? null
-  if (jr) {
+  /* 7b · judicial pipeline (P4-01) — work for justice-role viewers. Judges:
+   *      unassigned, non-sealed submitted_to_judge rows (the judicial queue,
+   *      claimable) and reviews assigned to them. The Attorney General: sealed
+   *      submitted_to_judge rows awaiting assign_judge (judges can never
+   *      self-claim those — the claim RPC's bar, mirrored). No prosecutor
+   *      items: the role is retired and its RPCs are EXECUTE-revoked. Creators
+   *      are excluded (their view is branch 7's waiting lane + the
+   *      conflict-of-interest bar). Assigned-review items reuse the
+   *      `legal:<id>` dedupe key so they can never double up with a branch-7
+   *      item for the same request. The sweep's marks lift these too. */
+  if (judicialViewer) {
     for (const l of s.legal) {
       const st = l.review_status || ''
       if (l.created_by === s.me) continue
       const deadline = activeDeadline(l)
+      const sla = slaOf(l)
       const common = {
         sourceType: 'legal_queue' as const, sourceId: l.id,
         title: `${l.request_number} — ${humanize(l.request_type || 'request')}`,
@@ -780,42 +814,37 @@ export function buildActionItems(s: ActionSources): ActionQueue {
         caseId: l.case_id, caseNumber: l.case_number_snapshot, bureau: l.responsible_bureau,
         deepLink: `/legal?request=${encodeURIComponent(l.id)}`,
         isWaitingOnCurrentUser: true,
+        nudge: sla.nudge,
+        sourceMetadata: sla.mark ? { sla: sla.mark } : {},
       }
-      if (jr === 'prosecutor' && st === 'prosecutor_queue' && l.classification !== 'sealed') {
-        add({
-          ...common, id: `legal_queue:${l.id}`,
-          summary: l.case_number_snapshot ? `Case ${l.case_number_snapshot} · shared queue` : 'Shared prosecutor queue',
-          reason: 'Unclaimed request in the shared queue',
-          status: 'needs_action',
-          waitingSince: l.queue_entered_at ?? l.created_at,
-          dedupeKey: `legal_queue:${l.id}`,
-        })
-      } else if (st === 'prosecutor_review' && (l.assigned_prosecutor_id === s.me || l.assigned_ada_id === s.me)) {
-        add({
-          ...common, id: `legal_queue:${l.id}`,
-          reason: 'Assigned for prosecutorial review',
-          status: 'needs_action',
-          waitingSince: l.updated_at,
-          isPersonalItem: true,
-          dedupeKey: `legal:${l.id}`,
-        })
-      } else if (jr === 'judge' && st === 'submitted_to_judge' && !l.assigned_judge_id && l.classification !== 'sealed') {
+      const withSla = (reason: string) => (sla.label ? `${sla.label} — ${reason}` : reason)
+      if (jr === 'judge' && st === 'submitted_to_judge' && !l.assigned_judge_id && l.classification !== 'sealed') {
         add({
           ...common, id: `legal_queue:${l.id}`,
           summary: l.case_number_snapshot ? `Case ${l.case_number_snapshot} · judicial queue` : 'Judicial queue',
-          reason: 'Awaiting judicial pickup — available to claim',
+          reason: withSla('Awaiting judicial pickup — available to claim'),
           status: 'needs_action',
-          waitingSince: l.submitted_to_doj_at ?? l.updated_at,
+          waitingSince: l.submitted_to_judge_at ?? l.stage_entered_at ?? l.updated_at,
           dedupeKey: `legal_queue:${l.id}`,
         })
-      } else if ((st === 'submitted_to_judge' || st === 'judicial_review') && l.assigned_judge_id === s.me) {
+      } else if (jr === 'judge' && (st === 'submitted_to_judge' || st === 'judicial_review') && l.assigned_judge_id === s.me) {
         add({
           ...common, id: `legal_queue:${l.id}`,
-          reason: 'Assigned for judicial review',
+          reason: withSla('Assigned for judicial review'),
           status: 'needs_action',
-          waitingSince: l.updated_at,
+          waitingSince: l.stage_entered_at ?? l.updated_at,
           isPersonalItem: true,
           dedupeKey: `legal:${l.id}`,
+        })
+      } else if (jr === 'attorney_general' && st === 'submitted_to_judge' && !l.assigned_judge_id && l.classification === 'sealed') {
+        add({
+          ...common, id: `legal_queue:${l.id}`,
+          summary: 'Sealed request · judicial queue',
+          reason: withSla('Sealed — assign a judge'),
+          status: 'needs_action',
+          waitingSince: l.submitted_to_judge_at ?? l.stage_entered_at ?? l.updated_at,
+          isCommandItem: true,
+          dedupeKey: `legal_queue:${l.id}`,
         })
       }
     }

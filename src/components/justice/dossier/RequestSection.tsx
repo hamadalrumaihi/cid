@@ -8,9 +8,11 @@
 import { clearDraft, type LoadedDraft } from '@/lib/userDrafts'
 import { fmtDateTime, timeAgo } from '@/lib/format'
 import {
-  CLASSIFICATIONS, SOCIAL_PLATFORMS,
+  CLASSIFICATIONS, SOCIAL_PLATFORMS, STANDARDS_OF_PROOF,
   type LegalRequest, type LegalVersion,
 } from '@/lib/justice'
+import type { LegalChargeRow } from '@/lib/legalExport'
+import { standardOfProofLabel } from '@/lib/legalExport'
 import { humanize } from '@/lib/legalWorkflow'
 import { parseLegalFormEntries } from '@/lib/schemas'
 import { Button } from '@/components/ui/Button'
@@ -18,9 +20,14 @@ import { Card } from '@/components/ui/Card'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { VersionViewer, type VersionItem } from '@/components/shared/VersionViewer'
 import { DiffView } from '@/components/sops/docDiff'
+import { ChargesBlock } from './ChargesBlock'
 import { Row, sanitizeStash, type DraftShape } from './dossierShared'
 
 type FieldSpec = { key: string; label: string; req?: boolean; kind?: 'textarea' | 'datetime' }
+
+/** The P4-04 basis keys render as their own labelled rows, not as generic
+ *  particulars. */
+const BASIS_KEYS = new Set(['standard_of_proof', 'pc_statement'])
 
 /** Canonical text of a version (narrative + labelled form entries) — the diff
  *  input, so a revision reads as one document change, not raw JSON. */
@@ -51,6 +58,11 @@ function VersionHistory({ versions, name }: { versions: LegalVersion[]; name: (i
           const prev = versions[idx + 1] ?? null // list is newest-first
           return (
             <div className="space-y-2">
+              {v.change_summary && (
+                <p className="rounded-lg border border-badge-500/20 bg-badge-500/5 px-2.5 py-1.5 text-xs text-slate-200">
+                  <span className="font-semibold text-white">What changed: </span>{v.change_summary}
+                </p>
+              )}
               <p className="whitespace-pre-wrap text-sm text-slate-200">{v.narrative?.trim() || '—'}</p>
               {entries.length > 0 && (
                 <div>
@@ -76,7 +88,7 @@ function VersionHistory({ versions, name }: { versions: LegalVersion[]; name: (i
 
 export function RequestSection({
   r, editable, busy, spec, draft, setDraft, pendingDraft, setPendingDraft,
-  currentVersion, versions, name, onSaveDraft, onSubmit,
+  currentVersion, versions, name, onSaveDraft, onSubmit, charges, onEditCharges,
 }: {
   r: LegalRequest
   editable: boolean
@@ -91,8 +103,16 @@ export function RequestSection({
   name: (id: string | null | undefined) => string
   onSaveDraft: () => void
   onSubmit: () => void
+  /** legal_request_charges rows (P4-03) — read-only here; edited in the wizard. */
+  charges: LegalChargeRow[]
+  onEditCharges?: () => void
 }) {
-  const formEntries = parseLegalFormEntries(currentVersion?.form_data)
+  const formEntries = parseLegalFormEntries(currentVersion?.form_data).filter(([k]) => !BASIS_KEYS.has(k))
+  const warrant = r.request_type === 'warrant'
+  const versionForm = (currentVersion?.form_data && typeof currentVersion.form_data === 'object' && !Array.isArray(currentVersion.form_data))
+    ? (currentVersion.form_data as Record<string, unknown>) : {}
+  const setFormKey = (key: string, value: string) => setDraft((d) => ({ ...d, form: { ...d.form, [key]: value } }))
+  const resubmitting = r.review_status.startsWith('returned_by')
   return (
     <div className="space-y-4">
       {editable ? (
@@ -120,10 +140,27 @@ export function RequestSection({
               )}
             </Field>
           )}
+          {warrant && (
+            <>
+              {/* P4-04: submit_legal_request_to_cid refuses a warrant without
+                  both — they live in form_data beside the other fields. */}
+              <Field label="Standard of proof" required hint="The standard the request must meet; the probable-cause statement below must support it.">
+                {(id) => (
+                  <Select id={id} value={draft.form.standard_of_proof ?? ''} onChange={(e) => setFormKey('standard_of_proof', e.target.value)}>
+                    <option value="">Choose…</option>
+                    {STANDARDS_OF_PROOF.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </Select>
+                )}
+              </Field>
+              <Field label="Probable-cause statement" required hint="The facts, in order, that establish the standard — what was seen, by whom, and how it ties the target to the offence.">
+                {(id) => <Textarea id={id} rows={5} value={draft.form.pc_statement ?? ''} onChange={(e) => setFormKey('pc_statement', e.target.value)} />}
+              </Field>
+            </>
+          )}
           <Field label="Description / Justification" required>
             {(id) => <Textarea id={id} rows={5} value={draft.narrative} onChange={(e) => setDraft((d) => ({ ...d, narrative: e.target.value }))} />}
           </Field>
-          {spec.map((f) => (
+          {spec.filter((f) => !BASIS_KEYS.has(f.key)).map((f) => (
             <Field key={f.key} label={f.label} required={f.req}>
               {(id) => f.key === 'platform' ? (
                 <Select id={id} value={draft.form[f.key] ?? ''} onChange={(e) => setDraft((d) => ({ ...d, form: { ...d.form, [f.key]: e.target.value } }))}>
@@ -146,13 +183,11 @@ export function RequestSection({
           </Field>
           <div className="flex gap-2">
             <Button disabled={busy} onClick={onSaveDraft}>Save draft</Button>
-            {/* A judge/prosecutor return fast-tracks: the corrected request
-                goes straight back to the prosecutor (material changes are
-                declared in the preview), so the label stays honest. */}
+            {/* A judge return fast-tracks back to the judicial queue (material
+                changes are declared in the preview); every resubmission
+                captures a change summary there, so the label stays honest. */}
             <Button variant="primary" disabled={busy} onClick={onSubmit}>
-              {['returned_by_judge', 'returned_by_prosecutor'].includes(r.review_status)
-                ? 'Resubmit for review'
-                : 'Submit for CID review'}
+              {resubmitting ? 'Resubmit for review' : 'Submit for bureau review'}
             </Button>
           </div>
         </Card>
@@ -163,6 +198,15 @@ export function RequestSection({
           </p>
           <Row label="Title">{r.title}</Row>
           {r.priority && <Row label="Priority">{r.priority}</Row>}
+          {warrant && (
+            <>
+              <Row label="Standard of proof">{standardOfProofLabel(versionForm.standard_of_proof)}</Row>
+              <div>
+                <p className="text-xs font-semibold text-slate-400">Probable-cause statement</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-slate-200">{typeof versionForm.pc_statement === 'string' && versionForm.pc_statement.trim() ? versionForm.pc_statement : '—'}</p>
+              </div>
+            </>
+          )}
           <div>
             <p className="text-xs font-semibold text-slate-400">Description / Justification</p>
             <p className="mt-1 whitespace-pre-wrap text-sm text-slate-200">{currentVersion?.narrative ?? r.narrative ?? '—'}</p>
@@ -176,6 +220,7 @@ export function RequestSection({
           )}
         </Card>
       )}
+      <ChargesBlock charges={charges} editable={editable} onEdit={onEditCharges} className="max-w-2xl" />
       <VersionHistory versions={versions} name={name} />
     </div>
   )
