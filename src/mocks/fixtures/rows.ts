@@ -74,6 +74,14 @@ export function reportRow(overrides: Partial<Tables<'reports'>> & Pick<Tables<'r
     seq: 1,
     signature: null,
     template: 'general',
+    review_note: null,
+    review_status: 'draft',
+    reviewed_at: null,
+    reviewed_by: null,
+    reviewer_signature: null,
+    submitted_at: null,
+    submitted_by: null,
+    template_version_id: null,
     updated_at: mockTimestamp(),
     ...overrides,
   }
@@ -94,6 +102,9 @@ export function caseTaskRow(overrides: Partial<Tables<'case_tasks'>> & Pick<Tabl
     parent_id: null,
     title: 'Canvass the scene',
     updated_at: mockTimestamp(),
+    waive_reason: null,
+    waived_at: null,
+    waived_by: null,
     ...overrides,
   }
 }
@@ -440,3 +451,91 @@ export function legalRequestExhibitRow(
   }
 }
 
+
+/* ── Report builder (Phase 5, migrations 20261028120000 → 20261029120000) ── */
+
+/** A report template catalog row (P5-01). The mock seeds the 14 FORM_SCHEMAS
+ *  keys lazily (src/mocks/handlers/reports.ts); this builder exists for a
+ *  spec that needs an extra — typically retired — template. */
+export function reportTemplateRow(overrides: Partial<Tables<'report_templates'>> = {}): Tables<'report_templates'> {
+  return {
+    active: true,
+    created_at: mockTimestamp(),
+    created_by: null,
+    description: null,
+    id: mockId(),
+    is_default: false,
+    key: 'mock_template',
+    name: 'Mock Template',
+    sort_order: 99,
+    updated_at: mockTimestamp(),
+    ...overrides,
+  }
+}
+
+/** A template version: the FormSchema plus the `required` / `advisory`
+ *  keys and the review rule. Defaults to a published v1 that requires
+ *  review, with a minimal but valid schema. */
+export function reportTemplateVersionRow(
+  overrides: Partial<Tables<'report_template_versions'>> & Pick<Tables<'report_template_versions'>, 'template_id'>,
+): Tables<'report_template_versions'> {
+  return {
+    advisory: [],
+    change_summary: null,
+    created_at: mockTimestamp(),
+    created_by: null,
+    id: mockId(),
+    published_at: mockTimestamp(),
+    published_by: null,
+    required: ['case_number', 'narrative'],
+    review_required: true,
+    schema: {
+      title: 'Mock Template',
+      subtitle: 'Criminal Investigations Department — FOR OFFICIAL USE ONLY',
+      sections: [
+        { id: 'hdr', label: 'Report', type: 'kv', fields: [{ key: 'case_number', label: 'Case Number', type: 'text' }] },
+        { id: 'narrative', label: 'Narrative', type: 'textarea', key: 'narrative' },
+      ],
+    },
+    status: 'published',
+    superseded_at: null,
+    version_number: 1,
+    ...overrides,
+  }
+}
+
+/** A record inserted into (or mentioned by) a report (P5-04). `ref_id` is
+ *  null only for a `timeline_event`; the builder defaults to a person
+ *  subject with an empty snapshot. */
+export function reportEntityRow(
+  overrides: Partial<Tables<'report_entities'>> & Pick<Tables<'report_entities'>, 'report_id'>,
+): Tables<'report_entities'> {
+  return {
+    created_at: mockTimestamp(),
+    edited: false,
+    id: mockId(),
+    inserted_by: null,
+    kind: 'person',
+    label: 'Mock Suspect',
+    ref_id: mockId(),
+    role: 'subject',
+    snapshot: {},
+    ...overrides,
+  }
+}
+
+/** An export receipt (P5-07): the format, the sealed version it rendered
+ *  (null for a draft) and the 10-character verification code. */
+export function reportExportRow(
+  overrides: Partial<Tables<'report_exports'>> & Pick<Tables<'report_exports'>, 'report_id'>,
+): Tables<'report_exports'> {
+  return {
+    exported_at: mockTimestamp(),
+    exported_by: null,
+    format: 'pdf',
+    id: mockId(),
+    verification_code: 'ABCDEF0123',
+    version_number: null,
+    ...overrides,
+  }
+}

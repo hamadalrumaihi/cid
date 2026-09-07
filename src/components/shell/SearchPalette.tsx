@@ -199,6 +199,7 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
       audit: isOwner,
       devdocs: isOwner,
       'command-center': isCommand || isOwner,
+      'report-templates': isCommand || isOwner,
       siu: siuCanAccess,
     }
     for (const [tab, meta] of Object.entries(PAGE_META)) {

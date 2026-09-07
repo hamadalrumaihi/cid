@@ -58,3 +58,24 @@ specific account password is absent.
   caught a real 42501 projection bug in the Gate form — `select('*')` vs
   the `internal_decision_note` column revoke — since fixed via explicit
   `MR_COLS` in `MembershipRequest.tsx`.)
+
+## Report builder (`reports.spec.ts`, Phase 5)
+
+Runs against the **live project** with the lsb + lead fixtures
+(`reportFixtures.ts` builds one `[rls-test]` case per run, reads the
+published template catalog the Reports tab renders from, and sweeps via
+`rls_test_cleanup()` — with the same crash-safety teardown as the legal
+fixtures). Self-skips without `RLS_TEST_PASSWORD_LSB` / `_LEAD`.
+
+- **Catalog → drafts**: every active published template is offered and a
+  draft is created from each through the editor (`Save` → "Report saved.").
+- **Required-field gate + submit**: an empty `incident_followup` refuses
+  "Submit for review" with the server's `required fields missing` message;
+  the required keys are read from the published version (never
+  hard-coded), filled, and the submit lands in **Awaiting review** — the
+  author loses Edit / Submit.
+- **Review**: the Bureau Lead sees **Approve** / **Return for revision**,
+  approves with a typed signature, and the report shows **Sealed**.
+
+Selectors follow the Phase 5 `ReportsTab` (labels from
+`REPORT_REVIEW_LABEL`); the assertions are the contract, the markup is not.

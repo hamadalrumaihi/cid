@@ -1253,6 +1253,9 @@ export type Database = {
           parent_id: string | null
           title: string
           updated_at: string
+          waive_reason: string | null
+          waived_at: string | null
+          waived_by: string | null
         }
         Insert: {
           assignee?: string | null
@@ -1269,6 +1272,9 @@ export type Database = {
           parent_id?: string | null
           title: string
           updated_at?: string
+          waive_reason?: string | null
+          waived_at?: string | null
+          waived_by?: string | null
         }
         Update: {
           assignee?: string | null
@@ -1285,6 +1291,9 @@ export type Database = {
           parent_id?: string | null
           title?: string
           updated_at?: string
+          waive_reason?: string | null
+          waived_at?: string | null
+          waived_by?: string | null
         }
         Relationships: [
           {
@@ -9561,6 +9570,225 @@ export type Database = {
         }
         Relationships: []
       }
+      report_entities: {
+        Row: {
+          created_at: string
+          edited: boolean
+          id: string
+          inserted_by: string | null
+          kind: string
+          label: string
+          ref_id: string | null
+          report_id: string
+          role: string | null
+          snapshot: Json
+        }
+        Insert: {
+          created_at?: string
+          edited?: boolean
+          id?: string
+          inserted_by?: string | null
+          kind: string
+          label: string
+          ref_id?: string | null
+          report_id: string
+          role?: string | null
+          snapshot?: Json
+        }
+        Update: {
+          created_at?: string
+          edited?: boolean
+          id?: string
+          inserted_by?: string | null
+          kind?: string
+          label?: string
+          ref_id?: string | null
+          report_id?: string
+          role?: string | null
+          snapshot?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_entities_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_entities_inserted_by_fkey"
+            columns: ["inserted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      report_exports: {
+        Row: {
+          exported_at: string
+          exported_by: string | null
+          format: string
+          id: string
+          report_id: string
+          verification_code: string
+          version_number: number | null
+        }
+        Insert: {
+          exported_at?: string
+          exported_by?: string | null
+          format: string
+          id?: string
+          report_id: string
+          verification_code: string
+          version_number?: number | null
+        }
+        Update: {
+          exported_at?: string
+          exported_by?: string | null
+          format?: string
+          id?: string
+          report_id?: string
+          verification_code?: string
+          version_number?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_exports_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_exports_exported_by_fkey"
+            columns: ["exported_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      report_template_versions: {
+        Row: {
+          advisory: string[]
+          change_summary: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          published_at: string | null
+          published_by: string | null
+          required: string[]
+          review_required: boolean
+          schema: Json
+          status: string
+          superseded_at: string | null
+          template_id: string
+          version_number: number
+        }
+        Insert: {
+          advisory?: string[]
+          change_summary?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          published_at?: string | null
+          published_by?: string | null
+          required?: string[]
+          review_required?: boolean
+          schema: Json
+          status?: string
+          superseded_at?: string | null
+          template_id: string
+          version_number: number
+        }
+        Update: {
+          advisory?: string[]
+          change_summary?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          published_at?: string | null
+          published_by?: string | null
+          required?: string[]
+          review_required?: boolean
+          schema?: Json
+          status?: string
+          superseded_at?: string | null
+          template_id?: string
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_template_versions_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "report_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_template_versions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_template_versions_published_by_fkey"
+            columns: ["published_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      report_templates: {
+        Row: {
+          active: boolean
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_default: boolean
+          key: string
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_default?: boolean
+          key: string
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_default?: boolean
+          key?: string
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       report_versions: {
         Row: {
           created_at: string
@@ -9568,6 +9796,7 @@ export type Database = {
           fields: Json
           id: string
           report_id: string
+          reviewer_signature: Json | null
           signature: Json | null
           version_number: number
         }
@@ -9577,6 +9806,7 @@ export type Database = {
           fields: Json
           id?: string
           report_id: string
+          reviewer_signature?: Json | null
           signature?: Json | null
           version_number: number
         }
@@ -9586,6 +9816,7 @@ export type Database = {
           fields?: Json
           id?: string
           report_id?: string
+          reviewer_signature?: Json | null
           signature?: Json | null
           version_number?: number
         }
@@ -9620,9 +9851,17 @@ export type Database = {
           id: string
           kind: Database["public"]["Enums"]["report_kind"]
           parent_id: string | null
+          review_note: string | null
+          review_status: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          reviewer_signature: Json | null
           seq: number | null
           signature: Json | null
+          submitted_at: string | null
+          submitted_by: string | null
           template: string
+          template_version_id: string | null
           updated_at: string
         }
         Insert: {
@@ -9638,9 +9877,17 @@ export type Database = {
           id?: string
           kind?: Database["public"]["Enums"]["report_kind"]
           parent_id?: string | null
+          review_note?: string | null
+          review_status?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_signature?: Json | null
           seq?: number | null
           signature?: Json | null
+          submitted_at?: string | null
+          submitted_by?: string | null
           template: string
+          template_version_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -9656,9 +9903,17 @@ export type Database = {
           id?: string
           kind?: Database["public"]["Enums"]["report_kind"]
           parent_id?: string | null
+          review_note?: string | null
+          review_status?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_signature?: Json | null
           seq?: number | null
           signature?: Json | null
+          submitted_at?: string | null
+          submitted_by?: string | null
           template?: string
+          template_version_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -13435,6 +13690,46 @@ export type Database = {
         }
         Returns: Database["public"]["Tables"]["profiles"]["Row"]
       }
+      case_task_unwaive: {
+        Args: { p_task: string }
+        Returns: Database["public"]["Tables"]["case_tasks"]["Row"]
+      }
+      case_task_waive: {
+        Args: { p_reason: string; p_task: string }
+        Returns: Database["public"]["Tables"]["case_tasks"]["Row"]
+      }
+      report_entities_set: {
+        Args: { p_items: Json; p_report: string }
+        Returns: Json
+      }
+      report_record_export: {
+        Args: { p_format: string; p_report: string }
+        Returns: Json
+      }
+      report_review: {
+        Args: { p_badge?: string; p_decision: string; p_note?: string; p_report: string; p_signature?: string }
+        Returns: Database["public"]["Tables"]["reports"]["Row"]
+      }
+      report_submit: {
+        Args: { p_badge?: string; p_report: string; p_signature?: string }
+        Returns: Database["public"]["Tables"]["reports"]["Row"]
+      }
+      report_template_discard: {
+        Args: { p_version: string }
+        Returns: Json
+      }
+      report_template_publish: {
+        Args: { p_note?: string; p_version: string }
+        Returns: Json
+      }
+      report_template_save: {
+        Args: { p_advisory?: Json; p_change_summary?: string; p_description?: string; p_key: string; p_name: string; p_required: Json; p_review_required?: boolean; p_schema: Json }
+        Returns: Json
+      }
+      report_template_update: {
+        Args: { p_patch: Json; p_template: string }
+        Returns: Json
+      }
       request_transfer: {
         Args: {
           p_reason: string
@@ -13544,20 +13839,7 @@ export type Database = {
       }
       report_finalize: {
         Args: { p_badge?: string; p_report: string }
-        Returns: {
-          author_id: string | null
-          case_id: string
-          created_at: string
-          fields: Json
-          finalized: boolean
-          id: string
-          kind: Database["public"]["Enums"]["report_kind"]
-          parent_id: string | null
-          seq: number | null
-          signature: Json | null
-          template: string
-          updated_at: string
-        }
+        Returns: Database["public"]["Tables"]["reports"]["Row"]
         SetofOptions: {
           from: "*"
           to: "reports"
@@ -13566,21 +13848,8 @@ export type Database = {
         }
       }
       report_reopen: {
-        Args: { p_report: string }
-        Returns: {
-          author_id: string | null
-          case_id: string
-          created_at: string
-          fields: Json
-          finalized: boolean
-          id: string
-          kind: Database["public"]["Enums"]["report_kind"]
-          parent_id: string | null
-          seq: number | null
-          signature: Json | null
-          template: string
-          updated_at: string
-        }
+        Args: { p_reason?: string; p_report: string }
+        Returns: Database["public"]["Tables"]["reports"]["Row"]
         SetofOptions: {
           from: "*"
           to: "reports"
@@ -13590,20 +13859,7 @@ export type Database = {
       }
       warrant_set_status: {
         Args: { p_report: string; p_status: string }
-        Returns: {
-          author_id: string | null
-          case_id: string
-          created_at: string
-          fields: Json
-          finalized: boolean
-          id: string
-          kind: Database["public"]["Enums"]["report_kind"]
-          parent_id: string | null
-          seq: number | null
-          signature: Json | null
-          template: string
-          updated_at: string
-        }
+        Returns: Database["public"]["Tables"]["reports"]["Row"]
         SetofOptions: {
           from: "*"
           to: "reports"

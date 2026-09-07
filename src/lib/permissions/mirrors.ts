@@ -115,3 +115,66 @@ export const isSignoffReviewer = (c: SignoffCase, v: CidViewer | null): boolean 
  *  accepted — never widen this to isCommandRole. */
 export const canOverrideSignoff = (v: CidViewer | null): boolean =>
   !!v?.active && (isDeputyOrDirector(v.role) || !!v.is_owner)
+
+/* ---- report review flow (report_submit / report_review / report_reopen) --
+ * Mirrors of the Phase 5 report RPCs (contract §2 / §3). The RPCs raise on
+ * refusal; these only decide whether to SHOW a control. */
+
+export interface ReviewableReport {
+  author_id?: string | null
+  finalized?: boolean | null
+  review_status?: string | null
+}
+
+/** Roles private.can_review_report accepts (plus the Owner). */
+export const REPORT_REVIEWER_ROLES: ReadonlySet<string> = new Set(['senior_detective', 'bureau_lead', 'deputy_director', 'director'])
+
+const reviewStateOf = (r: ReviewableReport): string =>
+  r.review_status === 'submitted' || r.review_status === 'returned' || r.review_status === 'approved' || r.review_status === 'draft'
+    ? r.review_status
+    : r.finalized ? 'approved' : 'draft'
+
+/** Mirror of report_submit's gate: the AUTHOR only, while draft or returned,
+ *  on a writable case (the caller passes case writability — archived cases
+ *  refuse every write). */
+export function canSubmitReport(r: ReviewableReport, v: CidViewer | null, caseWritable = true): boolean {
+  if (!v?.id || !caseWritable || r.finalized) return false
+  if (r.author_id !== v.id) return false
+  const s = reviewStateOf(r)
+  return s === 'draft' || s === 'returned'
+}
+
+/** Mirror of private.can_review_report: active, case access (implied — the
+ *  viewer can see the case), NOT the author, SrDet / Bureau Lead / DD /
+ *  Director or the Owner; a Bureau Lead only for the case bureau (JTF: any);
+ *  and the report must be awaiting review. */
+export function canReviewReport(r: ReviewableReport, v: CidViewer | null, caseBureau: string | null | undefined): boolean {
+  if (!v?.id || v.active === false) return false
+  if (reviewStateOf(r) !== 'submitted') return false
+  if (r.author_id === v.id) return false
+  if (v.is_owner) return true
+  if (!REPORT_REVIEWER_ROLES.has(v.role ?? '')) return false
+  if (v.role === 'bureau_lead') return !caseBureau || caseBureau === 'JTF' || v.division === caseBureau
+  return true
+}
+
+/** Mirror of report_reopen's authority (unchanged from the 1-arg RPC): a
+ *  Bureau Lead of the case bureau (JTF: any), Deputy Director+, or the Owner —
+ *  and only a sealed report can be reopened. */
+export function canReopenReport(r: ReviewableReport, v: CidViewer | null, caseBureau: string | null | undefined): boolean {
+  if (!v?.id || !r.finalized) return false
+  if (v.is_owner || isDeputyOrDirector(v.role)) return true
+  return v.role === 'bureau_lead' && (!caseBureau || caseBureau === 'JTF' || v.division === caseBureau)
+}
+
+/* ---- report templates (report_template_* RPCs) --------------------------- */
+
+/** Mirror of private.report_template_proposer: Bureau Lead+ or the Owner may
+ *  save a DRAFT on an existing template. */
+export const canProposeReportTemplate = (v: CidViewer | null): boolean =>
+  !!v && (!!v.is_owner || isCommandRole(v.role))
+
+/** Mirror of private.report_template_admin: Director / Deputy Director /
+ *  Owner — publish, discard, create a new key, retire / restore, set default. */
+export const canPublishReportTemplate = (v: CidViewer | null): boolean =>
+  !!v && (!!v.is_owner || isDeputyOrDirector(v.role))

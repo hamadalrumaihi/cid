@@ -348,6 +348,173 @@ export const FORM_SCHEMAS: Record<string, FormSchema> = {
       { id: 'outcome', label: 'Outcome / Recommendations', type: 'textarea', key: 'outcome' },
     ],
   },
+  incident_followup: {
+    title: 'Incident Follow-up Report',
+    subtitle: 'Criminal Investigations Department — FOR OFFICIAL USE ONLY',
+    sections: [
+      { id: 'details', label: 'Report Details', type: 'kv', fields: [
+        { key: 'case_number', label: 'Case Number', type: 'text' },
+        { key: 'date', label: 'Date', type: 'date' },
+        { key: 'detective', label: 'Reporting Detective', type: 'text' },
+        { key: 'bureau', label: 'Bureau', type: 'select', opts: FORM_BUREAU_OPTS },
+        { key: 'incident_ref', label: 'Original Incident / Report', type: 'text' },
+        { key: 'location', label: 'Location', type: 'text' },
+      ] },
+      { id: 'developments', label: 'Developments Since the Last Report', type: 'textarea', key: 'developments' },
+      { id: 'contacts', label: 'Contacts Made', type: 'grid', cols: [
+        { key: 'name', label: 'Name', type: 'text', person: true },
+        { key: 'role', label: 'Role', type: 'text' },
+        { key: 'summary', label: 'Summary', type: 'text' },
+      ] },
+      { id: 'evidence', label: 'Evidence Collected / Reviewed', type: 'grid', cols: [
+        { key: 'item', label: 'Item', type: 'text' },
+        { key: 'source', label: 'Source', type: 'text' },
+        { key: 'status', label: 'Status', type: 'select', opts: ['', 'Logged', 'Pending', 'Returned'] },
+      ], evidencePick: true },
+      { id: 'narrative', label: 'Narrative', type: 'textarea', key: 'narrative' },
+      { id: 'next_steps', label: 'Next Steps', type: 'textarea', key: 'next_steps' },
+    ],
+  },
+  interview: {
+    title: 'Interview Report',
+    subtitle: 'Criminal Investigations Department — FOR OFFICIAL USE ONLY',
+    sections: [
+      { id: 'details', label: 'Interview Details', type: 'kv', fields: [
+        { key: 'case_number', label: 'Case Number', type: 'text' },
+        { key: 'date', label: 'Date', type: 'date' },
+        { key: 'start_time', label: 'Start', type: 'text' },
+        { key: 'end_time', label: 'End', type: 'text' },
+        { key: 'location', label: 'Location', type: 'text' },
+        { key: 'detective', label: 'Interviewing Detective', type: 'text' },
+        { key: 'second_officer', label: 'Second Officer', type: 'text' },
+      ] },
+      { id: 'subject', label: 'Subject', type: 'kv', fields: [
+        { key: 'subject_name', label: 'Name', type: 'text', person: true },
+        { key: 'subject_role', label: 'Role', type: 'select', opts: ['', 'Suspect', 'Witness', 'Victim', 'Informant', 'Other'] },
+        { key: 'rights_advised', label: 'Rights Advised', type: 'select', opts: ['', 'Yes', 'No', 'Not applicable'] },
+        { key: 'rights_dt', label: 'Rights Advised At', type: 'text' },
+        { key: 'counsel', label: 'Counsel Present', type: 'select', opts: ['', 'Yes', 'No', 'Waived'] },
+        { key: 'recorded', label: 'Recorded', type: 'select', opts: ['', 'Audio', 'Video', 'Not recorded'] },
+      ] },
+      { id: 'summary', label: 'Summary of Statements', type: 'textarea', key: 'summary' },
+      { id: 'narrative', label: 'Narrative', type: 'textarea', key: 'narrative' },
+      { id: 'assessment', label: 'Investigative Assessment', type: 'textarea', key: 'assessment' },
+    ],
+  },
+  arrest_report: {
+    title: 'Arrest Report',
+    subtitle: 'Criminal Investigations Department — FOR OFFICIAL USE ONLY',
+    sections: [
+      { id: 'details', label: 'Arrest Details', type: 'kv', fields: [
+        { key: 'case_number', label: 'Case Number', type: 'text' },
+        { key: 'date', label: 'Date', type: 'date' },
+        { key: 'time', label: 'Time', type: 'text' },
+        { key: 'location', label: 'Location', type: 'text' },
+        { key: 'detective', label: 'Arresting Detective', type: 'text' },
+        { key: 'assisting', label: 'Assisting Officers', type: 'text' },
+        { key: 'warrant_ref', label: 'Warrant Reference', type: 'text' },
+      ] },
+      { id: 'arrestee', label: 'Arrestee', type: 'kv', fields: [
+        { key: 'arrestee_name', label: 'Name', type: 'text', person: true },
+        { key: 'arrestee_dob', label: 'Date of Birth', type: 'text' },
+        { key: 'rights_advised', label: 'Rights Advised', type: 'select', opts: ['', 'Yes', 'No'] },
+        { key: 'rights_dt', label: 'Rights Advised At', type: 'text' },
+        { key: 'injuries', label: 'Injuries / Medical', type: 'text' },
+        { key: 'transported_to', label: 'Transported To', type: 'text' },
+      ] },
+      { id: 'charges', label: 'Charges', type: 'grid', cols: [
+        { key: 'code', label: 'Code', type: 'text' },
+        { key: 'offense', label: 'Offense', type: 'text' },
+        { key: 'counts', label: 'Counts', type: 'text' },
+      ] },
+      { id: 'seized', label: 'Property Seized', type: 'grid', cols: [
+        { key: 'item', label: 'Item', type: 'text' },
+        { key: 'description', label: 'Description', type: 'text' },
+        { key: 'disposition', label: 'Disposition', type: 'text' },
+      ], evidencePick: true },
+      { id: 'narrative', label: 'Narrative / Probable Cause', type: 'textarea', key: 'narrative' },
+    ],
+  },
+  search_report: {
+    title: 'Search Report',
+    subtitle: 'Criminal Investigations Department — FOR OFFICIAL USE ONLY',
+    sections: [
+      { id: 'details', label: 'Search Details', type: 'kv', fields: [
+        { key: 'case_number', label: 'Case Number', type: 'text' },
+        { key: 'date', label: 'Date', type: 'date' },
+        { key: 'start_time', label: 'Start', type: 'text' },
+        { key: 'end_time', label: 'End', type: 'text' },
+        { key: 'location', label: 'Location Searched', type: 'text' },
+        { key: 'detective', label: 'Lead Detective', type: 'text' },
+        { key: 'officers', label: 'Officers Present', type: 'text' },
+        { key: 'authority', label: 'Authority', type: 'select', opts: ['', 'Search warrant', 'Consent', 'Exigent circumstances', 'Incident to arrest', 'Other'] },
+        { key: 'warrant_ref', label: 'Warrant Reference', type: 'text' },
+      ] },
+      { id: 'present', label: 'Persons Present', type: 'grid', cols: [
+        { key: 'name', label: 'Name', type: 'text', person: true },
+        { key: 'role', label: 'Role', type: 'text' },
+      ] },
+      { id: 'items', label: 'Items Seized', type: 'grid', cols: [
+        { key: 'item', label: 'Item', type: 'text' },
+        { key: 'found_at', label: 'Found At', type: 'text' },
+        { key: 'seized_by', label: 'Seized By', type: 'text' },
+        { key: 'evidence_ref', label: 'Evidence Ref', type: 'text' },
+      ], evidencePick: true },
+      { id: 'narrative', label: 'Narrative', type: 'textarea', key: 'narrative' },
+      { id: 'damage', label: 'Damage / Property Left', type: 'textarea', key: 'damage' },
+    ],
+  },
+  case_closure: {
+    title: 'Case Closure Report',
+    subtitle: 'Criminal Investigations Department — FOR OFFICIAL USE ONLY',
+    sections: [
+      { id: 'details', label: 'Closure Details', type: 'kv', fields: [
+        { key: 'case_number', label: 'Case Number', type: 'text' },
+        { key: 'date', label: 'Date', type: 'date' },
+        { key: 'detective', label: 'Lead Detective', type: 'text' },
+        { key: 'bureau', label: 'Bureau', type: 'select', opts: FORM_BUREAU_OPTS },
+        { key: 'disposition', label: 'Disposition', type: 'select', opts: ['', 'Cleared by arrest', 'Cleared exceptionally', 'Unfounded', 'Inactive — leads exhausted', 'Referred', 'Other'] },
+        { key: 'prosecution_status', label: 'Prosecution Status', type: 'text' },
+      ] },
+      { id: 'note', label: 'Before you submit', type: 'note', text: 'Every open task on this case must be done or waived before a closure report can be submitted.' },
+      { id: 'summary', label: 'Investigation Summary', type: 'textarea', key: 'summary' },
+      { id: 'outcome', label: 'Outcome', type: 'textarea', key: 'outcome' },
+      { id: 'evidence_disposition', label: 'Evidence Disposition', type: 'grid', cols: [
+        { key: 'item', label: 'Item', type: 'text' },
+        { key: 'disposition', label: 'Disposition', type: 'select', opts: ['', 'Retained', 'Returned', 'Destroyed', 'Transferred'] },
+        { key: 'note', label: 'Note', type: 'text' },
+      ], evidencePick: true },
+      { id: 'recommendations', label: 'Recommendations', type: 'textarea', key: 'recommendations' },
+    ],
+  },
+  warrant_return: {
+    title: 'Warrant Return',
+    subtitle: 'Criminal Investigations Department — Return of Service — FOR OFFICIAL USE ONLY',
+    sections: [
+      { id: 'details', label: 'Warrant', type: 'kv', fields: [
+        { key: 'case_number', label: 'Case Number', type: 'text' },
+        { key: 'warrant_ref', label: 'Warrant / Legal Request Number', type: 'text' },
+        { key: 'warrant_type', label: 'Warrant Type', type: 'select', opts: ['', 'Arrest warrant', 'Search warrant'] },
+        { key: 'issued_by', label: 'Issuing Judge', type: 'text' },
+        { key: 'issued_on', label: 'Issued On', type: 'date' },
+        { key: 'detective', label: 'Executing Detective', type: 'text' },
+      ] },
+      { id: 'execution', label: 'Execution', type: 'kv', fields: [
+        { key: 'executed_on', label: 'Executed On', type: 'date' },
+        { key: 'time', label: 'Time', type: 'text' },
+        { key: 'location', label: 'Location', type: 'text' },
+        { key: 'outcome', label: 'Outcome', type: 'select', opts: ['', 'Executed', 'Executed — nothing found', 'Not executed', 'Expired unexecuted'] },
+        { key: 'subject', label: 'Subject', type: 'text', person: true },
+        { key: 'officers', label: 'Officers Present', type: 'text' },
+      ] },
+      { id: 'inventory', label: 'Inventory / Persons Taken Into Custody', type: 'grid', cols: [
+        { key: 'item', label: 'Item / Person', type: 'text' },
+        { key: 'description', label: 'Description', type: 'text' },
+        { key: 'evidence_ref', label: 'Evidence Ref', type: 'text' },
+      ], evidencePick: true },
+      { id: 'return_narrative', label: 'Return Narrative', type: 'textarea', key: 'return_narrative' },
+    ],
+  },
 }
 
 /** The fillable CID forms ARE the canonical report templates (persons.js:31). */
@@ -367,6 +534,12 @@ const TEMPLATE_META: { id: string; isDefault?: boolean }[] = [
   { id: 'wiretap_warrant' },
   { id: 'subpoena' },
   { id: 'surveillance_report' },
+  { id: 'incident_followup' },
+  { id: 'interview' },
+  { id: 'arrest_report' },
+  { id: 'search_report' },
+  { id: 'case_closure' },
+  { id: 'warrant_return' },
 ]
 
 export const REPORT_TEMPLATES: ReportTemplate[] = TEMPLATE_META
@@ -388,9 +561,12 @@ export interface ReportLike {
   signature?: unknown
 }
 
-export function reportTitle(r: ReportLike): string {
+/** `name` overrides the FORM_SCHEMAS title — the Reports tab passes the DB
+ *  catalog's template name so a template that exists only in the database
+ *  (no FORM_SCHEMAS entry) still titles its reports. */
+export function reportTitle(r: ReportLike, name?: string | null): string {
   const tpl = tplById(r.template)
-  const base = tpl ? tpl.name : 'Report'
+  const base = name || (tpl ? tpl.name : 'Report')
   if (r.kind === 'supplemental') return `${base} — Supplemental #${r.seq}`
   if (r.kind === 'followup') return `${base} — Follow-up #${r.seq}`
   return base
@@ -409,51 +585,92 @@ export const warrantStatusOf = (r: ReportLike): string => {
   return f?._warrant_status || 'draft'
 }
 
-/** Flatten a filled form to text for exports (drive.js:125-136). */
-export function formToText(schema: FormSchema, values: FormValues): string {
-  const V = values || {}
-  const lines: string[] = []
-  schema.sections.forEach((s) => {
-    lines.push(s.label.toUpperCase())
-    if (s.type === 'note') lines.push(s.text)
-    else if (s.type === 'textarea') lines.push(String(V[s.key] ?? '') || '—')
-    else if (s.type === 'kv') {
-      s.fields.forEach((f) => {
-        const rawVal = V[f.key]
-        const val = Array.isArray(rawVal) ? rawVal.join(', ') : String(rawVal ?? '')
-        lines.push(`${f.label}: ${val || '—'}`)
-      })
-    } else {
-      const rows = Array.isArray(V[s.id]) ? (V[s.id] as Record<string, string>[]) : []
-      lines.push(s.cols.map((c) => c.label).join(' | '))
-      if (!rows.length) lines.push('—')
-      rows.forEach((r) => lines.push(s.cols.map((c) => r[c.key] || '').join(' | ')))
-    }
-    lines.push('')
-  })
-  return lines.join('\n')
+/* ---- required-field checker (P5-03) ------------------------------------
+ * The pinned template version carries `required` / `advisory` key lists; the
+ * server (report_submit / report_review) enforces `required` and the client
+ * mirrors it here for the editor checklist and the pre-submit modal. The
+ * rules are the contract's: a key is satisfied by a non-blank string, a
+ * non-empty array, or a grid with ≥ 1 row. lib/reportTemplates wraps these
+ * with the version-aware requiredGaps / advisoryGaps. */
+
+export interface FormKeyLabel { key: string; label: string }
+
+/** Every value key a template can require, in schema order: kv field keys,
+ *  textarea keys and grid section ids (a grid's rows live under its id). */
+export function formValueKeys(schema: FormSchema): FormKeyLabel[] {
+  const out: FormKeyLabel[] = []
+  for (const s of schema.sections) {
+    if (s.type === 'kv') for (const f of s.fields) out.push({ key: f.key, label: f.label })
+    else if (s.type === 'textarea') out.push({ key: s.key, label: s.label })
+    else if (s.type === 'grid') out.push({ key: s.id, label: s.label })
+  }
+  return out
 }
 
-/** Soft "required field" check before a report is sealed (reports.js:383-398).
- *  Non-blocking: the modal shows gaps but lets the officer finalize anyway. */
+/** Mirror of the server's presence test: non-blank string, non-empty array
+ *  (checks values, grid rows), or any other non-null scalar. */
+export function formKeySatisfied(values: FormValues, key: string): boolean {
+  const v = values[key]
+  if (Array.isArray(v)) return v.length > 0
+  if (v == null) return false
+  return String(v).trim() !== ''
+}
+
+/** The keys of `keys` that are NOT satisfied, labelled from the schema
+ *  (unknown keys fall back to the key itself so a stale list still reads). */
+export function formGapsForKeys(schema: FormSchema, keys: readonly string[], values: FormValues): FormKeyLabel[] {
+  const labels = new Map(formValueKeys(schema).map((k) => [k.key, k.label]))
+  return keys.filter((k) => !formKeySatisfied(values, k)).map((k) => ({ key: k, label: labels.get(k) ?? k }))
+}
+
+/** The migration's seeded `required` map (20261028120000_report_templates,
+ *  REQUIRED) — the tiebreaker for what version 1 of each template requires.
+ *  Used ONLY when a report has no pinned version and the catalog is
+ *  unreadable: the client never hard-codes required keys for a pinned
+ *  report, it reads the version. A grid key is its section id. */
+export const SEEDED_REQUIRED: Readonly<Record<string, readonly string[]>> = {
+  cid_investigative_report: ['case_number', 'filed_at', 'det_name', 'narrative'],
+  raid_seizure: ['case_number', 'seizure_date', 'operation', 'inventory'],
+  uc_operation: ['submitted', 'uc_officer', 'summary'],
+  arrest_warrant: ['case_number', 'detective', 'date', 'probable_cause'],
+  search_warrant: ['case_number', 'affiant', 'date', 'location', 'probable_cause'],
+  wiretap_warrant: ['case_number', 'detective', 'date', 'probable_cause', 'necessity'],
+  subpoena: ['case_number', 'detective', 'date', 'records_requested'],
+  surveillance_report: ['case_number', 'detective', 'date', 'assessment'],
+  incident_followup: ['case_number', 'date', 'detective', 'narrative'],
+  interview: ['case_number', 'date', 'detective', 'subject_name', 'summary'],
+  arrest_report: ['case_number', 'date', 'detective', 'arrestee_name', 'narrative'],
+  search_report: ['case_number', 'date', 'detective', 'location', 'narrative'],
+  case_closure: ['case_number', 'date', 'detective', 'disposition', 'summary'],
+  warrant_return: ['case_number', 'warrant_ref', 'executed_on', 'outcome', 'return_narrative'],
+}
+
+/** Fallback required keys for a template KEY: the seeded map when the key
+ *  is known, else the map's shape derived from the schema (case number,
+ *  date, the detective / affiant field and the primary narrative key). Only
+ *  keys the schema actually has are returned. */
+export function fallbackRequiredKeys(key: string | null | undefined, schema?: FormSchema): string[] {
+  const sch = schema ?? (key ? FORM_SCHEMAS[key] : undefined)
+  if (!sch) return []
+  const keys = new Set(formValueKeys(sch).map((k) => k.key))
+  const seeded = key ? SEEDED_REQUIRED[key] : undefined
+  if (seeded) return seeded.filter((k) => keys.has(k))
+  const out: string[] = []
+  if (keys.has('case_number')) out.push('case_number')
+  if (keys.has('date')) out.push('date')
+  const signer = ['affiant', 'detective'].find((k) => keys.has(k))
+  if (signer) out.push(signer)
+  const primary = ['probable_cause', 'narrative', 'investigation_details', 'necessity'].find((k) => keys.has(k))
+  if (primary) out.push(primary)
+  return out
+}
+
+/** Legacy entry point (reports.js:383-398): the required-field gaps of a
+ *  report judged by the FORM_SCHEMAS fallback map. Kept as a thin wrapper
+ *  over formGapsForKeys so existing callers keep working; version-aware
+ *  callers use lib/reportTemplates requiredGaps. */
 export function reportFinalizeGaps(r: ReportLike): string[] {
   const tpl = tplById(r.template)
   if (!tpl) return []
-  const f = parseFormValues(r.fields)
-  const keys = new Set<string>()
-  tpl.schema.sections.forEach((s) => {
-    if (s.type === 'kv') s.fields.forEach((fl) => keys.add(fl.key))
-    else if (s.type === 'textarea') keys.add(s.key)
-  })
-  const has = (k: string) => {
-    const v = f[k]
-    return Array.isArray(v) ? v.length > 0 : v != null && String(v).trim() !== ''
-  }
-  const gaps: string[] = []
-  if (keys.has('case_number') && !has('case_number')) gaps.push('Case number')
-  if ((keys.has('affiant') || keys.has('detective')) && !(has('affiant') || has('detective'))) gaps.push('Affiant / detective')
-  if (keys.has('date') && !has('date')) gaps.push('Date')
-  const primary = ['probable_cause', 'narrative', 'investigation_details', 'necessity'].filter((k) => keys.has(k))
-  if (primary.length && !primary.some(has)) gaps.push('Narrative / probable cause')
-  return gaps
+  return formGapsForKeys(tpl.schema, fallbackRequiredKeys(tpl.id, tpl.schema), parseFormValues(r.fields)).map((g) => g.label)
 }

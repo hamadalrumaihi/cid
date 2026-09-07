@@ -23,6 +23,8 @@ export const RicoView = lazy('rico', () => import('@/components/rico/RicoView').
 export const HeatmapView = lazy('heatmap', () => import('@/components/heatmap/HeatmapView').then((m) => m.HeatmapView))
 export const DevDocsView = lazy('devdocs', () => import('@/components/devdocs/DevDocsView').then((m) => m.DevDocsView))
 export const OwnerView = lazy('owner', () => import('@/components/owner/OwnerView').then((m) => m.OwnerView))
+// Report template administration (Phase 5) — command-only, rarely opened.
+export const ReportTemplatesView = lazy('report-templates', () => import('@/components/reports/ReportTemplatesView').then((m) => m.ReportTemplatesView))
 // The unified workspace (/workspace, and /tools which renders the same
 // view). The 14 tool views themselves are NOT imported here — they live in
 // the workspace's own lazy registry (components/tools/toolRegistry) so they

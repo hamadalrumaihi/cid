@@ -11,44 +11,40 @@ import { Button } from '@/components/ui/Button'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { deleteWithUndo, list, rpc, update } from '@/lib/db'
 import { createReport } from '@/lib/services/reports'
-import { searchPersonHits, type EntityHit } from '@/lib/entitySearch'
 import type { Json, Tables } from '@/lib/database.types'
-import { copyText, downloadTextFile, fmtDateTime, timeAgo } from '@/lib/format'
+import { copyText, fmtDateTime, timeAgo } from '@/lib/format'
 import { caseLink } from '@/lib/caseLinks'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
-import { FORM_SCHEMAS, REPORT_TEMPLATES, WARRANT_TPLS, formToText, reportFinalizeGaps, reportTitle, warrantStatusOf, type FormSchema, type FormValues } from '@/lib/forms'
-import { mediaRefLine, parseMediaRefEntries, resolveMediaRefText } from '@/lib/mediaRefs'
+import { WARRANT_TPLS, reportTitle, warrantStatusOf, type FormSchema, type FormValues } from '@/lib/forms'
+import {
+  REPORT_REVIEW_LABEL, fallbackVersionFor, isReportEditable, loadPublishedTemplates, parseSignatureInfo, reopenEntries,
+  reportReviewTone, resolveReportVersion, reviewStatusOf, type PublishedTemplate, type TemplateCatalog, type TemplateVersion,
+} from '@/lib/reportTemplates'
+import { parseMediaRefEntries } from '@/lib/mediaRefs'
+import { detectEditedEntities, entityKey, mentionEntityRows, mergeEntityItems, withMentionLabels, type EntityItem, type MentionLabels } from '@/lib/mentions'
+import { parseSignatureLike } from '@/lib/reportExport'
 import { parseFormValues } from '@/lib/jsonShapes'
-import { parseReopenLog, parseReportSignature } from '@/lib/schemas'
-import { Field } from '@/components/ui/Field'
-import { RecordPeekButton } from '@/components/shared/RecordPeekButton'
-import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
-import { RelatedRecordPicker } from '@/components/shared/RelatedRecordPicker'
+import { canReopenReport, canReviewReport, canSubmitReport, type CidViewer } from '@/lib/permissions'
 import { SignatureViewer, type SignatureItem } from '@/components/shared/SignatureViewer'
 import { VersionViewer } from '@/components/shared/VersionViewer'
 import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
 import { useTabDirty } from '@/components/workspace/WorkspaceProvider'
 import { SaveState } from '@/components/ui/SaveState'
-import { toast } from '@/lib/toast'
+import { humanizeError, toast } from '@/lib/toast'
 import { WarrantPrintButton } from './WarrantPrint'
 import type { CaseRow, EvidenceRow, MediaRow, ReportRow } from './shared'
-import { DocumentIcon, EyeIcon, RadioIcon, ReceiptIcon, ReportIcon, ScaleIcon, SearchIcon, VideoIcon } from '@/components/shell/icons'
-import { isCommandRole } from '@/lib/permissions'
-
-/** Report-template glyphs, drawn from the shared icon set (was an emoji map in lib/forms). */
-function TemplateIcon({ id }: { id: string }) {
-  switch (id) {
-    case 'raid_seizure': return <ReceiptIcon size={14} />
-    case 'uc_operation': return <EyeIcon size={14} />
-    case 'arrest_warrant': case 'subpoena': return <ScaleIcon size={14} />
-    case 'search_warrant': return <SearchIcon className="h-3.5 w-3.5" />
-    case 'wiretap_warrant': case 'surveillance_report': return <RadioIcon size={14} />
-    case 'cid_investigative_report': return <ReportIcon size={14} />
-    default: return <DocumentIcon size={14} />
-  }
-}
+import { DocumentIcon, ScaleIcon, VideoIcon } from '@/components/shell/icons'
+import { TemplateIcon } from './reports/TemplateIcon'
+import { ReportView } from './reports/ReportView'
+import { FormEditor } from './reports/FormEditor'
+import { RequiredChecklist } from './reports/RequiredChecklist'
+import { ReopenReportModal, ReviewReportModal, SubmitReportModal, type FlowTarget } from './reports/ReportFlowModals'
+import { InsertFromCaseDrawer } from './reports/InsertFromCaseDrawer'
+import { ReportEntityList } from './reports/ReportEntityBadge'
+import { loadReportEntities, syncReportEntities, toEntityItem } from './reports/ReportEntities'
+import { ReportExportMenu } from './reports/ReportExportMenu'
 
 /** Lite persons projection the read view resolves report-referenced ids to. */
 type PersonRef = { id: string; name: string | null }
@@ -71,12 +67,59 @@ export function collectReportPersonIds(schema: FormSchema | undefined, values: F
   return [...out]
 }
 
+/** Both seal signatures (author + reviewer) plus every superseded pair a
+ *  reopen preserved in fields._reopen_log — purely presentational. Pure
+ *  (exported for the unit tests). */
+export function sealSignatureItems(r: Pick<ReportRow, 'signature' | 'reviewer_signature' | 'fields'>): SignatureItem[] {
+  const sig = parseSignatureInfo(r.signature)
+  const rev = parseSignatureInfo(r.reviewer_signature)
+  const log = reopenEntries(parseFormValues(r.fields))
+  return [
+    ...(sig ? [{ id: 'current', name: sig.officer, badge: sig.badge ?? null, action: 'report seal', at: sig.signed_at ?? null }] : []),
+    ...(rev ? [{ id: 'reviewer', name: rev.officer, badge: rev.badge ?? null, role: rev.role ?? null, action: 'review approval', at: rev.signed_at ?? null }] : []),
+    ...log.flatMap((e, i) => [
+      ...(e.prev_signature ? [{ id: `prev-${i}`, name: e.prev_signature.officer, badge: e.prev_signature.badge ?? null, action: 'previous seal', at: e.at ?? null, superseded: true }] : []),
+      ...(e.prev_reviewer_signature ? [{ id: `prev-rev-${i}`, name: e.prev_reviewer_signature.officer, badge: e.prev_reviewer_signature.badge ?? null, role: e.prev_reviewer_signature.role ?? null, action: 'previous review approval', at: e.at ?? null, superseded: true }] : []),
+    ]),
+  ]
+}
+
 export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: CaseRow; canEdit: boolean; canDelete: boolean; holdActive?: boolean }) {
   const router = useRouter()
   const sp = useSearchParams()
   const { profile } = useAuth()
+  const viewer: CidViewer = useMemo(() => ({ id: profile?.id, role: profile?.role, division: profile?.division, active: profile?.active, is_owner: profile?.is_owner }), [profile])
+  // Case writability mirror (private.case_writable): an archived case refuses
+  // every write, so the flow controls close with it.
+  const writable = canEdit && !c.archived_at
   const [reports, setReports] = useState<ReportRow[]>([])
-  const [editing, setEditing] = useState<{ template: string; values: FormValues; report?: ReportRow } | null>(null)
+  // Published template catalog (DB, with the FORM_SCHEMAS fallback) — drives
+  // the picker; every OPEN report renders from its own pinned version.
+  const [catalog, setCatalog] = useState<TemplateCatalog | null>(null)
+  useEffect(() => {
+    let alive = true
+    void loadPublishedTemplates().then((cat) => { if (alive) setCatalog(cat) })
+    return () => { alive = false }
+  }, [])
+  const byKey = useMemo(() => new Map((catalog?.templates ?? []).map((t) => [t.key, t])), [catalog])
+  const titleOf = useCallback((r: ReportRow) => reportTitle(r, byKey.get(r.template)?.name), [byKey])
+  // `entities` = the report's record set (report_entities: drawer inserts +
+  // narrative mentions); `labels` = every mention label known (snapshots +
+  // what the RichEditor learns) so the mention rows can be derived on save.
+  const [editing, setEditing] = useState<{ template: string; version: TemplateVersion; values: FormValues; report?: ReportRow; entities: EntityItem[]; labels: MentionLabels } | null>(null)
+  /** Drop an inserted record from the editor; a saved report persists the
+   *  remaining set at once (REPLACE — the source record is never touched). */
+  const removeEntity = async (key: string) => {
+    if (!editing) return
+    const remaining = editing.entities.filter((it) => entityKey(it) !== key)
+    setEditing({ ...editing, entities: remaining })
+    if (editing.report) {
+      const res = await syncReportEntities(editing.report.id, remaining, 'replace')
+      if (!res.ok) toast(humanizeError(res.message ?? 'Could not update the inserted records.'), 'danger')
+    }
+  }
+  // Insert-from-case drawer: the narrative key its lines append to.
+  const [drawerFor, setDrawerFor] = useState<string | null>(null)
   // The open report lives in the URL (?report=), so exact records are
   // shareable/bookmarkable. `case` and `tab` are always preserved — same
   // router.replace idiom the shell's tab strip uses.
@@ -88,16 +131,20 @@ export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: C
     else params.delete('report')
     router.replace(`/cases?${params.toString()}`)
   }, [sp, router, c.id])
-  // Sealing and reopening both go through an explicit confirmation.
-  const [confirm, setConfirm] = useState<{ kind: 'finalize' | 'reopen'; r: ReportRow } | null>(null)
+  // Submit / review / reopen each go through an explicit dialog.
+  const [flow, setFlow] = useState<FlowTarget | null>(null)
+  const openFlow = async (kind: FlowTarget['kind'], r: ReportRow, decision?: 'approve' | 'return') => {
+    const version = await resolveReportVersion(r, catalog?.templates)
+    setFlow({ kind, r, version, decision })
+  }
   const v = useTableVersion('reports')
   const refresh = useCallback(async () => { try { setReports(await list('reports', { eq: { case_id: c.id }, order: 'created_at', ascending: false })) } catch { /* stale */ } }, [c.id])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, v])
   // The in-page detail derives from the id, so a realtime refresh shows the
-  // REFRESHED row (Finalize flips the chip live) and a deleted report falls
-  // back to the list.
+  // REFRESHED row (a review decision flips the chip live) and a deleted
+  // report falls back to the list.
   const open = openId ? reports.find((r) => r.id === openId) ?? null : null
-  const seed = (): FormValues => ({ case_number: c.case_number, report_type: 'Initial', filed_at: fmtDateTime(new Date()), det_name: profile?.display_name || '', narrative: c.summary || '', summary: c.summary || '' })
+  const seed = (): FormValues => ({ case_number: c.case_number, report_type: 'Initial', filed_at: fmtDateTime(new Date()), det_name: profile?.display_name || '', detective: profile?.display_name || '', narrative: c.summary || '', summary: c.summary || '' })
   // Never-lose-work: field values are stashed per case+template (or per
   // report when editing) while typing — DB-backed via userDrafts so a draft
   // follows the detective across devices — restored when the editor reopens,
@@ -106,11 +153,16 @@ export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: C
   const editorDraft = useDraftState(editing ? draftKey(editing.template, editing.report) : '')
   useTabDirty(editing ? draftKey(editing.template, editing.report) : '') // workspace tab dot while the flush is pending
   const openEditor = async (template: string, report?: ReportRow) => {
+    // New reports use the published version; an existing report its PINNED
+    // one (fallback by key when it was filed before the catalog existed).
+    const version = report ? await resolveReportVersion(report, catalog?.templates) : (byKey.get(template)?.version ?? fallbackVersionFor(template))
+    if (!version) { toast('This report template is not available.', 'warn'); return }
     const d = await loadDraft<FormValues>(draftKey(template, report))
     const base = report ? parseFormValues(report.fields) : seed()
     const useDraft = !!d?.data && (!report || d.at > new Date(report.updated_at ?? report.created_at).getTime())
     if (useDraft) toast('Unsaved draft restored.', 'info')
-    setEditing({ template, values: useDraft ? d!.data : base, report })
+    const entities = report ? (await loadReportEntities(report.id).catch(() => [])).map(toEntityItem) : []
+    setEditing({ template, version, values: useDraft ? d!.data : base, report, entities, labels: withMentionLabels({}, entities) })
   }
   // Explicit throw-away (the legal wizard's discard pattern): clears the
   // stash everywhere and resets the form to the saved row / fresh seed.
@@ -122,18 +174,19 @@ export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: C
   }
   const save = async () => {
     if (!editing) return
-    const hasMediaRefs = !!FORM_SCHEMAS[editing.template]?.sections.some((s) => s.type === 'textarea' && s.mediaPick)
+    const hasMediaRefs = editing.version.schema.sections.some((s) => s.type === 'textarea' && s.mediaPick)
     const prevRefs = editing.report ? String(parseFormValues(editing.report.fields).media_refs ?? '') : ''
     let reportId = editing.report?.id ?? null
     if (editing.report) {
       // Editing changes only what was typed — kind/seq/author stay as filed.
+      // A submitted / sealed report is trigger-locked; the message says so.
       const res = await update('reports', editing.report.id, { fields: editing.values as Json })
       if (res.error) { toast(res.error.message, 'danger'); return }
     } else {
       // Creation goes through the shared report_create RPC: seq is computed
       // server-side (max+1 per case/template/kind under a lock — the old
-      // client count raced concurrent authors) and author_id is pinned to
-      // the caller, never sent from here.
+      // client count raced concurrent authors), author_id is pinned to the
+      // caller and template_version_id to the published version.
       const rt = String(editing.values.report_type ?? '').toLowerCase()
       const kind = rt.startsWith('supplemental') ? ('supplemental' as const) : rt.startsWith('follow') ? ('followup' as const) : ('initial' as const)
       const res = await createReport({ caseId: c.id, template: editing.template, kind, fields: editing.values as Json })
@@ -141,33 +194,63 @@ export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: C
       reportId = res.data?.id ?? null
     }
     if (hasMediaRefs && reportId) await syncReportMediaLinks(reportId, prevRefs, String(editing.values.media_refs ?? ''))
+    if (reportId) await syncEntitiesAfterSave(reportId, editing)
     void clearDraft(draftKey(editing.template, editing.report)); setEditing(null); toast('Report saved.', 'success'); void refresh()
   }
-  const finalize = async (r: ReportRow) => {
-    const res = await rpc('report_finalize', { p_report: r.id, p_badge: profile?.badge_number || undefined })
-    if (res.error) toast(res.error.message, 'danger')
-    else { toast('Report sealed.', 'success'); void refresh() }
+  /** report_entities follow every save (P5-04/05): the narrative's `[kind:id]`
+   *  tokens become role-'mention' rows (the narrative is their source of
+   *  truth — removed tokens drop their rows), the drawer's inserts are kept
+   *  and re-flagged "differs from record" when their text was edited. One
+   *  read-merge-send; a refusal is a warning, the report itself is saved. */
+  const syncEntitiesAfterSave = async (reportId: string, e: NonNullable<typeof editing>) => {
+    const narrative = e.version.schema.sections.filter((s) => s.type === 'textarea' && !s.mediaPick).map((s) => (s.type === 'textarea' ? String(e.values[s.key] ?? '') : '')).join('\n')
+    const inserted = detectEditedEntities(e.entities.filter((it) => it.role !== 'mention'), JSON.stringify(e.values))
+    const mentions = mentionEntityRows(narrative, e.labels)
+    const hadMentions = e.entities.some((it) => it.role === 'mention')
+    if (!inserted.length && !mentions.length && !hadMentions) return
+    const res = await syncReportEntities(reportId, [...inserted, ...mentions], 'mentions')
+    if (!res.ok) toast(`Report saved, but its record links were not updated: ${res.message}`, 'warn')
   }
-  const reopen = async (r: ReportRow) => {
-    const res = await rpc('report_reopen', { p_report: r.id })
-    if (res.error) toast(res.error.message, 'danger')
-    else { toast('Report reopened — it can be edited again.', 'success'); void refresh() }
-  }
+  // List-row action label: the published version's review rule for the key
+  // (the dialog re-resolves the PINNED version before acting).
+  const selfSealByKey = (key: string) => { const ver = byKey.get(key)?.version ?? fallbackVersionFor(key); return !!ver && !ver.reviewRequired }
+  const statusChip = (r: ReportRow) => { const s = reviewStatusOf(r); return <Badge tone={reportReviewTone(s)}>{REPORT_REVIEW_LABEL[s]}</Badge> }
   return (
     <div className="space-y-4">
       {open ? (
-        <ReportDetail r={open} c={c} canEdit={canEdit} canDelete={canDelete} holdActive={holdActive}
+        <ReportDetail r={open} c={c} viewer={viewer} writable={writable} canEdit={canEdit} canDelete={canDelete} holdActive={holdActive} catalog={catalog} title={titleOf(open)}
           onBack={() => setOpenId(null)}
           onEdit={() => void openEditor(open.template, open)}
-          onFinalize={() => setConfirm({ kind: 'finalize', r: open })}
-          onReopen={() => setConfirm({ kind: 'reopen', r: open })}
+          onSubmit={() => void openFlow('submit', open)}
+          onReview={(decision) => void openFlow('review', open, decision)}
+          onReopen={() => void openFlow('reopen', open)}
           onChanged={() => void refresh()}
-          onDelete={() => { void deleteWithUndo('reports', open, { label: reportTitle(open), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }); setOpenId(null) }} />
+          onDelete={() => { void deleteWithUndo('reports', open, { label: titleOf(open), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }); setOpenId(null) }} />
       ) : (<>
-        {canEdit && <div className="flex flex-wrap gap-2">{REPORT_TEMPLATES.map((tpl) => <Button key={tpl.id} onClick={() => void openEditor(tpl.id)}><TemplateIcon id={tpl.id} /> {tpl.name}</Button>)}</div>}
+        {writable && (
+          catalog
+            ? <div className="space-y-1.5">
+                <div className="flex flex-wrap gap-2">{catalog.templates.map((tpl: PublishedTemplate) => <Button key={tpl.id} onClick={() => void openEditor(tpl.key)} title={tpl.description || (tpl.version.reviewRequired ? 'Review required before sealing' : 'Seals on submission')}><TemplateIcon id={tpl.key} /> {tpl.name}</Button>)}</div>
+                {catalog.source === 'fallback' && <p className="text-xs text-slate-400">Template catalog unavailable — offering the built-in forms.</p>}
+              </div>
+            : <ListSkeleton count={1} />
+        )}
         <div className="space-y-2">
-          {reports.map((r) => <div key={r.id} className="flex items-center gap-3 rounded-lg border border-white/10 bg-ink-950/50 p-3"><button onClick={() => setOpenId(r.id)} className="min-w-0 flex-1 text-left"><p className="font-semibold text-white">{reportTitle(r)}</p><p className="text-xs text-slate-500">{r.finalized ? 'Finalized' : 'Draft'} - {timeAgo(r.created_at)}</p></button>{!r.finalized && canEdit && <Button size="sm" variant="success" onClick={() => setConfirm({ kind: 'finalize', r })}>Finalize</Button>}{!r.finalized && canEdit && <button onClick={() => void openEditor(r.template, r)} className="text-sm font-bold text-badge-200">Edit</button>}{canDelete && (holdActive ? <span title="A legal hold preserves this case's reports" className="text-sm font-bold text-rose-300/50">Held</span> : <button onClick={() => { void deleteWithUndo('reports', r, { label: reportTitle(r), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }) }} className="text-sm font-bold text-rose-300">Delete</button>)}</div>)}
-          {!reports.length && <p className="rounded-lg border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-500">No reports yet.</p>}
+          {reports.map((r) => {
+            const editable = isReportEditable(r)
+            const mySubmit = canSubmitReport(r, viewer, writable)
+            return <div key={r.id} className="flex items-center gap-3 rounded-lg border border-white/10 bg-ink-950/50 p-3">
+              <button onClick={() => setOpenId(r.id)} className="min-w-0 flex-1 text-left">
+                <p className="font-semibold text-white">{titleOf(r)}</p>
+                <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-400">{statusChip(r)}<span>{timeAgo(r.created_at)}</span></p>
+              </button>
+              {editable && mySubmit && <Button size="sm" variant={selfSealByKey(r.template) ? 'success' : 'warn'} onClick={() => void openFlow('submit', r)}>{selfSealByKey(r.template) ? 'Finalize' : 'Submit for review'}</Button>}
+              {reviewStatusOf(r) === 'submitted' && canReviewReport(r, viewer, c.bureau) && <Button size="sm" variant="primary" onClick={() => void openFlow('review', r)}>Review</Button>}
+              {editable && writable && <button onClick={() => void openEditor(r.template, r)} className="min-h-9 text-sm font-bold text-badge-200">Edit</button>}
+              {canDelete && (holdActive ? <span title="A legal hold preserves this case's reports" className="text-sm font-bold text-rose-300/50">Held</span> : <button onClick={() => { void deleteWithUndo('reports', r, { label: titleOf(r), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }) }} className="min-h-9 text-sm font-bold text-rose-300">Delete</button>)}
+            </div>
+          })}
+          {!reports.length && <p className="rounded-lg border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-400">No reports yet.</p>}
         </div>
       </>)}
       <Modal open={!!editing} onClose={() => setEditing(null)} wide>
@@ -175,48 +258,86 @@ export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: C
           <ModalHeader
             title={
               <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                {editing ? FORM_SCHEMAS[editing.template]?.title || 'Report' : 'Report'}
+                {editing ? editing.version.schema.title || 'Report' : 'Report'}
+                {editing && editing.version.versionNumber > 0 && <span className="font-mono text-xs font-normal text-slate-400">v{editing.version.versionNumber}</span>}
                 <SaveState status={editorDraft.status} lastSavedAt={editorDraft.lastSavedAt} />
               </span>
             }
             onClose={() => setEditing(null)}
           />
-          {editing && <FormEditor template={editing.template} caseId={c.id} reportId={editing.report?.id} values={editing.values} onChange={(values) => { setEditing({ ...editing, values }); void saveDraft(draftKey(editing.template, editing.report), values) }} />}
+          {editing && <div className="space-y-4">
+            {editing.report && reviewStatusOf(editing.report) === 'returned' && editing.report.review_note && (
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-100"><span className="font-semibold">Returned for revision:</span> {editing.report.review_note}</p>
+            )}
+            <RequiredChecklist version={editing.version} values={editing.values} compact />
+            <FormEditor template={editing.template} schema={editing.version.schema} caseId={c.id} reportId={editing.report?.id} values={editing.values} requiredKeys={editing.version.required} advisoryKeys={editing.version.advisory}
+              mentions={{ labels: editing.labels, onLabels: (labels) => setEditing((cur) => (cur ? { ...cur, labels: { ...cur.labels, ...labels } } : cur)) }}
+              onInsertFromCase={(key) => setDrawerFor(key)}
+              onChange={(values) => { setEditing({ ...editing, values }); void saveDraft(draftKey(editing.template, editing.report), values) }} />
+            {editing.entities.some((it) => it.role !== 'mention') && (
+              <div>
+                <p className="mb-1 text-xs font-semibold text-slate-400">Records inserted from the case</p>
+                <ReportEntityList items={editing.entities.filter((it) => it.role !== 'mention')} onRemove={(key) => void removeEntity(key)} />
+              </div>
+            )}
+          </div>}
           <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
             <Button variant="ghost" className="text-rose-300 hover:text-rose-200" onAction={discardEditorDraft}>Discard draft</Button>
             <div className="flex gap-2"><Button onClick={() => setEditing(null)}>Cancel</Button><Button variant="primary" onAction={save}>Save</Button></div>
           </div>
         </div>
       </Modal>
-      <Modal open={!!confirm} onClose={() => setConfirm(null)}>
-        <div className="p-5">
-          <ModalHeader title={confirm?.kind === 'reopen' ? 'Reopen this report?' : 'Finalize & seal this report?'} onClose={() => setConfirm(null)} />
-          {confirm?.kind === 'reopen'
-            ? <p className="text-sm text-slate-300">The seal is removed and the report becomes editable again. The previous signature is kept in the report&apos;s history, and the reopen is audit-logged.</p>
-            : confirm && (() => { const gaps = reportFinalizeGaps(confirm.r); return <div className="space-y-2 text-sm text-slate-300">
-                <p>Finalizing seals the report: its contents lock and it is signed in your name. Bureau lead and above can reopen it later.</p>
-                {gaps.length > 0 && <p className="rounded-lg bg-amber-500/10 p-3 text-amber-200">Still empty: {gaps.join(', ')}. You can seal it anyway.</p>}
-              </div> })()}
-          <div className="mt-5 flex justify-end gap-2">
-            <Button onClick={() => setConfirm(null)}>Cancel</Button>
-            <Button variant={confirm?.kind === 'reopen' ? 'warn' : 'success'} onClick={() => { if (!confirm) return; const { kind, r } = confirm; setConfirm(null); if (kind === 'finalize') void finalize(r); else void reopen(r) }}>{confirm?.kind === 'reopen' ? 'Reopen report' : 'Finalize & seal'}</Button>
-          </div>
-        </div>
-      </Modal>
+      {editing && drawerFor && (
+        <InsertFromCaseDrawer
+          caseId={c.id}
+          reportId={editing.report?.id ?? null}
+          values={editing.values}
+          schema={editing.version.schema}
+          entities={editing.entities}
+          mentionTokens
+          onClose={() => setDrawerFor(null)}
+          onInsert={(items, text) => {
+            // Append the rendered lines to the target narrative and keep the
+            // items locally; an existing report is persisted by the drawer
+            // itself, a new one syncs right after report_create (save()).
+            const cur = String(editing.values[drawerFor] ?? '').trimEnd()
+            const values = { ...editing.values, [drawerFor]: cur ? `${cur}\n${text}` : text }
+            setEditing({ ...editing, values, entities: mergeEntityItems(editing.entities, items, 'merge'), labels: withMentionLabels(editing.labels, items) })
+            void saveDraft(draftKey(editing.template, editing.report), values)
+            setDrawerFor(null)
+          }}
+        />
+      )}
+      <SubmitReportModal target={flow} onClose={() => setFlow(null)} onDone={() => void refresh()} />
+      <ReviewReportModal target={flow} onClose={() => setFlow(null)} onDone={() => void refresh()} />
+      <ReopenReportModal target={flow} onClose={() => setFlow(null)} onDone={() => void refresh()} />
     </div>
   )
 }
 
 /** In-page read view of one report — replaces the template row + list while
- *  open. Loads case evidence/attachments plus ONLY the persons this report's
- *  fields reference (bounded in:{id} lookup — never the whole registry) so
- *  ReportView can make referenced items clickable; every load is best-effort. */
-function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, onFinalize, onReopen, onChanged, onDelete }: { r: ReportRow; c: CaseRow; canEdit: boolean; canDelete: boolean; holdActive: boolean; onBack: () => void; onEdit: () => void; onFinalize: () => void; onReopen: () => void; onChanged: () => void; onDelete: () => void }) {
+ *  open. Renders from the report's PINNED template version. Loads case
+ *  evidence/attachments plus ONLY the persons this report's fields reference
+ *  (bounded in:{id} lookup — never the whole registry) so ReportView can make
+ *  referenced items clickable; every load is best-effort. */
+function ReportDetail({ r, c, viewer, writable, canEdit, canDelete, holdActive, catalog, title, onBack, onEdit, onSubmit, onReview, onReopen, onChanged, onDelete }: {
+  r: ReportRow; c: CaseRow; viewer: CidViewer; writable: boolean; canEdit: boolean; canDelete: boolean; holdActive: boolean; catalog: TemplateCatalog | null; title: string
+  onBack: () => void; onEdit: () => void; onSubmit: () => void; onReview: (decision?: 'approve' | 'return') => void; onReopen: () => void; onChanged: () => void; onDelete: () => void
+}) {
   const router = useRouter()
   const nav = useToolNav()
-  const { profile } = useAuth()
-  const schema = FORM_SCHEMAS[r.template]
   const status = warrantStatusOf(r)
+  const review = reviewStatusOf(r)
+  // Pinned version — resolved once per report id; the schema it carries is
+  // what this report was filed under, whatever the template says today.
+  const [version, setVersion] = useState<TemplateVersion | null | undefined>(undefined)
+  useEffect(() => {
+    let alive = true
+    void resolveReportVersion({ template: r.template, template_version_id: r.template_version_id }, catalog?.templates).then((ver) => { if (alive) setVersion(ver) })
+    return () => { alive = false }
+  }, [r.template, r.template_version_id, catalog])
+  const schema = version?.schema
+  const selfSeal = !!version && !version.reviewRequired
   // Warrant lifecycle goes through a validating RPC — the status whitelist
   // and the actor stamped into fields._warrant_log are server-side, and it's
   // the only path that can touch a sealed warrant.
@@ -295,24 +416,23 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
     const seen = new Set(pools.media.map((m) => m.id))
     return [...pools.media, ...pools.linked.filter((m) => !seen.has(m.id))]
   }, [pools.media, pools.linked])
-  // Exports flatten media tokens to the CURRENT "title — url" (legacy plain
-  // lines pass through untouched).
-  const exportValues = (values: FormValues): FormValues => {
-    if (typeof values.media_refs !== 'string' || !values.media_refs) return values
-    const lookup = (id: string) => {
-      const m = mediaPool.find((x) => x.id === id)
-      return m ? { title: m.title, url: m.external_url ? safeUrl(m.external_url) || null : null } : null
+  const sealSignatures = sealSignatureItems(r)
+  // Records referenced (report_entities, RLS-filtered) and — for a sealed
+  // report — the latest frozen snapshot the export menu prints from.
+  const [entities, setEntities] = useState<EntityItem[]>([])
+  const [latestVersion, setLatestVersion] = useState<Tables<'report_versions'> | null>(null)
+  useEffect(() => {
+    let alive = true
+    void loadReportEntities(r.id).then((rows) => { if (alive) setEntities(rows.map(toEntityItem)) }).catch(() => { /* hidden or unavailable */ })
+    if (r.finalized) {
+      void list('report_versions', { eq: { report_id: r.id }, order: 'version_number', ascending: false, limit: 1 })
+        .then((rows) => { if (alive) setLatestVersion(rows[0] ?? null) }).catch(() => { /* export falls back to live fields */ })
     }
-    return { ...values, media_refs: resolveMediaRefText(values.media_refs, lookup) }
-  }
-  // Seal provenance: the current signature plus any previous seals a reopen
-  // preserved in fields._reopen_log — both purely presentational.
-  const reopenLog = parseReopenLog((parseFormValues(r.fields)._reopen_log ?? null) as Json)
-  const sig = parseReportSignature(r.signature)
-  const sealSignatures: SignatureItem[] = [
-    ...(sig ? [{ id: 'current', name: sig.officer, badge: sig.badge ?? null, action: 'report seal', at: sig.signed_at ?? null }] : []),
-    ...reopenLog.flatMap((e, i) => (e.prev_signature ? [{ id: `prev-${i}`, name: e.prev_signature.officer, badge: e.prev_signature.badge ?? null, action: 'previous seal', at: e.at ?? null, superseded: true }] : [])),
-  ]
+    return () => { alive = false }
+  }, [r.id, r.finalized, r.updated_at])
+  // A reopened report exports its live fields again (the stale snapshot
+  // state is simply not read while it is unsealed).
+  const exportVersion = r.finalized ? latestVersion : null
   // Frozen seal snapshots (report_versions) load lazily on toggle so readers
   // who never open history keep the detail view a single round-trip.
   const [versions, setVersions] = useState<Tables<'report_versions'>[] | null>(null)
@@ -331,13 +451,18 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
       catch { setVersions([]) }
     })()
   }
+  const editable = isReportEditable(r)
+  const mySubmit = canSubmitReport(r, viewer, writable)
+  const myReview = canReviewReport(r, viewer, c.bureau)
+  const myReopen = canReopenReport(r, viewer, c.bureau)
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <button onClick={onBack} className="rounded-lg py-2 pr-2 text-sm font-semibold text-badge-200 hover:text-white">← Back to reports</button>
-          <h3 className="min-w-0 truncate font-semibold text-white">{reportTitle(r)}</h3>
-          <Badge tone={r.finalized ? 'good' : 'neutral'}>{r.finalized ? 'Sealed' : 'Draft'}</Badge>
+          <h3 className="min-w-0 truncate font-semibold text-white">{title}</h3>
+          <Badge tone={reportReviewTone(review)}>{REPORT_REVIEW_LABEL[review]}</Badge>
+          {version && version.versionNumber > 0 && <span className="font-mono text-xs text-slate-400" title="Template version this report is pinned to">template v{version.versionNumber}</span>}
           {/* Registry chip: 'returned' renders as "Return filed" — the return
               was filed with the court, NOT sent back for revision. */}
           {WARRANT_TPLS[r.template] && <StatusBadge domain="warrant" value={status} className="uppercase" />}
@@ -349,21 +474,60 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
               <ScaleIcon size={14} /> Submit for Legal Review
             </Button>
           )}
-          {!r.finalized && canEdit && <Button size="sm" variant="success" onClick={onFinalize}>Finalize</Button>}
-          {r.finalized && isCommandRole(profile?.role) && <button onClick={onReopen} className="rounded-lg border border-amber-500/40 px-3 py-2 text-sm font-bold text-amber-300 hover:bg-amber-500/10">Reopen</button>}
-          {!r.finalized && canEdit && <button onClick={onEdit} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-badge-200 hover:bg-white/5">Edit</button>}
+          {editable && mySubmit && <Button size="sm" variant={selfSeal ? 'success' : 'warn'} onClick={onSubmit} disabled={version === undefined}>{selfSeal ? 'Finalize' : 'Submit for review'}</Button>}
+          {myReopen && <Button size="sm" variant="warn" onClick={onReopen}>Reopen</Button>}
+          {editable && writable && <Button size="sm" onClick={onEdit}>Edit</Button>}
           {canDelete && (holdActive
             ? <span title="A legal hold preserves this case's reports" className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-rose-300/50">Delete — blocked by legal hold</span>
-            : <button onClick={onDelete} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-rose-300 hover:bg-rose-500/10">Delete</button>)}
+            : <Button size="sm" variant="danger" onClick={onDelete}>Delete</Button>)}
           {/* Shareable deep link straight to this report (?case&tab&report). */}
           <Button onClick={() => copyText(`${window.location.origin}${caseLink(c.id, 'reports', { report: r.id })}`, 'Report link')}>Copy link</Button>
           <Button onClick={toggleVersions} aria-expanded={showVersions}>{showVersions ? 'Hide versions' : 'Versions'}</Button>
           {/* Court-ready paper copy for warrants — browser print flow only. */}
           {WARRANT_TPLS[r.template] && <WarrantPrintButton r={r} c={c} />}
-          <Button variant="primary" onClick={() => downloadTextFile(`${c.case_number}-${r.template}.md`, formToText(schema, exportValues(parseFormValues(r.fields))), 'text/markdown')}>Download .md</Button>
+          {/* PDF / DOCX / MD (P5-07): every download is recorded by
+              report_record_export first; a sealed report prints its frozen
+              snapshot, a draft its live fields. */}
+          {schema && version && (
+            <ReportExportMenu input={{
+              report: r, version: exportVersion, schema, templateName: title, templateVersion: version.versionNumber || null,
+              caseNumber: c.case_number, caseTitle: c.title, entities,
+              // A media entity whose row RLS withheld from this viewer (restricted) never prints.
+              restrictedMediaIds: new Set(entities.filter((e) => e.kind === 'media' && e.ref_id && !mediaPool.some((m) => m.id === e.ref_id)).map((e) => e.ref_id as string)),
+              authorSignature: parseSignatureLike(r.signature), reviewerSignature: parseSignatureLike(r.reviewer_signature),
+              reviewStatusLabel: (st) => REPORT_REVIEW_LABEL[reviewStatusOf({ review_status: st, finalized: r.finalized })],
+              authorName: parseSignatureInfo(r.signature)?.officer ?? null,
+            }} />
+          )}
         </div>
       </div>
-      {(r.finalized || reopenLog.length > 0) && (
+      {/* Flow state panels — what happens next, for the author and the reviewer. */}
+      {review === 'submitted' && (
+        <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4 text-sm text-slate-200">
+          <p><span className="font-semibold text-white">Awaiting review</span>{r.submitted_at ? ` — submitted ${timeAgo(r.submitted_at)}.` : '.'} Contents are locked until a reviewer approves or returns it.</p>
+          {myReview && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-slate-300">Your decision:</span>
+              <Button size="sm" variant="success" onClick={() => onReview('approve')}>Approve</Button>
+              <Button size="sm" variant="warn" onClick={() => onReview('return')}>Return for revision</Button>
+            </div>
+          )}
+        </div>
+      )}
+      {review === 'returned' && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-100">
+          <p className="font-semibold">Returned for revision{r.reviewed_at ? ` · ${timeAgo(r.reviewed_at)}` : ''}</p>
+          <p className="mt-1 whitespace-pre-wrap">{r.review_note || 'No note was left.'}</p>
+          {mySubmit && <p className="mt-1 text-xs text-amber-200/80">Edit the report and submit it again when it is ready.</p>}
+        </div>
+      )}
+      {review === 'approved' && r.review_note && (
+        <p className="rounded-lg border border-white/10 bg-ink-950/50 p-3 text-sm text-slate-300"><span className="font-semibold text-white">Reviewer note:</span> {r.review_note}</p>
+      )}
+      {version && version.required.length > 0 && editable && (
+        <RequiredChecklist version={version} values={parseFormValues(r.fields)} compact />
+      )}
+      {(r.finalized || sealSignatures.length > 0) && (
         <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
           <h4 className="mb-2 text-[13px] font-semibold text-white">Signatures</h4>
           <SignatureViewer signatures={sealSignatures} />
@@ -374,22 +538,33 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
           <h4 className="mb-2 text-[13px] font-semibold text-white">Versions</h4>
           {!versions ? <ListSkeleton count={3} /> : (
             <VersionViewer
-              versions={versions.map((ver) => ({ id: ver.id, number: ver.version_number, label: 'Sealed', at: ver.created_at, byName: parseReportSignature(ver.signature)?.officer ?? null }))}
+              versions={versions.map((ver) => ({ id: ver.id, number: ver.version_number, label: 'Sealed', at: ver.created_at, byName: parseSignatureInfo(ver.signature)?.officer ?? null }))}
               renderContent={(item) => {
                 const ver = versions.find((x) => x.id === item.id)
                 if (!ver) return null
-                const vsig = parseReportSignature(ver.signature)
+                const vsig = parseSignatureInfo(ver.signature)
+                const vrev = parseSignatureInfo(ver.reviewer_signature)
+                const sigs: SignatureItem[] = [
+                  ...(vsig ? [{ id: `${ver.id}-a`, name: vsig.officer, badge: vsig.badge ?? null, action: 'report seal', at: vsig.signed_at ?? null, versionLabel: `v${ver.version_number}` }] : []),
+                  ...(vrev ? [{ id: `${ver.id}-r`, name: vrev.officer, badge: vrev.badge ?? null, role: vrev.role ?? null, action: 'review approval', at: vrev.signed_at ?? null, versionLabel: `v${ver.version_number}` }] : []),
+                ]
                 return (
                   <div className="space-y-3">
-                    {vsig && <SignatureViewer signatures={[{ id: ver.id, name: vsig.officer, badge: vsig.badge ?? null, action: 'report seal', at: vsig.signed_at ?? null, versionLabel: `v${ver.version_number}` }]} />}
+                    {sigs.length > 0 && <SignatureViewer signatures={sigs} />}
                     {schema
-                      ? <ReportView schema={schema} values={parseFormValues(ver.fields)} evidence={pools.evidence} media={mediaPool} persons={personRefs} onOpenPerson={(id) => nav.openRecord('persons', id)} />
+                      ? <ReportView schema={schema} values={parseFormValues(ver.fields)} evidence={pools.evidence} media={mediaPool} persons={personRefs} entities={entities} onOpenPerson={(id) => nav.openRecord('persons', id)} />
                       : <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{JSON.stringify(ver.fields, null, 2)}</pre>}
                   </div>
                 )
               }}
             />
           )}
+        </div>
+      )}
+      {entities.length > 0 && (
+        <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
+          <h4 className="mb-2 text-[13px] font-semibold text-white">Records referenced ({entities.length})</h4>
+          <ReportEntityList items={entities} />
         </div>
       )}
       {pools.linked.length > 0 && (
@@ -414,9 +589,11 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
           <Link href={caseLink(c.id, 'media')} className="mt-2 inline-block text-xs font-semibold text-badge-200 hover:text-white">Manage in Photos &amp; Media →</Link>
         </div>
       )}
-      {schema
-        ? <ReportView schema={schema} values={parseFormValues(r.fields)} evidence={pools.evidence} media={mediaPool} persons={personRefs} onOpenPerson={(id) => nav.openRecord('persons', id)} />
-        : <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{JSON.stringify(r.fields, null, 2)}</pre>}
+      {version === undefined
+        ? <ListSkeleton count={4} />
+        : schema
+          ? <ReportView schema={schema} values={parseFormValues(r.fields)} evidence={pools.evidence} media={mediaPool} persons={personRefs} entities={entities} onOpenPerson={(id) => nav.openRecord('persons', id)} />
+          : <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{JSON.stringify(r.fields, null, 2)}</pre>}
     </div>
   )
 }
@@ -443,285 +620,4 @@ async function syncReportMediaLinks(reportId: string, prevText: string, nextText
       for (const m of rows) if (m.report_id === reportId) await update('media', m.id, { report_id: null })
     }
   } catch { /* text refs remain the durable record */ }
-}
-
-/** kv text-field keys that get a one-click "Now" timestamp fill. */
-const DATE_QUICK = new Set(['date', 'filed_at', 'submitted', 'seizure_date', 'dist_date', 'return_date', 'start_time', 'end_time', 'rights_dt', 'inc_dt'])
-
-function FormEditor({ template, caseId, reportId, values, onChange }: { template: string; caseId: string; reportId?: string; values: FormValues; onChange: (v: FormValues) => void }) {
-  const schema = FORM_SCHEMAS[template]
-  // Case-scoped evidence/attachment pool for sections flagged evidenceLookup,
-  // evidencePick or mediaPick. Loaded once per editor; a load failure shows a
-  // muted notice (kv lookup) or hides the pickers, never blocks the form.
-  const needsLookup = !!schema?.sections.some((s) => (s.type === 'kv' && s.evidenceLookup) || (s.type === 'grid' && s.evidencePick) || (s.type === 'textarea' && s.mediaPick))
-  const [pool, setPool] = useState<{ evidence: EvidenceRow[]; media: MediaRow[]; reports: ReportRow[] } | null>(null)
-  const [poolErr, setPoolErr] = useState(false)
-  useEffect(() => {
-    if (!needsLookup) return
-    let alive = true
-    void (async () => {
-      try {
-        const [ev, m, rp] = await Promise.all([
-          list('evidence', { eq: { case_id: caseId }, order: 'created_at' }),
-          // Pickers offer live media only — archived rows stay resolvable in
-          // saved reports but are not offered for new attachments.
-          list('media', { eq: { case_id: caseId }, is: { archived_at: null } }),
-          list('reports', { eq: { case_id: caseId }, order: 'created_at' }).catch(() => [] as ReportRow[]),
-        ])
-        if (alive) setPool({ evidence: ev, media: m, reports: rp.filter((r) => r.finalized) })
-      } catch { if (alive) setPoolErr(true) }
-    })()
-    return () => { alive = false }
-  }, [caseId, needsLookup])
-  if (!schema) return <p className="text-sm text-slate-400">Unknown report template.</p>
-  const set = (key: string, value: unknown) => onChange({ ...values, [key]: value })
-  // Free-text append into a single-line field: join picks with '; '.
-  const append = (key: string, text: string) => { const cur = String(values[key] ?? '').trim(); set(key, cur ? `${cur}; ${text}` : text) }
-  const evLabel = (ev: EvidenceRow) => [ev.item_code, ev.description].filter(Boolean).join(' — ') || 'Untitled item'
-  // Added entries render as removable chips — the fields stay '; '-joined
-  // strings underneath, so free text and saved reports are unaffected.
-  const entriesOf = (key: string) => String(values[key] ?? '').split(';').map((t) => t.trim()).filter(Boolean)
-  const removeEntry = (key: string, idx: number) => set(key, entriesOf(key).filter((_, i) => i !== idx).join('; '))
-  const chips = (key: string, label: string) => {
-    const es = entriesOf(key)
-    return es.length ? <div className="mb-2 flex flex-wrap gap-1.5">{es.map((t, i) => <span key={`${t}-${i}`} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200"><span className="min-w-0 truncate">{t}</span><button onClick={() => removeEntry(key, i)} aria-label={`Remove ${t} from ${label}`} title="Remove" className="shrink-0 font-bold text-rose-300 hover:text-rose-200">✕</button></span>)}</div> : null
-  }
-  const lookup = poolErr
-    ? <p className="mb-2 text-xs text-slate-400">Case evidence lookup unavailable — enter items manually.</p>
-    : pool && !pool.evidence.length && !pool.media.length
-      ? <p className="mb-2 text-xs text-slate-400">No photos or attachments on this case yet — add them in the Photos &amp; Media tab first.</p>
-      : pool && <div className="mb-2">
-          <RelatedRecordPicker
-            sources={[
-              { kind: 'evidence', label: 'Case evidence', options: pool.evidence.map((ev) => ({ id: ev.id, label: evLabel(ev) })) },
-              { kind: 'attachment', label: 'Case attachments', options: pool.media.map((m) => ({ id: m.id, label: m.title || m.type || 'Attachment' })) },
-              { kind: 'finalized_report', label: 'Case reports', options: pool.reports.map((fr) => ({ id: fr.id, label: reportTitle(fr) })) },
-            ]}
-            onPick={(kind, opt) => {
-              if (kind === 'evidence') append('ev_items', opt.label)
-              else if (kind === 'attachment') append('ev_files', opt.label)
-              else append('ev_files', `${opt.label} — finalized report`)
-            }}
-          />
-        </div>
-  const labelCls = 'mb-1 block text-xs font-medium text-slate-500'
-  const inputCls = 'w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white'
-  // Tolerant read for checks: legacy reports stored comma-joined strings.
-  const checksVal = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : typeof v === 'string' && v.trim() ? v.split(',').map((t) => t.trim()).filter(Boolean) : [])
-  const moneyInput = (id: string, val: string, on: (t: string) => void, label: string) => (
-    <div className="relative"><span aria-hidden className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-slate-400">$</span><input id={id} value={val} onChange={(e) => on(e.target.value)} inputMode="decimal" placeholder={label} className="w-full rounded-lg border border-white/10 bg-ink-950 py-2 pl-7 pr-3 text-sm text-white" /></div>
-  )
-  return <div className="space-y-4">{schema.sections.map((s) => {
-    if (s.type === 'note') return <p key={s.id} className="rounded-lg bg-white/5 p-3 text-sm text-slate-300">{s.text}</p>
-    if (s.type === 'textarea') {
-      const taId = `${template}-${s.key}`
-      return <div key={s.id}>
-        <label htmlFor={taId} className="block text-sm font-semibold text-white">{s.label}</label>
-        {s.mediaPick && pool && pool.media.length > 0 && <select aria-label={`Add attachment reference to ${s.label}`} value="" onChange={(e) => { const m = pool.media.find((x) => x.id === e.target.value); if (!m) return; /* Id-bearing token — render/export resolve the CURRENT title/url, so renames never orphan the reference. Legacy "title — url" lines keep rendering as plain text. */ const line = mediaRefLine(m.id, m.title || m.type || 'Attachment'); if (m.report_id && m.report_id !== reportId) toast('Already attached to another report — added as a text reference only.', 'info'); const cur = String(values[s.key] ?? '').trimEnd(); set(s.key, cur ? `${cur}\n${line}` : line) }} className="mt-2 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Add from case attachments…</option>{pool.media.map((m) => <option key={m.id} value={m.id}>{m.title || m.type || 'Attachment'}</option>)}</select>}
-        <textarea id={taId} value={String(values[s.key] ?? '')} onChange={(e) => set(s.key, e.target.value)} rows={5} className="mt-2 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm font-normal text-white" />
-      </div>
-    }
-    if (s.type === 'grid') {
-      const rows = (Array.isArray(values[s.id]) ? values[s.id] : [{}]) as Record<string, string>[]
-      const setCell = (i: number, key: string, val: string) => set(s.id, rows.map((r, idx) => (idx === i ? { ...r, [key]: val } : r)))
-      // Display-only per-column sums; a column with no parseable cells is omitted.
-      const totals = s.cols.filter((col) => col.type === 'money').map((col) => {
-        const nums = rows.map((r) => parseFloat(String(r[col.key] ?? '').replace(/[$,\s]/g, ''))).filter((n) => Number.isFinite(n))
-        return nums.length ? { label: col.label, sum: nums.reduce((a, b) => a + b, 0) } : null
-      }).filter((t): t is { label: string; sum: number } => !!t)
-      return <div key={s.id} className="rounded-lg border border-white/10 p-3">
-        <h4 className="mb-2 font-semibold text-white">{s.label}</h4>
-        {s.evidencePick && pool && pool.evidence.length > 0 && <select aria-label={`Add case evidence to ${s.label}`} value="" onChange={(e) => { const ev = pool.evidence.find((x) => x.id === e.target.value); if (!ev || !s.cols[0]) return; const row: Record<string, string> = { [s.cols[0].key]: ev.item_code || 'Untitled item' }; if (s.cols[1]) row[s.cols[1].key] = ev.description || ''; set(s.id, [...rows, row]) }} className="mb-2 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Add from case evidence…</option>{pool.evidence.map((ev) => <option key={ev.id} value={ev.id}>{evLabel(ev)}</option>)}</select>}
-        {rows.map((row, i) => <div key={i} className="mb-2 flex items-start gap-2">
-          <div className="grid min-w-0 flex-1 gap-2 md:grid-cols-2">{s.cols.map((col) => {
-            const cellId = `${template}-${s.id}-${i}-${col.key}`
-            // Person columns: registry picker (writes the name snapshot AND the
-            // row's canonical person_id in one commit). PersonField labels
-            // itself, so the cell's own <label> is skipped.
-            if (col.person) return <PersonField key={col.key} label={col.label} name={row[col.key] || ''} personId={row.person_id || ''}
-              onCommit={(nm, pid) => set(s.id, rows.map((r, idx) => (idx === i ? { ...r, [col.key]: nm, person_id: pid } : r)))} />
-            return <div key={col.key}>
-              <label htmlFor={cellId} className={labelCls}>{col.label}</label>
-              {col.type === 'select' && col.opts
-                ? <select id={cellId} value={row[col.key] || ''} onChange={(e) => setCell(i, col.key, e.target.value)} className={inputCls}><option value="">{col.label || '—'}</option>{col.opts.filter(Boolean).map((o) => <option key={o} value={o}>{o}</option>)}</select>
-                : col.type === 'money'
-                  ? moneyInput(cellId, row[col.key] || '', (t) => setCell(i, col.key, t), col.label)
-                  : <input id={cellId} value={row[col.key] || ''} onChange={(e) => setCell(i, col.key, e.target.value)} placeholder={col.label} className={inputCls} />}
-            </div>
-          })}</div>
-          <button onClick={() => set(s.id, rows.filter((_, idx) => idx !== i))} aria-label={`Remove row ${i + 1} from ${s.label}`} title="Remove row" className="mt-5 shrink-0 rounded-lg border border-white/10 px-2.5 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/10">✕</button>
-        </div>)}
-        <Button size="sm" onClick={() => set(s.id, [...rows, {}])}>Add row</Button>
-        {totals.length > 0 && <div className="mt-2 space-y-0.5">{totals.map((t) => <p key={t.label} className="text-xs font-bold text-slate-400">{t.label}: ${t.sum.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>)}</div>}
-      </div>
-    }
-    return <div key={s.id} className="rounded-lg border border-white/10 p-3"><h4 className="mb-2 font-semibold text-white">{s.label}</h4>{s.evidenceLookup && lookup}{s.evidenceLookup && chips('ev_items', 'items')}{s.evidenceLookup && chips('ev_files', 'files')}<div className="grid gap-2 md:grid-cols-2">{s.fields.map((f) => {
-      const id = `${template}-${f.key}`
-      if (f.type === 'select') return <div key={f.key}><label htmlFor={id} className={labelCls}>{f.label}</label><select id={id} value={String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} className={inputCls}><option value="">{f.label}</option>{(f.opts || []).filter(Boolean).map((o) => <option key={o} value={o}>{o}</option>)}</select></div>
-      if (f.type === 'checks') {
-        const cur = checksVal(values[f.key])
-        return <fieldset key={f.key} className="md:col-span-2"><legend className={labelCls}>{f.label}</legend><div className="flex flex-wrap gap-2">{(f.opts || []).filter(Boolean).map((o) => { const on = cur.includes(o); return <label key={o} className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${on ? 'border-badge-500/50 bg-badge-500/15 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}`}><input type="checkbox" checked={on} onChange={() => set(f.key, on ? cur.filter((x) => x !== o) : [...cur, o])} className="accent-amber-500" /> {o}</label> })}</div></fieldset>
-      }
-      if (f.type === 'money') return <div key={f.key}><label htmlFor={id} className={labelCls}>{f.label}</label>{moneyInput(id, String(values[f.key] ?? ''), (t) => set(f.key, t), f.label)}</div>
-      // Person fields: registry picker — the display-name snapshot stays in
-      // values[f.key] exactly as before, and the picker's commit writes the
-      // canonical id into the `_${f.key}_person_id` companion key.
-      if (f.person) return <PersonField key={f.key} label={f.label}
-        name={Array.isArray(values[f.key]) ? (values[f.key] as string[]).join(', ') : String(values[f.key] ?? '')}
-        personId={String(values[`_${f.key}_person_id`] ?? '')}
-        onCommit={(nm, pid) => onChange({ ...values, [f.key]: nm, [`_${f.key}_person_id`]: pid })} />
-      const quickNow = f.type === 'text' && DATE_QUICK.has(f.key)
-      return <div key={f.key}><label htmlFor={id} className={labelCls}>{f.label}</label><div className="flex gap-2"><input id={id} value={Array.isArray(values[f.key]) ? (values[f.key] as string[]).join(', ') : String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} placeholder={f.label} className={`${inputCls} min-w-0 flex-1`} />{quickNow && <button type="button" onClick={() => set(f.key, new Date().toLocaleString('en-US'))} aria-label={`Set ${f.label} to now`} className="shrink-0 rounded-lg border border-white/10 px-2.5 py-2 text-xs font-bold text-slate-200 hover:bg-white/10">Now</button>}</div></div>
-    })}</div></div>
-  })}</div>
-}
-
-/** Person-typed report field — the smart-picker replacement for the audit's
- *  worst offender (the whole-registry datalist + exact-name-match id capture).
- *  A committed value shows as a summary row: a "Registry profile" badge (with
- *  quick preview) when the canonical id is attached, a muted "Not linked" hint
- *  when it's free text. Editing opens the bounded RecordSearchPicker; picking
- *  a profile commits name + id together, and the "Use as typed" escape hatch
- *  commits free text with an EMPTY id — every commit writes both, so a changed
- *  name can never carry a stale person id. */
-function PersonField({ label, name, personId, onCommit }: { label: string; name: string; personId: string; onCommit: (name: string, personId: string) => void }) {
-  const [editing, setEditing] = useState(false)
-  if (name && !editing) {
-    return (
-      <Field label={label}>
-        {(id) => (
-          <div className="flex min-h-11 items-center gap-2 rounded-lg border border-white/10 bg-ink-900 py-1 pl-3 pr-1.5">
-            <span className="min-w-0 flex-1 truncate text-sm text-white">{name}</span>
-            {personId
-              ? <Badge tone="good">Registry profile</Badge>
-              : <span className="flex-shrink-0 text-xs text-slate-500" title="Free text — not linked to a Persons-registry record">Not linked</span>}
-            {personId && <RecordPeekButton type="person" id={personId} label={name} />}
-            <Button id={id} size="sm" onClick={() => setEditing(true)}>Change</Button>
-            <button type="button" aria-label={`Clear ${label}`} title="Clear" onClick={() => onCommit('', '')} className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
-          </div>
-        )}
-      </Field>
-    )
-  }
-  return (
-    <div>
-      <RecordSearchPicker<EntityHit>
-        label={label}
-        value={null}
-        onChange={(hit) => { if (hit) { onCommit(hit.label, hit.id); setEditing(false) } }}
-        search={searchPersonHits}
-        getThumb={(h) => h.thumbUrl}
-        peekType="person"
-        initialQuery={name}
-        placeholder="Search the Persons registry…"
-        allowFreeText={{ label: 'Use as typed (not linked)', onPick: (t) => { onCommit(t, ''); setEditing(false) } }}
-      />
-      {editing && name && <Button size="sm" variant="ghost" className="mt-1" onClick={() => setEditing(false)}>Cancel — keep &ldquo;{name}&rdquo;</Button>}
-    </div>
-  )
-}
-
-/** Read-only rendering of a saved report — walks the same FORM_SCHEMAS the
- *  editor uses and presents each section styled like the rest of the site.
- *  With evidence/media/persons pools it makes referenced items clickable;
- *  without them it renders exactly as before. The markdown flattening
- *  (formToText) is kept for the Download .md action. */
-function ReportView({ schema, values, evidence = [], media = [], persons = [], onOpenPerson }: { schema: FormSchema; values: FormValues; evidence?: EvidenceRow[]; media?: MediaRow[]; persons?: { id: string; name: string | null }[]; onOpenPerson?: (id: string) => void }) {
-  const V = values || {}
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const toggle = (k: string) => setExpanded((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n })
-  const text = (v: unknown) => (Array.isArray(v) ? v.join(', ') : String(v ?? '')).trim()
-  // Canonical person ids only (captured by the editor's picker) — the old
-  // fuzzy name-match fallback is gone with the whole-registry load. Name-only
-  // legacy values render as the plain text they are, with a subtle hint. The
-  // persons pool holds just this report's referenced ids: when it resolved and
-  // an id is missing, the registry row is gone (or RLS-hidden), so the stored
-  // snapshot renders instead of a dead link; an empty pool (lookup pending or
-  // failed) keeps the link, matching the old always-clickable behavior.
-  const personHint = (v: string, hint: string) => <>{v} <span className="text-xs text-slate-500">({hint})</span></>
-  const personText = (v: string, pid?: string) => {
-    if (!pid || !onOpenPerson) return pid ? v : personHint(v, 'not linked')
-    if (persons.length && !persons.some((p) => p.id === pid)) return personHint(v, 'profile unavailable')
-    return <button onClick={() => onOpenPerson(pid)} className="font-semibold text-badge-200 hover:underline">{v}</button>
-  }
-  const findEvidence = (entry: string) => evidence.find((ev) => (!!ev.item_code && !!ev.description && entry === `${ev.item_code} — ${ev.description}`) || (!!ev.item_code && entry.startsWith(ev.item_code)))
-  const detailPanel = (line: string) => <span className="mt-1 block rounded-lg border border-white/10 bg-ink-900 px-2.5 py-1.5 text-left text-xs text-slate-300">{line}</span>
-  // ev_items/ev_files render '; '-separated entries; entries that match a
-  // logged evidence item or attachment become expandable/linked.
-  const lookupEntries = (key: 'ev_items' | 'ev_files', raw: string) => (
-    <div className="flex flex-col items-end gap-0.5">{raw.split(';').map((t) => t.trim()).filter(Boolean).map((entry, i) => {
-      const k = `${key}:${i}`
-      if (key === 'ev_items') {
-        const ev = findEvidence(entry)
-        if (!ev) return <span key={k}>{entry}</span>
-        return <span key={k} className="flex flex-col items-end">
-          <button onClick={() => toggle(k)} aria-expanded={expanded.has(k)} className="text-badge-200 hover:underline">{entry}</button>
-          {expanded.has(k) && detailPanel([ev.description, ev.type, ev.collected_by ? `collected by ${ev.collected_by}` : '', `seal ${ev.tamper}`, timeAgo(ev.created_at)].filter(Boolean).join(' · '))}
-        </span>
-      }
-      const m = media.find((x) => !!x.title && x.title === entry)
-      if (!m) return <span key={k}>{entry}</span>
-      const url = m.external_url ? safeUrl(m.external_url) : ''
-      if (url) return <a key={k} href={url} target="_blank" rel="noreferrer" className="text-badge-200 hover:underline">{entry} ↗</a>
-      return <span key={k} className="flex flex-col items-end">
-        <button onClick={() => toggle(k)} aria-expanded={expanded.has(k)} className="text-badge-200 hover:underline">{entry}</button>
-        {expanded.has(k) && detailPanel([m.type, timeAgo(m.created_at)].filter(Boolean).join(' · '))}
-      </span>
-    })}</div>
-  )
-  return (
-    <div className="max-h-[65vh] space-y-3 overflow-y-auto pr-1">
-      <p className="text-xs font-medium text-slate-500">{schema.subtitle}</p>
-      {schema.sections.map((s) => {
-        if (s.type === 'note') return <p key={s.id} className="rounded-lg bg-white/5 p-3 text-sm text-slate-300">{s.text}</p>
-        return (
-          <section key={s.id} className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
-            <h4 className="mb-2 text-[13px] font-semibold text-white">{s.label}</h4>
-            {s.type === 'textarea' && (s.mediaPick
-              ? <MediaRefsView raw={text(V[s.key])} media={media} />
-              : text(V[s.key]) ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{text(V[s.key])}</p> : <p className="text-sm text-slate-500">—</p>)}
-            {s.type === 'kv' && <dl className="divide-y divide-white/5">{s.fields.map((f) => {
-              const v = text(V[f.key])
-              const lookupKey = s.evidenceLookup && (f.key === 'ev_items' || f.key === 'ev_files') ? f.key : null
-              const hasPool = lookupKey === 'ev_items' ? evidence.length > 0 : lookupKey === 'ev_files' ? media.length > 0 : false
-              return <div key={f.key} className="flex items-start justify-between gap-4 py-1.5"><dt className="text-sm text-slate-400">{f.label}</dt><dd className={`text-right text-sm ${v ? 'text-white' : 'text-slate-500'}`}>{!v ? '—' : lookupKey && hasPool ? lookupEntries(lookupKey, v) : f.person ? personText(v, String(V[`_${f.key}_person_id`] ?? '') || undefined) : v}</dd></div>
-            })}</dl>}
-            {s.type === 'grid' && (() => {
-              const rows = (Array.isArray(V[s.id]) ? V[s.id] : []) as Record<string, string>[]
-              const filled = rows.filter((r) => s.cols.some((c) => text(r[c.key])))
-              return filled.length
-                ? <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>{s.cols.map((c) => <th key={c.key} className="pb-1.5 pr-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">{c.label}</th>)}</tr></thead><tbody className="divide-y divide-white/5">{filled.map((r, i) => <tr key={i}>{s.cols.map((c) => { const cv = text(r[c.key]); return <td key={c.key} className="py-1.5 pr-4 text-slate-200">{cv ? (c.person ? personText(cv, r.person_id || undefined) : cv) : '—'}</td> })}</tr>)}</tbody></table></div>
-                : <p className="text-sm text-slate-500">—</p>
-            })()}
-          </section>
-        )
-      })}
-    </div>
-  )
-}
-
-/** media_refs display: `[media:<id>]` token lines resolve to the row's CURRENT
- *  title + URL (rename-proof); legacy plain-text lines render exactly as the
- *  text they are. A token whose row is deleted/RLS-hidden falls back to its
- *  label snapshot. */
-function MediaRefsView({ raw, media }: { raw: string; media: MediaRow[] }) {
-  const entries = parseMediaRefEntries(raw)
-  if (!entries.length) return <p className="text-sm text-slate-500">—</p>
-  return (
-    <ul className="space-y-1 text-sm">
-      {entries.map((e, i) => {
-        if (!e.id) return <li key={`${e.label}-${i}`} className="whitespace-pre-wrap text-slate-200">{e.label}</li>
-        const m = media.find((x) => x.id === e.id)
-        if (!m) return <li key={`${e.id}-${i}`} className="text-slate-400">{e.label} <span className="text-xs">(no longer available)</span></li>
-        const url = m.external_url ? safeUrl(m.external_url) : ''
-        return (
-          <li key={`${e.id}-${i}`}>
-            {url
-              ? <a href={url} target="_blank" rel="noreferrer" className="text-badge-200 hover:underline">{m.title} ↗</a>
-              : <span className="text-slate-200">{m.title}</span>}
-          </li>
-        )
-      })}
-    </ul>
-  )
 }

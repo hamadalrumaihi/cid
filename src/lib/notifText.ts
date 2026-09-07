@@ -21,6 +21,10 @@ export const NOTIF_LABEL: Record<string, string> = {
   task_assigned: 'Task assigned to you',
   case_handover: 'Case handed over',
   report_finalized: 'Report finalized',
+  // Phase 5 review flow (contract §4): reviewers on the case / the author.
+  report_submitted: 'Report submitted for your review',
+  report_returned: 'Report returned for revision',
+  report_reopened: 'Report reopened',
   rico_ready: 'RICO elements satisfied',
   signoff_waiting: 'Case awaiting your sign-off',
   signoff_approved: 'Case sign-off approved',
@@ -113,6 +117,9 @@ const NOTIF_CASE_TAB: Record<string, string> = {
   mention: 'chat',
   note_mention: 'notes',
   report_finalized: 'reports',
+  report_submitted: 'reports',
+  report_returned: 'reports',
+  report_reopened: 'reports',
   rico_ready: 'rico',
   signoff_waiting: 'signoff',
   signoff_approved: 'signoff',
@@ -140,7 +147,9 @@ const NOTIF_CASE_TAB: Record<string, string> = {
 export function notifHref(n: NotificationRow, opts: { command?: boolean } = {}): string | null {
   const p = asPayload(n.payload)
   const t = n.type
-  if (p.case_id) return caseLink(p.case_id, NOTIF_CASE_TAB[t])
+  // Report notifications carry report_id — land on THAT report (?report=),
+  // not just the Reports tab (contract §4 deep link).
+  if (p.case_id) return caseLink(p.case_id, NOTIF_CASE_TAB[t], { report: typeof p.report_id === 'string' ? p.report_id : undefined })
   // Legal review lives in the /legal surface (the minimal-DOJ workspace is a
   // role-aware mode of the same route). legal*/justice*/ada_assignment
   // notifications route to a specific request when one is carried, else the

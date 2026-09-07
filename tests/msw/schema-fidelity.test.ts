@@ -130,7 +130,10 @@ describe('RPC path (db.rpc, typed Returns)', () => {
   })
 
   it('an unhandled RPC fails loudly with PostgREST function-not-found', async () => {
-    const res = await rpc('report_finalize', { p_report: '00000000-0000-4000-a000-000000000001' })
+    // signoff_submit is a server-authoritative flow the mock deliberately
+    // never re-implements (report_finalize joined the Phase 5 report
+    // handlers, so it is no longer the example).
+    const res = await rpc('signoff_submit', { p_case: '00000000-0000-4000-a000-000000000001' })
     expect(res.error?.code).toBe('PGRST202')
   })
 })
