@@ -6,13 +6,19 @@ import { boloHitSublabel, legalHitSublabel, memberHits, tipHitsFromMatches, SEAR
  *  '_', ' ')` for legal hits; the client re-derives the workflow model's human
  *  status label from that token (the RPC itself is untouchable and untouched). */
 describe('legalHitSublabel', () => {
-  it('maps the machine status token to the model label', () => {
+  it('maps the machine status token to the model label (retired stages keep their history label)', () => {
+    // Retired stages (P4-01) render read-only with the "Retired stage" prefix.
     expect(legalHitSublabel('Warrant · submitted to doj'))
-      .toBe('Warrant · Submitted to DOJ — awaiting assignment')
+      .toBe('Warrant · Retired stage — Submitted to DOJ')
     expect(legalHitSublabel('Subpoena · returned by ada'))
-      .toBe('Subpoena · Returned by ADA')
+      .toBe('Subpoena · Retired stage — Returned by ADA')
+    // Live stages use the L5 labels.
+    expect(legalHitSublabel('Warrant · submitted to judge')).toBe('Warrant · Awaiting judge')
     expect(legalHitSublabel('Warrant · judicial review'))
-      .toBe('Warrant · Judicial review')
+      .toBe('Warrant · Under judicial review')
+    expect(legalHitSublabel('Warrant · returned by judge'))
+      .toBe('Warrant · Returned for revision (judge)')
+    expect(legalHitSublabel('Warrant · partially approved')).toBe('Warrant · Partially approved')
     expect(legalHitSublabel('Warrant · approved')).toBe('Warrant · Approved')
   })
 

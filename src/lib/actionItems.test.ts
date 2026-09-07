@@ -62,12 +62,13 @@ function mkLegal(over: Partial<AcLegal> = {}): AcLegal {
   return {
     id: 'lr-1', case_id: 'c-1', case_number_snapshot: 'CID-26-001',
     request_number: 'LR-26-004', request_type: 'warrant', subtype: 'search_warrant',
-    review_status: 'submitted_to_doj', document_status: 'submitted',
+    review_status: 'submitted_to_judge', document_status: 'submitted',
     fulfilment_status: 'unissued', service_status: 'not_served',
     compliance_status: 'pending', approval_route: 'judge', classification: 'standard',
     created_by: ME, responsible_bureau: 'major_crimes',
     assigned_ada_id: null, assigned_judge_id: null,
-    response_deadline: null, expires_at: null, submitted_to_doj_at: NOW_ISO,
+    response_deadline: null, expires_at: null, submitted_to_doj_at: null,
+    submitted_to_judge_at: NOW_ISO, stage_entered_at: NOW_ISO,
     created_at: NOW_ISO, updated_at: NOW_ISO, ...over,
   }
 }
@@ -281,19 +282,19 @@ describe('member approvals (membership summary)', () => {
 /* ---- legal requests -------------------------------------------------------------- */
 
 describe('legal requests (disposition-driven — lib/legalWorkflow)', () => {
-  it('filed by me, waiting at DOJ, no deadline → waiting with the model’s why-not text', () => {
+  it('filed by me, waiting in the judicial queue, no deadline → waiting with the model’s why-not text', () => {
     const q = buildActionItems(src({ legal: [mkLegal()] }))
     const item = byKey(q, 'legal:lr-1')
     expect(item).toMatchObject({
       sourceType: 'legal_request', status: 'waiting', waitingSince: NOW_ISO,
       deepLink: '/legal?request=lr-1', isPersonalItem: true, isWaitingOnCurrentUser: false,
     })
-    // Judge-routed + unassigned → the model says who is actually waited on.
+    // Unassigned in the queue → the model says who is actually waited on.
     expect(item?.reason).toBe('Waiting on any eligible judge.')
   })
 
-  it('returned_by_* puts the ball back with me → RETURNED band (350), actionable', () => {
-    const q = buildActionItems(src({ legal: [mkLegal({ review_status: 'returned_by_ada' })] }))
+  it('returned_by_judge puts the ball back with me → RETURNED band (350), actionable', () => {
+    const q = buildActionItems(src({ legal: [mkLegal({ review_status: 'returned_by_judge' })] }))
     const item = byKey(q, 'legal:lr-1')
     expect(item).toMatchObject({ status: 'returned', isWaitingOnCurrentUser: true, reason: 'Revise and resubmit' })
     expect(item?.urgencyScore).toBe(STATUS_BASE.returned)
@@ -310,6 +311,11 @@ describe('legal requests (disposition-driven — lib/legalWorkflow)', () => {
     expect(item?.status).toBe('due_soon')
     expect(item?.dueAt).toBe('2026-07-17T12:00:00.000Z')
     expect(item?.urgencyScore).toBe(360)
+  })
+
+  it('a partially approved request runs the same issued lane as approved', () => {
+    const q = buildActionItems(src({ legal: [mkLegal({ review_status: 'partially_approved', expires_at: '2026-07-17T12:00:00.000Z' })] }))
+    expect(byKey(q, 'legal:lr-1')).toMatchObject({ status: 'due_soon', urgencyScore: 360 })
   })
 
   it('a past response_deadline escalates to overdue (activeDeadline + urgencyFor)', () => {
@@ -329,7 +335,7 @@ describe('legal requests (disposition-driven — lib/legalWorkflow)', () => {
     })
   })
 
-  it('my own request in CID supervisor review just waits (conflict-of-role mirror)', () => {
+  it('my own request in bureau review just waits (conflict-of-role mirror)', () => {
     const q = buildActionItems(src({
       role: 'senior_detective',
       legal: [mkLegal({ review_status: 'cid_supervisor_review' })],
@@ -339,37 +345,109 @@ describe('legal requests (disposition-driven — lib/legalWorkflow)', () => {
     })
   })
 
-  it('bureau-awareness visibility NEVER surfaces as work', () => {
+  it('the reminder sweep’s marks lift a stalled request: nudged +20, escalated +50 (escalated wins)', () => {
+    const nudged = byKey(buildActionItems(src({ legal: [mkLegal({ nudged_at: NOW_ISO })] })), 'legal:lr-1')
+    expect(nudged?.urgencyScore).toBe(STATUS_BASE.waiting + NUDGE.legalNudged)
+    expect(nudged?.reason).toBe('Nudged — Waiting on any eligible judge.')
+    expect(nudged?.sourceMetadata).toEqual({ sla: 'nudged' })
+    const escalated = byKey(buildActionItems(src({ legal: [mkLegal({ nudged_at: NOW_ISO, escalated_at: NOW_ISO })] })), 'legal:lr-1')
+    expect(escalated?.urgencyScore).toBe(STATUS_BASE.waiting + NUDGE.legalEscalated)
+    expect(escalated?.reason).toBe('Escalated — Waiting on any eligible judge.')
+    expect(escalated?.sourceMetadata).toEqual({ sla: 'escalated' })
+    // the responsible party gets the same lift on their needs-action item
+    const lead = byKey(buildActionItems(src({
+      role: 'bureau_lead',
+      legal: [mkLegal({ created_by: 'off-2', review_status: 'cid_supervisor_review', escalated_at: NOW_ISO })],
+    })), 'legal:lr-1')
+    expect(lead?.urgencyScore).toBe(STATUS_BASE.needs_action + NUDGE.legalEscalated)
+    expect(lead?.reason).toBe('Escalated — Review as Bureau Lead')
+  })
+
+  it('waitingSince follows the stage clock when the server carries one', () => {
+    const q = buildActionItems(src({ legal: [mkLegal({ stage_entered_at: '2026-07-15T00:00:00.000Z' })] }))
+    expect(byKey(q, 'legal:lr-1')?.waitingSince).toBe('2026-07-15T00:00:00.000Z')
+  })
+
+  it('a retired prosecutor membership never surfaces work — not even on a row it once held', () => {
     const q = buildActionItems(src({
-      legalViewer: {
-        myId: ME, cidActive: true, cidRole: 'detective',
-        justiceRole: 'assistant_district_attorney', isOwner: false,
-        prosecutorBureaus: ['major_crimes'],
-      },
-      legal: [mkLegal({ created_by: 'off-2' })], // submitted_to_doj, major_crimes, unassigned
+      justiceRole: 'prosecutor',
+      legalViewer: { myId: ME, cidActive: false, cidRole: null, justiceRole: 'prosecutor', isOwner: false },
+      legal: [
+        mkLegal({ created_by: 'off-2' }),
+        mkLegal({ id: 'lr-2', created_by: 'off-2', review_status: 'prosecutor_review', assigned_prosecutor_id: ME }),
+        mkLegal({ id: 'lr-3', created_by: 'off-2', review_status: 'prosecutor_queue' }),
+      ],
     }))
     expect(q.items).toHaveLength(0)
   })
 
-  it('excludes rows I merely see, judge-claimable pickups, and closed/completed states', () => {
+  it('excludes rows I merely see and closed/completed states', () => {
     const q = buildActionItems(src({
       legal: [
         mkLegal({ created_by: 'off-2' }), // visible, not mine, not my action
         mkLegal({ id: 'lr-2', review_status: 'withdrawn' }),
         mkLegal({ id: 'lr-3', review_status: 'approved', fulfilment_status: 'closed' }),
         mkLegal({ id: 'lr-4', review_status: 'approved', fulfilment_status: 'return_recorded' }),
+        mkLegal({ id: 'lr-5', review_status: 'cancelled' }),
+        mkLegal({ id: 'lr-6', review_status: 'superseded' }),
       ],
     }))
     expect(q.items).toHaveLength(0)
-    // A judge could CLAIM the waiting request — still Justice-portal work.
-    const judge = buildActionItems(src({
-      legalViewer: {
-        myId: ME, cidActive: false, cidRole: null,
-        justiceRole: 'judge', isOwner: false, prosecutorBureaus: [],
-      },
-      legal: [mkLegal({ created_by: 'off-2' })],
+  })
+})
+
+describe('judicial pipeline items (justiceRole-gated — no prosecutor lane)', () => {
+  const judgeViewer = { myId: ME, cidActive: false, cidRole: null, justiceRole: 'judge' as const, isOwner: false }
+  const agViewer = { myId: ME, cidActive: false, cidRole: null, justiceRole: 'attorney_general' as const, isOwner: false }
+
+  it('a judge sees an open, unassigned, non-sealed queue row as ONE claimable legal_queue item', () => {
+    const q = buildActionItems(src({ justiceRole: 'judge', legalViewer: judgeViewer, legal: [mkLegal({ created_by: 'off-2' })] }))
+    expect(q.items).toHaveLength(1)
+    expect(byKey(q, 'legal_queue:lr-1')).toMatchObject({
+      sourceType: 'legal_queue', status: 'needs_action', reason: 'Awaiting judicial pickup — available to claim',
+      summary: 'Case CID-26-001 · judicial queue', waitingSince: NOW_ISO, isWaitingOnCurrentUser: true,
+    })
+    // never a branch-7 duplicate for the same row
+    expect(byKey(q, 'legal:lr-1')).toBeUndefined()
+  })
+
+  it('sealed rows are never a judge’s pickup; the Attorney General gets a sealed-assignment item instead', () => {
+    const sealed = mkLegal({ created_by: 'off-2', classification: 'sealed' })
+    expect(buildActionItems(src({ justiceRole: 'judge', legalViewer: judgeViewer, legal: [sealed] })).items).toHaveLength(0)
+    const ag = buildActionItems(src({ justiceRole: 'attorney_general', legalViewer: agViewer, legal: [sealed] }))
+    expect(ag.items).toHaveLength(1)
+    expect(byKey(ag, 'legal_queue:lr-1')).toMatchObject({
+      status: 'needs_action', reason: 'Sealed — assign a judge', summary: 'Sealed request · judicial queue', isCommandItem: true,
+    })
+    // an open (non-sealed) row is judges' work, not the AG's item
+    expect(buildActionItems(src({ justiceRole: 'attorney_general', legalViewer: agViewer, legal: [mkLegal({ created_by: 'off-2' })] })).items).toHaveLength(0)
+  })
+
+  it('an assigned judicial review is a personal needs-action item that dedupes with the branch-7 key', () => {
+    const q = buildActionItems(src({
+      justiceRole: 'judge', legalViewer: judgeViewer,
+      legal: [mkLegal({ created_by: 'off-2', review_status: 'judicial_review', assigned_judge_id: ME })],
     }))
-    expect(judge.items).toHaveLength(0)
+    expect(q.items).toHaveLength(1)
+    expect(byKey(q, 'legal:lr-1')).toMatchObject({ sourceType: 'legal_queue', status: 'needs_action', reason: 'Assigned for judicial review', isPersonalItem: true })
+    // another judge's review is nobody's item
+    expect(buildActionItems(src({
+      justiceRole: 'judge', legalViewer: judgeViewer,
+      legal: [mkLegal({ created_by: 'off-2', review_status: 'judicial_review', assigned_judge_id: 'j-9' })],
+    })).items).toHaveLength(0)
+  })
+
+  it('the sweep’s escalation lifts queue work too', () => {
+    const q = buildActionItems(src({ justiceRole: 'judge', legalViewer: judgeViewer, legal: [mkLegal({ created_by: 'off-2', escalated_at: NOW_ISO })] }))
+    const item = byKey(q, 'legal_queue:lr-1')
+    expect(item?.urgencyScore).toBe(STATUS_BASE.needs_action + NUDGE.legalEscalated)
+    expect(item?.reason).toBe('Escalated — Awaiting judicial pickup — available to claim')
+  })
+
+  it('a judge never gets an item for their own request', () => {
+    const q = buildActionItems(src({ justiceRole: 'judge', legalViewer: judgeViewer, legal: [mkLegal({ created_by: ME })] }))
+    expect(byKey(q, 'legal_queue:lr-1')).toBeUndefined()
+    expect(byKey(q, 'legal:lr-1')?.status).toBe('waiting')
   })
 })
 

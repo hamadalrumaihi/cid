@@ -1,36 +1,47 @@
 'use client'
 
 /** Guided legal-request wizard — the investigator landing's creation path,
- *  replacing the long linear create form. Steps:
- *  type cards → case & target → type-specific details (+ structured
- *  search-warrant targets) → narrative & justification → review & submit.
+ *  replacing the long linear create form. Steps (contract §10):
+ *  type cards → case & target → charges → type-specific details (+ structured
+ *  search-warrant targets) → evidence → narrative & justification (standard of
+ *  proof + probable-cause statement) → review & submit.
  *
  *  Backend behaviour is preserved exactly: creation is the create_legal_request
  *  definer RPC (verbatim args), draft edits stay on update_legal_draft,
- *  submission on submit_legal_request_to_cid (optionally carrying
- *  p_change_summary on a returned-request resubmission, and the explicit
- *  p_material_change declaration after a judge/prosecutor return), and structured
- *  targets ride the existing add_legal_exhibit flow with the new kinds +
- *  per-target p_rationale. Validation is the pure legalWizardIssues model —
+ *  submission on submit_legal_request_to_cid (carrying p_change_summary on a
+ *  returned-request resubmission — required from any returned_* state — and
+ *  the explicit p_material_change declaration after a judge return), and
+ *  structured targets ride the existing add_legal_exhibit flow with the new
+ *  kinds + per-target p_rationale. Phase 4 adds the structured charges
+ *  (legal_set_charges right after create and on every edit-mode save — P4-03),
+ *  the packet exhibits from the case records plus "Add new evidence" (host
+ *  upload → legal_add_evidence_and_exhibit, which creates the case media row
+ *  AND the exhibit in one step — P4-08), and the warrant basis fields that
+ *  live in form_data (P4-04). Validation is the pure legalWizardIssues model —
  *  the exact client mirror of the server checks; the server revalidates all
  *  of it. Case/person/target pickers are bounded server-backed searches
  *  (ilikeAny + limit 20) — RLS scopes every row; nothing here decides access.
  *
  *  EDIT mode ({ mode: 'edit' }) revises an existing draft/returned request —
  *  the dossier's own draft editor (RequestSection) remains the in-dossier
- *  entry path; this is the landing's guided alternative and the surface that
- *  captures the change summary on resubmission. */
+ *  entry path; this is the landing's guided alternative, the only place the
+ *  charge set is edited, and the surface that captures the change summary on
+ *  resubmission. */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useAuth } from '@/lib/auth'
 import { ScaleIcon } from '@/components/shell/icons'
-import type { Tables } from '@/lib/database.types'
+import type { Json, Tables } from '@/lib/database.types'
 import { list, rpc } from '@/lib/db'
+import { loadCaseCharges, proposeCaseCharge, type CaseChargeRow } from '@/lib/caseCharges'
+import { CASE_MEDIA_CATEGORIES } from '@/lib/caseMedia'
 import { suggestEntities } from '@/lib/entity'
 import { searchLegalRequestHits, searchPersonHits, searchPlaceHits, searchVehicleHits } from '@/lib/entitySearch'
+import { fmConfigured } from '@/lib/fivemanage'
 import { adoptLegacyDraft, clearDraft, saveDraft, type LoadedDraft } from '@/lib/userDrafts'
 import { timeAgo } from '@/lib/format'
 import {
-  CLASSIFICATIONS, SOCIAL_PLATFORMS, SUBPOENA_FIELDS, SUBPOENA_TYPES,
+  CLASSIFICATIONS, SOCIAL_PLATFORMS, STANDARDS_OF_PROOF, SUBPOENA_FIELDS, SUBPOENA_TYPES,
   WARRANT_FIELDS, WARRANT_TYPES, isEditableDraft,
   type LegalRequest, type SubpoenaType, type WarrantType,
 } from '@/lib/justice'
@@ -38,21 +49,42 @@ import {
   CID_ROUTING_BUREAUS, LEGAL_WIZARD_STEPS, ROUTING_SOURCE_LABEL,
   STRUCTURED_TARGET_KINDS, STRUCTURED_TARGET_KIND_LABEL,
   appendSearchTargetLine, canSetResponsibleBureau, humanize, isRoutingBureau,
-  legalWizardDraftIssues, legalWizardIssues, resolveResponsibleBureau,
+  legalWizardAdvisories, legalWizardDraftIssues, legalWizardIssues, resolveResponsibleBureau,
   structuredTargetLine, subtypeRequiresPerson, subtypeSupportsStructuredTargets,
   type LegalWizardInput, type RoutingBureau, type RoutingSource, type StructuredTargetKind,
 } from '@/lib/legalWorkflow'
+import { penalSearch } from '@/lib/penal'
 import { bureauLabel, bureauShort } from '@/lib/roles'
+import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
+import type { UploadedFile } from '@/lib/uppyFivemanage'
+import { usePenalCode } from '@/lib/usePenalCode'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { EmptyState, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { RelatedGuidance } from '@/components/sops/RelatedGuidance'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
-import { Row, sanitizeStash, type DraftShape } from '@/components/justice/dossier/dossierShared'
+import { RelatedRecordPicker } from '@/components/shared/RelatedRecordPicker'
+import { Row, exhibitSources, sanitizeStash, useCaseRecordsFor, type DraftShape } from '@/components/justice/dossier/dossierShared'
+import { legalSubmitChecklist } from '@/components/justice/dossier/legalP4Shim'
+import { fieldLabel, type RevisionItem } from '@/components/justice/dossier/RevisionChecklist'
+import { readJsonRpc } from '@/components/justice/dossier/rpcJson'
+
+/** The host-upload panel (Uppy) loads only when the Evidence step opens with
+ *  a configured FiveManage key — the same seam MediaTab uses (P4-08 reuses
+ *  its transit; persistence here is the legal_add_evidence_and_exhibit RPC). */
+const MediaUploadPanel = dynamic(() => import('@/components/cases/tabs/MediaUploadPanel').then((m) => m.MediaUploadPanel), {
+  ssr: false,
+  loading: () => (
+    <div aria-hidden className="rounded-lg border border-dashed border-white/15 bg-white/[0.03] p-6">
+      <Skeleton className="mx-auto h-9 w-56 rounded-lg" />
+    </div>
+  ),
+})
 
 export type LegalWizardEntry = { mode: 'create' } | { mode: 'edit'; requestId: string }
 
@@ -103,6 +135,17 @@ interface CasePick extends PickedRecord {
   routingCtx?: CaseRoutingCtx
 }
 interface TargetDraft { kind: StructuredTargetKind; sourceId: string; label: string; rationale: string }
+/** A packet exhibit chosen before the draft exists (create mode) —
+ *  attached with add_legal_exhibit right after create_legal_request. */
+interface ExhibitDraft { kind: string; sourceId: string | null; label: string; url?: string }
+/** New evidence uploaded/pasted before the draft exists — persisted with
+ *  legal_add_evidence_and_exhibit right after create (host-first: the URL
+ *  already exists on the media host, so nothing is lost if create fails). */
+interface EvidenceDraft { title: string; type: MediaType; url: string; category: string; rationale: string }
+type MediaType = Tables<'media'>['type']
+const MEDIA_TYPE_OPTIONS: readonly [MediaType, string][] = [['image', 'Image'], ['video', 'Video'], ['document', 'Document']]
+/** Selected case charges → counts (the legal_set_charges payload). */
+type ChargeSel = Record<string, number>
 /** Quick-preview (peek) type per structured-target kind. prior_legal_request
  *  has no preview type — those rows render plain, on purpose (a sealed prior
  *  is labelled by number alone and a peek would have nothing safe to add). */
@@ -122,6 +165,9 @@ interface WizardStash {
   title: string; priority: string; narrative: string; classification: string
   form: Record<string, string>
   targets: TargetDraft[]
+  charges?: ChargeSel
+  exhibits?: ExhibitDraft[]
+  evidence?: EvidenceDraft[]
 }
 
 /** localStorage is user-editable — coerce a recovered stash back into the
@@ -160,6 +206,25 @@ function asCasePick(v: unknown): CasePick | null {
       },
     } : {}),
   }
+}
+function asCharges(v: unknown): ChargeSel {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
+  return Object.fromEntries(Object.entries(v as Record<string, unknown>)
+    .filter(([, n]) => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 999)
+    .map(([k, n]) => [k, n as number]))
+}
+function asExhibits(v: unknown): ExhibitDraft[] {
+  if (!Array.isArray(v)) return []
+  return v.filter((e): e is ExhibitDraft => !!e && typeof e === 'object'
+    && typeof (e as ExhibitDraft).kind === 'string' && typeof (e as ExhibitDraft).label === 'string')
+    .map((e) => ({ kind: e.kind, sourceId: typeof e.sourceId === 'string' ? e.sourceId : null, label: e.label, ...(typeof e.url === 'string' ? { url: e.url } : {}) }))
+}
+function asEvidence(v: unknown): EvidenceDraft[] {
+  if (!Array.isArray(v)) return []
+  return v.filter((e): e is EvidenceDraft => !!e && typeof e === 'object'
+    && typeof (e as EvidenceDraft).title === 'string' && typeof (e as EvidenceDraft).url === 'string'
+    && MEDIA_TYPE_OPTIONS.some(([t]) => t === (e as EvidenceDraft).type))
+    .map((e) => ({ title: e.title, type: e.type, url: e.url, category: typeof e.category === 'string' ? e.category : '', rationale: typeof e.rationale === 'string' ? e.rationale : '' }))
 }
 function asTargets(v: unknown): TargetDraft[] {
   if (!Array.isArray(v)) return []
@@ -239,7 +304,25 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
   const [classification, setClassification] = useState('')
   const [form, setForm] = useState<Record<string, string>>({})
   const [targets, setTargets] = useState<TargetDraft[]>([])
-  const [savedTargets, setSavedTargets] = useState<Tables<'legal_request_exhibits'>[]>([])
+  // Edit mode holds EVERY exhibit row (targets are the structured subset).
+  const [savedExhibits, setSavedExhibits] = useState<Tables<'legal_request_exhibits'>[]>([])
+  const savedTargets = savedExhibits.filter((e) => (STRUCTURED_TARGET_KINDS as readonly string[]).includes(e.exhibit_type))
+  // Charges (P4-03): the case's charges + the selected subset with counts.
+  // Loaded rows are keyed by case so a case switch reads as "loading" without
+  // an effect having to clear state.
+  const [loadedCharges, setLoadedCharges] = useState<{ caseId: string; rows: CaseChargeRow[] } | null>(null)
+  const [chargeSel, setChargeSel] = useState<ChargeSel>({})
+  const [chargeQuery, setChargeQuery] = useState('')
+  const [addingCharge, setAddingCharge] = useState(false)
+  const { ready: penalReady } = usePenalCode()
+  // Evidence (P4-08): pending packet picks + new uploads (create mode only —
+  // edit mode attaches immediately).
+  const [pendingExhibits, setPendingExhibits] = useState<ExhibitDraft[]>([])
+  const [pendingEvidence, setPendingEvidence] = useState<EvidenceDraft[]>([])
+  const [evForm, setEvForm] = useState<{ title: string; type: MediaType; url: string; category: string; rationale: string }>({ title: '', type: 'image', url: '', category: '', rationale: '' })
+  const [uploadActive, setUploadActive] = useState(0)
+  // Unresolved revision items (P4-06) listed on the review step in edit mode.
+  const [revisionItems, setRevisionItems] = useState<RevisionItem[]>([])
   const [changeSummary, setChangeSummary] = useState('')
   const [materialChange, setMaterialChange] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -279,8 +362,16 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
             title: r.title, priority: r.priority ?? 'Medium', narrative: r.narrative ?? '',
             classification: r.classification, form: seededForm,
           } satisfies DraftShape))
-          const ex = await list('legal_request_exhibits', { eq: { legal_request_id: editId }, order: 'created_at' })
-          if (!cancelled) setSavedTargets(ex.filter((e) => (STRUCTURED_TARGET_KINDS as readonly string[]).includes(e.exhibit_type)))
+          const [ex, ch, ri] = await Promise.all([
+            list('legal_request_exhibits', { eq: { legal_request_id: editId }, order: 'created_at' }),
+            list('legal_request_charges', { eq: { legal_request_id: editId }, order: 'created_at' }).catch(() => []),
+            list('legal_request_revision_items', { eq: { legal_request_id: editId }, order: 'created_at' }).catch(() => []),
+          ])
+          if (!cancelled) {
+            setSavedExhibits(ex)
+            setChargeSel(Object.fromEntries(ch.map((c) => [c.case_charge_id, c.counts])))
+            setRevisionItems(ri)
+          }
         }
         if (!cancelled) setLoadState('ready')
       } catch { if (!cancelled) { setRow(null); setLoadState('ready') } }
@@ -303,14 +394,16 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     })
   }, [stashKey])
   const hasContent = !!(title.trim() || narrative.trim() || recipientName.trim()
-    || caseSel || personSel || targets.length || Object.keys(form).length)
+    || caseSel || personSel || targets.length || Object.keys(form).length
+    || Object.keys(chargeSel).length || pendingExhibits.length || pendingEvidence.length)
   useEffect(() => {
     if (!stashKey || !hasContent) return
     void saveDraft(stashKey, {
       subtype, caseSel, personSel, recipientType, recipientName,
       title, priority, narrative, classification, form, targets,
+      charges: chargeSel, exhibits: pendingExhibits, evidence: pendingEvidence,
     } satisfies WizardStash)
-  }, [stashKey, hasContent, subtype, caseSel, personSel, recipientType, recipientName, title, priority, narrative, classification, form, targets])
+  }, [stashKey, hasContent, subtype, caseSel, personSel, recipientType, recipientName, title, priority, narrative, classification, form, targets, chargeSel, pendingExhibits, pendingEvidence])
   const restoreStash = () => {
     const d = pendingStash?.data
     if (!d) return
@@ -322,6 +415,9 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     setTitle(s.title); setPriority(s.priority || 'Medium'); setNarrative(s.narrative)
     setClassification(s.classification); setForm(s.form)
     setTargets(asTargets(d.targets))
+    setChargeSel(asCharges(d.charges))
+    setPendingExhibits(asExhibits(d.exhibits))
+    setPendingEvidence(asEvidence(d.evidence))
     setPendingStash(null)
   }
   const discardStash = () => { if (stashKey) void clearDraft(stashKey); setPendingStash(null) }
@@ -418,6 +514,116 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     return hits.map((p) => ({ id: p.id, label: p.label, ...(p.sublabel ? { sublabel: p.sublabel } : {}), thumbUrl: p.thumbUrl ?? null }))
   }, [])
 
+  /* ── Charges (P4-03): the case's charges, refreshed when the case changes ── */
+  const caseId = caseSel?.id || null
+  const [chargesTick, setChargesTick] = useState(0)
+  useEffect(() => {
+    if (!caseId) return
+    let cancelled = false
+    const forCase = caseId
+    void loadCaseCharges(forCase)
+      .then((rows) => { if (!cancelled) setLoadedCharges({ caseId: forCase, rows }) })
+      .catch(() => { if (!cancelled) setLoadedCharges({ caseId: forCase, rows: [] }) })
+    return () => { cancelled = true }
+  }, [caseId, chargesTick])
+  const caseCharges: CaseChargeRow[] | null = caseId && loadedCharges?.caseId === caseId ? loadedCharges.rows : null
+  // A case change drops selections that belong to the old case (create mode
+  // only — the case is fixed while revising).
+  const prevCaseId = useRef<string | null>(null)
+  useEffect(() => {
+    if (prevCaseId.current && prevCaseId.current !== caseId && !isEdit) { setChargeSel({}); setPendingExhibits([]); setPendingEvidence([]) }
+    prevCaseId.current = caseId
+  }, [caseId, isEdit])
+  const toggleCharge = (c: CaseChargeRow) =>
+    setChargeSel((sel) => {
+      if (sel[c.id]) { const next = { ...sel }; delete next[c.id]; return next }
+      return { ...sel, [c.id]: c.counts }
+    })
+  const setChargeCounts = (id: string, n: number) =>
+    setChargeSel((sel) => (sel[id] ? { ...sel, [id]: Math.min(999, Math.max(1, n || 1)) } : sel))
+  // "Add a charge": the penal picker proposes a case charge (the same
+  // ordinary casework write ChargesTab makes) — then it is selectable here.
+  const addCaseCharge = async (chargeId: string) => {
+    if (!caseId) return
+    setBusy(true)
+    const err = await proposeCaseCharge(caseId, chargeId)
+    if (err) { setBusy(false); toast(err, 'danger'); return }
+    const rows = await loadCaseCharges(caseId).catch(() => null)
+    setBusy(false)
+    if (rows) {
+      setLoadedCharges({ caseId, rows })
+      const added = rows.find((r) => r.charge_id === chargeId && r.status !== 'withdrawn' && r.status !== 'dismissed')
+      if (added) setChargeSel((sel) => ({ ...sel, [added.id]: sel[added.id] ?? added.counts }))
+    } else setChargesTick((t) => t + 1)
+    setChargeQuery('')
+    setAddingCharge(false)
+    toast('Charge added to the case and selected.', 'success')
+  }
+  const chargeItems = Object.entries(chargeSel).map(([case_charge_id, counts]) => ({ case_charge_id, counts }))
+  const persistCharges = async (requestId: string): Promise<string | null> => {
+    const res = readJsonRpc(await rpc('legal_set_charges', { p_request: requestId, p_items: chargeItems as unknown as Json }))
+    return res.ok ? null : (res.message ?? 'Could not save the charges.')
+  }
+
+  /* ── Evidence (P4-08): case records for the packet picker + new uploads ─── */
+  const caseRecords = useCaseRecordsFor(caseId, caseSel?.number || null, !!caseId)
+  const attachExhibit = async (requestId: string, e: ExhibitDraft) => rpc('add_legal_exhibit', {
+    p_request: requestId, p_type: e.kind, p_source_id: e.sourceId ?? undefined,
+    ...(e.url ? { p_meta: { url: e.url } } : {}),
+  })
+  const attachEvidence = async (requestId: string, e: EvidenceDraft) => readJsonRpc(await rpc('legal_add_evidence_and_exhibit', {
+    p_request: requestId, p_title: e.title, p_type: e.type, p_external_url: e.url,
+    p_category: e.category || undefined, p_rationale: e.rationale || undefined,
+  }))
+  const pickExhibit = async (kind: string, sourceId: string | null, label: string, url?: string) => {
+    const draft: ExhibitDraft = { kind, sourceId, label, ...(url ? { url } : {}) }
+    if (!isEdit) {
+      if (pendingExhibits.some((x) => x.kind === kind && x.sourceId === sourceId && x.url === url)) return
+      setPendingExhibits((x) => [...x, draft])
+      return
+    }
+    if (!row) return
+    setBusy(true)
+    const res = await attachExhibit(row.id, draft)
+    setBusy(false)
+    if (res.error || !res.data) { toast(res.error?.message ?? 'Could not attach the exhibit.', 'danger'); return }
+    const saved = res.data
+    setSavedExhibits((x) => [...x, saved])
+    toast('Exhibit added.', 'success')
+  }
+  const addEvidence = async (e: EvidenceDraft) => {
+    if (!isEdit) { setPendingEvidence((x) => [...x, e]); return }
+    if (!row) return
+    setBusy(true)
+    const res = await attachEvidence(row.id, e)
+    setBusy(false)
+    if (!res.ok) { toast(res.message ?? 'Could not add the evidence.', 'danger'); return }
+    const ex = await list('legal_request_exhibits', { eq: { legal_request_id: row.id }, order: 'created_at' }).catch(() => null)
+    if (ex) setSavedExhibits(ex)
+    toast('Evidence added to the case and attached.', 'success')
+  }
+  // Host-first (the MediaTab seam): the file is already on the host when
+  // this runs; the case media row + exhibit are the RPC's job.
+  const handleUploaded = async (f: UploadedFile) => {
+    const type: MediaType = f.kind === 'video' ? 'video' : f.kind === 'audio' ? 'fivemanage' : 'image'
+    await addEvidence({ title: f.name.replace(/\.[a-z0-9]+$/i, '') || f.name, type, url: f.url, category: evForm.category, rationale: evForm.rationale.trim() })
+  }
+  const onQueueChange = useCallback((active: number) => setUploadActive(active), [])
+  const addPastedEvidence = async () => {
+    const url = safeUrl(evForm.url)
+    if (!url) { toast('Enter a valid http(s) URL.', 'warn'); return }
+    const title = evForm.title.trim() || url.replace(/^https?:\/\//, '').slice(0, 60)
+    await addEvidence({ title, type: evForm.type, url, category: evForm.category, rationale: evForm.rationale.trim() })
+    setEvForm((f) => ({ ...f, title: '', url: '' }))
+  }
+  const removeSavedExhibit = async (e: Tables<'legal_request_exhibits'>) => {
+    const ok = await uiConfirm(`Remove “${e.display_title}” from the packet?`, { title: 'Remove exhibit', confirmText: 'Remove' })
+    if (!ok) return
+    const res = await rpc('remove_legal_exhibit', { p_exhibit: e.id })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    setSavedExhibits((x) => x.filter((t) => t.id !== e.id))
+  }
+
   /* ── Structured search-warrant targets ────────────────────────────────────── */
   const [tKind, setTKind] = useState<StructuredTargetKind>('person_record')
   const [tSel, setTSel] = useState<ThumbPick | null>(null)
@@ -471,7 +677,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
       setBusy(false)
       if (res.error || !res.data) { toast(res.error?.message ?? 'Could not attach the target.', 'danger'); return }
       const saved = res.data
-      setSavedTargets((x) => [...x, saved])
+      setSavedExhibits((x) => [...x, saved])
       mirrorLine(tKind, saved.display_title)
       toast('Target attached.', 'success')
     }
@@ -482,12 +688,13 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     if (!ok) return
     const res = await rpc('remove_legal_exhibit', { p_exhibit: e.id })
     if (res.error) { toast(res.error.message, 'danger'); return }
-    setSavedTargets((x) => x.filter((t) => t.id !== e.id))
+    setSavedExhibits((x) => x.filter((t) => t.id !== e.id))
   }
 
   /* ── Derivations (pure model) ─────────────────────────────────────────────── */
   const steps = isEdit ? LEGAL_WIZARD_STEPS.filter((s) => s.id !== 'type') : LEGAL_WIZARD_STEPS
   const step = steps[Math.min(stepIdx, steps.length - 1)]
+  const isReturned = !!row && row.review_status.startsWith('returned_by')
   const input: LegalWizardInput = {
     requestType: requestType ?? 'warrant',
     subtype,
@@ -497,9 +704,22 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     // Resolution ran (create mode): a bureau permits, null blocks with a clear
     // fix path. Absent while unknown / in edit mode — the server still enforces.
     ...(!isEdit && caseSel?.routing ? { routingBureau: caseSel.routing.bureau } : {}),
+    // P4-03 / P4-04 / P4-06: the basis fields live in `form`; the model reads
+    // them there. Charges are advisory; the change summary is required when
+    // resubmitting from any returned_* state.
+    charges: chargeItems,
+    isResubmission: isEdit && isReturned,
+    changeSummary,
   }
   const currentIssues = legalWizardIssues(step.id, input)
+  const currentAdvisories = legalWizardAdvisories(step.id, input)
   const reviewIssues = legalWizardIssues('review', input)
+  const reviewAdvisories = legalWizardAdvisories('review', input)
+  const unresolvedItems = revisionItems.filter((i) => !i.resolved_at)
+  const exhibitCount = isEdit ? savedExhibits.length : pendingExhibits.length + pendingEvidence.length + targets.length
+  const reviewChecklist = legalSubmitChecklist({
+    requestType: requestType ?? 'warrant', subtype, title, narrative, priority, form, exhibitCount,
+  })
   const firstBlocked = steps.findIndex((s) => legalWizardIssues(s.id, input).length > 0)
   const maxReachable = firstBlocked === -1 ? steps.length - 1 : firstBlocked
   const requiresPerson = subtypeRequiresPerson(requestType ?? '', subtype)
@@ -507,12 +727,11 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
   const spec: FieldSpec[] = requestType === 'warrant'
     ? WARRANT_FIELDS[subtype as WarrantType] ?? []
     : requestType === 'subpoena' ? SUBPOENA_FIELDS[subtype as SubpoenaType] ?? [] : []
-  const isReturned = !!row && row.review_status.startsWith('returned_by')
-  // Judge/prosecutor returns fast-track (20260818120000): the corrected
-  // resubmission goes STRAIGHT back to the prosecutor queue unless the
-  // investigator explicitly declares a material change below. returned_by_cid
-  // and first submissions enter CID review as always.
-  const isFastReturn = !!row && ['returned_by_judge', 'returned_by_prosecutor'].includes(row.review_status)
+  // A judge return fast-tracks (P4-01): the corrected resubmission goes
+  // STRAIGHT back to the judicial queue unless the investigator explicitly
+  // declares a material change below. Bureau / SIB-command returns and first
+  // submissions enter bureau review as always.
+  const isFastReturn = !!row && row.review_status === 'returned_by_judge'
   // Review readout: the resolved responsible bureau (permanent-bureau cases
   // resolve with source 'bureau'); while revising, the stamped column.
   const editRoutingRaw = row?.responsible_bureau ?? null
@@ -603,6 +822,12 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
       })
       if (tr.error) targetFailures++
     }
+    // Packet exhibits + new evidence chosen before the draft existed, then
+    // the charge set (legal_set_charges replaces the whole set — P4-03).
+    let exhibitFailures = 0
+    for (const e of pendingExhibits) { const er = await attachExhibit(id, e); if (er.error) exhibitFailures++ }
+    for (const e of pendingEvidence) { const er = await attachEvidence(id, e); if (!er.ok) exhibitFailures++ }
+    const chargeErr = chargeItems.length ? await persistCharges(id) : null
     let submitted = false
     if (submit) {
       const sr = await rpc('submit_legal_request_to_cid', { p_request: id })
@@ -612,10 +837,12 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     setBusy(false)
     if (stashKey) void clearDraft(stashKey)
     if (targetFailures) toast(`${targetFailures} structured target(s) could not be attached — add them on the request's Supporting section.`, 'warn')
+    if (exhibitFailures) toast(`${exhibitFailures} supporting item(s) could not be attached — add them on the request's Supporting section.`, 'warn')
+    if (chargeErr) toast(`Draft created, but the charges were not saved: ${chargeErr}`, 'warn')
     toast(
       submitted
-        ? 'Request submitted for CID supervisor review.'
-        : 'Draft created — add supporting items, then submit for CID review.',
+        ? 'Request submitted for bureau review.'
+        : 'Draft created — add supporting items, then submit for bureau review.',
       'success',
     )
     onDone(id)
@@ -641,6 +868,9 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
       p_recipient_name: requestType === 'subpoena' && recipientType === 'entity' ? (recipientName.trim() || undefined) : undefined,
     })
     if (res.error) { setBusy(false); toast(res.error.message, 'danger'); return }
+    // Every edit-mode save replaces the charge set (P4-03).
+    const chargeErr = await persistCharges(row.id)
+    if (chargeErr) { setBusy(false); toast(`Draft saved, but the charges were not: ${chargeErr}`, 'danger'); return }
     if (!submit) {
       setBusy(false)
       void clearDraft(`legal:edit:${row.id}`)
@@ -658,8 +888,8 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     void clearDraft(`legal:edit:${row.id}`)
     toast(
       isFastReturn && !materialChange
-        ? 'Resubmitted — the corrected request returned directly to the prosecutor queue.'
-        : 'Submitted for CID supervisor review.',
+        ? 'Resubmitted — the corrected request returned directly to the judicial queue.'
+        : 'Submitted for bureau review.',
       'success',
     )
     onDone(row.id)
@@ -782,7 +1012,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
             </section>
             <section className="space-y-3">
               <h3 className="text-[13px] font-semibold text-white">
-                Subpoenas — reviewed on the DOJ route (DA / AG)
+                Subpoenas — decided by a Judge after bureau review
               </h3>
               {SUBPOENA_GROUPS.map((g) => (
                 <div key={g.label} className="space-y-1.5">
@@ -890,12 +1120,94 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
           </Card>
         )}
 
-        {/* ── Step 2: type-specific details (+ structured targets) ────────── */}
+        {/* ── Step: charges (P4-03) — from the case's charges, or add one ──── */}
+        {step.id === 'charges' && (
+          <div className="space-y-4">
+            <Card pad="sm" className="space-y-3">
+              <div>
+                <h3 className="text-[13px] font-semibold text-white">Charges on this request</h3>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Pick from the case&rsquo;s charges. Each is stored with its statute snapshot and printed on the approved instrument.
+                  {isEdit ? ' Saved with the draft.' : ' Saved when the draft is created.'}
+                </p>
+              </div>
+              {caseCharges === null && <p className="text-sm text-slate-400">Loading case charges…</p>}
+              {caseCharges?.length === 0 && !addingCharge && (
+                <p className="text-sm text-slate-400">This case has no charges yet — add one below.</p>
+              )}
+              {!!caseCharges?.length && (
+                <ul className="space-y-1.5" aria-label="Case charges">
+                  {caseCharges.map((c) => {
+                    const on = !!chargeSel[c.id]
+                    const closed = c.status === 'withdrawn' || c.status === 'dismissed'
+                    const inputId = `charge-${c.id}`
+                    return (
+                      <li key={c.id} className={`flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 ${on ? 'border-badge-500/40 bg-badge-500/5' : 'border-white/10 bg-ink-950/50'} ${closed ? 'opacity-60' : ''}`}>
+                        <label className="flex min-h-[40px] min-w-0 flex-1 cursor-pointer items-center gap-2.5">
+                          <input type="checkbox" checked={on} disabled={closed && !on} onChange={() => toggleCharge(c)} className="h-4 w-4 rounded border-white/20 bg-ink-900 accent-badge-500" />
+                          <span className="min-w-0">
+                            <span className="block text-sm text-white">
+                              <span className="font-mono text-badge-200">{c.code ?? '—'}</span> {c.offense}
+                            </span>
+                            <span className="block text-xs text-slate-400">{c.charge_class} · {humanize(c.status)} · on the case ×{c.counts}</span>
+                          </span>
+                        </label>
+                        {on && (
+                          <label className="flex items-center gap-1.5 text-xs text-slate-400" htmlFor={inputId}>
+                            Counts
+                            <Input id={inputId} type="number" min={1} max={999} value={chargeSel[c.id]} onChange={(e) => setChargeCounts(c.id, Number(e.target.value))} className="w-20" />
+                          </label>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              {currentAdvisories.length > 0 && (
+                <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+                  {currentAdvisories.map((x) => <p key={x}>{x}</p>)}
+                </div>
+              )}
+              {!addingCharge ? (
+                <Button disabled={!caseId} onClick={() => setAddingCharge(true)}>+ Add a charge from the penal code</Button>
+              ) : (
+                <div className="space-y-2 rounded-lg border border-white/10 bg-ink-950/50 p-3">
+                  <Field label="Search the penal code" hint="Adding a charge here proposes it on the case (the same record ChargesTab creates), then selects it.">
+                    {(id) => (
+                      <Input
+                        id={id} value={chargeQuery} onChange={(e) => setChargeQuery(e.target.value)}
+                        placeholder={penalReady ? 'Code, title or class…' : 'Loading penal code…'} disabled={!penalReady} autoComplete="off"
+                      />
+                    )}
+                  </Field>
+                  {penalReady && chargeQuery.trim() && (
+                    <ul className="max-h-60 space-y-1 overflow-y-auto" aria-label="Penal code matches">
+                      {penalSearch(chargeQuery).slice(0, 25).map((pc) => (
+                        <li key={pc.id}>
+                          <button type="button" disabled={busy} onClick={() => void addCaseCharge(pc.id)}
+                            className="block min-h-[40px] w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left text-sm hover:bg-white/10 disabled:opacity-60">
+                            <span className="font-mono text-badge-200">{pc.code}</span>{' '}
+                            <span className="font-semibold text-white">{pc.title}</span>
+                            <span className="ml-2 text-xs text-slate-400">{pc.level}{pc.rico ? ' · RICO' : ''}{pc.modifier ? ' · modifier' : ''}</span>
+                          </button>
+                        </li>
+                      ))}
+                      {penalSearch(chargeQuery).length === 0 && <li className="text-sm text-slate-400">No matches.</li>}
+                    </ul>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => { setAddingCharge(false); setChargeQuery('') }}>Done</Button>
+                </div>
+              )}
+            </Card>
+          </div>
+        )}
+
+        {/* ── Step: type-specific details (+ structured targets) ──────────── */}
         {step.id === 'details' && (
           <div className="space-y-4">
             <Card pad="sm" className="space-y-3">
               {spec.length === 0 && <p className="text-sm text-slate-400">This request type has no additional fields.</p>}
-              {spec.map((f) => (
+              {spec.filter((f) => f.key !== 'standard_of_proof' && f.key !== 'pc_statement').map((f) => (
                 <SpecField
                   key={f.key} f={f}
                   required={f.key === 'search_targets' ? !personSel : f.req}
@@ -965,7 +1277,95 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
           </div>
         )}
 
-        {/* ── Step 3: narrative & justification ───────────────────────────── */}
+        {/* ── Step: evidence (P4-08) — packet picks + add new ─────────────── */}
+        {step.id === 'evidence' && (() => {
+          const listed = isEdit
+            ? savedExhibits.filter((e) => !(STRUCTURED_TARGET_KINDS as readonly string[]).includes(e.exhibit_type))
+                .map((e) => ({ key: e.id, kind: e.exhibit_type, label: e.display_title, onRemove: () => void removeSavedExhibit(e) }))
+            : [
+                ...pendingExhibits.map((e, i) => ({ key: `x-${i}`, kind: e.kind, label: e.label, onRemove: () => setPendingExhibits((x) => x.filter((_, j) => j !== i)) })),
+                ...pendingEvidence.map((e, i) => ({ key: `n-${i}`, kind: 'new evidence', label: e.title, onRemove: () => setPendingEvidence((x) => x.filter((_, j) => j !== i)) })),
+              ]
+          return (
+            <div className="space-y-4">
+              <Card pad="sm" className="space-y-3">
+                <div>
+                  <h3 className="text-[13px] font-semibold text-white">Supporting items — reviewers see ONLY these</h3>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    Evidence, attachments, finalized reports and case media from this case.
+                    {isEdit ? ' Items attach immediately.' : ' Items are attached when the draft is created.'}
+                  </p>
+                </div>
+                {listed.length > 0 && (
+                  <ul className="space-y-1.5" aria-label="Selected supporting items">
+                    {listed.map((e) => (
+                      <li key={e.key} className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-950/50 px-3 py-2 text-sm">
+                        <span className="text-xs font-medium text-slate-400">{humanize(e.kind)}</span>
+                        <span className="min-w-0 flex-1 truncate text-slate-200">{e.label}</span>
+                        <button type="button" onClick={e.onRemove} aria-label={`Remove ${e.label}`} className="min-h-[40px] px-1 text-xs font-semibold text-rose-300 hover:text-rose-200">Remove</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {!caseId ? (
+                  <p className="text-sm text-slate-400">Select a case first.</p>
+                ) : (
+                  <RelatedRecordPicker
+                    sources={exhibitSources(caseRecords)}
+                    onPick={(kind, opt) => void pickExhibit(kind, opt.id, opt.label)}
+                    onAddLink={(url) => void pickExhibit('external_link', null, url, url)}
+                  />
+                )}
+              </Card>
+              <Card pad="sm" className="space-y-3">
+                <div>
+                  <h3 className="text-[13px] font-semibold text-white">Add new evidence</h3>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    Uploads become case media (custody preserved on the case) and attach here in one step.
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Category">
+                    {(id) => (
+                      <Select id={id} value={evForm.category} onChange={(e) => setEvForm((f) => ({ ...f, category: e.target.value }))}>
+                        <option value="">Uncategorized</option>
+                        {CASE_MEDIA_CATEGORIES.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+                      </Select>
+                    )}
+                  </Field>
+                  <Field label="Why it belongs on the request" hint="Optional — applied to each item added below.">
+                    {(id) => <Input id={id} value={evForm.rationale} onChange={(e) => setEvForm((f) => ({ ...f, rationale: e.target.value }))} />}
+                  </Field>
+                </div>
+                {!caseId ? null : fmConfigured() ? (
+                  <MediaUploadPanel onUploaded={handleUploaded} onQueueChange={onQueueChange} />
+                ) : (
+                  <p className="rounded-lg bg-white/5 p-3 text-xs text-slate-400">
+                    File upload is not configured (NEXT_PUBLIC_FIVEMANAGE_API_KEY) — paste a hosted URL below instead.
+                  </p>
+                )}
+                <details open={!fmConfigured()}>
+                  <summary className="cursor-pointer text-xs font-semibold text-slate-400 hover:text-slate-300">Or paste a hosted URL</summary>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_8rem_auto]">
+                    <Field label="Title">{(id) => <Input id={id} value={evForm.title} onChange={(e) => setEvForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Dashcam still" />}</Field>
+                    <Field label="URL">{(id) => <Input id={id} value={evForm.url} onChange={(e) => setEvForm((f) => ({ ...f, url: e.target.value }))} placeholder="https://…" className="font-mono text-xs" />}</Field>
+                    <Field label="Type">
+                      {(id) => (
+                        <Select id={id} value={evForm.type} onChange={(e) => setEvForm((f) => ({ ...f, type: e.target.value as MediaType }))}>
+                          {MEDIA_TYPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        </Select>
+                      )}
+                    </Field>
+                    <div className="flex items-end"><Button disabled={busy || !caseId} onClick={() => void addPastedEvidence()}>Add</Button></div>
+                  </div>
+                </details>
+                {uploadActive > 0 && <p className="text-xs text-amber-200">{uploadActive} upload{uploadActive === 1 ? '' : 's'} in progress — wait before continuing.</p>}
+              </Card>
+            </div>
+          )
+        })()}
+
+        {/* ── Step: narrative & justification ─────────────────────────────── */}
         {step.id === 'narrative' && (
           <Card pad="sm" className="space-y-3">
             <Field label={requestType === 'warrant' ? 'Warrant title' : 'Title'} required>
@@ -986,6 +1386,23 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
                   </Select>
                 )}
               </Field>
+            )}
+            {requestType === 'warrant' && (
+              <>
+                {/* P4-04: both live in form_data; the server refuses a warrant
+                    submission without them. */}
+                <Field label="Standard of proof" required hint="The standard the request must meet; the statement below has to support it.">
+                  {(id) => (
+                    <Select id={id} value={form.standard_of_proof ?? ''} onChange={(e) => setForm((x) => ({ ...x, standard_of_proof: e.target.value }))}>
+                      <option value="">Choose…</option>
+                      {STANDARDS_OF_PROOF.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </Select>
+                  )}
+                </Field>
+                <Field label="Probable-cause statement" required hint="The facts, in order, that establish the standard — what was seen, by whom, and how it ties the target to the offence.">
+                  {(id) => <Textarea id={id} rows={6} value={form.pc_statement ?? ''} onChange={(e) => setForm((x) => ({ ...x, pc_statement: e.target.value }))} />}
+                </Field>
+              </>
             )}
             <Field label={requestType === 'warrant' ? 'Description / justification' : 'Reason for subpoena'} required>
               {(id) => <Textarea id={id} rows={6} value={narrative} onChange={(e) => setNarrative(e.target.value)} />}
@@ -1018,17 +1435,40 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
               {requestType === 'warrant' && <Row label="Priority">{priority}</Row>}
               <Row label="Classification">{classification ? humanize(classification) : 'Default for this type'}</Row>
               <Row label="Title">{title.trim() || '—'}</Row>
+              {requestType === 'warrant' && (
+                <>
+                  <Row label="Standard of proof">{STANDARDS_OF_PROOF.find(([v]) => v === form.standard_of_proof)?.[1] ?? '—'}</Row>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400">Probable-cause statement</p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-slate-200">{(form.pc_statement ?? '').trim() || '—'}</p>
+                  </div>
+                </>
+              )}
               <div>
                 <p className="text-xs font-semibold text-slate-400">
                   {requestType === 'warrant' ? 'Description / justification' : 'Reason for subpoena'}
                 </p>
                 <p className="mt-1 whitespace-pre-wrap text-sm text-slate-200">{narrative.trim() || '—'}</p>
               </div>
-              {spec.filter((f) => String(form[f.key] ?? '').trim()).map((f) => (
+              {spec.filter((f) => f.key !== 'standard_of_proof' && f.key !== 'pc_statement' && String(form[f.key] ?? '').trim()).map((f) => (
                 <Row key={f.key} label={f.label}>
                   <span className="whitespace-pre-wrap">{form[f.key]}</span>
                 </Row>
               ))}
+              <div>
+                <p className="text-xs font-semibold text-slate-400">Charges ({chargeItems.length})</p>
+                {chargeItems.length === 0 ? (
+                  <p className="mt-1 text-sm text-slate-400">None selected.</p>
+                ) : (
+                  <ul className="mt-1 space-y-0.5 text-sm text-slate-200">
+                    {chargeItems.map((c) => {
+                      const cc = caseCharges?.find((x) => x.id === c.case_charge_id)
+                      return <li key={c.case_charge_id}><span className="font-mono text-badge-200">{cc?.code ?? '—'}</span> {cc?.offense ?? 'Charge'} ×{c.counts}</li>
+                    })}
+                  </ul>
+                )}
+              </div>
+              <Row label="Supporting items">{exhibitCount}</Row>
               {targetItems.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-slate-400">Structured targets</p>
@@ -1040,12 +1480,36 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
                 </div>
               )}
             </Card>
+            {/* Server-mirror checklist (the same rows the dossier preview shows). */}
+            <Card pad="sm" className="space-y-1.5">
+              <h3 className="text-[13px] font-semibold text-white">Requirements</h3>
+              <ul className="space-y-1">
+                {reviewChecklist.map((c) => (
+                  <li key={c.label} className="flex items-center gap-2 text-sm">
+                    <span className={c.ok ? 'text-emerald-300' : c.blocking ? 'text-rose-300' : 'text-amber-300'} aria-hidden>
+                      {c.ok ? '✓' : c.blocking ? '✗' : '⚠'}
+                    </span>
+                    <span className={c.ok ? 'text-slate-300' : 'text-slate-200'}>{c.label}</span>
+                    {!c.ok && !c.blocking && <span className="text-xs text-amber-300/80">the reviewer must record an override for an empty packet</span>}
+                  </li>
+                ))}
+              </ul>
+            </Card>
             {isEdit && isReturned && (
               <Card pad="sm" className="space-y-3">
+                {unresolvedItems.length > 0 && (
+                  <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+                    <p className="font-semibold">{unresolvedItems.length} requested revision{unresolvedItems.length === 1 ? ' is' : 's are'} still unresolved:</p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                      {unresolvedItems.map((i) => <li key={i.id}><span className="font-semibold">{fieldLabel(i.field)}</span> — {i.note}</li>)}
+                    </ul>
+                    <p className="mt-1 text-amber-200/80">Mark them resolved from the request&rsquo;s dossier, or resubmit and let the reviewer see them open.</p>
+                  </div>
+                )}
                 {isFastReturn && (
                   <>
                     <p className="text-xs text-slate-300">
-                      Corrected requests return directly to the prosecutor. Check below only if you
+                      A corrected request returns directly to the judicial queue. Check below only if you
                       made a material change.
                     </p>
                     <label className="flex min-h-[40px] cursor-pointer items-center gap-2.5 text-sm text-slate-200">
@@ -1055,13 +1519,14 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
                         onChange={(e) => setMaterialChange(e.target.checked)}
                         className="h-4 w-4 rounded border-white/20 bg-ink-900 accent-badge-500"
                       />
-                      I made a material change (requires renewed CID review)
+                      I made a material change (requires renewed bureau review)
                     </label>
                   </>
                 )}
                 <Field
-                  label="What changed since the last version? (optional)"
-                  hint="Saved with the new version so reviewers can see what changed at a glance."
+                  label="What changed since the last version?"
+                  required
+                  hint="Required on every resubmission — saved with the new version so reviewers can see what changed at a glance."
                 >
                   {(id) => <Textarea id={id} rows={3} value={changeSummary} onChange={(e) => setChangeSummary(e.target.value)} />}
                 </Field>
@@ -1075,11 +1540,13 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
                 </ul>
               </div>
             )}
-            {!isEdit && (
-              <p className="text-xs text-slate-400">
-                Supporting evidence, attachments, finalized reports and links are selected on the draft&rsquo;s
-                Supporting section — you can save as a draft first and submit from there later.
-              </p>
+            {reviewAdvisories.length > 0 && (
+              <div role="status" className="rounded-lg border border-white/10 bg-ink-950/50 px-3 py-2 text-xs text-slate-300">
+                <p className="font-semibold text-slate-200">Worth a look (does not block):</p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  {reviewAdvisories.map((x) => <li key={x}>{x}</li>)}
+                </ul>
+              </div>
             )}
           </div>
         )}
@@ -1097,21 +1564,21 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-3">
           <Button onClick={prev} disabled={stepIdx === 0}>← Back</Button>
           {step.id !== 'review' ? (
-            <Button variant="primary" onClick={next}>Continue</Button>
+            <Button variant="primary" disabled={step.id === 'evidence' && uploadActive > 0} onClick={next}>Continue</Button>
           ) : (
             <div className="flex flex-wrap justify-end gap-2">
               {isEdit ? (
                 <>
                   <Button disabled={busy} onClick={() => void saveEdit(false)}>Save draft</Button>
-                  <Button variant="primary" disabled={busy} onClick={() => void saveEdit(true)}>
-                    {isFastReturn ? 'Resubmit for review' : 'Submit for CID review'}
+                  <Button variant="primary" disabled={busy || uploadActive > 0} onClick={() => void saveEdit(true)}>
+                    {isReturned ? 'Resubmit for review' : 'Submit for bureau review'}
                   </Button>
                 </>
               ) : (
                 <>
-                  <Button disabled={busy} onClick={() => void createRequest(false)}>Save as draft</Button>
-                  <Button variant="primary" disabled={busy} onClick={() => void createRequest(true)}>
-                    Create &amp; submit for CID review
+                  <Button disabled={busy || uploadActive > 0} onClick={() => void createRequest(false)}>Save as draft</Button>
+                  <Button variant="primary" disabled={busy || uploadActive > 0} onClick={() => void createRequest(true)}>
+                    Create &amp; submit for bureau review
                   </Button>
                 </>
               )}

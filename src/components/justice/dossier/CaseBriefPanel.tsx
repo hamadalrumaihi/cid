@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react'
 import { rpc } from '@/lib/db'
 import { humanize } from '@/lib/legalWorkflow'
 import { parseLegalFormEntries } from '@/lib/schemas'
+import { safeUrl } from '@/lib/safeUrl'
 import type { Json } from '@/lib/database.types'
 import { Badge } from '@/components/ui/Badge'
 
@@ -154,9 +155,9 @@ export function CaseBriefPanel({ requestId }: { requestId: string }) {
                   <span className="text-xs font-medium text-slate-500">{humanize(m.type) || 'Media'}</span>
                   <span className="min-w-0 flex-1 truncate text-slate-200">{m.title ?? 'Untitled'}</span>
                   {m.evidence_ref && <Badge tone="accent">{m.evidence_ref}</Badge>}
-                  {m.external_url && (
+                  {safeUrl(m.external_url) && (
                     <a
-                      href={m.external_url}
+                      href={safeUrl(m.external_url)}
                       target="_blank"
                       rel="noreferrer"
                       className="rounded text-xs font-semibold text-badge-200 hover:text-white"

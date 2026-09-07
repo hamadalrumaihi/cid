@@ -4,17 +4,21 @@
  *  add_legal_exhibit, submit_legal_request_to_cid, review_legal_request_as_cid,
  *  issue_legal_request) — never direct table writes to workflow columns.
  *
- *  Minimal-DOJ revival (migration 20260816120000_minimal_doj_revival): a
- *  Bureau Lead+ 'approve' via review_legal_request_as_cid is no longer
- *  terminal — it hands the request to the shared PROSECUTOR QUEUE
- *  (review_status='prosecutor_queue'), and reaching 'approved' (and therefore
- *  issue_legal_request) requires an active prosecutor + judge. The CID
- *  fixtures cannot ride that pipeline (justice_appoint refuses is_test
- *  accounts by design), so the furthest deterministic state this builder can
- *  produce is `queuedWarrant` — a warrant sitting in prosecutor_queue with a
+ *  Portal Improvements P4-01 (migration 20261025120000_legal_reroute): the prosecutor
+ *  stage is retired. A Bureau Lead+ 'approve' via review_legal_request_as_cid
+ *  is not terminal — it hands the request to the JUDICIAL QUEUE
+ *  (review_status='submitted_to_judge'), and reaching 'approved' (and
+ *  therefore issue_legal_request) requires an active judge. The CID fixtures
+ *  cannot ride that leg (justice_appoint refuses is_test accounts by design),
+ *  so the furthest deterministic state this builder can produce is
+ *  `judicialQueueWarrant` — a warrant sitting in submitted_to_judge with a
  *  frozen cid_approved version. E2E specs that need an ISSUED warrant are
- *  skipped until the DOJ fixture accounts exist (see the provisioning
- *  contract in tests/rls/v163.test.ts).
+ *  skipped until the DOJ fixture accounts exist (rls-test-judge / -judge2 /
+ *  -ag — issue #299; provisioning contract in tests/rls/v163.test.ts).
+ *
+ *  P4-04: every warrant draft carries form_data.standard_of_proof +
+ *  pc_statement (WARRANT_FORM) — submit_legal_request_to_cid refuses a
+ *  warrant without them.
  *
  *  Safety rails (live project):
  *   - rls_test_cleanup() runs FIRST (purges leftovers from crashed runs) and
@@ -48,11 +52,11 @@ export interface LegalFixtures {
   cidReview: FixtureRequest
   /** Arrest warrant returned_by_cid to the lsb creator. */
   returned: FixtureRequest
-  /** Search warrant past Bureau Lead approval, sitting in the shared
-   *  prosecutor queue (review_status='prosecutor_queue', unissued, with a
-   *  frozen cid_approved version). Reaching 'approved'/issued requires the
-   *  DOJ fixture accounts — see tests/rls/v163.test.ts. */
-  queuedWarrant: FixtureRequest
+  /** Search warrant past Bureau Lead approval, sitting in the judicial
+   *  queue (review_status='submitted_to_judge', unissued, with a frozen
+   *  cid_approved version). Reaching 'approved'/issued requires the judge
+   *  fixture — see tests/rls/v163.test.ts (issue #299). */
+  judicialQueueWarrant: FixtureRequest
   actors: {
     lsb: Live
     lead: Live
@@ -110,6 +114,12 @@ async function rpcOk<T = Record<string, unknown>>(live: Live, fn: string, args: 
 
 type ReqRow = { id: string; request_number: string; title: string; review_status: string }
 const asFixture = (r: ReqRow): FixtureRequest => ({ id: r.id, number: r.request_number, title: r.title })
+
+/** P4-04: the form keys every warrant needs before it can be submitted. */
+export const WARRANT_FORM = {
+  standard_of_proof: 'probable_cause',
+  pc_statement: 'Two controlled buys observed by the affiant on consecutive nights (E2E fixture).',
+} as const
 
 type Actors = LegalFixtures['actors']
 type RegistryRow = { table: 'vehicles' | 'places' | 'persons'; id: string }
@@ -192,7 +202,8 @@ export async function buildLegalFixtures(): Promise<LegalFixtures> {
         p_priority: 'Medium',
         p_narrative: `Probable cause narrative for the ${tag} legal-workflow E2E fixture.`,
         ...(opts.person ? { p_person: person.id } : {}),
-        ...(opts.form ? { p_form: opts.form } : {}),
+        // Every warrant carries the P4-04 keys; a fixture may add its own.
+        p_form: { ...WARRANT_FORM, ...(opts.form ?? {}) },
         ...(opts.classification ? { p_classification: opts.classification } : {}),
       })
 
@@ -231,13 +242,12 @@ export async function buildLegalFixtures(): Promise<LegalFixtures> {
       p_request: returnedRow.id, p_decision: 'return', p_note: 'Tighten the probable-cause statement (E2E fixture).',
     })
 
-    // 4 · queuedWarrant — the minimal-DOJ CID handoff: submit → Bureau Lead+
-    //     approve (review_legal_request_as_cid 'approve') → prosecutor_queue.
-    //     Issuance is NOT possible here: review_legal_request_as_cid no longer
-    //     terminates at 'approved' (20260816120000_minimal_doj_revival), and
-    //     the prosecutor/judge stages need DOJ fixture accounts the build
-    //     doesn't have. Fail fast on contract drift either way.
-    const queuedRow = await createWarrant('search_warrant', 'queued warrant (prosecutor queue)', {
+    // 4 · judicialQueueWarrant — the CID handoff: submit → Bureau Lead+
+    //     approve (review_legal_request_as_cid 'approve') → submitted_to_judge
+    //     (P4-01, 20261024120000). Issuance is NOT possible here: the
+    //     judicial stage needs the judge fixture the build doesn't have. Fail
+    //     fast on contract drift either way.
+    const queuedRow = await createWarrant('search_warrant', 'queued warrant (judicial queue)', {
       form: { search_targets: `Place: ${place.name}`, items_sought: 'Stolen property' },
     })
     await attachLink(queuedRow.id)
@@ -245,8 +255,8 @@ export async function buildLegalFixtures(): Promise<LegalFixtures> {
     const decided = await rpcOk<ReqRow>(lead, 'review_legal_request_as_cid', {
       p_request: queuedRow.id, p_decision: 'approve', p_signature: 'RLS Lead',
     })
-    if (decided.review_status !== 'prosecutor_queue') {
-      throw new Error(`queuedWarrant fixture: expected review_status 'prosecutor_queue', got '${decided.review_status}'`)
+    if (decided.review_status !== 'submitted_to_judge') {
+      throw new Error(`judicialQueueWarrant fixture: expected review_status 'submitted_to_judge', got '${decided.review_status}'`)
     }
 
     return {
@@ -262,7 +272,7 @@ export async function buildLegalFixtures(): Promise<LegalFixtures> {
       entityDraft: asFixture(entityDraftRow),
       cidReview: asFixture(cidReviewRow),
       returned: asFixture(returnedRow),
-      queuedWarrant: asFixture(queuedRow),
+      judicialQueueWarrant: asFixture(queuedRow),
       actors,
     }
   } catch (err) {

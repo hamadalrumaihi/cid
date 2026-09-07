@@ -1,135 +1,128 @@
 /** DOJ / Judiciary functional E2E against the LIVE project (rls-test-*
- *  fixtures, PW_SUPABASE_SHIM-compatible — see liveAuth.ts). Covers the
- *  justice-portal surface that the shim can reach deterministically:
- *   - adaptive first-login Gate: domain selector (CID / DOJ / Judiciary),
- *     agency-scoped role menus, CID bureau selector only for CID, the
- *     Badge/Bar/Court identifier for justice applicants, request-only copy
- *   - justice-only users land in the standalone Justice portal (no CID nav)
- *   - role-scoped portal sections (ADA queues + coverage vs Judge queues)
- *   - CID side: the Legal Requests tab with File Warrant / File Subpoena and
- *     the conditional subpoena fields
- *   - keyboard reachability of the domain selector and mobile rendering.
- *  Self-skips without the fixture passwords. Nothing here writes data. */
+ *  fixtures, PW_SUPABASE_SHIM-compatible — see liveAuth.ts).
+ *
+ *  Portal Improvements P4-01 / P4-02 (L16): the justice identity model is
+ *  Judge + Attorney General ONLY. Prosecutor / ADA / DA memberships are
+ *  history — never offered by a grant menu, never a lane in the workspace —
+ *  so the ADA scenarios that used to live here are gone. Covers what the
+ *  shim can reach deterministically:
+ *   - first-login Gate: the single CID department request (no DOJ /
+ *     Judiciary domain selector, no ADA / DA anywhere), request-only copy
+ *   - a Judge lands in the DOJ mode of /legal with the judicial lanes only
+ *     (Judicial queue, My reviews; no prosecutor Queue, no Sealed assignment,
+ *     no Administration, no CID nav)
+ *   - the Attorney General gets Judicial queue + Sealed assignment +
+ *     Administration, never a prosecutor queue or a docket of their own
+ *   - CID side: the /legal landing with the guided wizard and the
+ *     conditional subpoena fields
+ *   - keyboard reachability of the Gate and mobile rendering.
+ *  Every scenario self-skips without its fixture password; the DOJ fixtures
+ *  (rls-test-judge / -judge2 / -ag) are not provisioned yet — issue #299.
+ *  Nothing here writes data. */
 import { test, expect } from '@playwright/test'
 import { LIVE, enabled, grant, inject, pwOf } from './liveAuth'
+
+const RETIRED_TITLES = /Assistant District Attorney|District Attorney|\bADA\b|\bDA\b|Prosecutor/
 
 test.describe('DOJ legal review — functional E2E', () => {
   test.skip(!enabled, 'RLS_TEST_* env not set')
 
-  test('first-login Gate shows the adaptive domain selector with correct role menus', async ({ page }) => {
+  test('first-login Gate offers the CID department request only — no DOJ / Judiciary domain, no ADA / DA role', async ({ page }) => {
     test.skip(!pwOf(LIVE.justice), 'RLS_TEST_PASSWORD_JUSTICE not set')
     const live = await grant(LIVE.justice)
     try {
       await inject(page, live)
       await page.goto('/command')
-      // Pending gate with the three-domain selector
-      await expect(page.getByText('I am applying to join:')).toBeVisible({ timeout: 20_000 })
-      await expect(page.getByRole('button', { name: /^CID/ })).toBeVisible()
-      await expect(page.getByRole('button', { name: /^DOJ/ })).toBeVisible()
-      await expect(page.getByRole('button', { name: /^Judiciary/ })).toBeVisible()
-      // keyboard: the domain buttons are reachable and activatable via Tab/Enter
-      await page.keyboard.press('Tab')
-      const focusable = await page.evaluate(() => document.activeElement?.tagName)
-      expect(focusable).toBeTruthy()
+      await expect(page.getByLabel(/Requested Department/)).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByLabel(/Requested CID Role/)).toBeVisible()
+      await expect(page.getByText(/does not grant access/)).toBeVisible()
+      // The retired domain selector and the justice identifier are gone.
+      await expect(page.getByRole('button', { name: /^DOJ/ })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: /^Judiciary/ })).toHaveCount(0)
+      await expect(page.getByLabel(/Badge \/ Bar \/ Court Identifier/)).toHaveCount(0)
+      await expect(page.getByLabel(/Requested Justice Role/)).toHaveCount(0)
 
-      // DOJ: justice roles + identifier, NO CID bureau selector
-      await page.getByRole('button', { name: /^DOJ/ }).click()
-      await expect(page.getByLabel(/Badge \/ Bar \/ Court Identifier/)).toBeVisible()
-      const roleSelect = page.getByLabel(/Requested Justice Role/)
-      await expect(roleSelect).toBeVisible()
-      const roles = await roleSelect.locator('option').allTextContents()
-      expect(roles.join('|')).toContain('Assistant District Attorney')
-      expect(roles.join('|')).toContain('District Attorney')
-      expect(roles.join('|')).toContain('Attorney General')
-      expect(roles.join('|')).not.toContain('Judge')
-      await expect(page.getByLabel(/Requested Department/)).toHaveCount(0)
-      await expect(page.getByText(/does not grant access immediately/)).toBeVisible()
-
-      // Judiciary: judge only
-      await page.getByRole('button', { name: /change/ }).click()
-      await page.getByRole('button', { name: /^Judiciary/ }).click()
-      await expect(page.getByLabel(/Requested Justice Role/)).toBeVisible()
-      const judgeRoles = await page.getByLabel(/Requested Justice Role/).locator('option').allTextContents()
-      expect(judgeRoles.join('|')).toContain('Judge')
-      expect(judgeRoles.join('|')).not.toContain('District Attorney')
-
-      // CID: detective roles + permanent bureau, no justice identifier
-      await page.getByRole('button', { name: /change/ }).click()
-      await page.getByRole('button', { name: /^CID/ }).click()
-      await expect(page.getByLabel(/Requested Department/)).toBeVisible({ timeout: 10_000 })
+      // CID roles never include a justice title; bureaus are the permanent two.
       const cidRoles = await page.getByLabel(/Requested CID Role/).locator('option').allTextContents()
       expect(cidRoles.join('|')).toContain('Detective')
-      expect(cidRoles.join('|')).not.toContain('Attorney')
+      expect(cidRoles.join('|')).not.toMatch(RETIRED_TITLES)
+      expect(cidRoles.join('|')).not.toContain('Judge')
       const bureaus = await page.getByLabel(/Requested Department/).locator('option').allTextContents()
       expect(bureaus.join('|')).toMatch(/Major Crimes/)
       expect(bureaus.join('|')).toMatch(/Street Crimes/)
       expect(bureaus.join('|')).not.toMatch(/JTF/)
       expect(bureaus.join('|')).not.toMatch(/Special Investigations/)
+
+      // keyboard: the form is reachable via Tab
+      await page.keyboard.press('Tab')
+      const focusable = await page.evaluate(() => document.activeElement?.tagName)
+      expect(focusable).toBeTruthy()
     } finally {
       await live.ctx.dispose()
     }
   })
 
-  test('an active ADA lands in the standalone Justice portal — no CID shell, redesigned sub-views visible', async ({ page }) => {
-    test.skip(!pwOf(LIVE.adaLsb), 'RLS_TEST_PASSWORD_ADA_LSB not set')
-    const live = await grant(LIVE.adaLsb)
-    try {
-      await inject(page, live)
-      await page.goto('/command')
-      await expect(page.getByRole('heading', { name: 'Justice Portal' })).toBeVisible({ timeout: 20_000 })
-      await expect(page.getByText('Assistant District Attorney (ADA)')).toBeVisible()
-      // Redesigned ?view= tab strip for an ADA: overview / requests / assigned /
-      // issued / roster — but never Applications (DA/AG/Owner only).
-      const tabs = page.getByRole('tablist', { name: 'Justice portal views' })
-      await expect(tabs.getByRole('tab', { name: /Overview/ })).toBeVisible()
-      await expect(tabs.getByRole('tab', { name: /Requests/ })).toBeVisible()
-      await expect(tabs.getByRole('tab', { name: /Assigned to me/ })).toBeVisible()
-      await expect(tabs.getByRole('tab', { name: /Issued & service/ })).toBeVisible()
-      await expect(tabs.getByRole('tab', { name: /Roster & coverage/ })).toBeVisible()
-      await expect(tabs.getByRole('tab', { name: /Applications/ })).toHaveCount(0)
-      // Overview action queue renders (never awareness rows inside it).
-      await expect(page.getByRole('heading', { name: 'Your action items' })).toBeVisible()
-      // The read-only coverage board lives under Roster & coverage.
-      await tabs.getByRole('tab', { name: /Roster & coverage/ }).click()
-      await expect(page.getByRole('heading', { name: 'Bureau ADA coverage' })).toBeVisible()
-      await expect(page.getByRole('heading', { name: 'DOJ & Judiciary personnel' })).toHaveCount(0)
-      // never the CID navigation
-      await expect(page.getByRole('button', { name: /Case Files/i })).toHaveCount(0)
-      await expect(page.getByText('Restricted // CID Eyes Only')).toHaveCount(0)
-    } finally {
-      await live.ctx.dispose()
-    }
-  })
-
-  test('a Judge sees only judicial queues — no coverage board, no DOJ management', async ({ page }) => {
-    test.skip(!pwOf(LIVE.judge), 'RLS_TEST_PASSWORD_JUDGE not set')
+  test('a Judge gets the judicial lanes only — no prosecutor queue, no Administration, no CID shell', async ({ page }) => {
+    test.skip(!pwOf(LIVE.judge), 'RLS_TEST_PASSWORD_JUDGE not set (DOJ fixtures: issue #299)')
     const live = await grant(LIVE.judge)
     try {
       await inject(page, live)
-      await page.goto('/command?view=assigned')
-      await expect(page.getByRole('heading', { name: 'Justice Portal' })).toBeVisible({ timeout: 20_000 })
-      // The judge docket + the distinct parallel pickup lane.
-      await expect(page.getByRole('heading', { name: /Assigned for judicial review/ })).toBeVisible()
-      await expect(page.getByRole('heading', { name: /Available to claim/ })).toBeVisible()
-      // No DOJ-management surfaces for a judge.
-      const tabs = page.getByRole('tablist', { name: 'Justice portal views' })
-      await expect(tabs.getByRole('tab', { name: /Roster & coverage/ })).toHaveCount(0)
-      await expect(tabs.getByRole('tab', { name: /Applications/ })).toHaveCount(0)
+      await page.goto('/legal')
+      await expect(page.getByRole('tab', { name: /Judicial queue/ })).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByRole('tab', { name: /My reviews/ })).toBeVisible()
+      await expect(page.getByRole('tab', { name: /^Queue/ })).toHaveCount(0)
+      await expect(page.getByRole('tab', { name: /Sealed assignment/ })).toHaveCount(0)
+      await expect(page.getByRole('tab', { name: /Administration/ })).toHaveCount(0)
+      // Retired-role surfaces never render for a judge.
       await expect(page.getByText('Bureau ADA coverage')).toHaveCount(0)
-      await expect(page.getByText('DOJ & Judiciary personnel')).toHaveCount(0)
+      await expect(page.getByText(/Prosecutor queue/)).toHaveCount(0)
+      // never the CID navigation
+      await expect(page.getByRole('button', { name: /Case Files/i })).toHaveCount(0)
+      await expect(page.getByText('Restricted // CID Eyes Only')).toHaveCount(0)
+      // The judicial queue lists requests (or its empty state) — never a
+      // sealed title: sealed rows are number + type only by convention.
+      await page.getByRole('tab', { name: /Judicial queue/ }).click()
+      await expect(page.getByText(/SEALED/i)).toHaveCount(0)
     } finally {
       await live.ctx.dispose()
     }
   })
 
-  test('mobile: the Justice portal renders and stays usable at 390px', async ({ page }) => {
-    test.skip(!pwOf(LIVE.judge), 'RLS_TEST_PASSWORD_JUDGE not set')
+  test('the Attorney General oversees: Judicial queue + Administration, never a prosecutor queue', async ({ page }) => {
+    test.skip(!pwOf(LIVE.ag), 'RLS_TEST_PASSWORD_AG not set (DOJ fixtures: issue #299)')
+    const live = await grant(LIVE.ag)
+    try {
+      await inject(page, live)
+      await page.goto('/legal')
+      await expect(page.getByRole('tab', { name: /Judicial queue/ })).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByRole('tab', { name: /Sealed assignment/ })).toBeVisible()
+      await expect(page.getByRole('tab', { name: /Administration/ })).toBeVisible()
+      await expect(page.getByRole('tab', { name: /^Queue/ })).toHaveCount(0)
+      // The AG never holds a docket of their own.
+      await expect(page.getByRole('tab', { name: /My reviews/ })).toHaveCount(0)
+      await page.getByRole('tab', { name: /Administration/ }).click()
+      // Appointment menus offer Judge / Attorney General only.
+      const menus = page.locator('select')
+      const count = await menus.count()
+      for (let i = 0; i < count; i++) {
+        const options = (await menus.nth(i).locator('option').allTextContents()).join('|')
+        expect(options).not.toMatch(RETIRED_TITLES)
+      }
+      await expect(page.getByText('Bureau ADA coverage')).toHaveCount(0)
+      await expect(page.getByRole('button', { name: /Case Files/i })).toHaveCount(0)
+    } finally {
+      await live.ctx.dispose()
+    }
+  })
+
+  test('mobile: the DOJ mode of /legal renders and stays usable at 390px', async ({ page }) => {
+    test.skip(!pwOf(LIVE.judge), 'RLS_TEST_PASSWORD_JUDGE not set (DOJ fixtures: issue #299)')
     await page.setViewportSize({ width: 390, height: 844 })
     const live = await grant(LIVE.judge)
     try {
       await inject(page, live)
-      await page.goto('/command')
-      await expect(page.getByRole('heading', { name: /Justice Portal/i })).toBeVisible({ timeout: 20_000 })
+      await page.goto('/legal')
+      await expect(page.getByRole('tab', { name: /Judicial queue/ })).toBeVisible({ timeout: 20_000 })
       await expect(page.getByRole('button', { name: /Sign out/i })).toBeVisible()
     } finally {
       await live.ctx.dispose()
@@ -149,8 +142,8 @@ test.describe('DOJ legal review — functional E2E', () => {
       const tabs = page.getByRole('tablist', { name: 'Legal request views' })
       await expect(tabs.getByRole('tab', { name: /Overview/ })).toBeVisible()
       await expect(tabs.getByRole('tab', { name: /Requests/ })).toBeVisible()
-      // no Justice portal leaf for a plain detective
-      await expect(page.getByRole('button', { name: /Justice Portal/i })).toHaveCount(0)
+      // no DOJ lanes for a plain detective
+      await expect(page.getByRole('tab', { name: /Judicial queue/ })).toHaveCount(0)
 
       // Guided wizard: type cards replace the old long form.
       await page.getByRole('button', { name: '+ File legal request' }).click()

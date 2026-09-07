@@ -28,7 +28,7 @@ import { timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { parseSecurityOverview, type SecurityOverview } from '@/lib/schemas'
 import { parseStringArray } from '@/lib/jsonShapes'
-import { PERMANENT_BUREAUS, bureauLabel, roleLabel } from '@/lib/roles'
+import { bureauLabel, roleLabel } from '@/lib/roles'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -566,8 +566,9 @@ interface AccessState {
   activeMembers: number | null
   pendingCid: number | null
   legacyTransfers: number | null
-  /** Active prosecutor assignment per bureau (null = the fetch failed). */
-  coverage: { bureau: string; primaryId: string | null; actingId: string | null }[] | null
+  /** Active justice roster (null = the fetch failed): judges + whether an
+   *  Attorney General seat is filled. The prosecutor role is retired (L16). */
+  justice: { judgeIds: string[]; agIds: string[] } | null
   at: number
 }
 
@@ -575,29 +576,30 @@ function AccessSection() {
   const router = useRouter()
   const [a, setA] = useState<AccessState | null>(null)
   const [loading, setLoading] = useState(true)
-  // Subscribe to the roster so prosecutor names resolve as soon as it loads —
-  // and so an UNRESOLVABLE assignee (test fixtures are hidden from profile
+  // Subscribe to the roster so judge / AG names resolve as soon as it loads —
+  // and so an UNRESOLVABLE holder (test fixtures are hidden from profile
   // reads by RLS) can be surfaced as a warning instead of a blank.
   const roster = useProfilesStore((s) => s.profiles)
 
   const refresh = useCallback(async () => {
     setLoading(true)
     void useProfilesStore.getState().fetch()
-    const [activeMembers, pendingCid, legacy, pba] = await Promise.all([
+    const [activeMembers, pendingCid, legacy, jm] = await Promise.all([
       countRows('profiles', { eq: { active: true } }).catch(() => null),
       countRows('membership_requests', { eq: { status: 'pending' } }).catch(() => null),
       list('transfer_requests', { in: { status: ['pending_source', 'pending_target', 'approved'] }, select: 'id' }).catch(() => null),
-      list('prosecutor_bureau_assignments', { is: { ends_at: null } }).catch(() => null),
+      list('justice_memberships', { eq: { active: true }, select: 'user_id,justice_role,expires_at' }).catch(() => null),
     ])
-    const coverage = pba === null ? null : PERMANENT_BUREAUS.map((b) => ({
-      bureau: b,
-      primaryId: pba.find((r) => r.bureau === b && r.assignment_type === 'primary')?.prosecutor_id ?? null,
-      actingId: pba.find((r) => r.bureau === b && r.assignment_type === 'acting')?.prosecutor_id ?? null,
-    }))
+    const nowMs = Date.now()
+    const live = (jm ?? []).filter((m) => !m.expires_at || Date.parse(m.expires_at) > nowMs)
+    const justice = jm === null ? null : {
+      judgeIds: live.filter((m) => m.justice_role === 'judge').map((m) => m.user_id),
+      agIds: live.filter((m) => m.justice_role === 'attorney_general').map((m) => m.user_id),
+    }
     setA({
       activeMembers, pendingCid,
       legacyTransfers: legacy === null ? null : legacy.length,
-      coverage, at: Date.now(),
+      justice, at: nowMs,
     })
     setLoading(false)
   }, [])
@@ -637,39 +639,43 @@ function AccessSection() {
         </div>
       </Panel>
 
-      <Panel title="Justice coverage" sub="Each bureau needs an active prosecutor (primary or acting) or its classified legal requests go unseen at the DOJ — exactly the failure repaired in July 2026.">
-        {a?.coverage === null && <p className="text-sm text-slate-400"><Badge tone="neutral">Unknown</Badge> <span className="ml-1">The assignment table could not be read — retry, and check Supabase if it persists.</span></p>}
-        {a?.coverage && (
+      <Panel title="Justice roster" sub="Judges decide; the Attorney General appoints, oversees the judicial queue and places sealed requests. Without an active Attorney General, sealed requests wait for you to assign a judge.">
+        {a?.justice === null && <p className="text-sm text-slate-400"><Badge tone="neutral">Unknown</Badge> <span className="ml-1">Justice memberships could not be read — retry, and check Supabase if it persists.</span></p>}
+        {a?.justice && (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {a.coverage.map((c) => {
-              const covererId = c.primaryId ?? c.actingId
-              // A held slot whose holder is invisible on the roster is a real
-              // signal: test fixtures and removed accounts are hidden from
-              // profile reads, so "held by someone you can't see" warrants a
-              // look — never a green light. (Direct roster lookup, NOT
-              // officerName(): that helper returns an 'Officer' placeholder
-              // for unknown ids, which would mask exactly this case.)
-              const holder = covererId ? roster.find((p) => p.id === covererId) : undefined
-              const name = holder?.display_name ?? null
-              const unresolvable = !!covererId && roster.length > 0 && !holder
-              const tone = !covererId ? 'danger' : unresolvable ? 'warn' : name ? 'good' : 'neutral'
-              const label = !covererId ? 'Uncovered' : unresolvable ? 'Verify' : name ? 'Covered' : 'Unknown'
+            {([
+              { key: 'attorney_general', title: 'Attorney General', ids: a.justice.agIds, missing: 'No active Attorney General — sealed requests fall to you (Owner) to assign, and no one can appoint judges.' },
+              { key: 'judge', title: 'Judges', ids: a.justice.judgeIds, missing: 'No active judges — nothing in the judicial queue can be claimed or decided until one is appointed.' },
+            ] as const).map((seat) => {
+              // A holder invisible on the roster is a real signal: test
+              // fixtures and removed accounts are hidden from profile reads,
+              // so "held by someone you can't see" warrants a look — never a
+              // green light. (Direct roster lookup, NOT officerName(): that
+              // helper returns an 'Officer' placeholder for unknown ids.)
+              const names = seat.ids.map((id) => roster.find((p) => p.id === id)?.display_name ?? null)
+              const unresolvable = roster.length > 0 && names.some((n) => !n)
+              const tone = seat.ids.length === 0 ? 'danger' : unresolvable ? 'warn' : 'good'
+              const label = seat.ids.length === 0 ? 'Vacant' : unresolvable ? 'Verify' : `${seat.ids.length} active`
               return (
-                <div key={c.bureau} className="rounded-lg bg-ink-950/50 p-3">
+                <div key={seat.key} className="rounded-lg bg-ink-950/50 p-3">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-bold text-white">{bureauLabel(c.bureau)}</p>
-                    <Badge tone={tone as 'danger' | 'warn' | 'good' | 'neutral'}>{label}</Badge>
+                    <p className="text-sm font-bold text-white">{seat.title}</p>
+                    <Badge tone={tone}>{label}</Badge>
                   </div>
                   <p className="mt-1 text-xs text-slate-400">
-                    {covererId
-                      ? <>{c.primaryId ? 'Primary' : 'Acting'}: {name || 'not on the visible roster — likely a test fixture or removed account; verify in Justice Portal → Coverage'}</>
-                      : 'No active prosecutor — classified requests from this bureau are invisible at the DOJ until one is assigned (Justice Portal → Coverage).'}
+                    {seat.ids.length === 0
+                      ? seat.missing
+                      : names.map((n) => n || 'not on the visible roster — likely a test fixture or removed account').join(' · ')}
                   </p>
                 </div>
               )
             })}
           </div>
         )}
+        <p className="mt-3 text-xs text-slate-400">
+          The prosecutor role is retired: bureau approval goes straight to the judicial queue. Anyone who needs to
+          read or comment on one request is granted observer access from that request.
+        </p>
       </Panel>
 
       <TestFlagPanel roster={roster} />

@@ -1,31 +1,36 @@
 /** Deterministic legal-workflow model — the single source of truth for how a
- *  legal request is INTERPRETED across every surface (CID registry, Justice
- *  portal, request dossier, Action Center, notifications, calendar, search).
+ *  legal request is INTERPRETED across every surface (CID registry, DOJ
+ *  workspace, request dossier, Action Center, notifications, calendar, search).
  *
  *  Pure and framework-free: no React, no db, no I/O, no clock of its own (a
  *  `now` epoch is passed in). It NEVER decides access — RLS + the definer RPCs
  *  are the authority. This only shapes what an already-authorised viewer is
  *  shown: the current stage, who owns the next action, what that action is
- *  called in plain language, whether the viewer may act / may claim / is merely
- *  aware, why not, and how urgent it is.
+ *  called in plain language, whether the viewer may act / may claim, why not,
+ *  and how urgent it is.
  *
- *  Mirrors the server rules verified in the audit + LegalRequestDetail:
- *   - warrants are judge-routed; the parallel judiciary lane lets an eligible
- *     judge claim a waiting (submitted_to_doj / submitted_to_judge) non-sealed
- *     judge-routed request without an ADA hand-off (claim_legal_request_as_judge);
- *   - a prosecution-side actor or the creator can never judge their own request;
- *   - sealed requests keep their explicit-assignment audience (no open pickup);
- *   - minimal-DOJ revival (20260816120000): CID approval hands off to ONE
- *     shared prosecutor queue (atomic claim / AG assignment), prosecutorial
- *     review feeds the judicial queue, and declined/cancelled/superseded are
- *     closed terminals beside denied/withdrawn. */
+ *  Mirrors the Phase 4 stage graph (P4-01, decisions L1–L4):
+ *   - bureau approval (Bureau Lead, or SIB command for an SIB case) hands the
+ *     request STRAIGHT to the judicial queue — there is no prosecutor stage;
+ *   - any eligible judge claims a non-sealed queued request
+ *     (claim_legal_request_as_judge); a sealed request is placed by the
+ *     Attorney General (assign_judge — AG or Owner), never self-claimed;
+ *   - the creator can never judge their own request;
+ *   - a judge approves in full or in part (partially_approved), denies, or
+ *     returns; a return goes back to the investigator and resubmits to the
+ *     queue (or to bureau review again when a material change is declared);
+ *   - withdrawn / cancelled / superseded / denied are closed terminals;
+ *     approved and partially_approved run the issued → fulfilment → closed ladder;
+ *   - the retired prosecutor / ADA / DA / AG-review statuses stay renderable
+ *     as read-only history ("Retired stage — …") and own no action. */
 
 import type { Tables } from './database.types'
 import {
   REVIEW_STATUS_LABEL, SUBPOENA_FIELDS, WARRANT_FIELDS, reviewStatusLabel,
+  isDecidedApproved, isRetiredReviewStatus, isStandardOfProof,
   type SubpoenaType, type WarrantType,
 } from './justice'
-import { PERMANENT_BUREAUS, bureauLabel, bureauShort } from './roles'
+import { PERMANENT_BUREAUS, bureauShort } from './roles'
 
 /* ── Viewer context (authority mirror — server re-checks everything) ───────── */
 export interface LegalViewer {
@@ -35,16 +40,14 @@ export interface LegalViewer {
   cidActive: boolean
   /** CID rank (profiles.role) — NEVER implies justice authority. */
   cidRole: string | null
-  /** EFFECTIVE justice role, or null. buildLegalViewer maps legacy ADA/DA
-   *  memberships to 'prosecutor' (the client mirror of
-   *  private.justice_role_effective); the legacy literals stay accepted so
-   *  historical fixtures/viewers keep working. */
+  /** EFFECTIVE justice role, or null. Only 'judge' and 'attorney_general'
+   *  are live (L16); 'prosecutor' and the legacy ADA/DA literals stay
+   *  accepted so historical fixtures/viewers keep working — they confer
+   *  nothing here (the server revoked every prosecutor RPC). */
   justiceRole:
-    | 'prosecutor' | 'attorney_general' | 'judge'
-    | 'assistant_district_attorney' | 'district_attorney' | null
+    | 'judge' | 'attorney_general'
+    | 'prosecutor' | 'assistant_district_attorney' | 'district_attorney' | null
   isOwner: boolean
-  /** Bureaus this viewer is a live prosecutor for (major_crimes/street_crimes). */
-  prosecutorBureaus?: readonly string[]
   /** CID bureau (profiles.division). A Bureau Lead may only decide requests
    *  whose responsible bureau is their own -- can_approve_legal() enforces it,
    *  and without this the client showed every Bureau Lead an approve button on
@@ -60,8 +63,8 @@ export interface LegalViewer {
 }
 
 /** The request fields the model reads (a Pick keeps it decoupled from the wide
- *  row). The minimal-DOJ columns are OPTIONAL — legacy projections and test
- *  fixtures that predate the revival stay valid; absent reads as null. */
+ *  row). The newer columns are OPTIONAL — legacy projections and test
+ *  fixtures stay valid; absent reads as null. */
 export type LegalReqLike = Pick<
   Tables<'legal_requests'>,
   | 'created_by' | 'review_status' | 'document_status' | 'fulfilment_status'
@@ -70,12 +73,18 @@ export type LegalReqLike = Pick<
   | 'assigned_ada_id' | 'assigned_judge_id'
   | 'expires_at' | 'response_deadline' | 'submitted_to_doj_at'
 > & {
-  /** Minimal-DOJ revival (20260816120000): the shared-queue holder + the
+  /** Historical prosecutor-stage columns (retired by P4-01) + the
    *  amendment/supersession links. */
   assigned_prosecutor_id?: string | null
   queue_entered_at?: string | null
+  submitted_to_judge_at?: string | null
   amends_request_id?: string | null
   superseded_by_id?: string | null
+  /** SLA columns (P4-10): trigger-maintained stage clock + the reminder
+   *  sweep's marks (both cleared whenever review_status changes). */
+  stage_entered_at?: string | null
+  nudged_at?: string | null
+  escalated_at?: string | null
   /** The BUREAU OF THE CASE, which is not on legal_requests and so is only
    *  present where a case is already in context. can_approve_legal() widens
    *  approval to any Bureau Lead on a JTF case; without this the client cannot
@@ -86,65 +95,67 @@ export type LegalReqLike = Pick<
   case_authority?: string | null
 }
 
-const DECIDED = new Set(['approved', 'denied', 'withdrawn'])
-/** Administrative/prosecutorial terminals (minimal-DOJ): closed like DECIDED
- *  but recorded separately — declined is a prosecutorial refusal, cancelled an
- *  admin stop, superseded a replaced instrument. */
+/** Judicial decisions + the creator's own exit. */
+const DECIDED = new Set(['approved', 'partially_approved', 'denied', 'withdrawn'])
+/** Administrative terminals: cancelled (command/AG stop with a reason),
+ *  superseded (a replacement carries the authority) and the retired
+ *  prosecutorial `declined` (history only). */
 const ADMIN_TERMINAL = new Set(['declined', 'cancelled', 'superseded'])
 const isTerminal = (s: string): boolean => DECIDED.has(s) || ADMIN_TERMINAL.has(s)
+/** Every returned_by_* value, live and retired — all collapse to the
+ *  investigator's draft stage (the author owns the fix). */
 const RETURNED = new Set([
-  'returned_by_cid', 'returned_by_siu_command',
-  'returned_by_ada', 'returned_by_da', 'returned_by_ag',
-  'returned_by_judge', 'returned_by_prosecutor',
+  'returned_by_cid', 'returned_by_siu_command', 'returned_by_judge',
+  'returned_by_ada', 'returned_by_da', 'returned_by_ag', 'returned_by_prosecutor',
 ])
+
+export { isRetiredReviewStatus, isDecidedApproved }
 
 /* ── Stage model ──────────────────────────────────────────────────────────── */
 export type StageId =
-  | 'draft' | 'cid_review' | 'doj_intake' | 'prosecutorial_review'
-  | 'judicial_review' | 'issued' | 'fulfilment' | 'closed'
+  | 'draft' | 'cid_review' | 'judicial_queue' | 'judicial_review'
+  | 'issued' | 'fulfilment' | 'closed'
 
 export const STAGE_LABEL: Record<StageId, string> = {
   draft: 'Draft',
-  cid_review: 'CID Review',
-  // Minimal-DOJ: the intake stage IS the prosecutor queue (bureau-scoped
-  // since 20260818120000) — labelled as what it is.
-  doj_intake: 'Prosecutor queue',
-  prosecutorial_review: 'Prosecutorial Review',
-  judicial_review: 'Judicial Review',
+  cid_review: 'Bureau review',
+  judicial_queue: 'Judicial queue',
+  judicial_review: 'Judicial review',
   issued: 'Issued',
   fulfilment: 'Execution / Service',
   closed: 'Closed',
 }
 
 /** The ordered spine a request MIGHT traverse. The renderer shows only the
- *  stages relevant to the request's type/route (see stagesForRequest). */
+ *  stages relevant to the request's route (see stagesForRequest). */
 export const STAGE_ORDER: StageId[] = [
-  'draft', 'cid_review', 'doj_intake', 'prosecutorial_review',
-  'judicial_review', 'issued', 'fulfilment', 'closed',
+  'draft', 'cid_review', 'judicial_queue', 'judicial_review',
+  'issued', 'fulfilment', 'closed',
 ]
 
 /** Map a review_status to its lifecycle stage. Returned states collapse back to
- *  the stage that owns the fix (draft for the investigator). */
+ *  the stage that owns the fix (draft for the investigator). Retired statuses
+ *  land on the slot they used to precede — the judicial queue — so a
+ *  historical row still reads as "somewhere between bureau review and the
+ *  bench"; the tracker marks it "Retired stage" beside that slot. */
 export function stageForReviewStatus(status: string): StageId {
   switch (status) {
     case 'not_submitted': return 'draft'
-    case 'returned_by_cid': case 'returned_by_ada':
-    case 'returned_by_da': case 'returned_by_ag': case 'returned_by_judge': return 'draft'
-    // SIU command review occupies the same LIFECYCLE position as CID
-    // supervisor review — first approval, before the request leaves the
-    // department — even though a different person decides it. Sharing the
-    // stage keeps the progress bar honest; the wording everywhere else says
-    // who is actually holding it.
+    case 'returned_by_cid': case 'returned_by_siu_command': case 'returned_by_judge':
+    case 'returned_by_ada': case 'returned_by_da': case 'returned_by_ag':
+    case 'returned_by_prosecutor': return 'draft'
+    // SIU command review occupies the same LIFECYCLE position as bureau
+    // review — first approval, before the request leaves the department —
+    // even though a different person decides it. Sharing the stage keeps the
+    // progress bar honest; the wording everywhere else says who holds it.
     case 'cid_supervisor_review': case 'siu_command_review': return 'cid_review'
-    // The shared queue (and a prosecutor return, which re-enters via the
-    // queue's stage once the investigator resubmits) sits at DOJ intake.
-    case 'submitted_to_doj': case 'prosecutor_queue':
-    case 'returned_by_prosecutor': return 'doj_intake'
+    case 'submitted_to_judge': return 'judicial_queue'
+    // Retired DOJ intake / prosecutorial / AG-review parking (history only).
+    case 'submitted_to_doj': case 'prosecutor_queue': case 'prosecutor_review':
     case 'ada_review': case 'submitted_to_da': case 'da_review':
-    case 'submitted_to_ag': case 'ag_review':
-    case 'prosecutor_review': return 'prosecutorial_review'
-    case 'submitted_to_judge': case 'judicial_review': return 'judicial_review'
-    case 'approved': return 'issued'
+    case 'submitted_to_ag': case 'ag_review': return 'judicial_queue'
+    case 'judicial_review': return 'judicial_review'
+    case 'approved': case 'partially_approved': return 'issued'
     case 'denied': case 'withdrawn':
     case 'declined': case 'cancelled': case 'superseded': return 'closed'
     default: return 'draft'
@@ -152,41 +163,33 @@ export function stageForReviewStatus(status: string): StageId {
 }
 
 /** The overall lifecycle stage, folding in fulfilment once a request is decided.
- *  Approved requests progress through issued → fulfilment → closed by fulfilment
- *  status; denied/withdrawn are closed. */
+ *  Approved (fully or partially) requests progress through issued → fulfilment
+ *  → closed by fulfilment status; every other terminal is closed. */
 export function currentStage(r: LegalReqLike): StageId {
-  if (r.review_status === 'approved') {
+  if (isDecidedApproved(r.review_status)) {
     const f = r.fulfilment_status ?? 'unissued'
     if (['closed', 'expired', 'revoked'].includes(f)) return 'closed'
     if (['executed', 'served', 'returned', 'return_recorded', 'records_received', 'testimony_completed', 'non_compliance'].includes(f)) return 'fulfilment'
-    if (f === 'issued') return 'issued'
-    return 'issued' // approved, awaiting issuance
+    return 'issued' // issued, or approved and awaiting issuance
   }
   return stageForReviewStatus(r.review_status)
 }
 
-/** Which stages to actually render for this request (never force every request
- *  through every stage). Subpoenas skip nothing structurally but
- *  the fulfilment label differs; da/ag-routed requests still pass a judicial
- *  stage only if judge-routed. */
+/** Which stages to actually render for this request. Every live request is
+ *  judge-routed; a legacy da/ag-routed row (approval_route from the retired
+ *  pipeline) never had a bench stage, so both judicial slots are dropped. */
 export function stagesForRequest(r: LegalReqLike): StageId[] {
   const judgeRouted = (r.approval_route ?? 'judge') === 'judge'
-  return STAGE_ORDER.filter((s) => {
-    if (s === 'judicial_review') return judgeRouted
-    if (s === 'prosecutorial_review') return true // every request has a DOJ prosecutorial touchpoint (even if awareness-only)
-    return true
-  })
+  return STAGE_ORDER.filter((s) => judgeRouted || (s !== 'judicial_queue' && s !== 'judicial_review'))
 }
 
-/** Did the judiciary lane or the prosecutorial lane carry the request forward?
- *  (Surfaces show which lane advanced it.) */
+/** @deprecated The prosecutorial lane is retired (P4-01); every live request
+ *  advances through the judiciary alone. Kept for the dossier's historical
+ *  read: 'prosecutorial' only when a retired-pipeline row carries a
+ *  prosecutor/ADA assignment, 'judicial' once a judge holds or decided it. */
 export function laneThatAdvanced(r: LegalReqLike): 'judicial' | 'prosecutorial' | null {
-  const prosecuted = !!r.assigned_ada_id || !!r.assigned_prosecutor_id
-  if (r.assigned_judge_id && (r.review_status === 'judicial_review' || r.review_status === 'approved' || r.review_status === 'denied' || r.review_status === 'returned_by_judge')) {
-    // Claimed directly from DOJ intake (no prosecutor ever assigned) = judicial lane.
-    return prosecuted ? 'prosecutorial' : 'judicial'
-  }
-  if (prosecuted) return 'prosecutorial'
+  if (r.assigned_ada_id || r.assigned_prosecutor_id) return 'prosecutorial'
+  if (r.assigned_judge_id) return 'judicial'
   return null
 }
 
@@ -198,14 +201,14 @@ export function stageLabel(r: LegalReqLike): string {
 }
 
 /** Stage label, SIB-aware: an SIB request sitting in (or returned from) SIB
- *  command review must never be captioned "CID Review" — the one wording the
- *  SIB lane migration forbids. The lane is inferred from the request's own
+ *  command review must never be captioned "Bureau review" — the one wording
+ *  the SIB lane migration forbids. The lane is inferred from the request's own
  *  status; for SIB requests in later stages the shared slot still reads
- *  "CID Review" because the row alone cannot prove the lane there. */
+ *  "Bureau review" because the row alone cannot prove the lane there. */
 export function stageDisplayLabel(stage: StageId, r: LegalReqLike): string {
   if (stage === 'cid_review'
     && (r.review_status === 'siu_command_review' || r.review_status === 'returned_by_siu_command')) {
-    return 'SIB Command Review'
+    return 'SIB command review'
   }
   return STAGE_LABEL[stage]
 }
@@ -218,41 +221,42 @@ export function judgeClaimEligible(r: LegalReqLike, v: LegalViewer): boolean {
     r.created_by !== v.myId &&
     !r.assigned_judge_id &&
     (r.approval_route ?? 'judge') === 'judge' &&
+    // "sealed requests are assigned by the Attorney General" — the server's
+    // literal refusal; the client never paints the claim.
     r.classification !== 'sealed' &&
-    // claim_legal_request_as_judge accepts ONLY submitted_to_judge — the old
-    // submitted_to_doj parallel lane painted a claim the server refuses.
     r.review_status === 'submitted_to_judge'
   )
 }
 
 /* ── Responsible role — who owns the next action right now ─────────────────── */
+/** Live members: investigator, cid_supervisor, siu_command, attorney_general
+ *  (sealed assignment), assigned_judge, any_judge, none. The prosecution-side
+ *  members survive ONLY so a pre-remap historical row still names its former
+ *  holder — every one of them is labelled a retired stage and never owns an
+ *  action (viewerOwnsAction returns false for the whole retired set). */
 export type ResponsibleRole =
-  | 'investigator' | 'cid_supervisor' | 'siu_command' | 'assigned_ada' | 'bureau_prosecutor'
-  | 'district_attorney' | 'attorney_general' | 'assigned_judge' | 'any_judge'
-  | 'doj_management' | 'prosecutor' | 'none'
+  | 'investigator' | 'cid_supervisor' | 'siu_command'
+  | 'attorney_general' | 'assigned_judge' | 'any_judge' | 'none'
+  | 'assigned_ada' | 'bureau_prosecutor' | 'district_attorney' | 'doj_management' | 'prosecutor'
 
 export function responsibleRole(r: LegalReqLike): ResponsibleRole {
   const s = r.review_status
   if (s === 'not_submitted' || RETURNED.has(s)) return 'investigator'
   if (s === 'cid_supervisor_review') return 'cid_supervisor'
   if (s === 'siu_command_review') return 'siu_command'
-  if (s === 'submitted_to_doj') return r.assigned_ada_id ? 'assigned_ada' : (r.approval_route === 'judge' ? 'any_judge' : 'doj_management')
-  // Shared queue: sealed requests wait for AG assignment; everything else is
-  // any active prosecutor's to claim.
-  if (s === 'prosecutor_queue') return r.classification === 'sealed' ? 'attorney_general' : 'prosecutor'
-  if (s === 'prosecutor_review') return 'prosecutor'
-  if (s === 'ada_review') return 'assigned_ada'
-  if (s === 'da_review' || s === 'submitted_to_da') return 'district_attorney'
-  if (s === 'ag_review' || s === 'submitted_to_ag') return 'attorney_general'
   if (s === 'submitted_to_judge') {
     if (r.assigned_judge_id) return 'assigned_judge'
     return r.classification === 'sealed' ? 'attorney_general' : 'any_judge'
   }
   if (s === 'judicial_review') return 'assigned_judge'
-  if (s === 'approved') {
-    // operational phase — responsibility is the executing/serving officer, tracked elsewhere
-    return 'none'
-  }
+  // Retired parking states — history only; the member names who USED to hold it.
+  if (s === 'ada_review') return 'assigned_ada'
+  if (s === 'submitted_to_doj') return r.assigned_ada_id ? 'assigned_ada' : 'doj_management'
+  if (s === 'prosecutor_queue' || s === 'prosecutor_review') return 'prosecutor'
+  if (s === 'da_review' || s === 'submitted_to_da') return 'district_attorney'
+  if (s === 'ag_review' || s === 'submitted_to_ag') return 'attorney_general'
+  // decided / operational phase — responsibility is the executing/serving
+  // officer, tracked elsewhere
   return 'none'
 }
 
@@ -260,18 +264,21 @@ export const RESPONSIBLE_ROLE_LABEL: Record<ResponsibleRole, string> = {
   investigator: 'Requesting investigator',
   cid_supervisor: 'Bureau Lead',
   siu_command: 'SIB command (X-1)',
-  assigned_ada: 'Assigned ADA (retired stage)',
-  bureau_prosecutor: 'Bureau prosecutor',
-  district_attorney: 'District Attorney',
   attorney_general: 'Attorney General',
   assigned_judge: 'Assigned Judge',
   any_judge: 'Any eligible Judge',
-  doj_management: 'DOJ management',
-  prosecutor: 'Prosecutor',
   none: '—',
+  assigned_ada: 'Retired stage (ADA)',
+  bureau_prosecutor: 'Retired stage (bureau prosecutor)',
+  district_attorney: 'Retired stage (District Attorney)',
+  doj_management: 'Retired stage (DOJ intake)',
+  prosecutor: 'Retired stage (prosecutor)',
 }
 
 /* ── Operational grouping — ONE primary group per request/viewer ──────────── */
+/** `waiting_doj` now means "parked in a retired stage"; `waiting_prosecution`
+ *  and `awareness` are kept in the union for the registry's saved filters
+ *  but are no longer emitted (no prosecutor lane, no bureau awareness). */
 export type OpGroup =
   | 'needs_action' | 'returned_to_you' | 'available_to_claim' | 'assigned_to_you'
   | 'waiting_cid' | 'waiting_doj' | 'waiting_prosecution' | 'waiting_judge'
@@ -282,9 +289,9 @@ export const OP_GROUP_LABEL: Record<OpGroup, string> = {
   returned_to_you: 'Returned to you',
   available_to_claim: 'Available to claim',
   assigned_to_you: 'Assigned to you',
-  waiting_cid: 'Waiting on CID',
-  waiting_doj: 'Waiting at DOJ',
-  waiting_prosecution: 'Waiting on prosecution',
+  waiting_cid: 'Waiting on bureau review',
+  waiting_doj: 'Parked in a retired stage',
+  waiting_prosecution: 'Waiting on prosecution (retired)',
   waiting_judge: 'Waiting on Judge',
   issued_active: 'Issued and active',
   service_return_pending: 'Service or return pending',
@@ -304,9 +311,9 @@ export interface LegalDisposition {
   nextAction: string
   /** The viewer can perform the next action themselves right now. */
   viewerCanAct: boolean
-  /** The viewer may CLAIM the request (judge parallel lane). */
+  /** The viewer may CLAIM the request (open judicial queue). */
   viewerCanClaim: boolean
-  /** The viewer only sees it for bureau awareness — NOT assigned work. */
+  /** Visible without any action for the viewer (e.g. an observer grant). */
   awarenessOnly: boolean
   /** When !viewerCanAct, a short reason. */
   whyNoAction: string | null
@@ -349,38 +356,20 @@ function viewerOwnsAction(r: LegalReqLike, v: LegalViewer): boolean {
   if (s === 'siu_command_review') {
     return !isCreator && (v.isOwner || v.siuIsCommand === true)
   }
-  if (s === 'ada_review') return mine && r.assigned_ada_id === v.myId
-  if (s === 'da_review') return v.justiceRole === 'district_attorney'
-  if (s === 'ag_review') return v.justiceRole === 'attorney_general'
-  // Shared prosecutor queue (minimal-DOJ): any active prosecutor owns the
-  // claim on a non-sealed request they didn't create; sealed rows are the
-  // AG's to assign (legal_claim_prosecutor refuses them server-side).
-  if (s === 'prosecutor_queue') {
-    if (r.classification === 'sealed') return v.justiceRole === 'attorney_general' || v.isOwner
-    return v.justiceRole === 'prosecutor' && !isCreator
-  }
-  if (s === 'prosecutor_review') return mine && (r.assigned_prosecutor_id ?? null) === v.myId
   // Judicial queue: an eligible judge owns the claim; a sealed request waits
-  // for formal assignment (assign_judge — AG/Owner or the approving prosecutor).
+  // for formal placement by the Attorney General (assign_judge — AG/Owner).
   if (s === 'submitted_to_judge') {
     if (r.assigned_judge_id) return mine && r.assigned_judge_id === v.myId
     if (r.classification === 'sealed') return v.justiceRole === 'attorney_general' || v.isOwner
     return v.justiceRole === 'judge' && !isCreator
   }
   if (s === 'judicial_review') return mine && r.assigned_judge_id === v.myId
-  // Parked at DOJ with no routing prosecutor: assigning one IS the next
-  // action, and it belongs to DOJ management — without this branch a
-  // coverage-gap request was nobody's action item (which is exactly how
-  // seven warrants sat unnoticed for two weeks).
-  if (s === 'submitted_to_doj') {
-    return !r.assigned_ada_id
-      && (v.justiceRole === 'district_attorney' || v.justiceRole === 'attorney_general' || v.isOwner)
-  }
+  // Retired stages own nothing: their RPCs are EXECUTE-revoked, so painting
+  // a control here would produce a button the database refuses.
   return false
 }
 
-/** Canonical disposition for a viewer + request. Awareness-only is resolved
- *  LAST so bureau-visibility never masquerades as assigned work. */
+/** Canonical disposition for a viewer + request. */
 export function dispositionFor(r: LegalReqLike, v: LegalViewer, now: number): LegalDisposition {
   const stage = currentStage(r)
   const respRole = responsibleRole(r)
@@ -391,32 +380,29 @@ export function dispositionFor(r: LegalReqLike, v: LegalViewer, now: number): Le
   const s = r.review_status
 
   let group: OpGroup
-  let awarenessOnly = false
   let whyNoAction: string | null = null
 
   if (isTerminal(s)) {
-    // approved runs the fulfilment ladder; every other terminal (denied,
-    // withdrawn, declined, cancelled, superseded) is closed.
-    group = s === 'approved' ? issuedGroup(r) : 'closed'
+    // approved / partially_approved run the fulfilment ladder; every other
+    // terminal (denied, withdrawn, cancelled, superseded, retired declined)
+    // is closed.
+    group = isDecidedApproved(s) ? issuedGroup(r) : 'closed'
   } else if (canAct) {
-    // Queue ownership is claim-shaped: the shared prosecutor queue and the
-    // open judicial queue read as "available to claim", not assigned work.
-    const claimShaped = (s === 'prosecutor_queue' && respRole === 'prosecutor')
-      || (s === 'submitted_to_judge' && !r.assigned_judge_id && respRole === 'any_judge')
+    // Queue ownership is claim-shaped: the open judicial queue reads as
+    // "available to claim", not assigned work.
+    const claimShaped = s === 'submitted_to_judge' && !r.assigned_judge_id && respRole === 'any_judge'
     group = isCreator && RETURNED.has(s) ? 'returned_to_you'
       : claimShaped ? 'available_to_claim'
-      : (respRole === 'assigned_judge' || respRole === 'assigned_ada'
-          || (respRole === 'prosecutor' && s === 'prosecutor_review'))
-        ? 'assigned_to_you'
-        : 'needs_action'
+      : respRole === 'assigned_judge' ? 'assigned_to_you'
+      : 'needs_action'
   } else if (canClaim) {
     group = 'available_to_claim'
   } else {
-    // Not the viewer's action. Bucket by who IS waited on; flag bureau awareness.
-    if (isCreator) group = 'waiting_' + waitingLane(r) as OpGroup
-    else if (isBureauAwareness(r, v)) { group = 'awareness'; awarenessOnly = true; whyNoAction = 'Visible for bureau awareness — no action is assigned to you.' }
-    else group = 'waiting_' + waitingLane(r) as OpGroup
-    if (!whyNoAction) whyNoAction = `Waiting on ${RESPONSIBLE_ROLE_LABEL[respRole].toLowerCase()}.`
+    // Not the viewer's action. Bucket by who IS waited on.
+    group = 'waiting_' + waitingLane(r) as OpGroup
+    whyNoAction = isRetiredReviewStatus(s)
+      ? 'Parked in a retired review stage — read-only history; no action is available here.'
+      : `Waiting on ${RESPONSIBLE_ROLE_LABEL[respRole].toLowerCase()}.`
   }
 
   return {
@@ -425,10 +411,10 @@ export function dispositionFor(r: LegalReqLike, v: LegalViewer, now: number): Le
     statusLabel: reviewStatusLabel(s),
     responsibleRole: respRole,
     responsibleRoleLabel: RESPONSIBLE_ROLE_LABEL[respRole],
-    nextAction: nextActionLabel(r, v, { canAct, canClaim, awarenessOnly }),
+    nextAction: nextActionLabel(r, v, { canAct, canClaim }),
     viewerCanAct: canAct,
     viewerCanClaim: canClaim,
-    awarenessOnly,
+    awarenessOnly: false,
     whyNoAction,
     group,
     groupLabel: OP_GROUP_LABEL[group],
@@ -437,19 +423,18 @@ export function dispositionFor(r: LegalReqLike, v: LegalViewer, now: number): Le
 }
 
 /** How many of `rows` currently need THIS viewer's own action (dispositionFor's
- *  viewerCanAct — awareness-only and claimable rows are excluded). Drives the
- *  case Legal tab's attention marker; pure so it stays unit-testable. */
+ *  viewerCanAct — claimable rows are excluded). Drives the case Legal tab's
+ *  attention marker; pure so it stays unit-testable. */
 export function countViewerActionable(rows: readonly LegalReqLike[], v: LegalViewer, now: number): number {
   return rows.reduce((n, r) => n + (dispositionFor(r, v, now).viewerCanAct ? 1 : 0), 0)
 }
 
-function waitingLane(r: LegalReqLike): 'cid' | 'doj' | 'prosecution' | 'judge' {
+/** Who a non-actor is waiting on: the bureau gate, the bench, or (history
+ *  only) a retired stage nobody can advance. */
+function waitingLane(r: LegalReqLike): 'cid' | 'judge' | 'doj' {
   const s = r.review_status
   if (s === 'cid_supervisor_review' || s === 'siu_command_review') return 'cid'
-  // The shared queue + prosecutor states wait at DOJ.
-  if (['submitted_to_doj', 'prosecutor_queue', 'prosecutor_review'].includes(s)) return 'doj'
-  if (['ada_review', 'da_review', 'ag_review', 'submitted_to_da', 'submitted_to_ag'].includes(s)) return 'prosecution'
-  if (['submitted_to_judge', 'judicial_review'].includes(s)) return 'judge'
+  if (s === 'submitted_to_judge' || s === 'judicial_review') return 'judge'
   return 'doj'
 }
 
@@ -465,60 +450,42 @@ function issuedGroup(r: LegalReqLike): OpGroup {
   return 'issued_active'
 }
 
-/** A bureau prosecutor sees a DOJ-submitted request for their covered bureau
- *  that isn't assigned to them and that they can't act on — awareness only. */
-export function isBureauAwareness(r: LegalReqLike, v: LegalViewer): boolean {
-  if (!v.prosecutorBureaus?.length) return false
-  if (r.review_status !== 'submitted_to_doj') return false
-  if (r.assigned_ada_id === v.myId) return false
-  return v.prosecutorBureaus.includes(r.responsible_bureau ?? '')
-}
-
 /* ── Next-action labels ───────────────────────────────────────────────────── */
 function nextActionLabel(
   r: LegalReqLike, v: LegalViewer,
-  flags: { canAct: boolean; canClaim: boolean; awarenessOnly: boolean },
+  flags: { canAct: boolean; canClaim: boolean },
 ): string {
   const s = r.review_status
   const isCreator = !!v.myId && r.created_by === v.myId
   if (isTerminal(s)) {
     if (s === 'withdrawn') return 'Withdrawn'
     if (s === 'denied') return 'Denied'
-    if (s === 'declined') return 'Declined by prosecutor'
+    if (s === 'declined') return 'Declined (retired stage)'
     if (s === 'cancelled') return 'Cancelled'
     if (s === 'superseded') return 'Superseded'
-    return issuedActionLabel(r) // approved
+    return issuedActionLabel(r) // approved / partially_approved
   }
   if (flags.canAct) {
     if (s === 'not_submitted') return 'Finish draft'
     if (RETURNED.has(s)) return 'Revise and resubmit'
     if (s === 'cid_supervisor_review') return 'Review as Bureau Lead'
     if (s === 'siu_command_review') return 'Review as SIB command'
-    // ADA/DA review stages were retired in Phase 1 (20260808140000): their RPCs are
-    // EXECUTE-revoked, so a row parked there is history and cannot be actioned.
-    if (s === 'ada_review' || s === 'da_review') return 'Retired review stage — no action available'
-    if (s === 'ag_review') return 'Review as AG'
-    if (s === 'prosecutor_queue') {
-      return r.classification === 'sealed' ? 'Assign a prosecutor' : 'Claim from the queue'
-    }
-    if (s === 'prosecutor_review') return 'Review as prosecutor'
     if (s === 'submitted_to_judge') {
+      if (r.assigned_judge_id) return 'Decide request'
       if (r.classification === 'sealed') return 'Assign a Judge'
       return v.justiceRole === 'judge' ? 'Claim for judicial review' : 'Assign a Judge'
     }
     if (s === 'judicial_review') return 'Decide request'
   }
   if (flags.canClaim) return 'Take for judicial review'
-  if (flags.awarenessOnly) return 'Awareness only'
   if (isCreator && RETURNED.has(s)) return 'Revise and resubmit'
+  if (isRetiredReviewStatus(s)) return 'Retired stage — no action available'
   // waiting on someone else
   const role = responsibleRole(r)
   if (role === 'any_judge') return 'Available for judicial pickup'
-  if (role === 'cid_supervisor') return 'Waiting on CID review'
+  if (role === 'cid_supervisor') return 'Waiting on bureau review'
   if (role === 'siu_command') return 'Waiting on SIB command'
-  if (role === 'assigned_ada' || role === 'bureau_prosecutor') return 'Parked in a retired review stage'
-  if (role === 'prosecutor') return s === 'prosecutor_queue' ? 'Waiting in the prosecutor queue' : 'Waiting on the prosecutor'
-  if (role === 'district_attorney' || role === 'attorney_general') return 'Waiting on prosecution'
+  if (role === 'attorney_general') return 'Waiting on Attorney General assignment'
   if (role === 'assigned_judge') return 'Waiting on Judge'
   return 'No action required'
 }
@@ -529,7 +496,6 @@ export function issuedActionLabel(r: LegalReqLike): string {
   if (f === 'unissued') return 'Awaiting issuance'
   if (f === 'issued') return r.request_type === 'subpoena' ? 'Record service' : 'Record execution'
   if (f === 'executed') return 'File return'
-  if (['returned', 'return_recorded', 'records_received', 'testimony_completed', 'served', 'closed', 'expired', 'revoked', 'non_compliance'].includes(f)) return 'No action required'
   return 'No action required'
 }
 
@@ -572,7 +538,8 @@ export function issuedStateFor(r: LegalReqLike, now?: number): IssuedState {
 }
 
 /* ── Urgency + deadline state ─────────────────────────────────────────────── */
-const DAY = 86_400_000
+const HOUR = 3_600_000
+const DAY = 24 * HOUR
 export function urgencyFor(r: LegalReqLike, now: number): Urgency {
   const d = activeDeadline(r)
   if (!d) return 'none'
@@ -591,6 +558,60 @@ export function activeDeadline(r: LegalReqLike): { at: string; kind: 'expires' |
   if (r.response_deadline) return { at: r.response_deadline, kind: 'deadline' }
   if (r.expires_at) return { at: r.expires_at, kind: 'expires' }
   return null
+}
+
+/* ── SLA chips (P4-10) ────────────────────────────────────────────────────── */
+export type SlaChipId = 'escalated' | 'nudged' | 'expiring' | 'deadline_passed'
+export interface SlaChip {
+  id: SlaChipId
+  label: string
+  tone: 'warn' | 'danger'
+}
+
+/** Compact "3d" / "5h" / "20m" — pure, locale-free (the chip is a badge, not prose). */
+function shortDuration(ms: number): string {
+  const abs = Math.max(0, ms)
+  if (abs >= DAY) return `${Math.floor(abs / DAY)}d`
+  if (abs >= HOUR) return `${Math.floor(abs / HOUR)}h`
+  return `${Math.max(1, Math.floor(abs / 60_000))}m`
+}
+
+/** Fulfilment states in which an expiry or response deadline no longer
+ *  matters — the instrument is finished, so no SLA chip should nag. */
+const SLA_QUIET_FULFILMENT = new Set([
+  'closed', 'expired', 'revoked', 'returned', 'return_recorded',
+  'records_received', 'testimony_completed',
+])
+
+/** The reminder sweep's marks + the two deadline pressures, as badge chips.
+ *  Escalation implies an earlier nudge, so only the stronger mark renders.
+ *  Both marks are cleared server-side when the stage changes, so a chip
+ *  here always describes the CURRENT stage. Expiry shows only while issued
+ *  and inside 72 h; a passed subpoena response deadline shows while the
+ *  subpoena is still live. Pure: `now` is passed in. */
+export function slaChips(r: LegalReqLike, now: number): SlaChip[] {
+  const out: SlaChip[] = []
+  const live = !isTerminal(r.review_status)
+  if (live && r.escalated_at) {
+    out.push({ id: 'escalated', tone: 'danger', label: `Escalated ${shortDuration(now - Date.parse(r.escalated_at))} ago` })
+  } else if (live && r.nudged_at) {
+    out.push({ id: 'nudged', tone: 'warn', label: `Nudged ${shortDuration(now - Date.parse(r.nudged_at))} ago` })
+  }
+  const quiet = SLA_QUIET_FULFILMENT.has(r.fulfilment_status ?? '')
+  if (!quiet && r.expires_at) {
+    const t = Date.parse(r.expires_at)
+    const left = t - now
+    if (!Number.isNaN(t) && left > 0 && left <= 72 * HOUR) {
+      out.push({ id: 'expiring', tone: 'warn', label: `Expires in ${shortDuration(left)}` })
+    }
+  }
+  if (!quiet && r.request_type === 'subpoena' && r.response_deadline) {
+    const t = Date.parse(r.response_deadline)
+    if (!Number.isNaN(t) && t < now) {
+      out.push({ id: 'deadline_passed', tone: 'danger', label: `Response deadline passed ${shortDuration(now - t)} ago` })
+    }
+  }
+  return out
 }
 
 /** §9 "why is this stuck", CID lane.
@@ -615,9 +636,9 @@ export function activeDeadline(r: LegalReqLike): { at: string; kind: 'expires' |
 function cidReviewExplanation(r: LegalReqLike, v?: LegalViewer): string {
   const bureau = r.responsible_bureau ? bureauShort(r.responsible_bureau) : 'the responsible bureau'
   const base =
-    `This request is awaiting command review before it can be approved and issued. `
-    + `It can be decided by the ${bureau} Bureau Lead, or by any Deputy Director or `
-    + `Director standing in for them. On a joint (JTF) case, any Bureau Lead may act.`
+    `This request is awaiting bureau review. It can be decided by the ${bureau} Bureau Lead, `
+    + `or by any Deputy Director or Director standing in for them. On a joint (JTF) case, any `
+    + `Bureau Lead may act. Once approved it goes straight to the judicial queue.`
 
   if (!v?.myId || r.created_by !== v.myId) return base
 
@@ -635,41 +656,32 @@ function cidReviewExplanation(r: LegalReqLike, v?: LegalViewer): string {
 export function routingExplanation(r: LegalReqLike, v?: LegalViewer): string {
   const s = r.review_status
   const sealed = r.classification === 'sealed'
-  const judgeRouted = (r.approval_route ?? 'judge') === 'judge'
-  if (v && isBureauAwareness(r, v)) {
-    return 'This request is visible to you for bureau awareness. No action is currently assigned to you.'
-  }
   if (s === 'not_submitted') return 'This request is a draft and has not been submitted for review.'
-  if (RETURNED.has(s)) return 'This request was returned for revision and is with the requesting investigator.'
+  if (RETURNED.has(s)) {
+    return s === 'returned_by_judge'
+      ? 'The Judge returned this request for revision. Once the investigator resubmits it with a change summary it goes back to the judicial queue — or back through bureau review if a material change is declared.'
+      : 'This request was returned for revision and is with the requesting investigator. Resubmission needs a change summary.'
+  }
   if (s === 'cid_supervisor_review') return cidReviewExplanation(r, v)
   // §9 "why is this stuck", SIB lane. Says who is holding it AND where it goes
-  // next, because the SIB route is not the one most readers know: it skips the
-  // prosecutor queue entirely and goes X-1 → Attorney General → Judge.
-  if (s === 'siu_command_review') return 'This request is awaiting SIB command review. SIB legal requests do not go to a CID Bureau Lead or into a prosecutor queue — once SIB command approves, this goes to the Attorney General, and then to a Judge if it needs a warrant.'
-  if (s === 'submitted_to_doj') {
-    if (sealed) return 'This sealed request is not available for open judicial pickup. It requires explicit assignment under the sealed-request access rules.'
-    if (judgeRouted) return 'This request passed CID review and is waiting at DOJ. The responsible bureau prosecutor can review it, while an eligible Judge may claim it directly because the request is Judge-routed and not sealed.'
-    return 'This request passed CID review and is waiting at DOJ for prosecutorial assignment.'
-  }
-  if (s === 'prosecutor_queue') {
-    if (sealed) return 'This sealed request is not claimable from the queue. It waits for formal prosecutor assignment by the Attorney General.'
-    return `Waiting in the ${r.responsible_bureau ? bureauLabel(r.responsible_bureau) : 'responsible bureau'} prosecutor queue — prosecutors covering that bureau (home or temporary coverage) may claim it.`
-  }
-  if (s === 'prosecutor_review') return 'This request is under prosecutorial review by the assigned prosecutor, who may approve it for judicial review, return it for corrections, or decline it.'
-  if (s === 'ada_review' || s === 'da_review') return 'This request is parked in a retired review stage (the ADA/DA pipeline was retired). It cannot be actioned here — the Attorney General can reassign it.'
-  if (s === 'ag_review') return 'This request is under Attorney General review.'
+  // next: SIB legal work never touches a CID Bureau Lead, and once X-1
+  // approves it lands in the judicial queue directly — the Attorney General is
+  // notified for oversight but holds no gate.
+  if (s === 'siu_command_review') return 'This request is awaiting SIB command review. SIB legal requests do not go to a CID Bureau Lead — once SIB command (X-1) approves, it goes straight to the judicial queue, with the Attorney General notified for oversight only.'
   if (s === 'submitted_to_judge') {
     if (r.assigned_judge_id) return 'This request is assigned to a Judge for judicial review.'
-    if (sealed) return 'This sealed request is not claimable from the judicial queue. It waits for formal judicial assignment.'
-    return 'This request cleared prosecutorial review and is waiting in the judicial queue — any eligible Judge may claim it.'
+    if (sealed) return 'This sealed request is not claimable from the judicial queue. It waits for the Attorney General to assign a Judge; if no Attorney General is active, the Owner is alerted and may assign.'
+    return 'This request passed bureau review and is waiting in the judicial queue — any eligible Judge may claim it. There is no prosecutor stage.'
   }
-  if (s === 'judicial_review') return 'This request is under judicial review by the assigned Judge.'
+  if (s === 'judicial_review') return 'This request is under judicial review by the assigned Judge, who may approve it in full or in part, deny it, or return it for revision.'
   if (s === 'approved') return 'This request was approved and is now in its operational (issuance / service) phase.'
+  if (s === 'partially_approved') return 'This request was partially approved — the Judge narrowed its scope per target, and only the approved targets may be issued and executed. It is now in its operational phase.'
   if (s === 'denied') return 'This request was denied.'
   if (s === 'withdrawn') return 'This request was withdrawn by the requester.'
-  if (s === 'declined') return 'This request was declined by the prosecutor — a terminal prosecutorial refusal with the reason on record.'
   if (s === 'cancelled') return 'This request was cancelled administratively with a recorded reason.'
   if (s === 'superseded') return 'This request was superseded — a replacement request now carries the authority; the issued snapshot stays immutable.'
+  if (s === 'declined') return 'This request was declined by a prosecutor under the retired prosecutorial stage — a closed historical record.'
+  if (isRetiredReviewStatus(s)) return 'This request is parked in a retired review stage (the prosecutor / DA / AG-review pipeline was removed). It is read-only history and cannot be actioned here.'
   return REVIEW_STATUS_LABEL[s] ?? s
 }
 
@@ -751,32 +763,23 @@ export function fulfilmentEvents(r: LegalFulfilmentLike): FulfilmentEvent[] {
   return out
 }
 
-/* ── Justice approval matrix — client mirror of can_review_justice_role ───── */
+/* ── Justice approval matrix — client mirror of justice_appoint (L16) ──────── */
+/** Who may appoint / approve a justice membership for `requestedRole`: judges
+ *  by the Attorney General or the Owner; an Attorney General by the Owner
+ *  only. The prosecutor / ADA / DA roles are retired — nobody can grant them
+ *  (the server raises "the prosecutor role is retired"), so the answer is
+ *  false even for the Owner. */
 export function canReviewJusticeRole(
   reviewerRole: LegalViewer['justiceRole'], isOwner: boolean, requestedRole: string,
 ): boolean {
-  if (isOwner) return true
-  // Minimal-DOJ appointment matrix (justice_appoint): the AG appoints
-  // prosecutors and judges; an Attorney General stays Owner-only.
-  if (requestedRole === 'prosecutor') return reviewerRole === 'attorney_general'
-  if (requestedRole === 'assistant_district_attorney') return reviewerRole === 'district_attorney' || reviewerRole === 'attorney_general'
-  if (requestedRole === 'district_attorney') return reviewerRole === 'attorney_general'
-  // Judges are reviewed by the AG (server: 20260731010000). AG memberships
-  // stay Owner-only.
-  if (requestedRole === 'judge') return reviewerRole === 'attorney_general'
+  if (requestedRole === 'judge') return isOwner || reviewerRole === 'attorney_general'
+  if (requestedRole === 'attorney_general') return isOwner
   return false
 }
 
 /* ── Assignment eligibility ───────────────────────────────────────────────── */
 export function canAssignAsJudge(entry: { active: boolean; justice_role: string }): boolean {
   return entry.active && entry.justice_role === 'judge'
-}
-export function canAssignAsProsecutor(entry: { active: boolean; justice_role: string }): boolean {
-  return entry.active && (
-    entry.justice_role === 'prosecutor'
-    || entry.justice_role === 'assistant_district_attorney'
-    || entry.justice_role === 'district_attorney'
-  )
 }
 
 /* ── Target formatting ────────────────────────────────────────────────────── */
@@ -798,8 +801,8 @@ export function subtypeSupportsStructuredTargets(requestType: string, subtype: s
 /* ── Responsible-bureau resolution — the client mirror of the server chain ────
  * private.legal_resolve_bureau (migration 20260815120000) resolves the bureau
  * that routes a case's legal work: operational assignment (cases.bureau='JTF')
- * is NOT a prosecutorial lane, so a JTF case routes through its RESPONSIBLE
- * bureau. One chain, everywhere: bureau (when permanent) → originating_bureau →
+ * is NOT a review lane, so a JTF case routes through its RESPONSIBLE bureau.
+ * One chain, everywhere: bureau (when permanent) → originating_bureau →
  * case-number prefix → lead detective's division → creator's division. The
  * server persists a successful derivation to cases.originating_bureau; this
  * mirror only explains and previews — RLS and definer RPCs stay the authority. */
@@ -868,12 +871,17 @@ export const canChangeResponsibleBureau = (role: string | null | undefined, isOw
  * exist, what each step still needs, and the exact client mirror of the
  * server-side validation in create_legal_request / submit_legal_request_to_cid.
  * The server revalidates everything — this only keeps the UI honest. */
-export type LegalWizardStepId = 'type' | 'case_target' | 'details' | 'narrative' | 'review'
+export type LegalWizardStepId =
+  | 'type' | 'case_target' | 'charges' | 'details' | 'evidence' | 'narrative' | 'review'
 
+/** Step order (contract §10, L14 / P4-04 / P4-08). Charges and evidence are
+ *  optional everywhere — they never block, they only advise. */
 export const LEGAL_WIZARD_STEPS: readonly { id: LegalWizardStepId; label: string }[] = [
   { id: 'type', label: 'Type' },
   { id: 'case_target', label: 'Case & target' },
+  { id: 'charges', label: 'Charges' },
   { id: 'details', label: 'Details' },
+  { id: 'evidence', label: 'Evidence' },
   { id: 'narrative', label: 'Narrative' },
   { id: 'review', label: 'Review & submit' },
 ]
@@ -896,11 +904,30 @@ export interface LegalWizardInput {
    *  clear fix path); undefined = not evaluated (legacy callers — no issue,
    *  the server still enforces). */
   routingBureau?: RoutingBureau | null
+  /** Selected case charges (the legal_set_charges payload shape). Optional
+   *  everywhere; an arrest warrant with none gets an ADVISORY, never a block. */
+  charges?: readonly { case_charge_id: string; counts: number }[]
+  /** P4-04 — the warrant's standard of proof and probable-cause statement.
+   *  Both live in form_data server-side; the explicit fields win, and the
+   *  form keys (`standard_of_proof`, `pc_statement`) are read as a fallback
+   *  so a wizard that keeps them in `form` needs no extra plumbing. */
+  standardOfProof?: string | null
+  pcStatement?: string
+  /** Resubmission from a returned_* state: the server refuses without a
+   *  change summary ("a change summary is required when resubmitting"). */
+  isResubmission?: boolean
+  changeSummary?: string
 }
 
-/** Outstanding issues for one wizard step. `review` is the union of every
- *  earlier step — empty means the request would pass the server's submission
- *  checks (submit_legal_request_to_cid). */
+const standardOf = (w: LegalWizardInput): string =>
+  (w.standardOfProof ?? w.form.standard_of_proof ?? '').trim()
+const pcStatementOf = (w: LegalWizardInput): string =>
+  (w.pcStatement ?? w.form.pc_statement ?? '').trim()
+
+/** Outstanding BLOCKING issues for one wizard step. `review` is the union of
+ *  every earlier step — empty means the request would pass the server's
+ *  submission checks (submit_legal_request_to_cid). Charges and evidence never
+ *  block (see legalWizardAdvisories). */
 export function legalWizardIssues(step: LegalWizardStepId, w: LegalWizardInput): string[] {
   const issues: string[] = []
   const warrant = w.requestType === 'warrant'
@@ -924,6 +951,10 @@ export function legalWizardIssues(step: LegalWizardStepId, w: LegalWizardInput):
     }
     return issues
   }
+  // Charges and exhibits are optional on every request type — the server
+  // accepts a submission without either. Advisory wording lives in
+  // legalWizardAdvisories so a wizard never blocks on them.
+  if (step === 'charges' || step === 'evidence') return issues
   if (step === 'details') {
     const spec = warrant
       ? WARRANT_FIELDS[w.subtype as WarrantType] ?? []
@@ -946,17 +977,44 @@ export function legalWizardIssues(step: LegalWizardStepId, w: LegalWizardInput):
   if (step === 'narrative') {
     if (!w.title.trim()) issues.push('A title is required.')
     if (!w.narrative.trim()) issues.push(warrant ? 'A description / justification is required.' : 'A reason for the subpoena is required.')
-    if (warrant && !w.priority) issues.push('A warrant requires a priority.')
+    if (warrant) {
+      if (!w.priority) issues.push('A warrant requires a priority.')
+      // P4-04 — submit_legal_request_to_cid refuses a warrant without a
+      // recognised standard of proof and a non-blank probable-cause statement.
+      if (!isStandardOfProof(standardOf(w))) issues.push('A warrant must declare its standard of proof (probable cause or reasonable suspicion).')
+      if (!pcStatementOf(w)) issues.push('A warrant requires a probable-cause statement.')
+    }
     return issues
   }
-  // review — the union of every earlier step.
-  return (['type', 'case_target', 'details', 'narrative'] as const)
+  // review — the union of every earlier step, plus the resubmission rule.
+  const all = (['type', 'case_target', 'charges', 'details', 'evidence', 'narrative'] as const)
     .flatMap((s) => legalWizardIssues(s, w))
+  if (w.isResubmission && !(w.changeSummary ?? '').trim()) {
+    all.push('A change summary is required when resubmitting.')
+  }
+  return all
+}
+
+/** NON-blocking advice for a step (the review step unions every step's).
+ *  Today: an arrest warrant filed without a single charge — the court packet
+ *  prints charges, so an empty list is almost always an oversight, but the
+ *  server accepts it and so does the wizard. */
+export function legalWizardAdvisories(step: LegalWizardStepId, w: LegalWizardInput): string[] {
+  if (step === 'review') {
+    return (['type', 'case_target', 'charges', 'details', 'evidence', 'narrative'] as const)
+      .flatMap((s) => legalWizardAdvisories(s, w))
+  }
+  if (step === 'charges' && w.requestType === 'warrant' && w.subtype === 'arrest_warrant'
+      && (w.charges?.length ?? 0) === 0) {
+    return ['No charges are attached — an arrest warrant is normally filed with at least one charge from the case.']
+  }
+  return []
 }
 
 /** What "Save as draft" needs — the exact client mirror of create_legal_request
  *  (a draft needs a case, a title and the target rules, but NOT the narrative,
- *  priority or type-specific detail fields the submission check adds). */
+ *  priority, standard of proof or type-specific detail fields the submission
+ *  check adds). */
 export function legalWizardDraftIssues(w: LegalWizardInput): string[] {
   const issues: string[] = []
   issues.push(...legalWizardIssues('type', w))

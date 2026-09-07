@@ -29,7 +29,7 @@ vi.mock('./supabase', () => ({
   }),
 }))
 
-import { caseVersionKey, createDebouncedBump, resetRealtime, subscribeCaseTable, subscribeTable, useRealtimeStore } from './realtime'
+import { caseVersionKey, createDebouncedBump, resetRealtime, rowVersionKey, subscribeCaseTable, subscribeRowScoped, subscribeTable, useRealtimeStore } from './realtime'
 
 const byName = (name: string) => channels.find((c) => c.name === name)
 const version = (key: string) => useRealtimeStore.getState().versions[key] ?? 0
@@ -160,5 +160,57 @@ describe('subscribeCaseTable', () => {
     expect(version(caseVersionKey('media', 'c1'))).toBe(1)
     vi.advanceTimersByTime(300)
     expect(version(caseVersionKey('media', 'c1'))).toBe(2)
+  })
+})
+
+/* ── Column-scoped channels (P4-05: one request's comments) ─────────────── */
+describe('subscribeRowScoped', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.stubGlobal('window', {})
+    channels.length = 0
+    removed.length = 0
+    resetRealtime()
+    useRealtimeStore.setState({ versions: {} })
+  })
+  afterEach(() => { vi.runAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
+
+  it('keeps the historical case key and channel name for case_id scopes', () => {
+    expect(rowVersionKey('media', 'case_id', 'c1')).toBe(caseVersionKey('media', 'c1'))
+    expect(caseVersionKey('media', 'c1')).toBe('media:c1')
+    subscribeRowScoped('media', 'case_id', 'c1')
+    expect(channels.map((c) => c.name)).toEqual(['rt_media_c1'])
+  })
+
+  it('namespaces other columns so two scopes on one table never collide', () => {
+    expect(rowVersionKey('legal_request_comments', 'legal_request_id', 'r1'))
+      .not.toBe(rowVersionKey('legal_request_comments', 'case_id', 'r1'))
+    subscribeRowScoped('legal_request_comments', 'legal_request_id', 'r1')
+    subscribeRowScoped('legal_request_comments', 'legal_request_id', 'r1') // idempotent
+    const ch = byName('rt_legal_request_comments_legal_request_id_r1')
+    expect(ch).toBeDefined()
+    expect(channels).toHaveLength(1)
+    expect(ch!.filters[0]).toMatchObject({ table: 'legal_request_comments', filter: 'legal_request_id=eq.r1' })
+    ch!.cb?.('SUBSCRIBED')
+    ch!.handlers[0]!()
+    expect(version(rowVersionKey('legal_request_comments', 'legal_request_id', 'r1'))).toBe(1)
+    expect(version('legal_request_comments')).toBe(0)
+  })
+
+  it('falls back to the whole-table channel and follows it afterwards', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    subscribeRowScoped('legal_request_comments', 'legal_request_id', 'r1')
+    byName('rt_legal_request_comments_legal_request_id_r1')!.cb?.('CHANNEL_ERROR')
+    expect(removed).toEqual(['rt_legal_request_comments_legal_request_id_r1'])
+    const whole = byName('rt_legal_request_comments')
+    expect(whole).toBeDefined()
+    whole!.handlers[0]!()
+    expect(version('legal_request_comments')).toBe(1)
+    expect(version(rowVersionKey('legal_request_comments', 'legal_request_id', 'r1'))).toBe(1)
+  })
+
+  it('ignores an empty id', () => {
+    subscribeRowScoped('legal_request_comments', 'legal_request_id', '')
+    expect(channels).toHaveLength(0)
   })
 })

@@ -21,7 +21,7 @@ import { useFieldStanding } from '@/lib/fieldStanding'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { pendingMembership, type JusticeRequestLite } from '@/components/command-center/lib/membershipPending'
-import { buildLegalViewer, useMyProsecutorBureaus } from '@/components/justice/legalShared'
+import { buildLegalViewer } from '@/components/justice/legalShared'
 import { usePermissions, useSiu } from '@/lib/permissions'
 
 /* Column projections — each mirrors its Ac* Pick in lib/actionItems exactly
@@ -36,7 +36,8 @@ const LEGAL_COLS =
   'id,case_id,case_number_snapshot,request_number,request_type,subtype,review_status,'
   + 'document_status,fulfilment_status,service_status,compliance_status,approval_route,'
   + 'classification,created_by,responsible_bureau,assigned_ada_id,assigned_judge_id,'
-  + 'assigned_prosecutor_id,queue_entered_at,'
+  + 'assigned_prosecutor_id,queue_entered_at,submitted_to_judge_at,'
+  + 'stage_entered_at,nudged_at,escalated_at,'
   + 'response_deadline,expires_at,submitted_to_doj_at,created_at,updated_at'
 const BLOCKER_COLS = 'id,case_id,title,type,status,owner_id,review_at,created_at,updated_at'
 /** Active legal holds — command only; the model gates the item on isCommand. */
@@ -129,9 +130,6 @@ export function useActionItems(): ActionItemsResult {
   const siu = useSiu()
   const permissions = usePermissions()
   const { profile, state, isCommand, isOwner, justiceRole, canEdit } = auth
-  // The legal branch's disposition viewer needs live prosecutor bureaus so
-  // bureau-awareness rows are recognised (and never shown as assigned work).
-  const prosecutorBureaus = useMyProsecutorBureaus()
   const fetchProfiles = useProfilesStore((s) => s.fetch)
   const [built, setBuilt] = useState<{ items: ActionItem[]; suppressedCount: number } | null>(null)
   const [error, setError] = useState<unknown>(null)
@@ -365,7 +363,7 @@ export function useActionItems(): ActionItemsResult {
         accessRequests,
         membershipPending,
         legal,
-        legalViewer: buildLegalViewer(auth, prosecutorBureaus, undefined, siu.isCommand),
+        legalViewer: buildLegalViewer(auth, null, undefined, siu.isCommand),
         justiceRole: permissions.perms.doj_role,
         memberTransfers,
         caseGrants,
@@ -394,7 +392,7 @@ export function useActionItems(): ActionItemsResult {
     } finally {
       setRefreshing(false)
     }
-  }, [state, profile, isCommand, isOwner, justiceRole, canEdit, fetchProfiles, auth, prosecutorBureaus, siu.canAccess, siu.isAgent, siu.isCommand, permissions.perms.doj_role])
+  }, [state, profile, isCommand, isOwner, justiceRole, canEdit, fetchProfiles, auth, siu.canAccess, siu.isAgent, siu.isCommand, permissions.perms.doj_role])
 
   useEffect(() => {
     // A version-driven refetch fans out ~21 queries — pointless while the tab

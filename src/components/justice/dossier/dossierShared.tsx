@@ -19,6 +19,7 @@ export const DOSSIER_SECTIONS = [
   { id: 'request', label: 'Request' },
   { id: 'supporting', label: 'Supporting' },
   { id: 'review', label: 'Review' },
+  { id: 'comments', label: 'Comments' },
   { id: 'decision', label: 'Decision' },
   { id: 'service', label: 'Service & Return' },
   { id: 'activity', label: 'Activity' },
@@ -71,9 +72,12 @@ export interface CaseRecords {
   media: Tables<'media'>[]
 }
 export function useCaseRecords(r: LegalRequest | null, enabled: boolean): CaseRecords | null {
+  return useCaseRecordsFor(r?.case_id ?? null, r?.case_number_snapshot ?? null, enabled)
+}
+/** The same loader keyed by case id — the wizard's Evidence step needs the
+ *  records before a request row exists (P4-08). */
+export function useCaseRecordsFor(caseId: string | null, caseNumber: string | null, enabled: boolean): CaseRecords | null {
   const [records, setRecords] = useState<CaseRecords | null>(null)
-  const caseId = r?.case_id ?? null
-  const caseNumber = r?.case_number_snapshot ?? null
   useEffect(() => {
     if (!caseId || !enabled) return
     let cancelled = false
@@ -115,3 +119,49 @@ export function exhibitFlag(e: LegalExhibit, rec: CaseRecords | null): string | 
       return null
   }
 }
+
+/** The packet picker's sources over the case records — shared by the
+ *  dossier's Supporting section and the wizard's Evidence step so both offer
+ *  exactly the same canonical records. */
+export function exhibitSources(records: CaseRecords | null): { kind: string; label: string; options: { id: string; label: string }[] }[] {
+  return [
+    { kind: 'evidence', label: 'Evidence', options: (records?.evidence ?? []).map((e) => ({ id: e.id, label: `${e.item_code ?? ''} ${e.description ?? e.type ?? 'Evidence'}`.trim() })) },
+    { kind: 'attachment', label: 'Attachments', options: (records?.files ?? []).map((f) => ({ id: f.id, label: f.name })) },
+    { kind: 'finalized_report', label: 'Finalized reports', options: (records?.reports ?? []).filter((x) => x.finalized).map((x) => ({ id: x.id, label: `${x.template} report` })) },
+    { kind: 'case_media', label: 'Case media', options: (records?.media ?? []).map((m) => ({ id: m.id, label: m.title })) },
+  ]
+}
+
+/** The restricted set for EVERY viewer of a dossier, not only the creator
+ *  while editing: fetch the media rows behind the case_media exhibits and
+ *  treat "not returned" (RLS refused it) and `restricted` alike — the export
+ *  skips both and counts them as omitted. Keyed by the sorted id list so a
+ *  changed manifest refetches; empty until the fetch lands. */
+export function useRestrictedExhibitIds(exhibits: LegalExhibit[]): Set<string> {
+  const key = exhibits
+    .filter((e) => e.exhibit_type === 'case_media' && e.source_id)
+    .map((e) => e.source_id as string)
+    .sort()
+    .join(',')
+  const [state, setState] = useState<{ key: string; ids: Set<string> }>({ key: '', ids: new Set() })
+  useEffect(() => {
+    if (!key) return
+    const wanted = key.split(',')
+    let cancelled = false
+    void (async () => {
+      let ids: Set<string>
+      try {
+        const rows = await list('media', { in: { id: wanted }, select: 'id,restricted', includeDeleted: true })
+        const visible = new Map(rows.map((m) => [m.id, !!m.restricted]))
+        ids = new Set(wanted.filter((id) => !visible.has(id) || visible.get(id)))
+      } catch {
+        // Unknown means unsafe: keep every media exhibit out of the export.
+        ids = new Set(wanted)
+      }
+      if (!cancelled) setState({ key, ids })
+    })()
+    return () => { cancelled = true }
+  }, [key])
+  return state.key === key ? state.ids : EMPTY_IDS
+}
+const EMPTY_IDS: Set<string> = new Set()

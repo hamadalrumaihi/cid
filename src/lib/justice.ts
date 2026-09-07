@@ -15,10 +15,17 @@ export type JusticeRole =
   | 'prosecutor'
 export type JusticeAgency = 'doj' | 'judiciary'
 
+/** A historical prosecution-side membership title (never offered, still
+ *  rendered). Only judge / attorney_general can still be appointed (L16,
+ *  P4-01): justice_appoint refuses everything else, and a prosecutor who needs
+ *  to see a request today is granted per-request observer access instead. */
+export const isRetiredJusticeRole = (r?: string | null): boolean =>
+  r === 'prosecutor' || r === 'assistant_district_attorney' || r === 'district_attorney'
+
 export const JUSTICE_ROLE_LABEL: Record<JusticeRole, string> = {
-  // Legacy titles are preserved exactly — historical rows keep their name;
-  // the minimal-DOJ model maps ADA/DA to the effective role 'prosecutor'
-  // (private.justice_role_effective) without rewriting them.
+  // Legacy titles are preserved exactly — historical rows keep their name.
+  // None of the three prosecution-side titles is grantable any more
+  // (isRetiredJusticeRole); surfaces that list them add a "retired role" mark.
   assistant_district_attorney: 'Assistant District Attorney',
   district_attorney: 'District Attorney',
   attorney_general: 'Attorney General',
@@ -122,9 +129,11 @@ export const WARRANT_TYPES = [
 export type WarrantType = (typeof WARRANT_TYPES)[number][0]
 
 /** Type-specific warrant fields — parallel to SUBPOENA_FIELDS, stored in the
- *  same free `form_data` jsonb. Probable cause lives in the shared narrative
- *  field (not duplicated here). `req` marks the fields the form must fill;
- *  every requirement is revalidated server-side. */
+ *  same free `form_data` jsonb. The standard of proof and the probable-cause
+ *  statement (P4-04) are NOT listed here: they are shared by every warrant
+ *  subtype and live on the wizard's Narrative step (form_data.standard_of_proof
+ *  / form_data.pc_statement — see STANDARDS_OF_PROOF). `req` marks the fields
+ *  the form must fill; every requirement is revalidated server-side. */
 export const WARRANT_FIELDS: Record<WarrantType, { key: string; label: string; req?: boolean; kind?: 'textarea' | 'datetime' }[]> = {
   arrest_warrant: [
     { key: 'charges', label: 'Charges', kind: 'textarea' },
@@ -138,38 +147,58 @@ export const WARRANT_FIELDS: Record<WarrantType, { key: string; label: string; r
   ],
 }
 
+/** Review-status labels (decision L5, contract §2). Live values read as
+ *  plain workflow language; every RETIRED value keeps its old label behind a
+ *  "Retired stage — " prefix so historical rows stay legible and can never be
+ *  mistaken for a live queue. The prefix is the ONE cue every surface shares
+ *  (registry chips, dossier header, stage tracker). */
+export const RETIRED_STAGE_PREFIX = 'Retired stage — '
+
+/** The review_status values the P4-01 migration retired. They stay in the
+ *  CHECK for history, render read-only, and never own an action. In-flight
+ *  rows were remapped by the migration (prosecutor_queue / prosecutor_review /
+ *  ag_review → submitted_to_judge; returned_by_prosecutor → returned_by_judge),
+ *  so a live row only lands here if it predates the remap. */
+export const RETIRED_REVIEW_STATES: ReadonlySet<string> = new Set([
+  'prosecutor_queue', 'prosecutor_review', 'returned_by_prosecutor', 'declined',
+  'submitted_to_doj', 'ada_review', 'returned_by_ada',
+  'submitted_to_da', 'da_review', 'returned_by_da',
+  'submitted_to_ag', 'ag_review', 'returned_by_ag',
+])
+export const isRetiredReviewStatus = (s?: string | null): boolean => !!s && RETIRED_REVIEW_STATES.has(s)
+
 export const REVIEW_STATUS_LABEL: Record<string, string> = {
-  not_submitted: 'Draft — not submitted',
-  cid_supervisor_review: 'CID supervisor review',
-  returned_by_cid: 'Returned by CID',
+  not_submitted: 'Draft',
+  cid_supervisor_review: 'Awaiting bureau review',
+  returned_by_cid: 'Returned for revision (bureau)',
   // The SIB lane (20260903170000). Named for who actually decides: an SIB
-  // warrant must never read "CID supervisor review", because the Director of
-  // CID holds no SIB authority and cannot act on it.
-  siu_command_review: 'SIB command review',
-  returned_by_siu_command: 'Returned by SIB command',
-  submitted_to_doj: 'Submitted to DOJ — awaiting assignment',
-  ada_review: 'ADA review',
-  returned_by_ada: 'Returned by ADA',
-  submitted_to_da: 'Submitted to DA',
-  da_review: 'DA review',
-  returned_by_da: 'Returned by DA',
-  submitted_to_ag: 'Submitted to AG',
-  ag_review: 'AG review',
-  returned_by_ag: 'Returned by AG',
-  submitted_to_judge: 'Awaiting judicial assignment',
-  judicial_review: 'Judicial review',
-  returned_by_judge: 'Returned by Judge',
+  // warrant must never read "bureau review", because the Director of CID
+  // holds no SIB authority and cannot act on it.
+  siu_command_review: 'Awaiting SIB command review',
+  returned_by_siu_command: 'Returned for revision (SIB command)',
+  submitted_to_judge: 'Awaiting judge',
+  judicial_review: 'Under judicial review',
+  returned_by_judge: 'Returned for revision (judge)',
   approved: 'Approved',
+  partially_approved: 'Partially approved',
   denied: 'Denied',
   withdrawn: 'Withdrawn',
-  // Minimal-DOJ revival (20260816120000): the shared prosecutor queue + the
-  // administrative terminals.
-  prosecutor_queue: 'Prosecutor queue',
-  prosecutor_review: 'Prosecutorial review',
-  returned_by_prosecutor: 'Returned by prosecutor',
-  declined: 'Declined by prosecutor',
   cancelled: 'Cancelled',
   superseded: 'Superseded',
+  // Retired stages (P4-01) — history only.
+  submitted_to_doj: `${RETIRED_STAGE_PREFIX}Submitted to DOJ`,
+  ada_review: `${RETIRED_STAGE_PREFIX}ADA review`,
+  returned_by_ada: `${RETIRED_STAGE_PREFIX}Returned by ADA`,
+  submitted_to_da: `${RETIRED_STAGE_PREFIX}Submitted to DA`,
+  da_review: `${RETIRED_STAGE_PREFIX}DA review`,
+  returned_by_da: `${RETIRED_STAGE_PREFIX}Returned by DA`,
+  submitted_to_ag: `${RETIRED_STAGE_PREFIX}Submitted to AG`,
+  ag_review: `${RETIRED_STAGE_PREFIX}AG review`,
+  returned_by_ag: `${RETIRED_STAGE_PREFIX}Returned by AG`,
+  prosecutor_queue: `${RETIRED_STAGE_PREFIX}Prosecutor queue`,
+  prosecutor_review: `${RETIRED_STAGE_PREFIX}Prosecutorial review`,
+  returned_by_prosecutor: `${RETIRED_STAGE_PREFIX}Returned by prosecutor`,
+  declined: `${RETIRED_STAGE_PREFIX}Declined by prosecutor`,
 }
 export const FULFILMENT_LABEL: Record<string, string> = {
   unissued: 'Not issued',
@@ -200,7 +229,8 @@ export const reviewStatusLabel = (s?: string | null) => (s && REVIEW_STATUS_LABE
 export const fulfilmentLabel = (s?: string | null) => (s && FULFILMENT_LABEL[s]) || s || '—'
 
 /** The editable (draft/returned) states — EXACT mirror of
- *  private.can_edit_legal_draft (incl. the minimal-DOJ prosecutor return). */
+ *  private.can_edit_legal_draft (unchanged by P4-01; the retired returned_by_*
+ *  values stay so a pre-remap row can still be revised by its author). */
 export const EDITABLE_REVIEW_STATES = new Set([
   'not_submitted', 'returned_by_cid', 'returned_by_siu_command',
   'returned_by_ada', 'returned_by_da', 'returned_by_ag', 'returned_by_judge',
@@ -209,6 +239,24 @@ export const EDITABLE_REVIEW_STATES = new Set([
 export const isEditableDraft = (r: Pick<LegalRequest, 'document_status' | 'review_status'>): boolean =>
   (r.document_status === 'draft' || r.document_status === 'reopened') &&
   EDITABLE_REVIEW_STATES.has(r.review_status)
+
+/** The two DECIDED-APPROVED states (P4-07): a partial approval is a judicial
+ *  approval whose scope was narrowed per target — it issues, executes and
+ *  closes exactly like `approved` (issue_legal_request / close_legal_request
+ *  accept both). Anything that asks "was this granted?" reads this set. */
+export const PARTIAL_APPROVAL_STATES: ReadonlySet<string> = new Set(['approved', 'partially_approved'])
+export const isDecidedApproved = (s?: string | null): boolean => !!s && PARTIAL_APPROVAL_STATES.has(s)
+
+/** Standard of proof a warrant must declare (P4-04) — stored in
+ *  form_data.standard_of_proof; submit_legal_request_to_cid refuses a warrant
+ *  without one (and without a non-blank form_data.pc_statement). */
+export const STANDARDS_OF_PROOF = [
+  ['probable_cause', 'Probable cause'],
+  ['reasonable_suspicion', 'Reasonable suspicion'],
+] as const
+export type StandardOfProof = (typeof STANDARDS_OF_PROOF)[number][0]
+export const isStandardOfProof = (v: unknown): v is StandardOfProof =>
+  v === 'probable_cause' || v === 'reasonable_suspicion'
 
 /** Deadline helper — server timestamps in, human warning out. Thin
  *  delegation to the shared engine (lib/deadlines): same labels

@@ -233,6 +233,9 @@ export function legalRequestRow(
   return {
     amends_request_id: null,
     approval_route: null,
+    stage_entered_at: null,
+    nudged_at: null,
+    escalated_at: null,
     assigned_ada_id: null,
     assigned_judge_id: null,
     assigned_prosecutor_id: null,
@@ -356,3 +359,84 @@ export function caseLinkRow(
     ...overrides,
   }
 }
+
+/* ── Legal workflow (Phase 4, migrations 20261024120000 → 20261027120000) ── */
+
+/** A justice identity. Judge + Attorney General are the only live roles
+ *  since P4-01 (L16); a prosecutor row is history the handlers ignore. */
+export function justiceMembershipRow(
+  overrides: Partial<Tables<'justice_memberships'>> & Pick<Tables<'justice_memberships'>, 'user_id'>,
+): Tables<'justice_memberships'> {
+  return {
+    active: true,
+    agency: 'judiciary',
+    approved_at: mockTimestamp(),
+    approved_by: null,
+    created_at: mockTimestamp(),
+    ended_at: null,
+    expires_at: null,
+    justice_identifier: 'CT-1001',
+    justice_role: 'judge',
+    prosecutor_bureau: null,
+    updated_at: mockTimestamp(),
+    ...overrides,
+  }
+}
+
+/** A charge on a case (20260905130000) with its statute snapshot — the
+ *  source `legal_set_charges` copies from. */
+export function caseChargeRow(
+  overrides: Partial<Tables<'case_charges'>> & Pick<Tables<'case_charges'>, 'case_id'>,
+): Tables<'case_charges'> {
+  return {
+    added_at: mockTimestamp(),
+    added_by: null,
+    charge_id: mockId(),
+    counts: 1,
+    decided_at: null,
+    decided_by: null,
+    decision_note: null,
+    id: mockId(),
+    imposed_at: null,
+    imposed_by: null,
+    imposed_fine: null,
+    imposed_jail_months: null,
+    note: null,
+    snap_charge_class: 'felony',
+    snap_code: '(1)09',
+    snap_fine: 110_000,
+    snap_is_modifier: false,
+    snap_is_rico: false,
+    snap_jail_months: 60,
+    snap_judge_set_fine: false,
+    snap_judge_set_jail: false,
+    snap_offense: 'Attempted Murder',
+    snap_penal_title: 'Crimes Against Persons',
+    snap_stackable: true,
+    snap_substance_schedule: null,
+    status: 'approved',
+    substance_note: null,
+    substance_quantity: null,
+    substance_unit: null,
+    updated_at: mockTimestamp(),
+    version_id: mockId(),
+    ...overrides,
+  }
+}
+
+export function legalRequestExhibitRow(
+  overrides: Partial<Tables<'legal_request_exhibits'>> & Pick<Tables<'legal_request_exhibits'>, 'legal_request_id' | 'added_by'>,
+): Tables<'legal_request_exhibits'> {
+  return {
+    created_at: mockTimestamp(),
+    display_title: 'Exhibit A',
+    exhibit_type: 'external_link',
+    id: mockId(),
+    rationale: null,
+    snapshot_metadata: { url: 'https://evidence.example/a' },
+    source_id: null,
+    version_id: null,
+    ...overrides,
+  }
+}
+

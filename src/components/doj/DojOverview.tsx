@@ -10,16 +10,17 @@
  *  Ranking is deterministic: urgency first (urgencyFor — the exact urgency
  *  field dispositionFor computes), then oldest wait first, then id as the
  *  final tiebreak. Separation rules are respected as surfaces, not re-argued:
- *  a viewer's own request and sealed rows never appear as claimable, sealed
- *  matters render (number + type only) for the AG alone, and the AG-lane
- *  panel ("On your desk" — the SIB route) exists only on the AG landing. */
+ *  a viewer's own request and sealed rows never appear as claimable, and
+ *  sealed matters render (number + type only) for the Attorney General alone.
+ *  A retired prosecutor membership gets a read-only landing. */
 import { useMemo } from 'react'
 import { timeAgo } from '@/lib/format'
 import { useNow } from '@/lib/useNow'
 import type { LegalRequest } from '@/lib/justice'
-import { humanize, reviewStatusLabel, urgencyFor, type Urgency } from '@/lib/legalWorkflow'
+import { humanize, reviewStatusLabel, slaChips, urgencyFor, type Urgency } from '@/lib/legalWorkflow'
 import { bureauShort } from '@/lib/roles'
 import { Badge } from '@/components/ui/Badge'
+import { Notice } from '@/components/ui/Notice'
 import { SectionHeader } from '@/components/ui/PageHeader'
 import { DashPanel } from '@/components/dash/DashPanel'
 import { DashRow } from '@/components/dash/DashRow'
@@ -66,7 +67,9 @@ function urgencyBadge(u: Urgency): React.ReactNode {
   return undefined
 }
 
-/** One overview row over a legal request. Meta stays quiet: age stamp. */
+/** One overview row over a legal request. Meta stays quiet: age stamp. The
+ *  reminder sweep's marks (nudged / escalated) ride as chips so a stalled
+ *  request reads as stalled at a glance. */
 function RequestRow({ r, why, now, onOpen, showBureau = true, sealed = false }: {
   r: LegalRequest
   why: string
@@ -76,6 +79,7 @@ function RequestRow({ r, why, now, onOpen, showBureau = true, sealed = false }: 
   sealed?: boolean
 }) {
   const u = urgencyFor(r, now)
+  const sla = slaChips(r, now).filter((c) => c.id === 'escalated' || c.id === 'nudged')
   return (
     <DashRow
       title={titleOf(r)}
@@ -86,6 +90,7 @@ function RequestRow({ r, why, now, onOpen, showBureau = true, sealed = false }: 
         <>
           {sealed && <Badge tone="danger">sealed</Badge>}
           {showBureau && r.responsible_bureau && <Badge tone="neutral">{bureauShort(r.responsible_bureau)}</Badge>}
+          {sla.map((c) => <Badge key={c.id} tone={c.tone}>{c.id}</Badge>)}
           {urgencyBadge(u)}
         </>
       }
@@ -98,7 +103,7 @@ export function DojOverview({ role, myId, lists, requests, onOpen, onNavigate }:
   role: DojRole
   myId: string | null
   lists: DojLists
-  /** The full RLS-scoped set (AG-only panels read the AG lane from it). */
+  /** The full RLS-scoped set (the AG's sealed panel reads live sealed matters from it). */
   requests: LegalRequest[]
   onOpen: (id: string) => void
   /** Switch the workspace to one of the viewer's EXISTING tabs. */
@@ -108,107 +113,86 @@ export function DojOverview({ role, myId, lists, requests, onOpen, onNavigate }:
   // so ranking and why-lines stay deterministic within a render.
   const now = useNow()
   const isAG = role === 'attorney_general'
+  const isJudge = role === 'judge'
 
   const m = useMemo(() => {
-    // Claimable slices mirror the tab's own action gates exactly: never the
+    // Claimable slice mirrors the tab's own action gate exactly: never the
     // viewer's own request, never a sealed row (AG assignment is its only
-    // path), and for judges never an already-assigned request. The server
-    // enforces all of this on every RPC — these filters only keep the landing
-    // from advertising work the tab would refuse.
-    const queueClaimable = rankUrgent(
-      lists.queue.filter((r) => r.classification !== 'sealed' && r.created_by !== myId),
-      (r) => r.queue_entered_at ?? r.submitted_to_doj_at, now,
-    )
-    const judicialClaimable = rankUrgent(
+    // path), never an already-assigned request. The server enforces all of
+    // this on every RPC — these filters only keep the landing from
+    // advertising work the tab would refuse.
+    const claimable = rankUrgent(
       lists.judicial.filter((r) => r.classification !== 'sealed' && r.created_by !== myId && !r.assigned_judge_id),
       (r) => r.submitted_to_judge_at, now,
     )
-    const mine = rankUrgent(lists.mine, (r) => r.prosecutor_claimed_at ?? r.submitted_to_judge_at ?? r.updated_at, now)
-    // AG landing: sealed matters live in ONE dedicated panel (queue/judicial
-    // panels stay non-sealed so nothing double-appears). "Live" reuses the
-    // workspace's own decided derivation rather than re-stating terminality.
+    const mine = rankUrgent(lists.mine, (r) => r.submitted_to_judge_at ?? r.updated_at, now)
+    // AG landing: the open queue (non-sealed) and the sealed assignment lane
+    // are separate panels so nothing double-appears; "live sealed matters"
+    // widens to every sealed request not yet decided, wherever it sits.
     const decidedIds = new Set(lists.decided.map((r) => r.id))
-    const sealed = isAG
+    const agOpen = isAG ? rankUrgent(lists.judicial.filter((r) => r.classification !== 'sealed'), (r) => r.submitted_to_judge_at, now) : []
+    const agSealedQueue = isAG ? rankUrgent(lists.sealed, (r) => r.submitted_to_judge_at, now) : []
+    const sealedLive = isAG
       ? rankUrgent(requests.filter((r) => r.classification === 'sealed' && !decidedIds.has(r.id)), (r) => r.updated_at, now)
       : []
-    const agQueue = isAG ? rankUrgent(lists.queue.filter((r) => r.classification !== 'sealed'), (r) => r.queue_entered_at ?? r.submitted_to_doj_at, now) : []
-    const agJudicial = isAG ? rankUrgent(lists.judicial.filter((r) => r.classification !== 'sealed'), (r) => r.submitted_to_judge_at, now) : []
-    // The AG's personal review lane — the SIB route (SIB command → AG → judge)
-    // plus legacy AG-route submissions. These rows appear in no other tab.
-    const agDesk = isAG
-      ? rankUrgent(requests.filter((r) => r.review_status === 'submitted_to_ag' || r.review_status === 'ag_review'), (r) => r.updated_at, now)
-      : []
-    const heldCount = isAG ? requests.filter((r) => r.review_status === 'prosecutor_review').length : 0
-    return { queueClaimable, judicialClaimable, mine, sealed, agQueue, agJudicial, agDesk, heldCount }
+    return { claimable, mine, agOpen, agSealedQueue, sealedLive }
   }, [lists, requests, myId, now, isAG])
 
-  const queueWait = (r: LegalRequest) => sinceText(r.queue_entered_at ?? r.submitted_to_doj_at, now)
   const judicialWait = (r: LegalRequest) => sinceText(r.submitted_to_judge_at, now)
   const returnedWhy = (r: LegalRequest) =>
     r.created_by === myId
       ? 'Returned to you — changes requested'
-      : `${r.review_status === 'returned_by_judge' ? 'Returned by the judge' : 'Returned by the prosecutor'} — the investigator owes corrections`
+      : 'Returned by the judge — the investigator owes a revised resubmission'
 
   const subtitle = isAG
-    ? 'Every bureau queue, the bench, your own review lane, sealed matters, and administration — each panel opens its tab.'
-    : role === 'judge'
+    ? 'The judicial queue, sealed assignment, returns, the archive and administration — each panel opens its tab.'
+    : isJudge
       ? 'What is waiting for judicial action and what you already hold — each panel opens its tab.'
-      : 'Your queue, your held reviews, and where everything else stands — each panel opens its tab.'
+      : 'This membership is a retired role — the workspace is read-only.'
 
-  const allQuiet = role === 'prosecutor'
-    ? m.queueClaimable.length === 0 && m.mine.length === 0
-    : role === 'judge'
-      ? m.judicialClaimable.length === 0 && m.mine.length === 0
-      : m.agQueue.length === 0 && m.agJudicial.length === 0 && m.agDesk.length === 0 && m.sealed.length === 0
+  const allQuiet = isJudge
+    ? m.claimable.length === 0 && m.mine.length === 0
+    : isAG
+      ? m.agOpen.length === 0 && m.agSealedQueue.length === 0
+      : true
 
   return (
     <div className="space-y-4">
       <DashSwitcher />
       <SectionHeader title="Review overview" subtitle={subtitle} />
 
-      {allQuiet && (
+      {role === 'prosecutor' && (
+        <Notice text="Retired role — the prosecutor stage was removed from the legal workflow: bureau approval now goes straight to the judicial queue. Requests you were granted observer access to open from the lists below; nothing here needs your action." />
+      )}
+
+      {allQuiet && role !== 'prosecutor' && (
         <p className="rounded-lg border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-400">
           All quiet — nothing is waiting on you right now.
         </p>
       )}
 
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
-        {/* ── Prosecutor: the shared bureau queue, claimable rows only ─────── */}
-        {role === 'prosecutor' && (
-          <DashPanel
-            title="Unclaimed queue"
-            count={m.queueClaimable.length}
-            hint="Requests in your bureau queue you can claim right now. Claiming is atomic — first claim wins."
-            action={{ label: 'Open queue →', onClick: () => onNavigate('queue') }}
-            empty={m.queueClaimable.length === 0}
-          >
-            {m.queueClaimable.slice(0, TOP).map((r) => (
-              <RequestRow key={r.id} r={r} now={now} onOpen={onOpen} why={`Unclaimed for ${queueWait(r)}`} />
-            ))}
-          </DashPanel>
-        )}
-
         {/* ── Judge: the open judicial queue, claimable rows only ──────────── */}
-        {role === 'judge' && (
+        {isJudge && (
           <DashPanel
             title="Awaiting judicial action"
-            count={m.judicialClaimable.length}
-            hint="Cleared by prosecutorial review and unassigned — yours to claim."
+            count={m.claimable.length}
+            hint="Approved by bureau review and unassigned — yours to claim. Claiming is atomic; first claim wins."
             action={{ label: 'Open judicial queue →', onClick: () => onNavigate('judicial') }}
-            empty={m.judicialClaimable.length === 0}
+            empty={m.claimable.length === 0}
           >
-            {m.judicialClaimable.slice(0, TOP).map((r) => (
+            {m.claimable.slice(0, TOP).map((r) => (
               <RequestRow key={r.id} r={r} now={now} onOpen={onOpen} why={`Awaiting a judge for ${judicialWait(r)}`} />
             ))}
           </DashPanel>
         )}
 
-        {/* ── Prosecutor / judge: work they currently hold ─────────────────── */}
-        {role !== 'attorney_general' && (
+        {/* ── Judge: reviews they currently hold ───────────────────────────── */}
+        {isJudge && (
           <DashPanel
-            title={role === 'judge' ? 'My pending decisions' : 'My reviews'}
+            title="My pending decisions"
             count={m.mine.length}
-            action={{ label: 'Open my requests →', onClick: () => onNavigate('mine') }}
+            action={{ label: 'Open my reviews →', onClick: () => onNavigate('mine') }}
             empty={m.mine.length === 0}
           >
             {m.mine.slice(0, TOP).map((r) => (
@@ -217,64 +201,22 @@ export function DojOverview({ role, myId, lists, requests, onOpen, onNavigate }:
                 r={r}
                 now={now}
                 onOpen={onOpen}
-                why={r.review_status === 'judicial_review'
-                  ? `Assigned to you — decision pending for ${sinceText(r.submitted_to_judge_at ?? r.updated_at, now)}`
-                  : `Claimed by you ${sinceText(r.prosecutor_claimed_at, now)} ago — review pending`}
+                why={`Assigned to you — decision pending for ${sinceText(r.submitted_to_judge_at ?? r.updated_at, now)}`}
               />
             ))}
           </DashPanel>
         )}
 
-        {/* ── Prosecutor: where cleared work sits at the bench ─────────────── */}
-        {role === 'prosecutor' && (
-          <DashPanel
-            title="Awaiting judge"
-            count={lists.judicial.length}
-            hint="Requests cleared by prosecutorial review — awareness, not your action."
-            action={{ label: 'Open judicial queue →', onClick: () => onNavigate('judicial') }}
-            empty={lists.judicial.length === 0}
-          >
-            {lists.judicial.slice(0, TOP).map((r) => (
-              <RequestRow
-                key={r.id}
-                r={r}
-                now={now}
-                onOpen={onOpen}
-                sealed={r.classification === 'sealed'}
-                why={r.classification === 'sealed'
-                  ? 'Sealed — reaches the bench only through AG assignment'
-                  : r.assigned_judge_id
-                    ? 'With the assigned judge'
-                    : `Awaiting judicial pickup for ${judicialWait(r)}`}
-              />
-            ))}
-          </DashPanel>
-        )}
-
-        {/* ── AG: every bureau queue (non-sealed; sealed has its own panel) ── */}
-        {isAG && (
-          <DashPanel
-            title="Prosecutor queues"
-            count={m.agQueue.length}
-            hint="Unclaimed across every bureau queue. Assignment is yours when a queue stalls."
-            action={{ label: 'Open queues →', onClick: () => onNavigate('queue') }}
-            empty={m.agQueue.length === 0}
-          >
-            {m.agQueue.slice(0, TOP).map((r) => (
-              <RequestRow key={r.id} r={r} now={now} onOpen={onOpen} why={`Unclaimed for ${queueWait(r)}`} />
-            ))}
-          </DashPanel>
-        )}
-
+        {/* ── AG: the open judicial queue (oversight; sealed has its own panel) */}
         {isAG && (
           <DashPanel
             title="Judicial queue"
-            count={m.agJudicial.length}
-            hint="Awaiting judicial pickup or your assignment."
+            count={m.agOpen.length}
+            hint="Open requests awaiting judicial pickup. Assignment is yours when the queue stalls."
             action={{ label: 'Open judicial queue →', onClick: () => onNavigate('judicial') }}
-            empty={m.agJudicial.length === 0}
+            empty={m.agOpen.length === 0}
           >
-            {m.agJudicial.slice(0, TOP).map((r) => (
+            {m.agOpen.slice(0, TOP).map((r) => (
               <RequestRow
                 key={r.id}
                 r={r}
@@ -286,24 +228,17 @@ export function DojOverview({ role, myId, lists, requests, onOpen, onNavigate }:
           </DashPanel>
         )}
 
-        {/* ── AG: the personal review lane (SIB route) — rows open directly;
-               these requests appear in no other workspace tab ──────────────── */}
+        {/* ── AG: sealed requests waiting for assignment ───────────────────── */}
         {isAG && (
           <DashPanel
-            title="On your desk"
-            count={m.agDesk.length}
-            hint="SIB-routed and AG-route requests awaiting your own review before the bench."
-            empty={m.agDesk.length === 0}
+            title="Sealed — awaiting your assignment"
+            count={m.agSealedQueue.length}
+            hint="Judges cannot self-claim a sealed request. Formal assignment by you is its only path to the bench."
+            action={{ label: 'Open sealed assignment →', onClick: () => onNavigate('sealed') }}
+            empty={m.agSealedQueue.length === 0}
           >
-            {m.agDesk.slice(0, TOP).map((r) => (
-              <RequestRow
-                key={r.id}
-                r={r}
-                now={now}
-                onOpen={onOpen}
-                sealed={r.classification === 'sealed'}
-                why={`Awaiting your review for ${sinceText(r.updated_at, now)}`}
-              />
+            {m.agSealedQueue.slice(0, TOP).map((r) => (
+              <RequestRow key={r.id} r={r} now={now} onOpen={onOpen} sealed why={`Awaiting your judge assignment — waiting ${judicialWait(r)}`} />
             ))}
           </DashPanel>
         )}
@@ -312,39 +247,40 @@ export function DojOverview({ role, myId, lists, requests, onOpen, onNavigate }:
         {isAG && (
           <DashPanel
             title="Sealed matters"
-            count={m.sealed.length}
-            hint="Live sealed requests. Formal assignment by you is their only path forward."
-            empty={m.sealed.length === 0}
+            count={m.sealedLive.length}
+            hint="Every live sealed request under your oversight, whatever its stage."
+            empty={m.sealedLive.length === 0}
           >
-            {m.sealed.slice(0, TOP).map((r) => (
+            {m.sealedLive.slice(0, TOP).map((r) => (
               <RequestRow
                 key={r.id}
                 r={r}
                 now={now}
                 onOpen={onOpen}
                 sealed
-                why={r.review_status === 'prosecutor_queue'
-                  ? `Awaiting your prosecutor assignment — queued for ${queueWait(r)}`
-                  : r.review_status === 'submitted_to_judge' && !r.assigned_judge_id
-                    ? `Awaiting your judge assignment — waiting ${judicialWait(r)}`
-                    : reviewStatusLabel(r.review_status)}
+                why={r.review_status === 'submitted_to_judge' && !r.assigned_judge_id
+                  ? `Awaiting your judge assignment — waiting ${judicialWait(r)}`
+                  : reviewStatusLabel(r.review_status)}
               />
             ))}
           </DashPanel>
         )}
 
-        {/* ── Everyone: returns and the decided archive ────────────────────── */}
-        <DashPanel
-          title="Returned to requester"
-          count={lists.returned.length}
-          action={{ label: 'Open returned →', onClick: () => onNavigate('returned') }}
-          empty={lists.returned.length === 0}
-        >
-          {lists.returned.slice(0, TOP).map((r) => (
-            <RequestRow key={r.id} r={r} now={now} onOpen={onOpen} why={returnedWhy(r)} />
-          ))}
-        </DashPanel>
+        {/* ── Judge + AG: returns ───────────────────────────────────────────── */}
+        {role !== 'prosecutor' && (
+          <DashPanel
+            title="Returned to requester"
+            count={lists.returned.length}
+            action={{ label: 'Open returned →', onClick: () => onNavigate('returned') }}
+            empty={lists.returned.length === 0}
+          >
+            {lists.returned.slice(0, TOP).map((r) => (
+              <RequestRow key={r.id} r={r} now={now} onOpen={onOpen} why={returnedWhy(r)} />
+            ))}
+          </DashPanel>
+        )}
 
+        {/* ── Everyone: the decided archive ─────────────────────────────────── */}
         <DashPanel
           title="Recently decided"
           count={lists.decided.length}
@@ -365,18 +301,15 @@ export function DojOverview({ role, myId, lists, requests, onOpen, onNavigate }:
 
         {/* ── AG: administration pointers (never empty — it is the doorway) ── */}
         {isAG && (
-          <DashPanel title="Administration" hint="Memberships, coverage, transfers, and held work.">
+          <DashPanel title="Administration" hint="Judges, the Attorney General seat, and transfers.">
             <DashRow
-              title="Held prosecutorial work"
-              why={m.heldCount === 0
-                ? 'No claimed reviews are held right now'
-                : `${m.heldCount} claimed ${m.heldCount === 1 ? 'review' : 'reviews'} — reassign or return a stalled one`}
-              meta={String(m.heldCount)}
+              title="Memberships & transfers"
+              why="Appoint judges, manage the CID ↔ DOJ transfer queue"
               onClick={() => onNavigate('admin')}
             />
             <DashRow
-              title="Memberships, coverage & transfers"
-              why="Appointments, temporary bureau coverage, and the CID ↔ DOJ transfer queue"
+              title="Observer access"
+              why="Per-request observer grants are made from the request dossier, not here"
               onClick={() => onNavigate('admin')}
             />
           </DashPanel>

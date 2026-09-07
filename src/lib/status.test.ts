@@ -23,7 +23,7 @@ const DOMAIN_VALUES: Record<StatusDomain, string[]> = {
     'returned_by_siu_command', 'submitted_to_doj', 'ada_review', 'returned_by_ada',
     'submitted_to_da', 'da_review', 'returned_by_da', 'submitted_to_ag', 'ag_review',
     'returned_by_ag', 'submitted_to_judge', 'judicial_review', 'returned_by_judge',
-    'approved', 'denied', 'withdrawn', 'prosecutor_queue', 'prosecutor_review',
+    'approved', 'partially_approved', 'denied', 'withdrawn', 'prosecutor_queue', 'prosecutor_review',
     'returned_by_prosecutor', 'declined', 'cancelled', 'superseded',
   ],
   warrant: ['draft', 'signed', 'executed', 'returned'],
@@ -68,10 +68,19 @@ describe('label disambiguation — "returned" means three different things', () 
     expect(m.cls).toContain('emerald') // WARRANT_TINT value, unchanged
   })
 
-  it('legal returned_by_* = sent back (rose)', () => {
+  it('legal returned_by_* = sent back (rose); a retired stage keeps its history label', () => {
     const m = statusMeta('legalReview', 'returned_by_judge')
-    expect(m.label).toBe('Returned by Judge')
+    expect(m.label).toBe('Returned for revision (judge)')
     expect(m.cls).toContain('rose')
+    const retired = statusMeta('legalReview', 'returned_by_ada')
+    expect(retired.label).toBe('Retired stage — Returned by ADA')
+    expect(retired.cls).toContain('rose')
+  })
+
+  it('legal partially_approved reads as an approval (emerald)', () => {
+    const m = statusMeta('legalReview', 'partially_approved')
+    expect(m.label).toBe('Partially approved')
+    expect(m.cls).toContain('emerald')
   })
 
   it('seized returned = "Returned to owner" (accent, not rose/emerald)', () => {
@@ -117,8 +126,12 @@ describe('temperature normalizations', () => {
 })
 
 describe('legalReviewTone — the shared tone logic legalShared re-exports', () => {
-  it('matches the historical reviewTone semantics', () => {
+  it('matches the historical reviewTone semantics (+ partially_approved as an approval)', () => {
     expect(legalReviewTone('approved')).toBe('emerald')
+    expect(legalReviewTone('partially_approved')).toBe('emerald')
+    expect(legalReviewTone('submitted_to_judge')).toBe('amber')
+    expect(legalReviewTone('judicial_review')).toBe('amber')
+    expect(legalReviewTone('returned_by_judge')).toBe('rose')
     expect(legalReviewTone('denied')).toBe('rose')
     expect(legalReviewTone('returned_by_ada')).toBe('rose')
     expect(legalReviewTone('ada_review')).toBe('amber')

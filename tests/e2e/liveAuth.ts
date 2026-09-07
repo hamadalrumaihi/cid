@@ -30,9 +30,11 @@ export const LIVE = {
   lead: { email: 'rls-test-lead@cidportal.test', name: 'RLS Test Lead', pwEnv: 'RLS_TEST_PASSWORD_LEAD' },
   director: { email: 'rls-test-director@cidportal.test', name: 'RLS Test Director', pwEnv: 'RLS_TEST_PASSWORD_DIRECTOR' },
   applicant: { email: 'rls-test-applicant@cidportal.test', name: 'RLS Test Applicant', pwEnv: 'RLS_TEST_PASSWORD_APPLICANT' },
-  adaLsb: { email: 'rls-test-ada-lsb@cidportal.test', name: 'RLS Test — ADA LSB', pwEnv: 'RLS_TEST_PASSWORD_ADA_LSB' },
-  da: { email: 'rls-test-da@cidportal.test', name: 'RLS Test — DA', pwEnv: 'RLS_TEST_PASSWORD_DA' },
+  // DOJ fixtures (Judge + Attorney General only since P4-01 — prosecutor / ADA
+  // / DA fixtures are no longer needed). Not provisioned yet: issue #299.
   judge: { email: 'rls-test-judge@cidportal.test', name: 'RLS Test — Judge', pwEnv: 'RLS_TEST_PASSWORD_JUDGE' },
+  judge2: { email: 'rls-test-judge2@cidportal.test', name: 'RLS Test — Judge 2', pwEnv: 'RLS_TEST_PASSWORD_JUDGE2' },
+  ag: { email: 'rls-test-ag@cidportal.test', name: 'RLS Test — AG', pwEnv: 'RLS_TEST_PASSWORD_AG' },
   justice: { email: 'rls-test-justice@cidportal.test', name: 'RLS Test — Justice Applicant', pwEnv: 'RLS_TEST_PASSWORD_JUSTICE' },
 } satisfies Record<string, LiveAccount>
 

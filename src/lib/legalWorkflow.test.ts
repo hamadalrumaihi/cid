@@ -1,31 +1,36 @@
 import { describe, it, expect } from 'vitest'
 import {
   countViewerActionable,
-  currentStage, stageForReviewStatus, stagesForRequest, laneThatAdvanced,
-  judgeClaimEligible, responsibleRole, dispositionFor, isBureauAwareness,
-  routingExplanation, canReviewJusticeRole, canAssignAsJudge, canAssignAsProsecutor,
-  issuedStateFor, issuedActionLabel, urgencyFor, activeDeadline, formatTarget,
-  ISSUED_STATE_LABEL, ISSUED_STATE_ORDER,
+  currentStage, stageForReviewStatus, stagesForRequest, laneThatAdvanced, stageDisplayLabel,
+  judgeClaimEligible, responsibleRole, dispositionFor, isRetiredReviewStatus, isDecidedApproved,
+  routingExplanation, canReviewJusticeRole, canAssignAsJudge,
+  issuedStateFor, issuedActionLabel, urgencyFor, activeDeadline, formatTarget, slaChips,
+  ISSUED_STATE_LABEL, ISSUED_STATE_ORDER, STAGE_ORDER, RESPONSIBLE_ROLE_LABEL,
   subtypeRequiresPerson, subtypeSupportsStructuredTargets, fulfilmentEvents,
-  LEGAL_WIZARD_STEPS, legalWizardIssues, legalWizardDraftIssues,
+  LEGAL_WIZARD_STEPS, legalWizardIssues, legalWizardAdvisories, legalWizardDraftIssues,
   structuredTargetLine, appendSearchTargetLine,
   CID_ROUTING_BUREAUS, ROUTING_SOURCE_LABEL, resolveResponsibleBureau,
   isJtfAssigned, canSetResponsibleBureau, canChangeResponsibleBureau,
+  reviewStatusLabel,
   type CaseRoutingLike,
   type LegalFulfilmentLike, type LegalReqLike, type LegalViewer, type LegalWizardInput,
 } from './legalWorkflow'
+import { RETIRED_REVIEW_STATES, RETIRED_STAGE_PREFIX, REVIEW_STATUS_LABEL } from './justice'
 
 const NOW = Date.parse('2026-07-17T00:00:00Z')
+const H = 3_600_000
 
-// Minimal request factory — only the fields the model reads.
+// Minimal request factory — only the fields the model reads. Defaults to a
+// request waiting in the judicial queue (the stage bureau approval now feeds).
 function req(over: Partial<LegalReqLike> = {}): LegalReqLike {
   return {
-    created_by: 'inv-1', review_status: 'submitted_to_doj', document_status: 'finalized',
+    created_by: 'inv-1', review_status: 'submitted_to_judge', document_status: 'finalized',
     fulfilment_status: 'unissued', service_status: 'not_served', compliance_status: 'pending',
     approval_route: 'judge', classification: 'classified', request_type: 'warrant',
     subtype: 'search_warrant', responsible_bureau: 'major_crimes',
     assigned_ada_id: null, assigned_judge_id: null,
-    expires_at: null, response_deadline: null, submitted_to_doj_at: '2026-07-15T00:00:00Z',
+    expires_at: null, response_deadline: null, submitted_to_doj_at: null,
+    submitted_to_judge_at: '2026-07-15T00:00:00Z',
     ...over,
   }
 }
@@ -33,51 +38,84 @@ function viewer(over: Partial<LegalViewer> = {}): LegalViewer {
   return { myId: 'u-1', cidActive: false, cidRole: null, justiceRole: null, isOwner: false, ...over }
 }
 
-describe('stage derivation', () => {
-  it('maps review statuses to lifecycle stages', () => {
+describe('stage derivation (P4-01 graph)', () => {
+  it('maps live review statuses to lifecycle stages', () => {
     expect(stageForReviewStatus('not_submitted')).toBe('draft')
+    expect(stageForReviewStatus('returned_by_cid')).toBe('draft')
+    expect(stageForReviewStatus('returned_by_siu_command')).toBe('draft')
     expect(stageForReviewStatus('returned_by_judge')).toBe('draft') // returns collapse to the fix owner
     expect(stageForReviewStatus('cid_supervisor_review')).toBe('cid_review')
-    expect(stageForReviewStatus('submitted_to_doj')).toBe('doj_intake')
-    expect(stageForReviewStatus('ada_review')).toBe('prosecutorial_review')
-    expect(stageForReviewStatus('da_review')).toBe('prosecutorial_review')
+    expect(stageForReviewStatus('siu_command_review')).toBe('cid_review')
+    expect(stageForReviewStatus('submitted_to_judge')).toBe('judicial_queue')
     expect(stageForReviewStatus('judicial_review')).toBe('judicial_review')
     expect(stageForReviewStatus('approved')).toBe('issued')
-    expect(stageForReviewStatus('denied')).toBe('closed')
+    expect(stageForReviewStatus('partially_approved')).toBe('issued')
+    for (const s of ['denied', 'withdrawn', 'cancelled', 'superseded', 'declined']) {
+      expect(stageForReviewStatus(s), s).toBe('closed')
+    }
   })
-  it('folds fulfilment into the lifecycle stage once approved', () => {
+  it('parks every retired non-terminal status on the judicial-queue slot and flags it retired', () => {
+    for (const s of RETIRED_REVIEW_STATES) {
+      expect(isRetiredReviewStatus(s), s).toBe(true)
+      expect(REVIEW_STATUS_LABEL[s], `${s} needs a retired label`).toMatch(new RegExp(`^${RETIRED_STAGE_PREFIX}`))
+      if (s.startsWith('returned_by')) expect(stageForReviewStatus(s), s).toBe('draft')
+      else if (s === 'declined') expect(stageForReviewStatus(s)).toBe('closed')
+      else expect(stageForReviewStatus(s), s).toBe('judicial_queue')
+    }
+    expect(isRetiredReviewStatus('submitted_to_judge')).toBe(false)
+    expect(isRetiredReviewStatus(null)).toBe(false)
+  })
+  it('the spine has no prosecutor stage', () => {
+    expect(STAGE_ORDER).toEqual(['draft', 'cid_review', 'judicial_queue', 'judicial_review', 'issued', 'fulfilment', 'closed'])
+  })
+  it('folds fulfilment into the lifecycle stage once approved — fully or partially', () => {
     expect(currentStage(req({ review_status: 'approved', fulfilment_status: 'issued' }))).toBe('issued')
     expect(currentStage(req({ review_status: 'approved', fulfilment_status: 'executed' }))).toBe('fulfilment')
     expect(currentStage(req({ review_status: 'approved', fulfilment_status: 'closed' }))).toBe('closed')
+    expect(currentStage(req({ review_status: 'partially_approved', fulfilment_status: 'unissued' }))).toBe('issued')
+    expect(currentStage(req({ review_status: 'partially_approved', fulfilment_status: 'served' }))).toBe('fulfilment')
+    expect(currentStage(req({ review_status: 'partially_approved', fulfilment_status: 'expired' }))).toBe('closed')
+    expect(isDecidedApproved('partially_approved')).toBe(true)
+    expect(isDecidedApproved('denied')).toBe(false)
   })
-  it('renders judicial stage only for judge-routed requests', () => {
-    expect(stagesForRequest(req({ approval_route: 'judge' }))).toContain('judicial_review')
-    expect(stagesForRequest(req({ approval_route: 'da' }))).not.toContain('judicial_review')
+  it('renders both judicial slots for judge-routed requests and neither for legacy da/ag routes', () => {
+    expect(stagesForRequest(req({ approval_route: 'judge' }))).toEqual(STAGE_ORDER)
+    const legacy = stagesForRequest(req({ approval_route: 'da' }))
+    expect(legacy).not.toContain('judicial_review')
+    expect(legacy).not.toContain('judicial_queue')
+  })
+  it('captions the shared first-approval slot by who holds it', () => {
+    expect(stageDisplayLabel('cid_review', req({ review_status: 'cid_supervisor_review' }))).toBe('Bureau review')
+    expect(stageDisplayLabel('cid_review', req({ review_status: 'siu_command_review' }))).toBe('SIB command review')
+  })
+  it('labels per decision L5', () => {
+    expect(reviewStatusLabel('submitted_to_judge')).toBe('Awaiting judge')
+    expect(reviewStatusLabel('judicial_review')).toBe('Under judicial review')
+    expect(reviewStatusLabel('partially_approved')).toBe('Partially approved')
+    expect(reviewStatusLabel('cid_supervisor_review')).toBe('Awaiting bureau review')
+    expect(reviewStatusLabel('prosecutor_queue')).toBe('Retired stage — Prosecutor queue')
   })
 })
 
-describe('parallel-lane rendering', () => {
-  it('judicial lane when a judge claimed directly from DOJ (no ADA ever assigned)', () => {
-    expect(laneThatAdvanced(req({ review_status: 'judicial_review', assigned_judge_id: 'j-1', assigned_ada_id: null }))).toBe('judicial')
+describe('laneThatAdvanced (historical read only)', () => {
+  it('judicial once a judge holds the request and no prosecutor ever did', () => {
+    expect(laneThatAdvanced(req({ review_status: 'judicial_review', assigned_judge_id: 'j-1' }))).toBe('judicial')
   })
-  it('prosecutorial lane when an ADA was assigned first', () => {
+  it('prosecutorial only for a retired-pipeline row that carried a prosecutor/ADA', () => {
     expect(laneThatAdvanced(req({ review_status: 'judicial_review', assigned_judge_id: 'j-1', assigned_ada_id: 'a-1' }))).toBe('prosecutorial')
-    expect(laneThatAdvanced(req({ review_status: 'ada_review', assigned_ada_id: 'a-1' }))).toBe('prosecutorial')
+    expect(laneThatAdvanced(req({ review_status: 'prosecutor_review', assigned_prosecutor_id: 'p-1' }))).toBe('prosecutorial')
   })
-  it('no lane yet at bare DOJ intake', () => {
-    expect(laneThatAdvanced(req({ review_status: 'submitted_to_doj' }))).toBeNull()
+  it('no lane while the request waits in the queue', () => {
+    expect(laneThatAdvanced(req())).toBeNull()
   })
 })
 
 describe('judge claim eligibility (mirror of claim_legal_request_as_judge)', () => {
   const judge = viewer({ myId: 'j-1', justiceRole: 'judge' })
-  it('eligible: judge, judge-routed, non-sealed, waiting, no judge yet, not creator', () => {
-    // ONLY submitted_to_judge — claim_legal_request_as_judge refuses the
-    // legacy submitted_to_doj parking state, so the mirror must too.
-    expect(judgeClaimEligible(req(), judge)).toBe(false)
-    expect(judgeClaimEligible(req({ review_status: 'submitted_to_judge' }), judge)).toBe(true)
+  it('eligible: judge, judge-routed, non-sealed, queued, no judge yet, not creator', () => {
+    expect(judgeClaimEligible(req(), judge)).toBe(true)
   })
-  it('rejects sealed', () => {
+  it('rejects sealed — "sealed requests are assigned by the Attorney General"', () => {
     expect(judgeClaimEligible(req({ classification: 'sealed' }), judge)).toBe(false)
   })
   it('rejects when a judge is already assigned', () => {
@@ -86,51 +124,67 @@ describe('judge claim eligibility (mirror of claim_legal_request_as_judge)', () 
   it('rejects the creator claiming their own request', () => {
     expect(judgeClaimEligible(req({ created_by: 'j-1' }), judge)).toBe(false)
   })
-  it('rejects non-judges (ADA/DA/CID/anon)', () => {
+  it('rejects non-judges (AG / legacy prosecutor / CID / anon)', () => {
+    expect(judgeClaimEligible(req(), viewer({ justiceRole: 'attorney_general' }))).toBe(false)
+    expect(judgeClaimEligible(req(), viewer({ justiceRole: 'prosecutor' }))).toBe(false)
     expect(judgeClaimEligible(req(), viewer({ justiceRole: 'assistant_district_attorney' }))).toBe(false)
     expect(judgeClaimEligible(req(), viewer({ cidActive: true, cidRole: 'director' }))).toBe(false)
     expect(judgeClaimEligible(req(), viewer({ myId: null }))).toBe(false)
   })
-  it('rejects wrong state and da-routed', () => {
-    expect(judgeClaimEligible(req({ review_status: 'ada_review' }), judge)).toBe(false)
+  it('rejects every other state, including bureau review and the retired parking states', () => {
+    for (const s of ['cid_supervisor_review', 'siu_command_review', 'judicial_review', 'returned_by_judge', 'prosecutor_queue', 'submitted_to_doj', 'ag_review']) {
+      expect(judgeClaimEligible(req({ review_status: s }), judge), s).toBe(false)
+    }
     expect(judgeClaimEligible(req({ approval_route: 'da' }), judge)).toBe(false)
   })
 })
 
 describe('responsible role', () => {
-  it('tracks who owns the next action', () => {
+  it('tracks who owns the next action on the live graph', () => {
     expect(responsibleRole(req({ review_status: 'not_submitted' }))).toBe('investigator')
-    expect(responsibleRole(req({ review_status: 'returned_by_ada' }))).toBe('investigator')
+    expect(responsibleRole(req({ review_status: 'returned_by_judge' }))).toBe('investigator')
     expect(responsibleRole(req({ review_status: 'cid_supervisor_review' }))).toBe('cid_supervisor')
-    expect(responsibleRole(req({ review_status: 'submitted_to_doj', assigned_ada_id: null, approval_route: 'judge' }))).toBe('any_judge')
-    expect(responsibleRole(req({ review_status: 'submitted_to_doj', assigned_ada_id: 'a-1' }))).toBe('assigned_ada')
-    expect(responsibleRole(req({ review_status: 'ada_review' }))).toBe('assigned_ada')
-    expect(responsibleRole(req({ review_status: 'judicial_review' }))).toBe('assigned_judge')
+    expect(responsibleRole(req({ review_status: 'siu_command_review' }))).toBe('siu_command')
+    expect(responsibleRole(req())).toBe('any_judge')
+    expect(responsibleRole(req({ classification: 'sealed' }))).toBe('attorney_general')
+    expect(responsibleRole(req({ assigned_judge_id: 'j-1' }))).toBe('assigned_judge')
+    expect(responsibleRole(req({ review_status: 'judicial_review', assigned_judge_id: 'j-1' }))).toBe('assigned_judge')
+    expect(responsibleRole(req({ review_status: 'approved' }))).toBe('none')
+    expect(responsibleRole(req({ review_status: 'partially_approved' }))).toBe('none')
+  })
+  it('names the former holder of a retired stage, labelled as retired', () => {
+    for (const [s, role] of [
+      ['ada_review', 'assigned_ada'], ['prosecutor_queue', 'prosecutor'], ['prosecutor_review', 'prosecutor'],
+      ['da_review', 'district_attorney'], ['ag_review', 'attorney_general'], ['submitted_to_doj', 'doj_management'],
+    ] as const) {
+      expect(responsibleRole(req({ review_status: s })), s).toBe(role)
+    }
+    for (const role of ['assigned_ada', 'bureau_prosecutor', 'district_attorney', 'doj_management', 'prosecutor'] as const) {
+      expect(RESPONSIBLE_ROLE_LABEL[role], role).toMatch(/Retired stage/)
+    }
   })
 })
 
-describe('action vs awareness distinction', () => {
-  it('a bureau prosecutor sees a parked bureau request as awareness-only, not assigned', () => {
-    const prosecutor = viewer({ myId: 'p-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['major_crimes'] })
-    const r = req({ review_status: 'submitted_to_doj', responsible_bureau: 'major_crimes', assigned_ada_id: null })
-    expect(isBureauAwareness(r, prosecutor)).toBe(true)
-    const d = dispositionFor(r, prosecutor, NOW)
-    expect(d.awarenessOnly).toBe(true)
-    expect(d.viewerCanAct).toBe(false)
-    expect(d.group).toBe('awareness')
-    expect(d.nextAction).toBe('Awareness only')
-  })
-  it('a different bureau prosecutor gets no awareness flag', () => {
-    const scb = viewer({ myId: 'p-2', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['street_crimes'] })
-    expect(isBureauAwareness(req({ responsible_bureau: 'major_crimes' }), scb)).toBe(false)
-  })
-  it('a row parked in the retired ADA stage is surfaced to the assignee as history, never as a live action label', () => {
-    const ada = viewer({ myId: 'a-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['major_crimes'] })
+describe('retired stages are read-only history for everyone', () => {
+  it('nobody owns an action on a retired parking state — not even its former assignee', () => {
+    const ada = viewer({ myId: 'a-1', justiceRole: 'assistant_district_attorney' })
     const d = dispositionFor(req({ review_status: 'ada_review', assigned_ada_id: 'a-1' }), ada, NOW)
-    expect(d.viewerCanAct).toBe(true)
+    expect(d.viewerCanAct).toBe(false)
+    expect(d.viewerCanClaim).toBe(false)
+    expect(d.group).toBe('waiting_doj')
+    expect(d.nextAction).toBe('Retired stage — no action available')
+    expect(d.whyNoAction).toMatch(/retired review stage/i)
+    const prosecutor = viewer({ myId: 'p-1', justiceRole: 'prosecutor' })
+    expect(dispositionFor(req({ review_status: 'prosecutor_review', assigned_prosecutor_id: 'p-1' }), prosecutor, NOW).viewerCanAct).toBe(false)
+    expect(dispositionFor(req({ review_status: 'prosecutor_queue' }), prosecutor, NOW).viewerCanAct).toBe(false)
+    expect(dispositionFor(req({ review_status: 'ag_review' }), viewer({ justiceRole: 'attorney_general' }), NOW).viewerCanAct).toBe(false)
+  })
+  it('a legacy prosecutor viewer never gets a claim on the judicial queue', () => {
+    const d = dispositionFor(req(), viewer({ myId: 'p-1', justiceRole: 'prosecutor' }), NOW)
+    expect(d.viewerCanAct).toBe(false)
+    expect(d.viewerCanClaim).toBe(false)
     expect(d.awarenessOnly).toBe(false)
-    expect(d.group).toBe('assigned_to_you')
-    expect(d.nextAction).toBe('Retired review stage — no action available')
+    expect(d.group).toBe('waiting_judge')
   })
 })
 
@@ -138,7 +192,7 @@ describe('next-action derivation + grouping', () => {
   it('creator draft/returned', () => {
     const inv = viewer({ myId: 'inv-1', cidActive: true, cidRole: 'detective' })
     expect(dispositionFor(req({ review_status: 'not_submitted', created_by: 'inv-1' }), inv, NOW).nextAction).toBe('Finish draft')
-    const ret = dispositionFor(req({ review_status: 'returned_by_ada', created_by: 'inv-1' }), inv, NOW)
+    const ret = dispositionFor(req({ review_status: 'returned_by_judge', created_by: 'inv-1' }), inv, NOW)
     expect(ret.nextAction).toBe('Revise and resubmit')
     expect(ret.group).toBe('returned_to_you')
   })
@@ -149,40 +203,72 @@ describe('next-action derivation + grouping', () => {
     expect(d.nextAction).toBe('Review as Bureau Lead')
     expect(d.group).toBe('needs_action')
   })
-  it('a judge sees an eligible request as available-to-claim', () => {
+  it('a judge sees an open queued request as available-to-claim', () => {
     const judge = viewer({ myId: 'j-1', justiceRole: 'judge' })
-    const d = dispositionFor(req({ review_status: 'submitted_to_judge' }), judge, NOW)
+    const d = dispositionFor(req(), judge, NOW)
     expect(d.viewerCanClaim).toBe(true)
+    expect(d.viewerCanAct).toBe(true)
     expect(d.group).toBe('available_to_claim')
     expect(d.nextAction).toBe('Claim for judicial review')
   })
+  it('a sealed queued request is the Attorney General’s (or Owner’s) assignment, never a judge’s claim', () => {
+    const sealed = req({ classification: 'sealed' })
+    const ag = dispositionFor(sealed, viewer({ myId: 'ag-1', justiceRole: 'attorney_general' }), NOW)
+    expect(ag.viewerCanAct).toBe(true)
+    expect(ag.nextAction).toBe('Assign a Judge')
+    expect(ag.group).toBe('needs_action')
+    expect(dispositionFor(sealed, viewer({ myId: 'own', isOwner: true }), NOW).viewerCanAct).toBe(true)
+    const judge = dispositionFor(sealed, viewer({ myId: 'j-1', justiceRole: 'judge' }), NOW)
+    expect(judge.viewerCanAct).toBe(false)
+    expect(judge.viewerCanClaim).toBe(false)
+    expect(judge.nextAction).toBe('Waiting on Attorney General assignment')
+  })
+  it('the assigned judge decides; every other judge just waits', () => {
+    const held = req({ review_status: 'judicial_review', assigned_judge_id: 'j-1' })
+    const mine = dispositionFor(held, viewer({ myId: 'j-1', justiceRole: 'judge' }), NOW)
+    expect(mine.viewerCanAct).toBe(true)
+    expect(mine.group).toBe('assigned_to_you')
+    expect(mine.nextAction).toBe('Decide request')
+    const other = dispositionFor(held, viewer({ myId: 'j-2', justiceRole: 'judge' }), NOW)
+    expect(other.viewerCanAct).toBe(false)
+    expect(other.group).toBe('waiting_judge')
+    expect(other.whyNoAction).toBe('Waiting on assigned judge.')
+  })
   it('an uninvolved viewer sees waiting, never action', () => {
     const other = viewer({ myId: 'x', cidActive: true, cidRole: 'detective' })
-    const d = dispositionFor(req({ review_status: 'ada_review', assigned_ada_id: 'a-9', created_by: 'inv-1' }), other, NOW)
+    const d = dispositionFor(req({ created_by: 'inv-1' }), other, NOW)
     expect(d.viewerCanAct).toBe(false)
-    expect(d.group).toBe('waiting_prosecution')
+    expect(d.group).toBe('waiting_judge')
+    expect(d.whyNoAction).toBe('Waiting on any eligible judge.')
+  })
+  it('terminals: partially_approved runs the issued ladder, the rest close', () => {
+    const inv = viewer({ myId: 'inv-1', cidActive: true })
+    expect(dispositionFor(req({ review_status: 'partially_approved' }), inv, NOW).group).toBe('issued_active')
+    expect(dispositionFor(req({ review_status: 'partially_approved', fulfilment_status: 'executed' }), inv, NOW).group).toBe('service_return_pending')
+    for (const s of ['denied', 'withdrawn', 'cancelled', 'superseded', 'declined']) {
+      expect(dispositionFor(req({ review_status: s }), inv, NOW).group, s).toBe('closed')
+    }
+    expect(dispositionFor(req({ review_status: 'declined' }), inv, NOW).nextAction).toBe('Declined (retired stage)')
   })
 })
 
 describe('countViewerActionable (case Legal tab marker)', () => {
-  it('counts only rows the viewer can act on — claimable and awareness excluded', () => {
+  it('counts only rows the viewer can act on', () => {
     const rows = [
-      req({ review_status: 'ada_review', assigned_ada_id: 'a-1' }),                   // actionable for the ADA
-      req({ review_status: 'submitted_to_doj', responsible_bureau: 'major_crimes' }), // awareness for an MCB prosecutor
-      req({ review_status: 'ada_review', assigned_ada_id: 'a-9' }),                   // someone else's review
+      req({ review_status: 'judicial_review', assigned_judge_id: 'j-1' }), // actionable for j-1
+      req(),                                                                // open queue — claim-shaped, still the judge's action
+      req({ review_status: 'judicial_review', assigned_judge_id: 'j-9' }), // someone else's review
     ]
-    const ada = viewer({ myId: 'a-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['major_crimes'] })
-    expect(countViewerActionable(rows, ada, NOW)).toBe(1)
-    // A judge could CLAIM the parked request, but claimable is not "needs your action".
-    const judge = viewer({ myId: 'j-1', justiceRole: 'judge' })
-    expect(countViewerActionable(rows, judge, NOW)).toBe(0)
-    expect(countViewerActionable([], ada, NOW)).toBe(0)
+    expect(countViewerActionable(rows, viewer({ myId: 'j-1', justiceRole: 'judge' }), NOW)).toBe(2)
+    expect(countViewerActionable(rows, viewer({ myId: 'j-9', justiceRole: 'judge' }), NOW)).toBe(2)
+    expect(countViewerActionable(rows, viewer({ myId: 'x', cidActive: true, cidRole: 'detective' }), NOW)).toBe(0)
+    expect(countViewerActionable([], viewer(), NOW)).toBe(0)
   })
 
   it('returned requests count for their creator', () => {
     const inv = viewer({ myId: 'inv-1', cidActive: true, cidRole: 'detective' })
-    expect(countViewerActionable([req({ review_status: 'returned_by_ada', created_by: 'inv-1' })], inv, NOW)).toBe(1)
-    expect(countViewerActionable([req({ review_status: 'returned_by_ada', created_by: 'other' })], inv, NOW)).toBe(0)
+    expect(countViewerActionable([req({ review_status: 'returned_by_judge', created_by: 'inv-1' })], inv, NOW)).toBe(1)
+    expect(countViewerActionable([req({ review_status: 'returned_by_judge', created_by: 'other' })], inv, NOW)).toBe(0)
   })
 })
 
@@ -231,25 +317,66 @@ describe('deadlines + urgency', () => {
   })
 })
 
+describe('SLA chips (P4-10 reminder sweep marks)', () => {
+  const iso = (msAgo: number) => new Date(NOW - msAgo).toISOString()
+  it('nothing on a quiet request', () => {
+    expect(slaChips(req(), NOW)).toEqual([])
+  })
+  it('nudged → one warn chip; escalated wins over nudged', () => {
+    expect(slaChips(req({ nudged_at: iso(5 * H) }), NOW)).toEqual([{ id: 'nudged', tone: 'warn', label: 'Nudged 5h ago' }])
+    const both = slaChips(req({ nudged_at: iso(3 * 24 * H), escalated_at: iso(2 * H) }), NOW)
+    expect(both).toEqual([{ id: 'escalated', tone: 'danger', label: 'Escalated 2h ago' }])
+  })
+  it('sweep marks never render on a decided request', () => {
+    expect(slaChips(req({ review_status: 'approved', escalated_at: iso(H) }), NOW)).toEqual([])
+    expect(slaChips(req({ review_status: 'denied', nudged_at: iso(H) }), NOW)).toEqual([])
+  })
+  it('expiry inside 72 h shows; further out or already passed does not', () => {
+    const soon = req({ review_status: 'approved', fulfilment_status: 'issued', expires_at: new Date(NOW + 30 * H).toISOString() })
+    expect(slaChips(soon, NOW)).toEqual([{ id: 'expiring', tone: 'warn', label: 'Expires in 1d' }])
+    expect(slaChips(req({ review_status: 'approved', fulfilment_status: 'issued', expires_at: new Date(NOW + 100 * H).toISOString() }), NOW)).toEqual([])
+    expect(slaChips(req({ review_status: 'approved', fulfilment_status: 'issued', expires_at: iso(H) }), NOW)).toEqual([])
+    // a closed/expired instrument stays quiet
+    expect(slaChips(req({ review_status: 'approved', fulfilment_status: 'expired', expires_at: new Date(NOW + H).toISOString() }), NOW)).toEqual([])
+  })
+  it('a passed subpoena response deadline is a danger chip while the subpoena is live', () => {
+    const sub = req({ request_type: 'subpoena', subtype: 'testimony', review_status: 'approved', fulfilment_status: 'served', response_deadline: iso(2 * 24 * H) })
+    expect(slaChips(sub, NOW)).toEqual([{ id: 'deadline_passed', tone: 'danger', label: 'Response deadline passed 2d ago' }])
+    expect(slaChips({ ...sub, fulfilment_status: 'records_received' }, NOW)).toEqual([])
+    // warrants never carry a response deadline chip
+    expect(slaChips(req({ review_status: 'approved', fulfilment_status: 'issued', response_deadline: iso(H) }), NOW)).toEqual([])
+  })
+})
+
 describe('routing explanation', () => {
-  it('parallel-lane explanation for a non-sealed judge-routed DOJ request', () => {
-    expect(routingExplanation(req())).toContain('Judge may claim it directly')
+  it('open judicial queue: any judge may claim, and there is no prosecutor stage', () => {
+    const why = routingExplanation(req())
+    expect(why).toMatch(/any eligible Judge may claim/)
+    expect(why).toMatch(/no prosecutor stage/i)
   })
-  it('sealed explanation excludes open pickup', () => {
-    expect(routingExplanation(req({ classification: 'sealed' }))).toContain('not available for open judicial pickup')
+  it('sealed queue: AG assignment with the Owner fallback, no open pickup', () => {
+    const why = routingExplanation(req({ classification: 'sealed' }))
+    expect(why).toMatch(/not claimable/)
+    expect(why).toMatch(/Attorney General to assign a Judge/)
+    expect(why).toMatch(/Owner/)
   })
-  it('bureau awareness explanation', () => {
-    const prosecutor = viewer({ myId: 'p-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['major_crimes'] })
-    expect(routingExplanation(req(), prosecutor)).toContain('bureau awareness')
+  it('bureau review says where approval leads (the judicial queue)', () => {
+    expect(routingExplanation(req({ review_status: 'cid_supervisor_review' }))).toMatch(/straight to the judicial queue/)
   })
-  it('queue explanation names the responsible bureau and the coverage path (bureau queues, 20260818120000)', () => {
-    const queued = routingExplanation(req({ review_status: 'prosecutor_queue', responsible_bureau: 'street_crimes' }))
-    expect(queued).toContain('Street Crimes Bureau prosecutor queue')
-    expect(queued).toContain('coverage')
-    expect(queued).not.toContain('any active prosecutor') // the shared-queue phrasing is gone
-    // sealed rows never advertise the queue at all
-    const sealed = routingExplanation(req({ review_status: 'prosecutor_queue', responsible_bureau: 'street_crimes', classification: 'sealed' }))
-    expect(sealed).toContain('formal prosecutor assignment by the Attorney General')
+  it('a judge return explains the resubmission path', () => {
+    const why = routingExplanation(req({ review_status: 'returned_by_judge' }))
+    expect(why).toMatch(/change summary/)
+    expect(why).toMatch(/material change/)
+  })
+  it('partial approval and the retired stages are explained, never blank', () => {
+    expect(routingExplanation(req({ review_status: 'partially_approved' }))).toMatch(/narrowed its scope/)
+    expect(routingExplanation(req({ review_status: 'prosecutor_queue' }))).toMatch(/retired review stage/)
+    expect(routingExplanation(req({ review_status: 'declined' }))).toMatch(/retired prosecutorial stage/)
+  })
+  it('never mentions a prosecutor queue on any live status', () => {
+    for (const s of ['not_submitted', 'returned_by_cid', 'cid_supervisor_review', 'siu_command_review', 'submitted_to_judge', 'judicial_review', 'approved', 'partially_approved', 'denied']) {
+      expect(routingExplanation(req({ review_status: s })), s).not.toMatch(/prosecutor queue/i)
+    }
   })
 })
 
@@ -314,19 +441,20 @@ describe('fulfilment event derivation (service/return event cards)', () => {
 })
 
 describe('guided create wizard (pure step model)', () => {
-  // Minimal wizard-input factory — a valid search-warrant draft by default.
+  // Minimal wizard-input factory — a valid, submittable search-warrant draft.
   function wiz(over: Partial<LegalWizardInput> = {}): LegalWizardInput {
     return {
       requestType: 'warrant', subtype: 'search_warrant', caseId: 'c-1', personId: '',
       recipientType: 'player', recipientName: '', title: 'Search Warrant — stash house',
       priority: 'High', narrative: 'Probable cause narrative.',
       form: { search_targets: 'Place: The stash house', items_sought: 'Contraband' },
+      standardOfProof: 'probable_cause', pcStatement: 'Officer observed the exchange.',
       ...over,
     }
   }
 
-  it('publishes the canonical step order', () => {
-    expect(LEGAL_WIZARD_STEPS.map((s) => s.id)).toEqual(['type', 'case_target', 'details', 'narrative', 'review'])
+  it('publishes the canonical step order (contract §10)', () => {
+    expect(LEGAL_WIZARD_STEPS.map((s) => s.id)).toEqual(['type', 'case_target', 'charges', 'details', 'evidence', 'narrative', 'review'])
   })
 
   it('type step requires a chosen subtype', () => {
@@ -346,6 +474,25 @@ describe('guided create wizard (pure step model)', () => {
     expect(legalWizardIssues('case_target', { ...sub, recipientType: 'entity', recipientName: 'Maze Bank' })).toEqual([])
   })
 
+  it('charges never block; an arrest warrant without one gets an advisory only', () => {
+    const arrest = wiz({ subtype: 'arrest_warrant', personId: 'p-1', charges: [] })
+    expect(legalWizardIssues('charges', arrest)).toEqual([])
+    expect(legalWizardAdvisories('charges', arrest)).toHaveLength(1)
+    expect(legalWizardAdvisories('charges', arrest)[0]).toMatch(/No charges are attached/)
+    expect(legalWizardAdvisories('review', arrest)).toHaveLength(1)
+    // a charge (or a non-arrest request) clears it
+    expect(legalWizardAdvisories('charges', { ...arrest, charges: [{ case_charge_id: 'cc-1', counts: 2 }] })).toEqual([])
+    expect(legalWizardAdvisories('charges', wiz({ charges: [] }))).toEqual([])
+    expect(legalWizardAdvisories('charges', wiz({ requestType: 'subpoena', subtype: 'testimony', charges: [] }))).toEqual([])
+    // legacy callers that never pass charges are not advised either way on a search warrant
+    expect(legalWizardAdvisories('review', wiz())).toEqual([])
+  })
+
+  it('evidence never blocks', () => {
+    expect(legalWizardIssues('evidence', wiz())).toEqual([])
+    expect(legalWizardAdvisories('evidence', wiz())).toEqual([])
+  })
+
   it('details: required type-specific fields are enforced', () => {
     const sub = wiz({ requestType: 'subpoena', subtype: 'testimony', personId: 'p-1', form: {} })
     expect(legalWizardIssues('details', sub)).toEqual(['Testimony Subject is required.'])
@@ -362,25 +509,38 @@ describe('guided create wizard (pure step model)', () => {
     expect(legalWizardIssues('details', wiz({ personId: '', form: { items_sought: 'x', search_targets: 'Vehicle: ABC123' } }))).toEqual([])
   })
 
-  it('narrative: title + narrative always, priority for warrants only', () => {
+  it('narrative: title + narrative always; priority, standard of proof and PC statement for warrants only', () => {
     expect(legalWizardIssues('narrative', wiz({ title: ' ' }))).toHaveLength(1)
     expect(legalWizardIssues('narrative', wiz({ narrative: '' }))).toHaveLength(1)
     expect(legalWizardIssues('narrative', wiz({ priority: '' }))).toHaveLength(1)
-    expect(legalWizardIssues('narrative', wiz({ requestType: 'subpoena', subtype: 'testimony', priority: '' }))).toEqual([])
+    // P4-04: a warrant must declare a recognised standard and a non-blank PC statement.
+    expect(legalWizardIssues('narrative', wiz({ standardOfProof: null }))).toEqual(['A warrant must declare its standard of proof (probable cause or reasonable suspicion).'])
+    expect(legalWizardIssues('narrative', wiz({ standardOfProof: 'hunch' }))).toHaveLength(1)
+    expect(legalWizardIssues('narrative', wiz({ standardOfProof: 'reasonable_suspicion' }))).toEqual([])
+    expect(legalWizardIssues('narrative', wiz({ pcStatement: '   ' }))).toEqual(['A warrant requires a probable-cause statement.'])
+    // the form_data keys are read as a fallback when the explicit fields are absent
+    const viaForm = wiz({ standardOfProof: undefined, pcStatement: undefined, form: { search_targets: 'Place: X', items_sought: 'Y', standard_of_proof: 'probable_cause', pc_statement: 'Seen.' } })
+    expect(legalWizardIssues('narrative', viaForm)).toEqual([])
+    expect(legalWizardIssues('narrative', { ...viaForm, form: { ...viaForm.form, pc_statement: '' } })).toHaveLength(1)
+    // subpoenas never need any of the three
+    expect(legalWizardIssues('narrative', wiz({ requestType: 'subpoena', subtype: 'testimony', priority: '', standardOfProof: null, pcStatement: '' }))).toEqual([])
   })
 
-  it('review unions every earlier step', () => {
-    const broken = wiz({ caseId: '', title: '', form: {} , personId: '' })
+  it('review unions every earlier step and the resubmission change-summary rule', () => {
+    const broken = wiz({ caseId: '', title: '', form: {}, personId: '', standardOfProof: null })
     const issues = legalWizardIssues('review', broken)
     expect(issues).toContain('Select a case.')
     expect(issues).toContain('A title is required.')
     expect(issues).toContain('A search warrant requires a subject or at least one search target.')
+    expect(issues).toContain('A warrant must declare its standard of proof (probable cause or reasonable suspicion).')
     expect(legalWizardIssues('review', wiz())).toEqual([])
+    expect(legalWizardIssues('review', wiz({ isResubmission: true, changeSummary: '' }))).toEqual(['A change summary is required when resubmitting.'])
+    expect(legalWizardIssues('review', wiz({ isResubmission: true, changeSummary: 'Fixed the address.' }))).toEqual([])
   })
 
-  it('draft issues mirror create_legal_request (no narrative/priority/detail requirements)', () => {
-    // A titled search warrant with a target can be saved without narrative or details.
-    expect(legalWizardDraftIssues(wiz({ narrative: '', priority: '', form: { search_targets: 'Place: X' } }))).toEqual([])
+  it('draft issues mirror create_legal_request (no narrative/priority/standard/detail requirements)', () => {
+    // A titled search warrant with a target can be saved without narrative, standard or details.
+    expect(legalWizardDraftIssues(wiz({ narrative: '', priority: '', standardOfProof: null, pcStatement: '', form: { search_targets: 'Place: X' } }))).toEqual([])
     expect(legalWizardDraftIssues(wiz({ title: '' }))).toContain('A title is required.')
     expect(legalWizardDraftIssues(wiz({ personId: '', form: {} })))
       .toContain('A search warrant requires a subject or at least one search target.')
@@ -455,7 +615,7 @@ describe('responsible-bureau resolution (mirror of private.legal_resolve_bureau)
     expect(resolveResponsibleBureau(kase({ case_number: '' }))).toEqual({ bureau: null, source: null })
   })
 
-  it('never resolves SIB — an SIB case does not enter the CID prosecutor lanes', () => {
+  it('never resolves SIB — an SIB case does not route through a CID bureau', () => {
     expect(resolveResponsibleBureau(kase({ bureau: 'special_investigations', case_number: 'SIB-8000004', leadDivision: 'special_investigations', creatorDivision: 'special_investigations' })))
       .toEqual({ bureau: null, source: null })
     expect(resolveResponsibleBureau(kase({ case_number: 'SIU-8000001' })))
@@ -511,6 +671,7 @@ describe('responsible-bureau resolution (mirror of private.legal_resolve_bureau)
         recipientType: 'player', recipientName: '', title: 'Search Warrant — stash house',
         priority: 'High', narrative: 'Probable cause narrative.',
         form: { search_targets: 'Place: The stash house', items_sought: 'Contraband' },
+        standardOfProof: 'probable_cause', pcStatement: 'Officer observed the exchange.',
         ...over,
       }
     }
@@ -529,29 +690,31 @@ describe('responsible-bureau resolution (mirror of private.legal_resolve_bureau)
   })
 })
 
-describe('justice approval matrix (mirror of can_review_justice_role)', () => {
-  it('ADA reviewed by DA/AG/Owner', () => {
-    expect(canReviewJusticeRole('district_attorney', false, 'assistant_district_attorney')).toBe(true)
-    expect(canReviewJusticeRole('attorney_general', false, 'assistant_district_attorney')).toBe(true)
-    expect(canReviewJusticeRole('judge', false, 'assistant_district_attorney')).toBe(false)
-  })
-  it('DA reviewed by AG/Owner only', () => {
-    expect(canReviewJusticeRole('attorney_general', false, 'district_attorney')).toBe(true)
-    expect(canReviewJusticeRole('district_attorney', false, 'district_attorney')).toBe(false)
-  })
-  it('AG and Judge are Owner-only', () => {
-    expect(canReviewJusticeRole('attorney_general', false, 'attorney_general')).toBe(false)
-    expect(canReviewJusticeRole(null, true, 'attorney_general')).toBe(true)
+describe('justice appointment matrix (mirror of justice_appoint, L16)', () => {
+  it('a Judge is appointed by the AG or the Owner', () => {
+    expect(canReviewJusticeRole('attorney_general', false, 'judge')).toBe(true)
     expect(canReviewJusticeRole(null, true, 'judge')).toBe(true)
+    expect(canReviewJusticeRole('judge', false, 'judge')).toBe(false)
+    expect(canReviewJusticeRole('prosecutor', false, 'judge')).toBe(false)
+  })
+  it('an Attorney General is Owner-only', () => {
+    expect(canReviewJusticeRole(null, true, 'attorney_general')).toBe(true)
+    expect(canReviewJusticeRole('attorney_general', false, 'attorney_general')).toBe(false)
+  })
+  it('the prosecution-side roles are retired — nobody can grant them, not even the Owner', () => {
+    for (const r of ['prosecutor', 'assistant_district_attorney', 'district_attorney']) {
+      expect(canReviewJusticeRole('attorney_general', false, r), r).toBe(false)
+      expect(canReviewJusticeRole('district_attorney', false, r), r).toBe(false)
+      expect(canReviewJusticeRole(null, true, r), r).toBe(false)
+    }
   })
 })
 
 describe('assignment eligibility + target/subtype helpers', () => {
-  it('judge/prosecutor assignment eligibility', () => {
+  it('judge assignment eligibility', () => {
     expect(canAssignAsJudge({ active: true, justice_role: 'judge' })).toBe(true)
     expect(canAssignAsJudge({ active: false, justice_role: 'judge' })).toBe(false)
-    expect(canAssignAsProsecutor({ active: true, justice_role: 'assistant_district_attorney' })).toBe(true)
-    expect(canAssignAsProsecutor({ active: true, justice_role: 'judge' })).toBe(false)
+    expect(canAssignAsJudge({ active: true, justice_role: 'attorney_general' })).toBe(false)
   })
   it('target formatting', () => {
     expect(formatTarget({ person_name_snapshot: 'John Doe', recipient_name: null, recipient_type: null })).toBe('John Doe')
@@ -566,34 +729,23 @@ describe('assignment eligibility + target/subtype helpers', () => {
   })
 })
 
-describe('remediation pins — executed grouping, parked ownership, AG judge review', () => {
+describe('remediation pins — executed grouping, fulfilment coherence', () => {
   it('an executed warrant is outstanding return work, not completed', () => {
     const r = req({ review_status: 'approved', fulfilment_status: 'executed' })
     expect(dispositionFor(r, viewer({ myId: 'inv-1', cidActive: true, cidRole: 'detective' }), NOW).group).toBe('service_return_pending')
-  })
-  it('a parked coverage-gap request is DOJ management\'s action', () => {
-    const parked = req({ review_status: 'submitted_to_doj', assigned_ada_id: null })
-    expect(dispositionFor(parked, viewer({ justiceRole: 'district_attorney' }), NOW).viewerCanAct).toBe(true)
-    expect(dispositionFor(parked, viewer({ justiceRole: 'attorney_general' }), NOW).viewerCanAct).toBe(true)
-    expect(dispositionFor(parked, viewer({ justiceRole: 'assistant_district_attorney' }), NOW).viewerCanAct).toBe(false)
-    const routed = req({ review_status: 'submitted_to_doj', assigned_ada_id: 'a-1' })
-    expect(dispositionFor(routed, viewer({ justiceRole: 'district_attorney' }), NOW).viewerCanAct).toBe(false)
-  })
-  it('the AG reviews judge applications (server matrix 20260731010000)', () => {
-    expect(canReviewJusticeRole('attorney_general', false, 'judge')).toBe(true)
-    expect(canReviewJusticeRole('district_attorney', false, 'judge')).toBe(false)
-    expect(canReviewJusticeRole('attorney_general', false, 'attorney_general')).toBe(false)
   })
   it('every fulfilment status lands in a coherent group (no completed-with-pending-return)', () => {
     const owed = ['issued', 'compliance_pending', 'non_compliance', 'executed']
     const done = ['served', 'returned', 'return_recorded', 'records_received', 'testimony_completed']
     const inv = viewer({ myId: 'inv-1', cidActive: true, cidRole: 'detective' })
-    for (const f of owed) {
-      const g = dispositionFor(req({ review_status: 'approved', fulfilment_status: f }), inv, NOW).group
-      expect(['issued_active', 'service_return_pending'], f).toContain(g)
-    }
-    for (const f of done) {
-      expect(dispositionFor(req({ review_status: 'approved', fulfilment_status: f }), inv, NOW).group, f).toBe('completed')
+    for (const status of ['approved', 'partially_approved']) {
+      for (const f of owed) {
+        const g = dispositionFor(req({ review_status: status, fulfilment_status: f }), inv, NOW).group
+        expect(['issued_active', 'service_return_pending'], `${status}/${f}`).toContain(g)
+      }
+      for (const f of done) {
+        expect(dispositionFor(req({ review_status: status, fulfilment_status: f }), inv, NOW).group, `${status}/${f}`).toBe('completed')
+      }
     }
   })
 })
@@ -602,7 +754,7 @@ describe('the SIB legal lane — X-1, not a Bureau Lead', () => {
   const siuReq = (over = {}) =>
     req({ review_status: 'siu_command_review', created_by: 'agent-1', ...over })
 
-  it('shares the CID stage but names a different holder', () => {
+  it('shares the first-approval stage but names a different holder', () => {
     // Same LIFECYCLE position — first approval, before the request leaves the
     // department — so the progress bar stays honest. Who holds it differs.
     expect(stageForReviewStatus('siu_command_review')).toBe('cid_review')
@@ -642,14 +794,16 @@ describe('the SIB legal lane — X-1, not a Bureau Lead', () => {
     expect(stageForReviewStatus('returned_by_siu_command')).toBe('draft')
   })
 
-  it('explains where the request goes next, since the SIB route is unfamiliar', () => {
-    // §9 "why is this stuck". A reader who knows the CID pipeline would
-    // reasonably expect a prosecutor queue next; the SIB lane skips it.
+  it('explains where the request goes next: straight to the judicial queue, AG oversight only', () => {
+    // §9 "why is this stuck". L3: X-1 approval lands in the judge queue; the
+    // Attorney General is notified but holds no gate.
     const other = viewer({ myId: 'u-other', cidActive: true })
     const why = routingExplanation(siuReq(), other)
     expect(why).toMatch(/SIB command/i)
+    expect(why).toMatch(/judicial queue/i)
     expect(why).toMatch(/Attorney General/i)
-    expect(why, 'it must say the prosecutor queue is NOT the next stop').toMatch(/prosecutor queue/i)
+    expect(why).toMatch(/oversight/i)
+    expect(why).not.toMatch(/prosecutor queue/i)
   })
 })
 
@@ -718,10 +872,9 @@ describe('who may decide a CID legal request', () => {
   })
 
   it('lets higher command act on any bureau, immediately', () => {
-    // The whole point of part 3: a request must not stall because the bureau's
-    // own lead is on LOA, unassigned, or does not exist. Neither role carries a
-    // division test, and nothing requires the lead to be marked unavailable
-    // first.
+    // A request must not stall because the bureau's own lead is on LOA,
+    // unassigned, or does not exist. Neither role carries a division test,
+    // and nothing requires the lead to be marked unavailable first.
     for (const role of ['deputy_director', 'director']) {
       expect(acts(viewer({ myId: 'u-cmd', cidActive: true, cidRole: role, cidDivision: 'street_crimes' })), role)
         .toBe(true)

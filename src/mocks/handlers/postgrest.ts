@@ -25,13 +25,16 @@ import {
   type MockRow, type MockTableName,
 } from '../store'
 import { visibleCaseNotes } from './caseWorkspace'
+import { visibleLegalRows } from './legal'
 
 /** Per-table read predicates the wall applies BEYOND the scenario switches
  *  (rlsRestricted / permissionDenied): case_notes hides a note restricted to
  *  command from a session that is neither command nor its author
- *  (20261021120000 case_notes_sel). Other tables read unfiltered. */
+ *  (20261021120000 case_notes_sel); the Phase 4 legal tables read only for
+ *  requests the session can view (can_view_legal_request, ./legal.ts).
+ *  Other tables read unfiltered. */
 function readable(table: MockTableName, rows: MockRow[]): MockRow[] {
-  return table === 'case_notes' ? visibleCaseNotes(rows) : rows
+  return table === 'case_notes' ? visibleCaseNotes(rows) : visibleLegalRows(table, rows)
 }
 
 /* ---- shared helpers (used by rpc/auth/fivemanage handlers too) ----------- */

@@ -1,6 +1,73 @@
 # DOJ Legal Review System
 
-> ## ✅ MINIMAL DOJ (Phase 2) — 2026-08-15 — the CURRENT model
+> ## ✅ PHASE 4 — Judge + Attorney General only (2026-10-24 → 2026-10-27) — the CURRENT model
+>
+> Portal Improvements Phase 4 (P4-01 … P4-12; migrations
+> [`20261024120000_legal_tables`](../supabase/migrations/20261024120000_legal_tables.sql),
+> [`20261025120000_legal_reroute`](../supabase/migrations/20261025120000_legal_reroute.sql),
+> [`20261026120000_legal_rpcs`](../supabase/migrations/20261026120000_legal_rpcs.sql),
+> [`20261027120000_legal_sweeps`](../supabase/migrations/20261027120000_legal_sweeps.sql)) **retired the prosecutor stage**. The live pipeline is
+> **Detective → Bureau Lead → Judge** for CID cases and **Special Agent → X-1
+> → Judge** for SIB cases (Attorney General notified, oversight only):
+> `not_submitted` → `cid_supervisor_review` | `siu_command_review` →
+> **`submitted_to_judge`** → `judicial_review` → `approved` |
+> **`partially_approved`** | `denied` (+ `returned_by_cid` /
+> `returned_by_siu_command` / `returned_by_judge`, `withdrawn`, `cancelled`,
+> `superseded`). State diagram and rules table: [WORKFLOWS.md §5](WORKFLOWS.md#5-warrants--subpoenas-legal-review);
+> authority: [AUTHORIZATION.md §16](AUTHORIZATION.md#16-the-legal-workflow-phase-4-20261024120000--20261027120000).
+>
+> **Identity model (L16):** exactly two live justice roles — **Judge** (decides)
+> and **Attorney General** (appoints, oversees every judge-submitted request
+> sealed included, assigns sealed requests; never decides). `justice_appoint`
+> accepts only `judge` | `attorney_general` and answers "the prosecutor role
+> is retired — grant per-request observer access instead" for anything else;
+> `p_bureau` must be null. Prosecutor / ADA / DA memberships are **history
+> only** — preserved, rendered with a retired-role mark, never offered by a
+> grant menu, conferring nothing. Someone from the prosecution side who must
+> see a request today is a per-request **observer** participant
+> (`legal_set_observer`; `legal_request_participants.participant_role =
+> 'observer'`), able to read and comment on that one request. The Owner is
+> the fallback assigner when no AG is seated. The prosecutor RPCs
+> (`legal_claim_prosecutor`, `legal_assign_prosecutor`,
+> `review_legal_request_as_prosecutor`, `legal_return_to_prosecutor_queue`,
+> `review_legal_request_as_ag`, `submit_legal_request_to_doj`,
+> `reassign_legal_ada`) are EXECUTE-revoked; `prosecutor_coverage` and
+> `justice_set_coverage` / `justice_end_coverage` remain server-side (AG /
+> Owner-only) but are unused. In-flight rows were mapped by the migration
+> (`prosecutor_queue` / `prosecutor_review` / `ag_review` →
+> `submitted_to_judge`; `returned_by_prosecutor` → `returned_by_judge`;
+> `LEGAL_JUDGE_QUEUE_MIGRATED`).
+>
+> **Legal-request model additions:** `legal_request_charges` (P4-03 — charges
+> chosen from the case's `case_charges`, statute snapshot per row, set by
+> `legal_set_charges` while editable), `legal_request_comments` +
+> `legal_request_comment_versions` (P4-05 — threaded, participant-visible,
+> RPC-only, immutable history, sealed-safe `legal_comment` notifications),
+> `legal_request_revision_items` (P4-06 — the reviewer's return checklist,
+> resolved by the creator; a change summary is required on every
+> resubmission), `legal_request_target_decisions` (P4-07 — per-target /
+> per-exhibit judicial decisions with reasoning; any denied target →
+> `partially_approved`, scope frozen into the judicial version),
+> `legal_expiry_defaults` + `legal_request_reminders` (P4-10 — per-subtype
+> expiry, idempotent 48 h nudge / 5 d escalation / 7 d unissued / 72 h expiring
+> / expiry sweeps, hourly `legal-sweep` cron), `legal_export_log` (P4-11 —
+> audited PDF / DOCX instrument and packet exports with a verification
+> code). New columns: `legal_requests.stage_entered_at` (trigger-maintained),
+> `nudged_at`, `escalated_at`; `form_data.standard_of_proof` +
+> `pc_statement` are required on every warrant (P4-04);
+> `legal_add_evidence_and_exhibit` creates the case media row and the exhibit
+> in one step (P4-08); `legal_amend` clones a decided request into a linked
+> new draft (`amends_request_id`, P4-09). Every new table is SELECT-only via
+> `private.can_view_legal_request` (creator, active participant incl.
+> observers, Owner, AG once `submitted_to_judge_at` is set, judges for the
+> non-sealed judicial queue, CID / SIB reviewers during their stage, any
+> case-access member for `standard`) — no client INSERT / UPDATE / DELETE.
+>
+> **Fixtures:** the RLS suites need `rls-test-judge`, `rls-test-judge2` and
+> `rls-test-ag` (issue #299); the prosecutor / ADA / DA fixtures are no longer
+> needed. See [TEST-ENVIRONMENT.md](TEST-ENVIRONMENT.md#doj-fixture-roster-phase-4).
+>
+> ## 🛑 MINIMAL DOJ (Phase 2) — 2026-08-15 — historical
 >
 > The retired multi-stage DOJ pipeline (see the Phase 1 note below) was revived
 > in **minimal form** by
@@ -80,7 +147,7 @@
 >
 > **The sections below document the ORIGINAL multi-stage pipeline** — kept so
 > preserved historical records stay legible. Where they conflict with the
-> Phase 2 note above, the note wins.
+> Phase 4 note above, that note wins (the Phase 2 note is itself history).
 
 Shipped in **v1.13.0**. This supersedes the original proposal (kept as a
 historical record in `docs/archive/DOJ-INTEGRATION-DRAFT.md`).
@@ -111,6 +178,10 @@ pattern but kept fully separate:
 - `justice_memberships` — the durable identity: `agency` (`doj` | `judiciary`),
   `justice_role`, `active`, `justice_identifier` (Bar / Court id). A CHECK
   constraint forbids invalid combinations (Judge-in-DOJ, ADA-in-Judiciary, …).
+  **Since Phase 4 only `judge` and `attorney_general` can be created**
+  (`justice_appoint`); prosecutor / ADA / DA rows are history and confer no
+  authority — a former prosecutor sees a request only as a per-request
+  observer (`legal_set_observer`).
 - `justice_membership_requests` (+ `_history`) — the applicant-owned onboarding
   request. `internal_decision_note` is column-revoked from clients (the
   `membership_requests.email` precedent); reviewers read it via
@@ -188,9 +259,14 @@ One shared model (`legal_requests`) for both request types, with three
 **independent** status dimensions (§19) — never one overloaded field:
 
 - `document_status`: draft / finalized / reopened
-- `review_status`: not_submitted → cid_supervisor_review → (returned | submitted_to_doj)
-  → ada_review → (submitted_to_da | submitted_to_ag | submitted_to_judge) →
-  approved | denied | withdrawn (plus every `returned_by_*`)
+- `review_status`: today `not_submitted → cid_supervisor_review | siu_command_review
+  → submitted_to_judge → judicial_review → approved | partially_approved | denied`
+  (+ `returned_by_cid` / `returned_by_siu_command` / `returned_by_judge`,
+  `withdrawn`, `cancelled`, `superseded`); the original chain
+  (`submitted_to_doj → ada_review → submitted_to_da | submitted_to_ag | …`) and
+  the minimal-DOJ `prosecutor_queue` / `prosecutor_review` /
+  `returned_by_prosecutor` / `declined` values stay in the CHECK for history
+  and render as "Retired stage"
 - `fulfilment_status`: warrant lifecycle (unissued / issued / executed /
   returned / expired / revoked / closed) and subpoena lifecycle (served /
   compliance_pending / records_received / testimony_completed / non_compliance /
@@ -209,8 +285,15 @@ Supporting tables:
   person_record). Reviewers see **only** these items — never the full case,
   all evidence, chat, or unrelated intelligence.
 - `legal_request_participants` — request-specific participation (requesting
-  investigator, CID supervisor, assigned ADA, DA, AG, judicial reviewer,
-  observer). Access is per-request, not per-role.
+  investigator, CID / SIB supervisor, judicial reviewer, **observer** — the
+  Phase 4 replacement for every prosecution-side role; historical ADA / DA /
+  AG rows remain). Access is per-request, not per-role.
+- Phase 4 additions (all RPC-only, SELECT via `can_view_legal_request`):
+  `legal_request_charges`, `legal_request_comments` +
+  `legal_request_comment_versions`, `legal_request_revision_items`,
+  `legal_request_target_decisions`, `legal_request_reminders`,
+  `legal_expiry_defaults`, `legal_export_log` — see the Phase 4 note at the
+  top and [WORKFLOWS.md §5](WORKFLOWS.md#5-warrants--subpoenas-legal-review).
 - `legal_request_signatures` — version-bound signatures. A prosecutor signature
   never satisfies judicial approval; the `action` names the stage it signs.
 - `mdt_wanted_projections` — see MDT below.

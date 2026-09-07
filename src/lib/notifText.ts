@@ -58,7 +58,17 @@ export const NOTIF_LABEL: Record<string, string> = {
   legal_request: '⚖️ Legal request needs your attention',
   legal_update: '⚖️ Legal request update',
   legal_decision: '⚖️ Legal decision recorded',
-  legal_coverage: '⚠ Prosecutor coverage gap',
+  legal_coverage: '⚠ Legal coverage gap', // legacy kind (prosecutor coverage retired)
+  // Phase 4 legal kinds (contract §7). Sealed payloads carry only
+  // {request_id, sealed:true} — the title is all the bell ever shows.
+  legal_comment: '💬 New comment on a legal request',
+  legal_nudge: '⏰ Legal request awaiting action',
+  legal_escalated: '⚠ Legal request escalated',
+  legal_unissued: 'Approved request not yet issued',
+  legal_expiring: 'Legal instrument expiring soon',
+  legal_expired: 'Legal instrument expired',
+  legal_deadline_passed: 'Subpoena response deadline passed',
+  legal_observer: 'You were added as an observer',
   client_error: '⚠ App error reported',
   case_stale: 'Case going stale',
   stale_case: 'Case going stale',
