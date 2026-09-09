@@ -16,7 +16,7 @@ import { uiConfirm } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { SignatureViewer } from '@/components/shared/SignatureViewer'
-import { caseNumById, fmtCountdown, type CaseRow, type TrackerRow } from './commandUtils'
+import { caseNumById, fmtCountdown, type CaseRow, type TrackerRow } from '@/components/command-center/lib/commandUtils'
 import { Card } from '@/components/ui/Card'
 
 type Bureau = Database['public']['Enums']['bureau']

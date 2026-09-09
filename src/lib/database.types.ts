@@ -231,6 +231,109 @@ export type Database = {
           },
         ]
       }
+      action_escalation_rules: {
+        Row: {
+          after_hours: number
+          enabled: boolean
+          kind: string
+          note: string | null
+          target: string
+          updated_at: string
+        }
+        Insert: {
+          after_hours: number
+          enabled?: boolean
+          kind: string
+          note?: string | null
+          target: string
+          updated_at?: string
+        }
+        Update: {
+          after_hours?: number
+          enabled?: boolean
+          kind?: string
+          note?: string | null
+          target?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      action_escalations: {
+        Row: {
+          case_id: string | null
+          escalated_at: string
+          id: string
+          kind: string
+          notified: string[]
+          resolved_at: string | null
+          source_id: string
+          stage: string | null
+        }
+        Insert: {
+          case_id?: string | null
+          escalated_at?: string
+          id?: string
+          kind: string
+          notified?: string[]
+          resolved_at?: string | null
+          source_id: string
+          stage?: string | null
+        }
+        Update: {
+          case_id?: string | null
+          escalated_at?: string
+          id?: string
+          kind?: string
+          notified?: string[]
+          resolved_at?: string | null
+          source_id?: string
+          stage?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "action_escalations_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      action_item_state: {
+        Row: {
+          dedupe_key: string
+          dismissed_at: string | null
+          seen_at: string | null
+          snoozed_until: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          dedupe_key: string
+          dismissed_at?: string | null
+          seen_at?: string | null
+          snoozed_until?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          dedupe_key?: string
+          dismissed_at?: string | null
+          seen_at?: string | null
+          snoozed_until?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "action_item_state_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       announcements: {
         Row: {
           audience: string
@@ -8338,6 +8441,7 @@ export type Database = {
           id: string
           payload: Json | null
           read: boolean
+          read_at: string | null
           type: string
           user_id: string
         }
@@ -8346,6 +8450,7 @@ export type Database = {
           id?: string
           payload?: Json | null
           read?: boolean
+          read_at?: string | null
           type: string
           user_id: string
         }
@@ -8354,6 +8459,7 @@ export type Database = {
           id?: string
           payload?: Json | null
           read?: boolean
+          read_at?: string | null
           type?: string
           user_id?: string
         }
@@ -12849,6 +12955,49 @@ export type Database = {
           p_type: string
         }
         Returns: Database["public"]["Tables"]["legal_request_exhibits"]["Row"]
+      }
+      action_escalation_rule_set: {
+        Args: { p_after_hours: number; p_enabled: boolean; p_kind: string }
+        Returns: Json
+      }
+      action_escalation_run: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      action_item_set_state: {
+        Args: { p_key: string; p_op: string; p_until?: string | null }
+        Returns: Json
+      }
+      action_item_set_state_many: {
+        Args: { p_keys: string[]; p_op: string; p_until?: string | null }
+        Returns: Json
+      }
+      action_reassign_blocker: {
+        Args: { p_blocker: string; p_reason: string; p_user: string }
+        Returns: undefined
+      }
+      action_reassign_task: {
+        Args: { p_reason: string; p_task: string; p_user: string }
+        Returns: undefined
+      }
+      notification_resolve: {
+        Args: { p_ids: string[] }
+        Returns: {
+          id: string
+          type: string
+          subject_kind: string | null
+          subject_id: string | null
+          visible: boolean
+          label: string | null
+        }[]
+      }
+      notifications_mark_read: {
+        Args: { p_ids: string[] }
+        Returns: number
+      }
+      rls_test_escalation_run: {
+        Args: { p_case: string }
+        Returns: Json
       }
       admin_justice_membership_requests: {
         Args: never

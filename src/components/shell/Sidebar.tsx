@@ -6,7 +6,7 @@
  *  collapse controls, officer card. Collapse uses the same
  *  body.nav-collapsed class contract as the legacy styles.css. */
 import { useSyncExternalStore } from 'react'
-import { DASH_LABEL, DASH_TAB, type SwitchableId } from '@/components/dash/DashSwitcherView'
+import { DASH_LABEL, DASH_TAB, type SwitchableId } from '@/lib/nav'
 import { useAuth } from '@/lib/auth'
 import { useCapabilities } from '@/lib/permissions'
 import { useSiu } from '@/lib/permissions'

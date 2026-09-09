@@ -11,9 +11,10 @@
  *  can't read their own row back). RLS (`profiles_upd_self`) is the real wall;
  *  this page is the convenience. No passwords exist (OAuth / magic-link only),
  *  so Security is read-only. Appearance is device-local (localStorage). */
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { updateNoSelect } from '@/lib/db'
+import { DISCORD_CATEGORIES, loadDiscordCategories, saveDiscordCategories } from '@/lib/notifications'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { useProfilesStore } from '@/lib/profiles'
@@ -219,6 +220,11 @@ function ProfileSection() {
           <label className={label} htmlFor="pf-discord">Discord ID <span className="font-normal text-slate-500">— enables Discord DM notifications</span></label>
           <input id="pf-discord" value={discord} onChange={(e) => setDiscord(e.target.value)} placeholder="your numeric Discord user ID" className={`${input} font-mono`} />
         </div>
+        {!!profile.discord_id && (
+          <div className="sm:col-span-2">
+            <DiscordCategoriesField />
+          </div>
+        )}
       </div>
 
       <label className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-3 text-sm text-slate-200">
@@ -325,6 +331,73 @@ function AccountSection() {
         <p className="mt-3 text-[11px] text-slate-500">“Everywhere” revokes your sessions on all devices.</p>
       </div>
     </section>
+  )
+}
+
+/* ---- Discord DM opt-in (Phase 7, P7-07) ---------------------------------- */
+
+/** "Discord DMs for…" — the categories the discord-notify function may DM
+ *  this member about (user_prefs `notif_discord`). No row = every category;
+ *  each toggle saves immediately. Rendered only once a Discord ID is saved.
+ *  A failed read (`loadDiscordCategories` → null) renders the checkboxes
+ *  disabled with a Retry — never a save, so an outage can't widen the pref. */
+function DiscordCategoriesField() {
+  // 'loading' → 'ready' (cats set) | 'error' (cats stay null, Retry offered).
+  const [cats, setCats] = useState<string[] | null>(null)
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    let live = true
+    void loadDiscordCategories().then((c) => {
+      if (!live) return
+      if (c === null) { setStatus('error'); return }
+      setCats(c)
+      setStatus('ready')
+    })
+    return () => { live = false }
+  }, [attempt])
+  const retry = () => { setStatus('loading'); setAttempt((n) => n + 1) }
+  const toggle = async (key: string) => {
+    if (!cats || status !== 'ready') return
+    const next = cats.includes(key) ? cats.filter((k) => k !== key) : [...cats, key]
+    setCats(next)
+    const err = await saveDiscordCategories(next)
+    if (err) { toast(`Could not save: ${err.message}`, 'danger'); setCats(cats) }
+  }
+  const disabled = status !== 'ready'
+  return (
+    <fieldset className="rounded-lg border border-white/10 bg-ink-900 p-3" aria-busy={status === 'loading' || undefined}>
+      <legend className="px-1 text-xs font-semibold text-slate-300">Discord DMs for…</legend>
+      <p className="mb-2 text-[11px] text-slate-400">Untick a category to stop its DMs; in-app notifications are unaffected.</p>
+      {status === 'error' && (
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2" role="alert">
+          <span className="text-xs text-rose-200">Couldn’t load your Discord preferences — nothing was changed.</span>
+          <Button size="sm" onClick={retry}>Retry</Button>
+        </div>
+      )}
+      {status === 'loading' ? (
+        <p className="text-xs text-slate-400">Loading…</p>
+      ) : (
+        <div className="grid gap-1 sm:grid-cols-2">
+          {DISCORD_CATEGORIES.map((c) => (
+            <label key={c.key} className={`flex min-h-[40px] items-center gap-2 rounded-lg px-2 py-1 text-sm text-slate-200 transition ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-white/5'}`}>
+              <input
+                type="checkbox"
+                checked={cats?.includes(c.key) ?? false}
+                disabled={disabled}
+                onChange={() => void toggle(c.key)}
+                aria-label={`Discord DMs for ${c.label}`}
+                className="h-4 w-4 flex-shrink-0 accent-amber-400"
+              />
+              <span className="min-w-0">
+                <span className="block">{c.label}</span>
+                <span className="block text-[11px] text-slate-400">{c.hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
+    </fieldset>
   )
 }
 

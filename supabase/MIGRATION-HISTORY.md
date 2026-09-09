@@ -977,6 +977,82 @@ or uncatalogued claim refused, a bad date of birth refused with the RPC's
 wording, a soft-deleted record's shadow row `deleted` and invisible to a
 detective.
 
+### Phase 7 — Action Center and scheduler (2026-09-09, applied)
+
+**P7-01 / P7-03 / P7-04 / P7-07 the queue's server side.**
+`20261101120000_action_center.sql` (applied as `action_center`): the
+per-viewer `action_item_state` (PK user + dedupe key; owner-only SELECT,
+RPC-only writes, in the realtime publication — identifiers only) with
+`action_item_set_state` / `_many` (seen / snooze ≤ 48 h / unsnooze / dismiss /
+undismiss; `private.action_key_class` sorts a key into dismissable /
+decision / work — only an informational key can be dismissed, a snoozed
+decision writes `ACTION_ITEM_SNOOZED`, the bulk form skips and reports
+non-dismissable keys), `notifications.read_at` (backfilled; a BEFORE UPDATE
+trigger keeps it in step with `read`) with the `(user_id, read)` and
+unread-partial indexes and `notifications_mark_read(ids)` (own rows, ≤ 500),
+`notification_resolve(ids)` — SECURITY INVOKER on purpose, so every subject
+lookup (report → task → blocker → submission → request → case) runs under
+the caller's RLS and a subject they can no longer see answers
+`visible=false` with no label — `action_reassign_task` / `_blocker` (the case
+lead or command on a live case, reason ≥ 3 chars, the target active and able
+to see the case through `private.user_can_access_case`; `TASK_REASSIGNED` /
+`BLOCKER_REASSIGNED`; `task_assigned` / the new `blocker_assigned` with ids
+only through `private.action_notify` — test-actor suppression, one unread
+row per kind and subject per hour), `action_escalation_rules` (Owner-only
+read; seeded sign-off 72 h → the next authority by stage, access request
+48 h → the bureau's leads and the deputies, overdue task 48 h → the case lead
+or, when the lead is the assignee, the bureau's leads; `legal` 120 h kept
+disabled because `legal_sweep` escalates legal requests itself) with
+`action_escalation_rule_set` (Owner; `ACTION_ESCALATION_RULE_SET`), the
+`action_escalations` ledger (unique per kind + source, readable with the
+case's own visibility, in the publication; re-opened when a resolved source
+qualifies again) written by `private.action_escalation_sweep` (`action_escalated`
+notifications with kind / source / case ids, `ACTION_ESCALATED`, resolution
+when the source is decided / done / approved), the `action-escalation-sweep`
+pg_cron job at :50 hourly through `private.action_escalation_job` and the
+Owner's `action_escalation_run()`, four catalog rows and the `action_item` /
+`action_escalation` / `case_task reassign` / `case_blocker reassign` arms of
+`private.perm_dispatch` (placed before the registry arm), and
+`rls_test_cleanup` spliced for the fixtures' state rows and escalations.
+Verified at apply time in rolled-back transactions as a detective, a second
+detective, a director and the Owner: seen / snooze / dismiss round trips, a
+49 h snooze refused, a task key's dismiss refused with `P0403`, the bulk
+form applying two of four keys and naming the two skipped, two audited
+decision snoozes, a direct insert `42501`, the rules invisible to a detective
+and readable by the Owner, mark-read stamping `read_at`, a task notification
+resolving to its title and an SIU case notification resolving invisible,
+reassignment refused for a short reason / a non-lead (`P0403`) / the same
+assignee and allowed for the lead with the audit row and an ids-only
+notification, the Owner's run escalating a stale sign-off (to the two deputy
+directors), a three-day access request (to the bureau leads and deputies)
+and a five-day-overdue task (to the lead), a second run notifying nobody,
+the ledger readable with the case, and every row resolved once the request
+was decided, the task done and the case approved.
+
+**Security-review follow-up** (applied as `action_center_review_fixes`, folded
+into the repo file): `private.user_can_access_case` follows `can_access_case`
+exactly — the SIU walls (recusal, compartment, command, restricted) and only
+joint-case assignments, no Owner standing — and every escalation recipient is
+filtered through it, so a compartmented SIB case awaiting sign-off tells no
+CID deputy; the ledger remembers the sign-off `stage` and a stage advance
+resolves the row and re-escalates to the next authority; a deleted case
+resolves its request rows; `notified` records only recipients actually
+written (`action_notify` returns boolean); an `access_request` ledger row is
+readable only by those who could decide it; `notification_resolve` casts
+payload ids tolerantly (a crafted `task_id` no longer sinks the batch); the
+reassign RPCs check authority before describing the row; `dedupe_key` must
+be an identifier path; the `read_at` trigger fires on any read / read_at
+change and `read` is the only notification column a client may update; the
+duplicate `(user_id, read)` index is dropped; `rls_test_escalation_run(case)`
+runs the sweep for ONE fixture-owned case so the suites never touch a
+production rule. Verified in a rolled-back transaction: the compartmented SIB
+case escalated with zero recipients while the CID case reached the two
+deputies, the stage advance re-escalating to the directors, a `task_id` of
+`zz` resolving to no subject, a key with spaces refused (`23514`), a client
+payload update `42501` and a client read update stamping `read_at`, a
+non-lead's reassign answered `P0403` before any row state, the fixture
+runner refusing a real user.
+
 | Version (live) | Name | Repo file |
 |---|---|---|
 | applied via MCP (`entity_normalization`, `entity_normalization_phone_fix`) | entity_normalization | `20261014120000_entity_normalization.sql` |
@@ -997,6 +1073,7 @@ detective.
 | applied via MCP (`report_review`, `report_review_entity_exists`, `report_review_fixes`) | report_review | `20261029120000_report_review.sql` |
 | applied via MCP (`intel_triage`, `intel_triage_perm_raise`, `intel_review_fixes`) | intel_triage | `20261030120000_intel_triage.sql` |
 | applied via MCP (`intel_groups_convert`, `intel_groups_convert_policy_grant`, `intel_review_fixes`) | intel_groups_convert | `20261031120000_intel_groups_convert.sql` |
+| applied via MCP (`action_center`, `action_center_review_fixes`, `action_center_review_fixes_surv_alert`) | action_center | `20261101120000_action_center.sql` |
 | applied via MCP (`record_versions`) | record_versions | `20261011120000_record_versions.sql` |
 | applied via MCP (`case_access_grant_expiry`) | case_access_grant_expiry | `20261012120000_case_access_grant_expiry.sql` |
 | applied via MCP (`permanent_delete_record`, `permanent_delete_record_preview_fix`) | permanent_delete_record | `20261013120000_permanent_delete_record.sql` |

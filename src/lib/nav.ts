@@ -3,7 +3,35 @@
  *  leaf tabs; categories + the sub-tab strip are a grouping layer over them.
  *  Route ids, labels and grouping MUST stay identical to vanilla for parity. */
 
+import type { DashboardId } from './permissions/capabilities'
 import { TOOL_TABS } from './toolsModel'
+
+/* ---- Dashboards (the sidebar's capability-gated leaves) --------------------
+ * Formerly components/dash/DashSwitcherView (the Phase-1B chip-row switcher,
+ * retired in Phase 7 — the sidebar leaves and the command palette are the
+ * only consumers left). 'submitter' is deliberately absent: field officers
+ * get a separate shell, never these leaves. */
+export type SwitchableId = Exclude<DashboardId, 'submitter'>
+
+export const DASH_LABEL: Record<SwitchableId, string> = {
+  my: 'My Dashboard',
+  cases: 'Cases',
+  command: 'Command Center',
+  sib: 'SIB',
+  doj: 'Legal Review',
+  owner: 'Owner Console',
+}
+
+/** Route (leaf tab id) per dashboard — /inbox, /cases, /command-center, /siu,
+ *  /legal, /owner. */
+export const DASH_TAB: Record<SwitchableId, string> = {
+  my: 'inbox',
+  cases: 'cases',
+  command: 'command-center',
+  sib: 'siu',
+  doj: 'legal',
+  owner: 'owner',
+}
 
 export interface PageMeta {
   title: string

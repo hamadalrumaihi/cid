@@ -235,7 +235,7 @@ function audit(action: string, entity: string, entityId: string, detail: Json | 
 function notify(userIds: Iterable<string | null | undefined>, kind: string, payload: Json): number {
   const me = uid()
   const targets = [...new Set([...userIds].filter((id): id is string => !!id && id !== me))]
-  seedRows('notifications', targets.map((user_id) => ({ created_at: now(), id: mockId(), payload, read: false, type: kind, user_id })))
+  seedRows('notifications', targets.map((user_id) => ({ created_at: now(), id: mockId(), payload, read: false, read_at: null, type: kind, user_id })))
   return targets.length
 }
 function payloadFor(r: Report, kase: MockRow, extra: Record<string, Json> = {}): Json {

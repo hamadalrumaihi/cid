@@ -9,7 +9,7 @@ import { NOTIF_LABEL, intelReviewHref, notifDetail, notifHref, notifSub, notifTi
 const INTEL_KINDS = ['intel_new', 'intel_assigned', 'intel_question', 'intel_reply', 'intel_referred'] as const
 
 const row = (type: string, payload: Record<string, unknown> | null = {}): NotificationRow => ({
-  id: 'n1', user_id: 'u1', type, payload: payload as never, read: false, created_at: '2026-09-01T00:00:00Z',
+  id: 'n1', user_id: 'u1', type, payload: payload as never, read: false, read_at: null, created_at: '2026-09-01T00:00:00Z',
 })
 
 describe('intel notifications', () => {
@@ -45,5 +45,55 @@ describe('intel notifications', () => {
 
   it('is never mutable', () => {
     for (const k of INTEL_KINDS) expect(MUTABLE_NOTIF_TYPES.has(k), k).toBe(false)
+  })
+})
+
+/* ── Phase 7 (P7-07): ONE title map, the escalation ladder's deep links. ─── */
+import titles from './notificationTitles.json'
+import { NOTIF_CATEGORY } from './notifText'
+
+describe('notification titles (P7-07)', () => {
+  it('NOTIF_LABEL is exactly the JSON title map (the edge function ships a copy)', () => {
+    const json = titles as Record<string, { title: string; category: string }>
+    expect(Object.keys(NOTIF_LABEL).sort()).toEqual(Object.keys(json).sort())
+    for (const [k, v] of Object.entries(json)) {
+      expect(NOTIF_LABEL[k]).toBe(v.title)
+      expect(NOTIF_CATEGORY[k]).toBe(v.category)
+    }
+  })
+
+  it('carries every kind the plan listed as missing, with the existing wording kept', () => {
+    expect(NOTIF_LABEL.narcotic_suggestion).toBe('Narcotic suggestion decided')
+    expect(NOTIF_LABEL.siu_access_request).toBe('SIB access requested')
+    expect(NOTIF_LABEL.siu_access_decision).toBe('SIB access decision')
+    expect(NOTIF_LABEL.siu_appointed).toBe('Appointed to the SIB')
+    expect(NOTIF_LABEL.siu_case_assigned).toBe('SIB case assigned')
+    expect(NOTIF_LABEL.siu_compartment_granted).toBe('SIB compartment granted')
+    expect(NOTIF_LABEL.document_required).toBe('Document acknowledgement required')
+    expect(NOTIF_LABEL.info).toBe('Notice')
+    expect(NOTIF_LABEL.client_error).toBe('⚠ App error reported')
+    expect(NOTIF_LABEL.blocker_assigned).toBe('Blocker assigned to you')
+    expect(NOTIF_LABEL.action_escalated).toBe('Escalated to you')
+    expect(NOTIF_LABEL.case_stale).toBe('Case going stale')
+    expect(NOTIF_LABEL.stale_case).toBe('Case going stale')
+    // Legacy wording preserved for the kinds the bell already rendered.
+    expect(NOTIF_LABEL.signoff_waiting).toBe('Case awaiting your sign-off')
+    expect(NOTIF_LABEL.announcement).toBe('📣 Announcement')
+    expect(notifTitle(row('never_heard_of_it'))).toBe('never_heard_of_it')
+  })
+
+  it('routes action_escalated by the escalated source kind', () => {
+    expect(notifHref(row('action_escalated', { kind: 'signoff', source_id: 'c-1', case_id: 'c-1' })))
+      .toBe('/cases?case=c-1&tab=signoff')
+    expect(notifHref(row('action_escalated', { kind: 'task_overdue', source_id: 't-9', case_id: 'c-1' })))
+      .toBe('/cases?case=c-1&tab=tasks&task=t-9')
+    expect(notifHref(row('action_escalated', { kind: 'access_request', source_id: 'ar-1', case_id: 'c-1' })))
+      .toBe('/cases?case=c-1')
+    // No case in the payload → the queue's escalated filter, never a dead row.
+    expect(notifHref(row('action_escalated', { kind: 'signoff', source_id: 'x' }))).toBe('/action?f=escalated')
+  })
+
+  it('blocker_assigned lands on the Brief tab (CaseBlockersPanel lives in OverviewTab)', () => {
+    expect(notifHref(row('blocker_assigned', { case_id: 'c-1', blocker_id: 'b-1' }))).toBe('/cases?case=c-1&tab=overview')
   })
 })

@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   NO_ACCESS, PERMISSIONS_MATRIX, SIGNOFF_AWAITING, canAssignIntel, canDecideCidTransfer, canDeleteIntel,
-  canGrantCaseByRole, canOverrideSignoff, canReassignBureau, canRejectIntel, canRestoreIntel, canReviewSignoff,
+  canGrantCaseByRole, canOverrideSignoff, canReassignBureau, canReassignCaseWork, canRejectIntel, canRestoreIntel, canReviewSignoff,
   canUndeleteIntel, canValidateIntel, effectiveDojRole, isBureauCommandFor, isCommandRole, isDeputyOrDirector,
   isSignoffOwner, isSignoffReviewer, matrixCan, matrixColumnFor, normalizePermissions, type MyPermissions,
 } from './index'
@@ -52,6 +52,19 @@ describe('matrix cells vs mirrors', () => {
     expect(canGrantCaseByRole({ role: 'bureau_lead' })).toBe(true)
     expect(canGrantCaseByRole({ role: 'detective' })).toBe(false)
     expect(canGrantCaseByRole({ role: 'detective', is_owner: true })).toBe(true)
+  })
+  it('reassign case work (Phase 7 §2.6): the case lead, command or the Owner — active only, never null', () => {
+    const c = { lead_detective_id: 'lead' }
+    expect(canReassignCaseWork(c, { id: 'lead', role: 'detective', active: true })).toBe(true)
+    expect(canReassignCaseWork(c, { id: 'other', role: 'detective', active: true })).toBe(false)
+    expect(canReassignCaseWork(c, { id: 'bl', role: 'bureau_lead', active: true })).toBe(true)
+    expect(canReassignCaseWork(c, { id: 'dd', role: 'deputy_director', active: true })).toBe(true)
+    expect(canReassignCaseWork(c, { id: 'o', role: 'detective', active: true, is_owner: true })).toBe(true)
+    expect(canReassignCaseWork(c, { id: 'lead', role: 'detective', active: false })).toBe(false)
+    expect(canReassignCaseWork(c, { id: 'bl', role: 'bureau_lead', active: false })).toBe(false)
+    expect(canReassignCaseWork({ lead_detective_id: null }, { id: 'd', role: 'detective', active: true })).toBe(false)
+    expect(canReassignCaseWork(c, null)).toBe(false)
+    expect(canReassignCaseWork(c, { role: 'director', active: true })).toBe(false) // no id → no viewer
   })
 })
 

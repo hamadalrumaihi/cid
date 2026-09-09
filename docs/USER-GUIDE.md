@@ -62,7 +62,7 @@ SIB is **not** applied for here. SIB membership is appointed from inside the div
 - **My Dashboard** (Command section — your landing page) is your work at a glance: a prioritized **Needs your attention** panel (the top of your Action Center queue), your cases, the **Jump back in** pins-and-recents strip, your open Investigative Tools tabs, unfinished **Drafts**, **Watched items** and your recent activity. Every count clicks through to the screen that owns it. Start every session here.
 - If your account holds more than one working world, a **dashboard switcher** chip row at the top of each dashboard hops between them — My Dashboard, Cases, Command Center, SIB, Legal Review, Owner Console — showing only the dashboards your access actually grants.
 - The **Division Overview** (Command section) is the shared division picture every member gets: case vitals (each tile opens the list behind the number), crime analytics, GPS trackers and raid compensation. Command queues, workload and approvals live in the **Command Center**.
-- The **Action Center** is one prioritized queue of everything awaiting a decision or action from you, in named lanes — Overdue, Returned to you, Needs your action, Command decisions, **Unassigned intel** (field intelligence no reviewer has claimed), **Expiring BOLOs** (windows closing within 7 days), Waiting on others, and **Drafts** (unfinished work you saved — resume or discard). Every item says why it's here and what to do next; filter the queue by type or bureau.
+- The **Action Center** is one prioritized queue of everything awaiting a decision or action from you, in named lanes — Overdue, Returned to you, Needs your action, Command decisions, **Unassigned intel** (field intelligence no reviewer has claimed), **Expiring BOLOs** (windows closing within 7 days), Waiting on others, and **Drafts** (unfinished work you saved — resume or discard). Every item says why it's here and what to do next; filter the queue by type or bureau. Snooze, dismiss, bulk actions, presets and escalation are described under **The Action Center** below.
 - The **bell** is your notification feed. Notifications about the same case or request collapse into one group; the unread badge is exact. Click a row to mark it read and jump to its record, mark a whole group read, or **Mark all read** in one click. The bell's settings panel can **mute the optional streams** (announcements, tracker authorizations, document suggestions, stale-case reminders, sign-off heads-ups) — assignments, mentions, sign-off decisions, legal and security notices can never be muted. Duplicate notifications for the same event are suppressed automatically.
 
 ---
@@ -110,6 +110,28 @@ SIB is a **separate workspace and authority**, not a CID category. An SIB accoun
 - **Pin** a case or record (the pin button on case headers and record profiles) to keep it one click away. Pins are saved to your account, so they **follow you across devices**. Pinning stores only the record's id — never its contents.
 - The portal also keeps a short **recently-opened** trail on each device.
 - Both appear in the **Jump back in** strip on My Dashboard — pinned chips first, then recents, with a **Clear** for the history. A record you can no longer access simply doesn't appear; a pin comes back by itself if your access returns.
+
+### The Action Center
+
+Everything waiting on you — a task, a blocker, a sign-off to decide, an access request, a legal request, a report to review, a mention, a draft — lands in **Action Center** (Command section, `/action`) as one list, most urgent first. The same list feeds the **Needs your attention** panel on My Dashboard, the Command Center's decision panels and the little counts on the sidebar, so you never see two different versions of "what's waiting".
+
+**Every row tells you why it's there and what to do.** Where the portal has a safe one-click action, it's right on the row — complete a task, resolve a blocker, approve or deny an access request, mark a notification read, discard a draft, approve an MDT export or a field-access request, acknowledge a surveillance alert. Anything that needs a proper form — a sign-off decision, a transfer, a legal ruling — opens the screen that owns it.
+
+**Snooze.** Not now? **Snooze** a row for **1 hour, 4 hours, until tomorrow 9:00, or 48 hours** — that's the maximum; the portal won't let anything hide for longer. Snoozed rows drop out of the list and come back on their own; **Show snoozed** lists them so you can bring one back early. Snoozing a *command decision* (a sign-off, an access or transfer request, an approval) is recorded in the audit trail — the item still belongs to you.
+
+**Dismiss.** Informational rows — a notification, a draft, an expiring window, a library notice, a follow-up reminder — can be **dismissed** for good. Work assigned to you and decisions you own **cannot** be dismissed: the row says so ("decide it, finish it or snooze it"). Nothing you dismiss disappears from the record; only your queue stops showing it.
+
+**Reassign.** If you lead the case, or hold a command rank, a task or blocker row offers **Reassign**: pick the member and say why (a short reason is required). The member must be able to see the case — the portal refuses otherwise, and tells you to grant access first. The new owner is notified.
+
+**Escalated.** When something waits too long — a sign-off past three days, an access request or an overdue task past two — the portal escalates it on its own: the next person up the chain is told (Deputy Directors for a Bureau Lead's sign-off, Directors for a Deputy's, the Owner for a Director's; the case bureau's leads for an access request; the case lead — or the bureau's leads when the lead is the one holding the task — for an overdue task), and the row wears a rose **Escalated** badge everyone on the case can see. **Escalated** is also a filter and a count in the metric strip. The portal owner tunes the hours from the Owner Console.
+
+**Bulk.** Tick several rows (Shift-click for a range; Ctrl/⌘+A selects what's visible; Escape clears) and use the bar at the bottom: **Mark read** (notifications), **Snooze**, or **Dismiss** — the bar says how many of the selected rows can be dismissed and skips the rest. Decisions are never taken in bulk.
+
+**Presets and saved views.** One-click **presets** open the queue the way your role usually needs it — Detective, Bureau Lead, Command, Judge, SIB, Owner — and you only see the presets your access allows; your default is picked from your rank. Set up filters, sections and *show snoozed* the way you like and **Save view**, exactly as on Case Files: views follow your account, one can be the default, and a link with `?preset=` or `?view=` opens the queue in that shape.
+
+**On a phone.** Rows become cards, the filter chips scroll sideways, sections collapse, every control is finger-sized and the bulk bar sticks to the bottom.
+
+**"An item you no longer have access to."** A notification can outlive your access to what it was about — a case that moved bureaus, a request that was sealed. The bell and the queue then show that line instead of a broken link. **Discord DMs**: on **My Profile**, under your Discord ID, tick the categories you want as DMs (assignments, decisions, legal, mentions, escalations, intel, reports, announcements, security). Leave them all ticked to keep today's behaviour.
 
 ---
 

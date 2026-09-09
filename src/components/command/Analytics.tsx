@@ -4,7 +4,7 @@
  *  bars over the RLS-scoped caches. One hue per chart (magnitude, not
  *  identity); values are direct-labeled. */
 import type { Tables } from '@/lib/database.types'
-import type { CaseRow } from './commandUtils'
+import type { CaseRow } from '@/components/command-center/lib/commandUtils'
 import { Card } from '@/components/ui/Card'
 
 type PersonRow = Tables<'persons'>

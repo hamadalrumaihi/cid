@@ -2,7 +2,8 @@
 
 /** My Dashboard (/inbox) — the personal landing surface (Phase-2A rebuild of
  *  the old "My Desk"). One prioritized "Needs your attention" panel (the TOP
- *  slice of the Action Center's useActionItems queue) replaces the former
+ *  slice of the ONE Action Center queue — useActionQueue via ActionSlice)
+ *  replaces the former
  *  dead metric strip and the duplicated sign-off / returned / follow-up /
  *  task / mention panels — and their big unprojected table loads went with
  *  them. Everything this view fetches itself is a slim projection with a
@@ -10,24 +11,22 @@
  *  `empty`); every count is clickable through to its owning surface. */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useActionItems } from '@/components/actioncenter/useActionItems'
+import { ActionSlice } from '@/components/actioncenter/ActionSlice'
+import { useActionQueue } from '@/components/actioncenter/useActionQueue'
 import { isFieldOnlyAccount } from '@/components/command-center/lib/membershipPending'
 import { DashPanel } from '@/components/dash/DashPanel'
 import { DashRow } from '@/components/dash/DashRow'
-import { DashSwitcher } from '@/components/dash/DashSwitcher'
-import { JumpBack } from '@/components/command/JumpBack'
+import { JumpBack } from './JumpBack'
 import { SiuAccessRequestCard } from '@/components/siu/SiuAccessRequest'
 import { useCreate } from '@/components/shell/CreateHost'
 import { useToolNav } from '@/components/tools/useToolNav'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { uiConfirm } from '@/components/ui/dialog'
-import { describeDraftKey } from '@/lib/actionItems'
 import { useAuth } from '@/lib/auth'
 import { caseLink } from '@/lib/caseLinks'
 import type { Json, Tables } from '@/lib/database.types'
-import { list, removeWhere } from '@/lib/db'
+import { list } from '@/lib/db'
 import { useFieldStanding } from '@/lib/fieldStanding'
 import { timeAgo } from '@/lib/format'
 import { useJusticeRoster } from '@/lib/justiceRoster'
@@ -38,7 +37,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { ROLE_LABEL, bureauShort } from '@/lib/roles'
 import { signoffLabel } from '@/lib/signoff'
 import { Store } from '@/lib/store'
-import { humanizeError, toast } from '@/lib/toast'
+import { humanizeError } from '@/lib/toast'
 import { isToolTab, type ToolId } from '@/lib/toolsModel'
 import { readMirror } from '@/lib/workspace/storage'
 import { workspaceCaseHref } from '@/lib/workspace/model'
@@ -57,7 +56,6 @@ type MessageLite = Pick<Tables<'case_messages'>,
   'id' | 'case_id' | 'author_id' | 'author_name' | 'body' | 'mentions' | 'created_at'>
 type LegalLite = Pick<Tables<'legal_requests'>,
   'id' | 'request_number' | 'request_type' | 'review_status' | 'updated_at'>
-type DraftLite = Pick<Tables<'user_drafts'>, 'key' | 'updated_at'>
 
 const MY_CASE_COLS =
   'id,case_number,title,status,bureau,lead_detective_id,created_by,summary,'
@@ -65,7 +63,6 @@ const MY_CASE_COLS =
 const REPORT_COLS = 'id,case_id,template,finalized,updated_at'
 const MESSAGE_COLS = 'id,case_id,author_id,author_name,body,mentions,created_at'
 const LEGAL_COLS = 'id,request_number,request_type,review_status,updated_at'
-const DRAFT_COLS = 'key,updated_at'
 
 interface DeskData {
   myCases: MyCaseRow[]
@@ -73,13 +70,14 @@ interface DeskData {
    *  and the recent-decisions slice of the activity panel. */
   submissions: MyCaseRow[]
   watched: WatchTarget[]
-  drafts: DraftLite[]
+  /** Unfinalized report rows only — saved user_drafts are the Action Center
+   *  queue's `draft` items (the slice above), not a second list here. */
   reports: ReportLite[]
   messages: MessageLite[]
   legal: LegalLite[]
 }
 
-const EMPTY: DeskData = { myCases: [], submissions: [], watched: [], drafts: [], reports: [], messages: [], legal: [] }
+const EMPTY: DeskData = { myCases: [], submissions: [], watched: [], reports: [], messages: [], legal: [] }
 
 const RETURNED_SIGNOFF = new Set(['changes_requested', 'denied'])
 /** Sign-off states that represent a DECISION on a submission (for the
@@ -124,7 +122,7 @@ export function InboxView() {
   const { profile, state, isCommand, canEdit } = useAuth()
   const create = useCreate()
   const { openHref } = useToolNav()
-  const ac = useActionItems()
+  const ac = useActionQueue()
   const fetchProfiles = useProfilesStore((s) => s.fetch)
   const rosterProfiles = useProfilesStore((s) => s.profiles)
   const justiceByUser = useJusticeRoster((s) => s.byUser)
@@ -144,7 +142,6 @@ export function InboxView() {
   const vMessages = useTableVersion('case_messages')
   const vReports = useTableVersion('reports')
   const vWatch = useTableVersion('watchlist')
-  const vDrafts = useTableVersion('user_drafts')
   const vLegal = useTableVersion('legal_requests')
   const vPersons = useTableVersion('persons')
   const vVehicles = useTableVersion('vehicles')
@@ -159,7 +156,7 @@ export function InboxView() {
       await fetchProfiles() // officerName for mention authors / case leads
       if (isCommand) { void fetchJustice(); void fetchFieldStanding() }
       const me = profile.id
-      const [myCases, submissions, watched, drafts, reports, messages, legal] = await Promise.all([
+      const [myCases, submissions, watched, reports, messages, legal] = await Promise.all([
         // My cases: lead OR creator = me, live rows, newest movement first.
         list('cases', {
           select: MY_CASE_COLS, or: `lead_detective_id.eq.${me},created_by.eq.${me}`,
@@ -171,10 +168,6 @@ export function InboxView() {
           order: 'updated_at', ascending: false, limit: 10,
         }).then((r) => r as unknown as MyCaseRow[]).catch(() => [] as MyCaseRow[]),
         fetchWatchTargets(me).catch(() => [] as WatchTarget[]),
-        // user_drafts is RLS owner-only; the eq is belt-and-braces. Keys only.
-        list('user_drafts', {
-          select: DRAFT_COLS, eq: { user_id: me }, order: 'updated_at', ascending: false, limit: 8,
-        }).then((r) => r as unknown as DraftLite[]).catch(() => [] as DraftLite[]),
         // Unfinalized reports authored by me (finalized filtered client-side —
         // the column is nullable).
         list('reports', {
@@ -190,7 +183,7 @@ export function InboxView() {
           select: LEGAL_COLS, eq: { created_by: me }, order: 'updated_at', ascending: false, limit: 5,
         }).then((r) => r as unknown as LegalLite[]).catch(() => [] as LegalLite[]),
       ])
-      setData({ myCases, submissions, watched, drafts, reports, messages, legal })
+      setData({ myCases, submissions, watched, reports, messages, legal })
       // profiles.id IS the auth uid — the same key ToolsView persists under.
       setOpenTabs(readToolTabs(profile.id))
     } catch (e) {
@@ -205,7 +198,7 @@ export function InboxView() {
   useEffect(() => {
     const id = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(id)
-  }, [refresh, vCases, vMessages, vReports, vWatch, vDrafts, vLegal, vPersons, vVehicles, vJustice])
+  }, [refresh, vCases, vMessages, vReports, vWatch, vLegal, vPersons, vVehicles, vJustice])
 
   // Command-only banner count: pending CID sign-ins awaiting a decision.
   // Mirrors the roster rule — an inactive member holding an active justice
@@ -262,7 +255,6 @@ export function InboxView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seenVer invalidates the Store-read watchSeen map
   }, [data, profile, seenVer])
 
-  const attention = ac.items.slice(0, 8)
   const freshWatched = model.watched.filter((it) => it.fresh)
 
   const markAllSeen = () => {
@@ -270,23 +262,9 @@ export function InboxView() {
     setSeenVer((v) => v + 1)
   }
 
-  const discardDraft = async (key: string) => {
-    const ok = await uiConfirm(
-      'Discard this draft? The saved work-in-progress is deleted; anything already saved to the record itself is untouched.',
-      { title: 'Discard draft', confirmText: 'Discard draft' },
-    )
-    if (!ok) return
-    // The viewer's own user_drafts row (RLS owner-only) — same write path the
-    // Action Center's discard uses.
-    const res = await removeWhere('user_drafts', { eq: { key } })
-    if (res.error) { toast(`Could not discard the draft: ${res.error.message}`, 'danger'); return }
-    setData((d) => ({ ...d, drafts: d.drafts.filter((x) => x.key !== key) }))
-    toast('Draft discarded.', 'success')
-  }
-
   if (state !== 'in') return <p className="px-3 py-2.5 text-sm text-slate-400">Sign in to view your dashboard.</p>
 
-  const draftsCount = data.drafts.length + model.draftReports.length
+  const draftsCount = model.draftReports.length
   const allQuiet = !loading && !ac.loading && ac.items.length === 0 && model.myCases.length === 0
     && openTabs.length === 0 && draftsCount === 0 && model.watched.length === 0 && model.activity.length === 0
 
@@ -296,8 +274,7 @@ export function InboxView() {
           this keeps the one-h1-per-view contract without duplicating it. */}
       <h1 className="sr-only">My Dashboard</h1>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <DashSwitcher />
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {canEdit && (
             <>
@@ -347,26 +324,15 @@ export function InboxView() {
       {loading && <p className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm text-slate-400">Loading your dashboard…</p>}
 
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2 2xl:grid-cols-3">
-        <DashPanel
+        {/* The TOP slice of the one Action Center queue — same items, same
+            ranking, one fetch (Phase 7 AC7). Saved drafts live here too. */}
+        <ActionSlice
           title="Needs your attention"
-          count={ac.items.length}
-          action={{ label: `Open Action Center (${ac.items.length}) →`, href: '/action' }}
-          empty={ac.items.length === 0}
-        >
-          {attention.map((it) => (
-            <DashRow
-              key={it.id}
-              title={it.title}
-              why={it.reason || it.summary}
-              meta={it.caseNumber ?? timeAgo(it.updatedAt)}
-              overdue={it.status === 'overdue'}
-              badge={it.priority === 'critical'
-                ? <Badge tone="danger">critical</Badge>
-                : it.priority === 'high' ? <Badge tone="warn">high</Badge> : undefined}
-              onClick={() => openHref(it.deepLink)}
-            />
-          ))}
-        </DashPanel>
+          filter={() => true}
+          limit={8}
+          emptyText="Nothing needs your action right now."
+          href="/action"
+        />
 
         <DashPanel
           title="My cases"
@@ -428,29 +394,7 @@ export function InboxView() {
           ))}
         </DashPanel>
 
-        <DashPanel title="Drafts" count={draftsCount} empty={draftsCount === 0}>
-          {data.drafts.map((d) => {
-            const desc = describeDraftKey(d.key)
-            return (
-              <div key={d.key} className="flex items-center gap-1">
-                <div className="min-w-0 flex-1">
-                  <DashRow
-                    title={desc.title}
-                    why={desc.summary}
-                    meta={timeAgo(d.updated_at)}
-                    onClick={() => openHref(desc.deepLink)}
-                  />
-                </div>
-                <button
-                  onClick={() => { void discardDraft(d.key) }}
-                  aria-label={`Discard draft: ${desc.title}`}
-                  className="min-h-10 flex-shrink-0 rounded-lg px-2.5 text-[11px] font-semibold text-slate-400 transition hover:bg-rose-500/10 hover:text-rose-300"
-                >
-                  Discard
-                </button>
-              </div>
-            )
-          })}
+        <DashPanel title="Report drafts" count={draftsCount} empty={draftsCount === 0}>
           {model.draftReports.map((r) => (
             <DashRow
               key={r.id}

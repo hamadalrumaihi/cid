@@ -22,7 +22,7 @@ import { Encourage } from './Encourage'
 import { RaidComp } from './RaidComp'
 import { Trackers } from './Trackers'
 import { Card } from '@/components/ui/Card'
-import type { CaseRow } from './commandUtils'
+import type { CaseRow } from '@/components/command-center/lib/commandUtils'
 
 type PersonRow = Tables<'persons'>
 type GangRow = Tables<'gangs'>

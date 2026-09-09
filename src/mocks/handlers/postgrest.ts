@@ -24,6 +24,7 @@ import {
   getDenial, getLatency, getRows, isOffline, mockId, setRows,
   type MockRow, type MockTableName,
 } from '../store'
+import { visibleActionRows } from './action'
 import { visibleCaseNotes } from './caseWorkspace'
 import {
   IntelRpcError, afterFieldMessageInsert, afterFieldSubmissionChange, fieldSubmissionPatch, messageInsertGuard,
@@ -40,11 +41,13 @@ import { ensureReportTemplates, pinReportTemplateVersion, reportUpdateGuard, vis
  *  Phase 5 report tables read for active members (templates) or through the
  *  parent report (entities / exports, ./reports.ts); the Phase 6 intel
  *  tables (the records, the shadow table, groups, notes, the thread) read
- *  through private.field_submission_readable (./intel.ts). Other tables
+ *  through private.field_submission_readable (./intel.ts); the Phase 7
+ *  action tables read for their viewer (state), the Owner (rules) or with
+ *  the case's visibility (the escalation ledger, ./action.ts). Other tables
  *  read unfiltered. */
 function readable(table: MockTableName, rows: MockRow[]): MockRow[] {
   if (table === 'case_notes') return visibleCaseNotes(rows)
-  return visibleIntelRows(table, visibleReportRows(table, visibleLegalRows(table, rows)))
+  return visibleActionRows(table, visibleIntelRows(table, visibleReportRows(table, visibleLegalRows(table, rows))))
 }
 
 /** Tables whose rows the migrations SEED: an empty mock store answers like

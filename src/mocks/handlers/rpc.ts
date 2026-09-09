@@ -169,6 +169,7 @@ export const rpcHandlers = [
         seedRows('notifications', [{
           created_at: new Date().toISOString(),
           id: mockId(),
+          read_at: null,
           payload: (typedArgs.p_payload ?? null) as Tables<'notifications'>['payload'],
           read: false,
           type: typedArgs.p_type,

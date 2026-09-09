@@ -43,7 +43,7 @@ describe('zero-row update = RLS-blocked write (the silent wall)', () => {
   it('RLS-filtered DELETE silently removes nothing (hard-deletable table)', async () => {
     const { caseRecord } = emptyCase()
     const [note] = seedRows('notifications', [{
-      created_at: new Date().toISOString(), id: mockId(), payload: { case_id: caseRecord.id }, read: false, type: 'case_assigned', user_id: mockId(),
+      created_at: new Date().toISOString(), id: mockId(), payload: { case_id: caseRecord.id }, read: false, read_at: null, type: 'case_assigned', user_id: mockId(),
     }])
     rlsRestricted('notifications')
     const res = await remove('notifications', note.id)

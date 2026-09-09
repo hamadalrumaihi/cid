@@ -7,12 +7,12 @@
  *  activated directly, request never decided; reviewed through the same RPC),
  *  (3) pending sign-ins WITHOUT a live request (the legacy one-click
  *  `assign_member` activate — replaced by a DecisionModal re-review when a
- *  recorded rejection/withdrawal exists), and (4) cases whose sign-off stage
- *  THIS command user can decide — those deep-link into the case Sign-off tab
- *  (the `signoff_decide` RPC is the authority). All membership buckets come
- *  from the shared `pendingMembership` model so every surface counts alike. */
+ *  recorded rejection/withdrawal exists), and (4) every OTHER command decision
+ *  — sign-offs, access, transfers, legal, surveillance … — as a slice of the
+ *  ONE Action Center queue (ActionSlice, Phase 7 AC7) instead of this view's
+ *  former unprojected `cases` load. All membership buckets come from the
+ *  shared `pendingMembership` model so every surface counts alike. */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { list, rpc } from '@/lib/db'
 import type { Database, Tables } from '@/lib/database.types'
 import { fmtDateTime } from '@/lib/format'
@@ -23,8 +23,7 @@ import { AGENCY_LABEL, justiceRoleLabel, type JusticeAgency } from '@/lib/justic
 import { useJusticeRoster } from '@/lib/justiceRoster'
 import { useFieldStanding } from '@/lib/fieldStanding'
 import { useTableVersion } from '@/lib/realtime'
-import { PERMANENT_BUREAUS, ROLE_LABEL, ROLE_ORDER, bureauLabel, bureauShort, roleLabel, type RoleParty } from '@/lib/roles'
-import { signoffLabel, signoffTint } from '@/lib/signoff'
+import { PERMANENT_BUREAUS, ROLE_LABEL, ROLE_ORDER, bureauLabel, roleLabel, type RoleParty } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -33,11 +32,10 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { ErrorNotice } from '@/components/ui/Notice'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTimeline'
-import { canReviewCase } from '../lib/approvals'
+import { ActionSlice } from '@/components/actioncenter/ActionSlice'
 import { pendingMembership } from '../lib/membershipPending'
 import { canApproveRequestedRole } from '@/lib/permissions'
 
-type CaseRow = Tables<'cases'>
 type RequestRow = Tables<'membership_requests'>
 /** Projection of a justice application this queue may read (jmr_sel admits
  *  command read-only since 20260731010000; internal notes stay revoked). */
@@ -245,8 +243,6 @@ export function ApprovalQueue() {
   const fieldLoaded = useFieldStanding((s) => s.loaded)
   const fetchFieldStanding = useFieldStanding((s) => s.fetch)
   const fetchJustice = useJusticeRoster((s) => s.fetch)
-  const router = useRouter()
-  const [cases, setCases] = useState<CaseRow[]>([])
   // null until the first successful load — an error must never render as an
   // empty-but-successful queue (the false all-clear).
   const [requests, setRequests] = useState<RequestRow[] | null>(null)
@@ -258,7 +254,6 @@ export function ApprovalQueue() {
   const [emails, setEmails] = useState<Record<string, string>>({})
   const [decision, setDecision] = useState<{ req: RequestRow; kind: Decision } | null>(null)
   const vP = useTableVersion('profiles')
-  const vC = useTableVersion('cases')
   const vM = useTableVersion('membership_requests')
   const vJ = useTableVersion('justice_memberships')
   const vJR = useTableVersion('justice_membership_requests')
@@ -267,7 +262,6 @@ export function ApprovalQueue() {
     void fetchProfiles()
     void fetchJustice()
     void fetchFieldStanding()
-    try { setCases(await list('cases', { order: 'updated_at', ascending: false })) } catch { /* stale */ }
     if (canAdmin) {
       const [rq, em] = await Promise.all([
         rpc('admin_membership_requests', undefined as never),
@@ -296,7 +290,7 @@ export function ApprovalQueue() {
       } catch { /* degrade: applicants blend into sign-ins as before */ }
     }
   }, [fetchProfiles, fetchJustice, fetchFieldStanding, canAdmin])
-  useEffect(() => { const t = window.setTimeout(() => { void refresh() }, 0); return () => window.clearTimeout(t) }, [refresh, vP, vC, vM, vJ, vJR])
+  useEffect(() => { const t = window.setTimeout(() => { void refresh() }, 0); return () => window.clearTimeout(t) }, [refresh, vP, vM, vJ, vJR])
 
   // Single source of truth for every membership bucket (and the shared
   // awaitingCount the badge/tile/Action Center use) — see lib/membershipPending.
@@ -304,7 +298,6 @@ export function ApprovalQueue() {
     fieldLoaded ? fieldIds : null)
   const membershipLoading = !profilesLoaded || (canAdmin && requests === null && reqError === null)
   const justicePending = (justiceReqs ?? []).filter((j) => j.status === 'pending')
-  const reviews = cases.filter((c) => canReviewCase(c, profile))
 
   const approve = async (p: RosterProfile) => {
     // Activation-only since v1.16 — role/division stay exactly as they are.
@@ -460,21 +453,19 @@ export function ApprovalQueue() {
         </>
       )}
 
-      <section className="rounded-lg border border-white/5 bg-ink-900/45 p-5">
-        <h3 className="mb-1 font-bold text-white">Sign-offs awaiting your decision <span className="text-slate-500">({reviews.length})</span></h3>
-        <p className="mb-3 text-xs text-slate-400">Cases at a stage your role can decide. Opens the case Sign-off tab, where the decision is recorded.</p>
-        {reviews.length ? (
-          <div className="space-y-2">
-            {reviews.map((c) => (
-              <button key={c.id} onClick={() => router.push(`/cases?case=${c.id}&tab=signoff`)} className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-ink-950/50 px-4 py-2.5 text-left transition hover:border-badge-400/50">
-                <div><p className="font-mono text-sm font-bold text-white">{c.case_number}</p><p className="text-[11px] text-slate-400">{c.title || 'Untitled'} · {bureauShort(c.bureau)}</p></div>
-                <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${signoffTint(c.signoff_status)}`}>{signoffLabel(c.signoff_status)}</span>
-              </button>
-            ))}
-          </div>
-        ) : <p className="text-sm text-emerald-300">✓ No sign-offs waiting on you.</p>}
-      </section>
-      <p className="text-[11px] text-slate-500">The same reviews appear on your <b>My Dashboard</b> tab; this is the command-wide aggregate. Only authorized reviewers can decide each stage.</p>
+      {/* Every other command decision — sign-offs (opens the case Sign-off tab,
+          where signoff_decide records it), access, transfers, legal,
+          surveillance — is the command slice of the one Action Center queue. */}
+      <ActionSlice
+        title="Decisions awaiting you"
+        filter={(it) => it.isCommandItem && it.sourceType !== 'membership_request'}
+        limit={12}
+        hint="Sign-offs at a stage your role can decide, access requests, transfers, legal and surveillance — the same items as your Action Center."
+        emptyText="No sign-offs or other decisions are waiting on you."
+        href="/action?preset=command"
+        hrefLabel="All command decisions →"
+      />
+      <p className="text-[11px] text-slate-400">The same reviews appear on your <b>My Dashboard</b> tab; this is the command-wide aggregate. Only authorized reviewers can decide each stage.</p>
 
       {decision && (
         <DecisionModal

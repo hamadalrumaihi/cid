@@ -213,7 +213,7 @@ export function intelNotify(userId: unknown, s: Sub, kind: string, extra: Record
     submission_id: s.id, submission_no: s.submission_no, jurisdiction: s.jurisdiction, actor_id: me.id, actor_name: me.display_name,
   }
   for (const [k, v] of Object.entries(extra)) if (!NEVER_IN_PAYLOAD.has(k)) payload[k] = v
-  seedRows('notifications', [{ created_at: now(), id: mockId(), payload, read: false, type: kind, user_id: target.id }])
+  seedRows('notifications', [{ created_at: now(), id: mockId(), payload, read: false, read_at: null, type: kind, user_id: target.id }])
   return true
 }
 /** private.intel_reviewers — active command (Bureau Lead / DD / Director) and the Owner inside the record's wall, never the actor. */

@@ -3,7 +3,18 @@
 // and the recipient must allow DMs. Looks up profiles.discord_id with the service
 // role. JWT-protected by default and additionally verifies the caller is active
 // and that a matching in-app notification was just created.
+//
+// Titles + Discord categories come from ./titles.json — a byte-identical copy of
+// src/lib/notificationTitles.json (scripts/sync-notification-titles.mjs; the
+// `check:notif-titles` gate fails when they drift). The recipient's opt-in
+// (user_prefs key 'notif_discord', {categories: string[]}) is read with the
+// service role: a missing row means every category; a type whose category is
+// not in the list is skipped; an unmapped type is 'other' and always sent —
+// so every decision-like kind MUST sit in a real category (see the JSON).
+// DM text: title + identifiers (case / request / FI number, detective); the
+// free-text `reason` is forwarded only for the REASON_OK kinds below.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import titles from './titles.json' with { type: 'json' };
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -13,42 +24,29 @@ const cors = {
 const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { ...cors, 'content-type': 'application/json' } });
 
-const titles: Record<string, string> = {
-  access_requested: 'Case access requested',
-  access_granted: 'Case access granted',
-  access_denied: 'Case access denied',
-  member_approved: 'CID access approved',
-  signoff_waiting: 'Sign-off needed',
-  signoff_approved: 'Sign-off approved',
-  signoff_denied: 'Sign-off denied',
-  signoff_changes: 'Changes requested',
-  signoff_escalated: 'Sign-off escalated',
-  signoff_heads_up: 'Deputy approved a case',
-  announcement: 'New announcement',
-  mention: 'You were mentioned',
-  chat_mention: 'You were mentioned',
-  case_stale: 'Case needs attention',
-  tracker_pending: 'Tracker awaiting co-sign',
-  tracker_authorized: 'Tracker authorized',
-  case_assigned: 'Case assigned',
-  report_finalized: 'Report finalized',
-  rico_ready: 'RICO elements satisfied',
-  membership_request: 'Membership request awaiting review',
-  membership_update: 'Membership request update',
-  joint_case_added: 'Added to a joint case',
-  joint_case_removed: 'Joint-case access removed',
-  joint_case_ended: 'Joint case ended',
-};
+type TitleEntry = { title: string; category: string };
+const TITLES = titles as Record<string, TitleEntry>;
+/** The opt-in categories the profile UI offers; anything else is 'other'. */
+const OPT_IN_CATEGORIES = new Set(['assignments', 'decisions', 'legal', 'mentions', 'escalations', 'intel', 'reports', 'announcements', 'security']);
+
 const clean = (v: unknown) => String(v || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 300);
-const dmBody = (type: string, payload: Record<string, unknown>) =>
-  [clean(payload.case_number), clean(payload.reason || payload.detective)].filter(Boolean).join(' — ');
+/** The ONLY types whose free-text `reason` may leave the portal in a DM.
+ *  Every other kind (review notes, surveillance / legal / SIB decision text,
+ *  suggestion verdicts …) DMs identifiers only — the words stay in-app. */
+const REASON_OK = new Set(['chat_mention', 'mention', 'note_mention', 'access_requested', 'member_approved']);
+const dmBody = (type: string, payload: Record<string, unknown>) => {
+  const parts = [clean(payload.case_number), clean(payload.request_number), clean(payload.submission_no), clean(payload.detective)];
+  if (REASON_OK.has(type)) parts.push(clean(payload.reason));
+  return parts.filter(Boolean).join(' — ');
+};
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
     const { user_id, type, payload } = await req.json();
     if (!user_id || !type) return json({ error: 'missing user_id/type' }, 400);
-    if (!titles[type]) return json({ error: 'unsupported notification type' }, 400);
+    const entry = TITLES[type];
+    if (!entry?.title) return json({ error: 'unsupported notification type' }, 400);
     const jwt = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
     if (!jwt) return json({ error: 'missing authorization' }, 401);
     const token = Deno.env.get('DISCORD_BOT_TOKEN');
@@ -76,15 +74,26 @@ Deno.serve(async (req) => {
     if (payload?.case_id) q = q.eq('payload->>case_id', String(payload.case_id));
     const { data: notif } = await q.maybeSingle();
     if (!notif?.id) return json({ error: 'matching notification not found' }, 403);
-    // The DM text comes from the VERIFIED notification row, never from the
-    // request body — a caller who legitimately triggered a notification must
-    // not be able to put arbitrary words in the official bot's mouth.
-    const verified = (notif.payload ?? {}) as Record<string, unknown>;
+    // The DM text comes from the stored notification row, never from the
+    // request body. Note the row is NOT a sanitised source: create_notification
+    // stores the caller's `reason` verbatim (capped at 500 chars), so dmBody
+    // only forwards it for the REASON_OK kinds and sends identifiers otherwise.
+    const stored = (notif.payload ?? {}) as Record<string, unknown>;
 
     const { data: prof } = await supa.from('profiles').select('active,discord_id').eq('id', user_id).maybeSingle();
     if (!prof?.active) return json({ skipped: 'recipient inactive' });
     const did = prof?.discord_id;
     if (!did) return json({ skipped: 'no discord_id for user' });
+
+    // Opt-in categories (P7-07). A missing row = every category; an unmapped
+    // type ('other') is never muted.
+    const category = OPT_IN_CATEGORIES.has(entry.category) ? entry.category : 'other';
+    if (category !== 'other') {
+      const { data: pref } = await supa.from('user_prefs').select('value')
+        .eq('user_id', user_id).eq('key', 'notif_discord').maybeSingle();
+      const cats = (pref?.value as { categories?: unknown } | null)?.categories;
+      if (Array.isArray(cats) && !cats.includes(category)) return json({ skipped: 'category muted' });
+    }
 
     const h = { Authorization: `Bot ${token}`, 'content-type': 'application/json' };
     const dmRes = await fetch('https://discord.com/api/v10/users/@me/channels', {
@@ -92,8 +101,8 @@ Deno.serve(async (req) => {
     });
     if (!dmRes.ok) return json({ error: 'dm_open_failed', status: dmRes.status, detail: await dmRes.text() }, 502);
     const dm = await dmRes.json();
-    const body = dmBody(type, verified);
-    const content = `**${titles[type]}**${body ? `\n${body}` : ''}`.slice(0, 1900);
+    const body = dmBody(type, stored);
+    const content = `**${entry.title}**${body ? `\n${body}` : ''}`.slice(0, 1900);
     const msgRes = await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
       method: 'POST', headers: h, body: JSON.stringify({ content }),
     });

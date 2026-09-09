@@ -43,7 +43,6 @@ import { SiuCommandSection } from './SiuCommand'
 import { SiuOversightSection, SiuTradecraftSection } from './SiuTradecraft'
 import { DashPanel } from '@/components/dash/DashPanel'
 import { DashRow } from '@/components/dash/DashRow'
-import { DashSwitcher } from '@/components/dash/DashSwitcher'
 import { roleLabel, bureauShort } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
@@ -134,11 +133,6 @@ export function SiuView() {
 
   return (
     <div>
-      {/* Same chip row as My Dashboard — a multi-role account hops between
-          its dashboards from the SIB landing without touching the sidebar. */}
-      <div className="mb-4">
-        <DashSwitcher />
-      </div>
       <div className="mb-5">
         <PageHeader
           eyebrow="Special Investigations Bureau"

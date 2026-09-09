@@ -219,6 +219,7 @@ export function notificationRow(overrides: Partial<Tables<'notifications'>> & Pi
     id: mockId(),
     payload: { title: 'Mock notification' },
     read: false,
+    read_at: null,
     type: 'case_update',
     ...overrides,
   }
@@ -777,6 +778,53 @@ export function intelGroupCaseRow(
     unlink_reason: null,
     unlinked_at: null,
     unlinked_by: null,
+    ...overrides,
+  }
+}
+
+/** Per-viewer Action Center state (P7-01) — one row per (viewer, dedupe
+ *  key); RPC-only on the server (`action_item_set_state`). */
+export function actionItemStateRow(
+  overrides: Partial<Tables<'action_item_state'>> & Pick<Tables<'action_item_state'>, 'user_id' | 'dedupe_key'>,
+): Tables<'action_item_state'> {
+  return {
+    dismissed_at: null,
+    seen_at: null,
+    snoozed_until: null,
+    updated_at: mockTimestamp(),
+    ...overrides,
+  }
+}
+
+/** An escalation rule (P7-03) — the Owner-tuned ladder; the migration seeds
+ *  four kinds (`handlers/action.ts` seeds them lazily, like the templates). */
+export function actionEscalationRuleRow(
+  overrides: Partial<Tables<'action_escalation_rules'>> & Pick<Tables<'action_escalation_rules'>, 'kind'>,
+): Tables<'action_escalation_rules'> {
+  return {
+    after_hours: 48,
+    enabled: true,
+    note: null,
+    target: 'the case lead',
+    updated_at: mockTimestamp(),
+    ...overrides,
+  }
+}
+
+/** An escalation ledger row (P7-03) — the shared fact the "Escalated" badge
+ *  reads; unique per (kind, source_id), read with the case's visibility
+ *  (`access_request` rows only by the lead / command); `stage` is the
+ *  sign-off stage the row was raised at. */
+export function actionEscalationRow(
+  overrides: Partial<Tables<'action_escalations'>> & Pick<Tables<'action_escalations'>, 'kind' | 'source_id'>,
+): Tables<'action_escalations'> {
+  return {
+    case_id: null,
+    escalated_at: mockTimestamp(),
+    id: mockId(),
+    notified: [],
+    resolved_at: null,
+    stage: null,
     ...overrides,
   }
 }

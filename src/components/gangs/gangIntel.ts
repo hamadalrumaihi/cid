@@ -3,6 +3,7 @@
  *  Kept side-effect-free and framework-free so they're unit-testable and shared
  *  by the dossier, the roster table, and the registry. */
 
+import { clusterDuplicates, type DuplicateClusterOf } from '@/lib/gangDuplicates'
 import type { GangRow, MemberRow, TurfRow } from './gangShared'
 
 // ── Controlled vocabularies (mirror the CHECK constraints in
@@ -67,37 +68,17 @@ export function groupByTier(members: MemberRow[]): Array<{ tier: Tier; members: 
 }
 
 // ── Duplicate detection (non-destructive) ─────────────────────────────────────
-export const normalizeName = (name?: string | null) =>
-  (name ?? '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim()
+// The cluster rule lives in lib/gangDuplicates (Phase 7) so the Action Center's
+// gang_duplicate lane and this roster banner can never disagree.
+export { normalizeName } from '@/lib/gangDuplicates'
 
-export interface DuplicateCluster {
-  key: string
-  members: MemberRow[]
-  reason: string
-}
+export type DuplicateCluster = DuplicateClusterOf<MemberRow>
 
 /** Flag likely-duplicate members within a gang. Exact normalized-name matches
  *  are grouped; a shared linked person_id strengthens the signal. Never
  *  mutates or removes anything — this only surfaces clusters for review. */
 export function findDuplicateMembers(members: MemberRow[]): DuplicateCluster[] {
-  const byName = new Map<string, MemberRow[]>()
-  for (const m of members) {
-    const k = normalizeName(m.name)
-    if (!k) continue
-    byName.set(k, [...(byName.get(k) ?? []), m])
-  }
-  const clusters: DuplicateCluster[] = []
-  for (const [key, group] of byName) {
-    if (group.length < 2) continue
-    const personIds = new Set(group.map((m) => m.person_id).filter(Boolean))
-    const reason =
-      personIds.size === 1 && personIds.has(group[0].person_id)
-        ? 'Same name and same linked person'
-        : 'Same name within this gang'
-    clusters.push({ key, members: group, reason })
-  }
-  // Most-collisions first.
-  return clusters.sort((a, b) => b.members.length - a.members.length)
+  return clusterDuplicates(members)
 }
 
 /** The set of member ids that participate in any duplicate cluster — for a

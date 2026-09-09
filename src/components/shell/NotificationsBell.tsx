@@ -9,12 +9,15 @@
  *  clearly-optional streams (lib/notifications OPTIONAL_NOTIF_CATEGORIES) —
  *  muted rows are hidden and uncounted, never deleted; mandatory types are
  *  always visible. RLS scopes rows to the signed-in user; realtime bumps the
- *  `notifications` table version so new arrivals appear without a reload. */
+ *  `notifications` table version so new arrivals appear without a reload.
+ *  Phase 7 (P7-07): the visible page is hydrated through notification_resolve
+ *  — a subject the viewer can no longer read renders "An item you no longer
+ *  have access to" with its deep link suppressed (no dead ends, no leaks). */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { list } from '@/lib/db'
 import {
-  OPTIONAL_NOTIF_CATEGORIES, loadMutedTypes, markAllRead, markRead,
-  saveMutedTypes, unreadCount, type NotifCategory,
+  OPTIONAL_NOTIF_CATEGORIES, loadMutedTypes, markAllRead, markRead, resolveNotifications,
+  saveMutedTypes, unreadCount, type NotifCategory, type NotifSubject,
 } from '@/lib/notifications'
 import { useAuth } from '@/lib/auth'
 import { notifDetail, notifHref, notifSub, notifTitle, type NotificationRow } from '@/lib/notifText'
@@ -63,6 +66,8 @@ export function NotificationsBell() {
   const [notifs, setNotifs] = useState<NotificationRow[]>([])
   const [unreadTotal, setUnreadTotal] = useState(0)
   const [muted, setMuted] = useState<string[]>([])
+  /** Subject hydration for the visible page (notification_resolve). */
+  const [subjects, setSubjects] = useState<Map<string, NotifSubject>>(new Map())
   const [open, setOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
@@ -80,6 +85,9 @@ export function NotificationsBell() {
       // Accurate server-side count (excluding muted types) — the 50-row list
       // is a display window, never the badge's truth.
       setUnreadTotal(await unreadCount(mutedTypes))
+      // Hydrate the page's subjects (fail-open: an error resolves nothing and
+      // the rows keep their links).
+      setSubjects(await resolveNotifications(rows.map((r) => r.id)))
     } catch { /* keep the last known list — the bell is non-critical */ }
   }, [state])
 
@@ -117,9 +125,16 @@ export function NotificationsBell() {
     if (err) void refresh() // roll back to server truth
   }
 
+  /** Deep link, or null when the subject is no longer readable (P7-07). */
+  const hrefOf = (n: NotificationRow): string | null => {
+    const subj = subjects.get(n.id)
+    if (subj && !subj.visible) return null
+    return notifHref(n, { command: isCommand })
+  }
+
   const onRow = async (n: NotificationRow) => {
     void markOne(n)
-    const href = notifHref(n, { command: isCommand })
+    const href = hrefOf(n)
     if (href) {
       setOpen(false)
       openHref(href)
@@ -158,9 +173,11 @@ export function NotificationsBell() {
   if (state !== 'in') return null
 
   const renderRow = (n: NotificationRow, inCluster = false) => {
-    const detail = notifDetail(n)
-    const sub = notifSub(n)
-    const href = notifHref(n, { command: isCommand })
+    const subj = subjects.get(n.id)
+    const gone = !!subj && !subj.visible
+    const detail = gone ? null : notifDetail(n)
+    const sub = gone ? 'An item you no longer have access to' : notifSub(n)
+    const href = hrefOf(n)
     return (
       <button
         key={n.id}
