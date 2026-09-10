@@ -6,6 +6,6 @@
  *  no new queries run, and the propose payload stays byte-identical to the
  *  pre-expansion one — the live panel renders exactly what it renders today.
  *  Server-side the bridge is equally dormant (mdt_patrol_feed is
- *  service_role-only). See docs/MDT-BRIDGE-CONTRACT.md. */
+ *  service_role-only). See docs/archive/MDT-BRIDGE-CONTRACT.md. */
 export const isMdtExpansionConfigured = (): boolean =>
   process.env.NEXT_PUBLIC_MDT_EXPANSION === 'on'

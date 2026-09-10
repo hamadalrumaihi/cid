@@ -3,7 +3,7 @@
 > **Executed.** This roadmap was carried out **in full, Phases 0–10, all merged to `main`**
 > (Phase 10 landed as PR #209). It is retained as the **historical planning record**: the
 > discovery, the confirmed decisions, and the phase plan as they stood before the build. For
-> what actually shipped and when, see [`CHANGELOG.md`](../CHANGELOG.md) and the per‑phase PRs
+> what actually shipped and when, see [`CHANGELOG.md`](../../CHANGELOG.md) and the per‑phase PRs
 > cited in the roadmap below.
 >
 > **This roadmap is closed.** Work delivered after it — notably the **Special Investigation
@@ -146,7 +146,7 @@ access change (PR #204) shipped alongside Phase 5.
 - ☑ **Phase 8 — Shared design‑system consistency + mobile pass — PR #207.** *Delivered.*
 - ◧ **Phase 9 — Security, reliability, operational hardening — PR #208 (security track).** Advisor hardening shipped: anon‑revoke drift, `search_path` pin, insert‑policy tightening, FK indexes — the live baseline is zero anon‑executable `public` functions, and a re‑run on 2026‑08‑17 confirmed **zero ERROR‑level security advisors** after the SIU build. *The reliability/operational sub‑track is the only part of this roadmap still open, and its three items now diverge:*
   - **Live‑verifying CI secrets — UNBLOCKED.** The blocker was `rls_test_cleanup()` reaching real CID records; findings F1–F5 were closed by PR #241, so `RLS_TEST_PASSWORD_*` can be added. This is the one remaining action in the whole roadmap.
-  - **Staging/seed Supabase project — deliberately NOT built.** It is required only for the destructive seeded E2E suite (`scripts/test-seed.sql` truncates) and for deterministic visual regression. Shipping features creates no obligation to build it. See [`TEST-ENVIRONMENT.md`](TEST-ENVIRONMENT.md).
+  - **Staging/seed Supabase project — deliberately NOT built.** It is required only for the destructive seeded E2E suite (`scripts/test-seed.sql` truncates) and for deterministic visual regression. Shipping features creates no obligation to build it. See [`TEST-ENVIRONMENT.md`](../TEST-ENVIRONMENT.md).
   - **Playwright E2E + visual‑regression baselines — still deferred**, conditional on the project above.
 - ☑ **Phase 10 — Historical‑data cleanup & documentation — PR #209.** Idempotent cleanup of ~5 non‑judicial rows, plus reconciliation of `CHANGELOG.md`, `supabase/README.md` and `supabase/MIGRATION-HISTORY.md`. *Delivered.*
 
@@ -157,7 +157,7 @@ access change (PR #204) shipped alongside Phase 5.
 - **DOJ/Justice surfaces:** converted to Lead+ review + historical read‑only (Phase 1, PR #197).
 - **Navigation:** legal/records/accounts folded into CID investigation + intelligence nav.
 - **Build priority after merge:** Phase 1 (DOJ retirement + Lead+ legal review) was taken first, squaring the workflow before layering features — as planned.
-- **Testing strategy:** RLS security suites (v152–v160, extended to v167) cover the new flows. The CI `security-suites` job still self‑skips the live RLS suites because `RLS_TEST_PASSWORD_*` is unset — verification has been by direct live catalog queries per phase. Those secrets are now **safe to add** (PR #241 confined `rls_test_cleanup()` to the fixture namespace and made an escape fail the build). The seeded staging project and visual‑regression baselines remain deliberately unbuilt; see [`TEST-ENVIRONMENT.md`](TEST-ENVIRONMENT.md) for why that is a decision rather than a gap.
+- **Testing strategy:** RLS security suites (v152–v160, extended to v167) cover the new flows. The CI `security-suites` job still self‑skips the live RLS suites because `RLS_TEST_PASSWORD_*` is unset — verification has been by direct live catalog queries per phase. Those secrets are now **safe to add** (PR #241 confined `rls_test_cleanup()` to the fixture namespace and made an escape fail the build). The seeded staging project and visual‑regression baselines remain deliberately unbuilt; see [`TEST-ENVIRONMENT.md`](../TEST-ENVIRONMENT.md) for why that is a decision rather than a gap.
 - Remaining page‑level polish (My Desk, Cases tabs, registries, mobile, a11y, motion, performance, backups) shipped across Phases 7–9.
 
 ## Post‑roadmap work (not part of Phases 0–10)
@@ -177,7 +177,7 @@ access change (PR #204) shipped alongside Phase 5.
   | Test isolation policy + RLS safety review | #240 |
   | `rls_test_cleanup()` namespace wall (F1–F5) | #241 |
 
-  Authority model: [`AUTHORIZATION.md` §4f](AUTHORIZATION.md). SIB remains behind an owner‑only
+  Authority model: [`AUTHORIZATION.md` §4f](../AUTHORIZATION.md). SIB remains behind an owner‑only
   build gate (`siu_settings.enabled_for_non_owner`) until `siu_set_release(true, …)` is called.
 
 ## Notes on process

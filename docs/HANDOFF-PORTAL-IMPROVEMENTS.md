@@ -1,6 +1,6 @@
 # Handoff — Portal Improvements plan (written 2026-09-07 at shutdown; updated 2026-09-09 after Phases 7–8)
 
-The Portal Improvements plan (`docs/PLAN-PORTAL-IMPROVEMENTS.md`) is delivered
+The Portal Improvements plan (`docs/archive/PLAN-PORTAL-IMPROVEMENTS.md`) is delivered
 through **Phase 8 of 8**: Phases 0–6 are merged into `main`; Phases 7 and 8
 are on the branch `claude/portal-improvements-plan-ubkiho` as two commits behind
 draft PR #372 (not merged — the Owner was away; nothing was merged on their
@@ -104,14 +104,14 @@ subscribes to it), P0-04 pg_cron.
 - The Director's ex-officio SIB oversight standing sees no SIB intake and no referred origin records (by design).
 - Open issues: **#299** provision the DOJ / RLS fixtures and CI secrets (owner-gated; unblocks every RLS and e2e suite — the v189 / v190 suites have never run live either), **#300** the a11y ratchet (the Action Center part landed in P7-08; the site-wide axe gate is not wired), **#194** deadlines and notifications (delivered in spirit by P7-03 / P7-07).
 - Security advisors: the definer-executable WARN count is 319 after Phase 8 (the documented pattern); no table-level findings.
-- `docs/PLAN-PORTAL-IMPROVEMENTS.md` §22 still says "nothing has been implemented" — historical; this file supersedes it for status.
+- `docs/archive/PLAN-PORTAL-IMPROVEMENTS.md` §22 still says "nothing has been implemented" — historical; this file supersedes it for status.
 - Phase 7: the escalation ledger `action_escalations` is a shared table readable with the case (the plan said "`escalated_at` on `action_item_state` for all viewers", which a per-viewer row cannot carry); the `legal` escalation rule is seeded disabled because `legal_sweep` already escalates legal requests; a restricted packet "export approval" item is the open one-hour window, not a request (the log records approvals only); `justice_application` items are informational, not decisions; `notification_resolve` labels a report by its `kind` (reports have no title). The read-only security reviews' findings are folded into the migration and the client (`action_center_review_fixes`, `action_center_review_fixes_surv_alert`; Discord DM bodies carry free text only for five kinds; the Discord-category read fails closed).
 - Phase 8: `RecordHistory` is mounted on person / vehicle / gang dossiers, the case Overview, notes, report drafts, draft legal requests (compare only) and intel records; places, accounts, narcotics and evidence have no detail surface to mount it on. The restore drill was not performed (needs a scratch project); the runbook is rewritten and the live audit chain verified. The 'Deleted — Undo' toast links the Trash, and `deleteWithUndo` is gone (`deleteRecord`; `case_templates` and `commendations` are plain confirmed removes; a case assignment removal stamps `removed_at`).
 - `discord-notify` is NOT redeployed by the branch; deploy it with the release.
 
 ## 6. Where to look first
 
-`docs/PLAN-PORTAL-IMPROVEMENTS.md` (the plan), `docs/AUTHORIZATION.md` §6–§18
+`docs/archive/PLAN-PORTAL-IMPROVEMENTS.md` (the plan), `docs/AUTHORIZATION.md` §6–§18
 (what each phase enforces), `docs/WORKFLOWS.md` (the user-facing flows),
 `supabase/MIGRATION-HISTORY.md` (what is live and what was verified),
 `tests/rls/README.md` (the fixture roster and what each suite proves),
@@ -119,19 +119,32 @@ subscribes to it), P0-04 pg_cron.
 
 ## 7. What would make the site less cluttered
 
-Observations gathered while delivering the eight phases — none of these is in
-the plan, each is a small, safe cleanup a follow-up PR could take. They are
-ordered by how much noise they remove for a member on an ordinary day.
+Observations gathered while delivering the eight phases — none of these was in
+the plan. **All twelve are done** in the Confidential Informant release (the
+PR after 1.18.0; see `CHANGELOG.md` "Portal cleanup"); the original
+observation is kept under each "Done" line as the record of why.
 
-1. **Four "what is waiting on me" surfaces became one queue, but the pages are still four.** My Dashboard (`/inbox`), the Action Center (`/action`), the Command Center Overview and the legacy Division Overview (`/command`) all still exist as tabs. Make `/inbox` the Action Center with the personal preset applied (one route, one nav entry), keep the Command Center as the command home, and fold `/command`'s Division Overview panels (`components/command/*`: trackers, analytics tiles, raid comp, encouragement, activity feed) into the Command Center sections or into `/analytics`, then delete the `command/` folder.
-2. **Two analytics screens.** `/analytics` (Division Analytics) and the Division Overview's analytics tiles show overlapping numbers; keep one.
-3. **Navigation categories carry rarely used leaves.** Oversight now holds Calendar, Shifts, Audit and Trash; Owner-only leaves (Owner Console, Audit, Developer Handbook, Report Templates admin) sit in the main nav for everyone who can see them. Move Owner-only leaves under one "Owner" category shown only to the Owner, and the Handbook behind the Owner Console.
-4. **Case workspace section strip is long.** `caseTabs.ts` lists 18+ sections; on most cases half are empty. Hide empty optional sections behind a "More…" chip (Graph, Charges, RICO, Legal, Surveillance, Extractions, Timeline when they have no rows) — the counts are already fetched for the pills.
-5. **The Command Center's Approval Queue duplicates the Action Center's command preset** (it now embeds the same slice plus the membership review). Rename it "Membership review" and drop the embedded slice, or drop the section and let membership items open from the Action Center only.
-6. **Notification bell + Action Center both list unread notifications** (`notif:*` items). Either the bell shows only what the queue does not (mentions, announcements), or the bell becomes a link to the Action Center's Activity lane.
-7. **Legacy routes kept alive as redirects** (the 14 Intelligence tool routes, `/reports`, `/tools`) each add a prerendered page; once bookmarks have aged, remove the redirect leaves from `PAGE_META` and `generateStaticParams`.
-8. **Three delete idioms remain**: `deleteRecord` (soft, undo, Trash), plain `remove()` (case templates, commendations, hard tables) and the member permanent-delete protocol. Document the rule once in the design system ("everything a member can create soft-deletes") and make the remaining hard tables soft-deletable when they next change.
-9. **Saved views exist for cases, BOLO, legal, persons and the Action Center, each with its own menu component.** One `ViewsMenu` (the Action Center's) could serve all five.
-10. **Dead or near-dead docs**: `docs/CID-FUTURE-STATE-SPEC.md`, `docs/CTO-REVIEW.md`, `docs/RECORDS-REQUESTS-*.md`, `docs/HARDENING.md`, `docs/SECURITY-REVIEW.md` and the `docs/archive/` folder predate the plan; `CHANGELOG.md` carries four `[Unreleased]` blocks. Archive the superseded documents under `docs/archive/` and collapse the changelog's history under the 1.18.0 release.
-11. **Two title maps became one (`notificationTitles.json`), but `OPTIONAL_NOTIF_CATEGORIES` (in-app mutes) and `DISCORD_CATEGORIES` are still two lists.** Derive both from the JSON's `category` field.
-12. **The Owner Console** mixes project intelligence, feedback triage, client errors, permanent deletion and engineering operations on one page; the Action Center's Owner signals now cover the alerting part. Split it into "Operations" (jobs, audit chain, errors) and "Data" (permanent deletion, fixtures) or move the alert tiles out.
+1. **Done** — `/inbox` is the Action Center (personal preset by default), My Dashboard is `/dashboard`, `/action` and `/command` are `LEGACY_REDIRECT_TABS`, `components/command/` is deleted (Trackers & Raid Comp are a Command Center section).
+   **Four "what is waiting on me" surfaces became one queue, but the pages are still four.** My Dashboard (`/inbox`), the Action Center (`/action`), the Command Center Overview and the legacy Division Overview (`/command`) all still exist as tabs. Make `/inbox` the Action Center with the personal preset applied (one route, one nav entry), keep the Command Center as the command home, and fold `/command`'s Division Overview panels (`components/command/*`: trackers, analytics tiles, raid comp, encouragement, activity feed) into the Command Center sections or into `/analytics`, then delete the `command/` folder.
+2. **Done** — `/analytics` is the one analytics surface; the Command Center Overview keeps a small Bureau workload summary linking to it.
+   **Two analytics screens.** `/analytics` (Division Analytics) and the Division Overview's analytics tiles show overlapping numbers; keep one.
+3. **Done** — Owner-only leaves sit under an **Owner** category rendered only for the Owner; `cases` is **Investigations** with Intelligence / Informants / Registries leaves.
+   **Navigation categories carry rarely used leaves.** Oversight now holds Calendar, Shifts, Audit and Trash; Owner-only leaves (Owner Console, Audit, Developer Handbook, Report Templates admin) sit in the main nav for everyone who can see them. Move Owner-only leaves under one "Owner" category shown only to the Owner, and the Handbook behind the Owner Console.
+4. **Done** — `CASE_TAB_OPTIONAL` + `SectionTabs` `more`: empty optional sections collapse into a **More…** chip.
+   **Case workspace section strip is long.** `caseTabs.ts` lists 18+ sections; on most cases half are empty. Hide empty optional sections behind a "More…" chip (Graph, Charges, RICO, Legal, Surveillance, Extractions, Timeline when they have no rows) — the counts are already fetched for the pills.
+5. **Done** — the section is **Membership Review** (`?s=membership`, `?s=approvals` aliased) without the embedded queue slice.
+   **The Command Center's Approval Queue duplicates the Action Center's command preset** (it now embeds the same slice plus the membership review). Rename it "Membership review" and drop the embedded slice, or drop the section and let membership items open from the Action Center only.
+6. **Done** — the bell is the last eight notifications + mark read + **View All** → `/inbox?lane=activity`; the mutes moved to Profile → Notifications.
+   **Notification bell + Action Center both list unread notifications** (`notif:*` items). Either the bell shows only what the queue does not (mentions, announcements), or the bell becomes a link to the Action Center's Activity lane.
+7. **Done** — the redirect leaves left `PAGE_META`; `LEGACY_REDIRECT_TABS` keeps them prerendered for bookmarks until they are dropped.
+   **Legacy routes kept alive as redirects** (the 14 Intelligence tool routes, `/reports`, `/tools`) each add a prerendered page; once bookmarks have aged, remove the redirect leaves from `PAGE_META` and `generateStaticParams`.
+8. **Done** — `docs/DESIGN-SYSTEM.md` "Deleting things"; `case_templates` and `commendations` soft-delete through `deleteRecord` (`20261104120000`) and appear in the Trash.
+   **Three delete idioms remain**: `deleteRecord` (soft, undo, Trash), plain `remove()` (case templates, commendations, hard tables) and the member permanent-delete protocol. Document the rule once in the design system ("everything a member can create soft-deletes") and make the remaining hard tables soft-deletable when they next change.
+9. **Done** — `components/shared/ViewsMenu` serves cases, BOLO, legal, persons, the Action Center and the Informants roster.
+   **Saved views exist for cases, BOLO, legal, persons and the Action Center, each with its own menu component.** One `ViewsMenu` (the Action Center's) could serve all five.
+10. **Done** — the superseded documents are under `docs/archive/` (links repointed, `docs/archive/README.md`); the four `[Unreleased]` blocks are subsections of 1.18.0.
+   **Dead or near-dead docs**: `docs/CID-FUTURE-STATE-SPEC.md`, `docs/CTO-REVIEW.md`, `docs/RECORDS-REQUESTS-*.md`, `docs/HARDENING.md`, `docs/SECURITY-REVIEW.md` and the `docs/archive/` folder predate the plan; `CHANGELOG.md` carries four `[Unreleased]` blocks. Archive the superseded documents under `docs/archive/` and collapse the changelog's history under the 1.18.0 release.
+11. **Done** — `OPTIONAL_NOTIF_CATEGORIES` and `DISCORD_CATEGORIES` are derived from the typed registry (`mutable`, `destination`); `NOTIF_CATEGORY_META` is the one copy table.
+   **Two title maps became one (`notificationTitles.json`), but `OPTIONAL_NOTIF_CATEGORIES` (in-app mutes) and `DISCORD_CATEGORIES` are still two lists.** Derive both from the JSON's `category` field.
+12. **Done** — the alert tiles ("Pending owner actions", "Critical warnings") are removed from the Owner Console; the Action Center's Owner signals carry them.
+   **The Owner Console** mixes project intelligence, feedback triage, client errors, permanent deletion and engineering operations on one page; the Action Center's Owner signals now cover the alerting part. Split it into "Operations" (jobs, audit chain, errors) and "Data" (permanent deletion, fixtures) or move the alert tiles out.

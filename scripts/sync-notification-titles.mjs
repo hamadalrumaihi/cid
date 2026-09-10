@@ -25,11 +25,27 @@ try { parsed = JSON.parse(src) } catch (e) {
   console.error(`sync-notification-titles: ${SRC_REL} is not valid JSON — ${e.message}`)
   process.exit(1)
 }
-const CATEGORIES = new Set(['assignments', 'decisions', 'legal', 'mentions', 'escalations', 'intel', 'reports', 'announcements', 'security', 'other'])
-const bad = Object.entries(parsed).filter(([, v]) =>
-  !v || typeof v.title !== 'string' || !v.title.trim() || !CATEGORIES.has(v.category))
-if (bad.length) {
-  console.error(`sync-notification-titles: every entry needs {title, category ∈ ${[...CATEGORIES].join('|')}} — bad: ${bad.map(([k]) => k).join(', ')}`)
+/** Entry shape: { title, category, destination?: 'portal', mutable?: true,
+ *  priority?: 'high'|'normal'|'low' } — mirrored by lib/notifText NotifEntry.
+ *  `informants` kinds are portal-only by contract (never DM'd), so every entry
+ *  in that category must carry destination 'portal'. */
+const CATEGORIES = new Set(['assignments', 'decisions', 'legal', 'mentions', 'escalations', 'intel', 'reports', 'announcements', 'security', 'informants', 'other'])
+const FIELDS = new Set(['title', 'category', 'destination', 'mutable', 'priority'])
+const PRIORITIES = new Set(['high', 'normal', 'low'])
+const problems = []
+for (const [k, v] of Object.entries(parsed)) {
+  if (!v || typeof v !== 'object') { problems.push(`${k}: not an object`); continue }
+  if (typeof v.title !== 'string' || !v.title.trim()) problems.push(`${k}: title must be a non-empty string`)
+  if (!CATEGORIES.has(v.category)) problems.push(`${k}: category must be one of ${[...CATEGORIES].join('|')}`)
+  for (const f of Object.keys(v)) if (!FIELDS.has(f)) problems.push(`${k}: unknown field "${f}"`)
+  if ('destination' in v && v.destination !== 'portal') problems.push(`${k}: destination may only be "portal"`)
+  if ('mutable' in v && v.mutable !== true) problems.push(`${k}: mutable may only be true (omit it otherwise)`)
+  if ('priority' in v && !PRIORITIES.has(v.priority)) problems.push(`${k}: priority must be high|normal|low`)
+  if (v.category === 'informants' && v.destination !== 'portal') problems.push(`${k}: informants kinds must be destination "portal"`)
+  if (v.mutable === true && v.destination === 'portal') problems.push(`${k}: a portal-only kind is not mutable`)
+}
+if (problems.length) {
+  console.error(`sync-notification-titles: invalid entries —\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
 

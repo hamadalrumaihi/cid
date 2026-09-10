@@ -16,9 +16,10 @@ import { workspaceCaseHref } from './workspace/model'
 
 export type TrashRow = Database['public']['Functions']['trash_list']['Returns'][number]
 
-/** Human label per soft-delete kind (the 27 kinds `trash_list` walks). */
+/** Human label per soft-delete kind (the 29 kinds `trash_list` walks). */
 export const TRASH_KIND_LABEL: Record<string, string> = {
   case: 'Case',
+  case_template: 'Case template', commendation: 'Commendation',
   report: 'Report', media: 'Media', evidence: 'Evidence item', case_task: 'Case task', case_message: 'Case message',
   case_intel_link: 'Case link (intel)', case_blocker: 'Case blocker', rico_case: 'RICO case', predicate_act: 'Predicate act',
   case_note: 'Case note', case_link: 'Related-case link',
@@ -37,14 +38,15 @@ export const trashKindLabel = (kind: string): string => {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-export type TrashGroupId = 'cases' | 'material' | 'registry' | 'links'
+export type TrashGroupId = 'cases' | 'material' | 'registry' | 'links' | 'admin'
 
 export interface TrashGroup { id: TrashGroupId; label: string; kinds: readonly string[] }
 
-/** The four display groups, in order. Every kind in TRASH_KIND_LABEL belongs
+/** The five display groups, in order. Every kind in TRASH_KIND_LABEL belongs
  *  to exactly one; unknown kinds fall into Registry. */
 export const TRASH_GROUPS: readonly TrashGroup[] = [
   { id: 'cases', label: 'Cases', kinds: ['case'] },
+  { id: 'admin', label: 'Administration', kinds: ['case_template', 'commendation'] },
   { id: 'material', label: 'Case material', kinds: ['report', 'media', 'evidence', 'case_task', 'case_message', 'case_blocker', 'rico_case', 'predicate_act', 'case_note'] },
   { id: 'registry', label: 'Registry', kinds: ['person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker'] },
   { id: 'links', label: 'Links', kinds: ['case_intel_link', 'case_link', 'gang_member', 'gang_turf', 'person_place', 'person_vehicle', 'person_relationship', 'account_link'] },
@@ -122,8 +124,9 @@ const REGISTRY_TOOL: Record<string, { tool: string; record: boolean }> = {
 /** Deep link to where the row lives once restored: a case → the workspace
  *  case tab; a case child → its case section (opening the record where the
  *  section supports it); a registry row → its tool (record tab where one
- *  exists); an operation → the operations board. Link rows without a case
- *  have no address of their own (null). */
+ *  exists); an operation → the operations board; a template → the New Case
+ *  modal, a commendation → Personnel. Link rows without a case have no
+ *  address of their own (null). */
 export function trashHref(row: Pick<TrashRow, 'kind' | 'id' | 'case_id'>): string | null {
   if (row.kind === 'case') return workspaceCaseHref(row.id)
   const sec = CASE_SECTION[row.kind]
@@ -131,6 +134,9 @@ export function trashHref(row: Pick<TrashRow, 'kind' | 'id' | 'case_id'>): strin
     return workspaceCaseHref(row.case_id, sec.tab, sec.param ? { [sec.param]: row.id } : {})
   }
   if (row.kind === 'operation') return `/operations?op=${encodeURIComponent(row.id)}`
+  // Templates are managed from the New Case modal; commendations from Personnel.
+  if (row.kind === 'case_template') return '/cases?new=1'
+  if (row.kind === 'commendation') return '/personnel'
   const tool = REGISTRY_TOOL[row.kind]
   if (tool) {
     const p = new URLSearchParams({ tool: tool.tool })

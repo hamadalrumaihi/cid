@@ -35,7 +35,7 @@ test.describe('smoke', () => {
   test.skip(!enabled, 'RLS test credentials not set — see tests/rls/README.md')
 
   test('signed-out visitors land on the sign-in gate', async ({ page }) => {
-    await page.goto('/command')
+    await page.goto('/inbox')
     await expect(page.getByText('Continue with Google')).toBeVisible()
     await expect(page.getByText('Continue with Discord')).toBeVisible()
   })
@@ -64,7 +64,7 @@ test.describe('smoke', () => {
 
       // Shell loads for an active member (session hydration + profile fetch
       // can take a few seconds on a cold PostgREST).
-      await page.goto('/command')
+      await page.goto('/inbox')
       await expect(page.getByText('Initializing secure session', { exact: false })).toHaveCount(0, { timeout: 30_000 })
       await expect(page.getByText('Continue with Google')).toHaveCount(0)
 

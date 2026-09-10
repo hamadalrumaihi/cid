@@ -8,7 +8,9 @@
  *  on return (CaseDetail's own per-section keep-alive then takes over).
  *  With nothing active the directory shows: the tool directory plus a strip
  *  of the open cases. `/tools` renders this same view; the provider mirrors
- *  the URL to `/workspace` so old bookmarks keep landing. */
+ *  the URL to `/workspace` so old bookmarks keep landing. The Investigations
+ *  leaves (`/intelligence`, `/registries`) render it with a `defaultTool`
+ *  the provider opens when the URL names no case or tool. */
 import { Suspense, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ViewPlaceholder } from '@/components/ViewPlaceholder'
@@ -24,12 +26,12 @@ import { WorkspaceProvider } from './WorkspaceProvider'
 import { WorkspaceTabBar } from './WorkspaceTabBar'
 import { TabKeyContext, useWorkspace } from './WorkspaceContext'
 
-export function WorkspaceView() {
+export function WorkspaceView({ defaultTool }: { defaultTool?: ToolId } = {}) {
   // useSearchParams (the provider's URL intake) needs a client-side Suspense
   // boundary in this host — same idiom as CasesView / LegalView.
   return (
     <Suspense fallback={<ViewPlaceholder tab="workspace" />}>
-      <WorkspaceProvider>
+      <WorkspaceProvider defaultTool={defaultTool}>
         <WorkspaceBody />
       </WorkspaceProvider>
     </Suspense>

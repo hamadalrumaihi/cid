@@ -7,6 +7,8 @@ export {
   reportEntityRow, reportExportRow, reportRow, reportTemplateRow, reportTemplateVersionRow,
   fieldClaimLinkRow, fieldClaimVerdictRow, fieldSubmissionEventRow, fieldSubmissionItemRow, fieldSubmissionMessageRow,
   fieldSubmissionPersonRow, fieldSubmissionReviewRow, fieldSubmissionRow, intelGroupCaseRow, intelGroupMemberRow, intelGroupRow,
+  confidentialInformantRow, ciHandlerRow, ciHandlerCapacityRow, ciCapacityRequestRow, ciIntelligenceRow, ciIntelligenceLinkRow,
+  ciContactRow, ciAssessmentRow, ciPaymentRow, ciCaseLinkRow, caseIntelReleaseRow, ciReleaseRow, ciAuditEventRow, ciEventRow,
 } from './rows'
 export {
   emptyCase, populatedCase, archivedCase, legalHoldCase, restrictedMediaCase,

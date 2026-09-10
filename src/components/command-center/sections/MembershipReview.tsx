@@ -1,17 +1,18 @@
 'use client'
 
-/** Command Center → Approval Queue. One aggregated view of everything waiting
- *  on a command decision: (1) submitted membership requests (reviewed through
- *  the `review_membership_request` RPC, which activates the profile atomically
- *  on approval), (2) open requests for already-active members ("ghosts" —
+/** Command Center → Membership Review. Every membership decision in one
+ *  place: (1) submitted membership requests (reviewed through the
+ *  `review_membership_request` RPC, which activates the profile atomically on
+ *  approval), (2) open requests for already-active members ("ghosts" —
  *  activated directly, request never decided; reviewed through the same RPC),
  *  (3) pending sign-ins WITHOUT a live request (the legacy one-click
  *  `assign_member` activate — replaced by a DecisionModal re-review when a
- *  recorded rejection/withdrawal exists), and (4) every OTHER command decision
- *  — sign-offs, access, transfers, legal, surveillance … — as a slice of the
- *  ONE Action Center queue (ActionSlice, Phase 7 AC7) instead of this view's
- *  former unprojected `cases` load. All membership buckets come from the
- *  shared `pendingMembership` model so every surface counts alike. */
+ *  recorded rejection/withdrawal exists), and (4) legacy DOJ / Judiciary
+ *  applications, listed for awareness only. All membership buckets come from
+ *  the shared `pendingMembership` model so every surface counts alike. Every
+ *  OTHER command decision — sign-offs, access, transfers, legal, surveillance
+ *  — is the Action Center's `command` preset (/inbox?preset=command); the
+ *  Overview's "Awaiting you" slice points there. */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { list, rpc } from '@/lib/db'
 import type { Database, Tables } from '@/lib/database.types'
@@ -32,7 +33,6 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { ErrorNotice } from '@/components/ui/Notice'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTimeline'
-import { ActionSlice } from '@/components/actioncenter/ActionSlice'
 import { pendingMembership } from '../lib/membershipPending'
 import { canApproveRequestedRole } from '@/lib/permissions'
 
@@ -230,7 +230,7 @@ function DecisionModal({ req, kind, onClose, onDone }: {
   )
 }
 
-export function ApprovalQueue() {
+export function MembershipReview() {
   const { profile, isCommand, isOwner } = useAuth()
   // The page admits command AND the owner — the fetch gate must match, or an
   // owner without a command role sees a permanently empty queue.
@@ -452,20 +452,6 @@ export function ApprovalQueue() {
       )}
         </>
       )}
-
-      {/* Every other command decision — sign-offs (opens the case Sign-off tab,
-          where signoff_decide records it), access, transfers, legal,
-          surveillance — is the command slice of the one Action Center queue. */}
-      <ActionSlice
-        title="Decisions awaiting you"
-        filter={(it) => it.isCommandItem && it.sourceType !== 'membership_request'}
-        limit={12}
-        hint="Sign-offs at a stage your role can decide, access requests, transfers, legal and surveillance — the same items as your Action Center."
-        emptyText="No sign-offs or other decisions are waiting on you."
-        href="/action?preset=command"
-        hrefLabel="All command decisions →"
-      />
-      <p className="text-[11px] text-slate-400">The same reviews appear on your <b>My Dashboard</b> tab; this is the command-wide aggregate. Only authorized reviewers can decide each stage.</p>
 
       {decision && (
         <DecisionModal

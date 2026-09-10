@@ -40,6 +40,7 @@ chapter stands alone and cross-links the rest.
 | 20 | [Learning Path](20-learning-path.md) | The order to learn all of this |
 | 21 | [City Integration & Bridges](21-integration.md) | The dormant FiveM/MDT bridges, integration tables, shared case services |
 | 22 | [Versions, Trash and the scheduler](22-versions-trash.md) | Soft delete and the Trash (`trash_list`), record history and restore, the Owner's permanent-delete protocol, the pg_cron jobs |
+| 23 | [Confidential Informants](23-confidential-informants.md) | The CI compartment: `can_access_ci`, the fourteen RPC-only tables, capacity + requests + overrides, sanitize / release, the leak surfaces, `ci_events`, the case tab rule, the tests |
 
 ## Appendices
 

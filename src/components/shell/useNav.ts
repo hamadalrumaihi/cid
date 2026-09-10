@@ -1,9 +1,8 @@
 'use client'
 
-/** Route helpers over the two-tier nav model. The vanilla router used
- *  `#<tab>` hashes + Store('tab'); here each leaf tab is a real path
- *  (`/cases`, `/penal`, …) and Store('tab') is still written so the last
- *  tab survives cutover in both directions. */
+/** Route helpers over the two-tier nav model. Each leaf tab is a real path
+ *  (`/cases`, `/penal`, …); Store('tab') is still written by AppShell so the
+ *  last tab survives reloads. */
 import { usePathname, useRouter } from 'next/navigation'
 import { useCallback } from 'react'
 import { CAT_DEFAULT, TAB_CATEGORY, isValidTab } from '@/lib/nav'
@@ -13,17 +12,18 @@ export function useNav() {
   const router = useRouter()
 
   // First path segment is the tab id ('/cases/…' → 'cases'); default 'inbox'
-  // (My Dashboard — the personal home and default landing, src/app/page.tsx).
+  // (the Action Center — the personal home and default landing, src/app/page.tsx).
   const seg = pathname.split('/')[1] || 'inbox'
   // `/m/cases/<id>` (the phone-first case route, P8-01) is outside PAGE_META;
-  // it belongs to the Cases category so the BottomNav lights the right tab and
-  // Store('tab') remembers a case, not the dashboard.
+  // it belongs to the Investigations category so the BottomNav lights the
+  // right tab and Store('tab') remembers a case, not the queue.
   const activeTab = isValidTab(seg) ? seg : seg === 'm' ? 'cases' : 'inbox'
-  // TAB_CATEGORY now covers every PAGE_META tab; null means "belongs to no
-  // category" (profile/owner/command-center/concern/siu/feedback) — no strip
-  // highlight, Subtabs suppressed. The 'command' fallback only guards a tab
-  // somehow missing from the map entirely. (Feedback keeps its explicit
-  // special case — it predates the null entries and must never regress.)
+  // TAB_CATEGORY covers every PAGE_META tab and every legacy redirect id;
+  // null means "belongs to no category" (profile/command-center/concern/siu/
+  // feedback and the retired /command address) — no strip highlight, Subtabs
+  // suppressed. The 'command' fallback only guards a tab somehow missing from
+  // the map entirely. (Feedback keeps its explicit special case — it predates
+  // the null entries and must never regress.)
   const activeCategory: string | null =
     activeTab === 'feedback' ? null : (TAB_CATEGORY[activeTab] !== undefined ? TAB_CATEGORY[activeTab] : 'command')
 

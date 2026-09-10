@@ -1,9 +1,10 @@
 'use client'
 
-/** GPS tracker deployment logs (command.js:430-572) — dual digital signatures
- *  (Director + Deputy co-sign; self-co-sign blocked per "no single-person
- *  approval") with a live countdown once authorized. Sign/deploy/remove are
- *  command-gated (canDelete); RLS is the real enforcement. */
+/** GPS tracker deployment logs (Command Center → Trackers & Raid Comp) —
+ *  dual digital signatures (Director + Deputy co-sign; self-co-sign blocked
+ *  per "no single-person approval") with a live countdown once authorized.
+ *  Sign/deploy/remove are command-gated (canDelete); RLS is the real
+ *  enforcement. */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Database } from '@/lib/database.types'
 import { insert, list, remove, update } from '@/lib/db'
@@ -16,7 +17,7 @@ import { uiConfirm } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { SignatureViewer } from '@/components/shared/SignatureViewer'
-import { caseNumById, fmtCountdown, type CaseRow, type TrackerRow } from '@/components/command-center/lib/commandUtils'
+import { caseNumById, fmtCountdown, type CaseRow, type TrackerRow } from '../lib/commandUtils'
 import { Card } from '@/components/ui/Card'
 
 type Bureau = Database['public']['Enums']['bureau']
@@ -43,8 +44,8 @@ export function Trackers({ cases }: { cases: CaseRow[] }) {
     return () => window.clearTimeout(id)
   }, [refresh, v])
 
-  // 1s countdown tick (vanilla app.js setInterval(tickTrackers, 1000)); the
-  // first command viewer to see an authorized tracker hit zero expires it,
+  // 1s countdown tick; the first command viewer to see an authorized tracker
+  // hit zero expires it,
   // guarded so one client only tries once per tracker.
   useEffect(() => {
     const id = window.setInterval(() => {

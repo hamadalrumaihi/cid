@@ -7,25 +7,31 @@
  *  the escalation ledger merged in); this view only sections, filters,
  *  selects and routes. Inline actions are whatever `inlineActionsFor` offers
  *  (the canonical writes the owning pages already make) — everything else
- *  deep-links to its owning surface. My Dashboard stays the broad personal
- *  overview.
+ *  deep-links to its owning surface. My Dashboard (/dashboard) stays the
+ *  broad personal overview.
  *
  *  Phase 7: per-row Snooze (≤ 48 h) / Dismiss (dismissable kinds only) with
  *  Snoozed / Dismissed folds, a bulk bar (mark read / snooze / dismiss —
  *  never a decision), Reassign for task / blocker rows the lead or command
  *  owns, the Escalated badge + filter, role presets + saved views
- *  (`?preset=` / `?view=`), and a card layout below 640 px. */
+ *  (`?preset=` / `?view=`), and a card layout below 640 px.
+ *
+ *  This IS the personal home (/inbox, the default landing): with no
+ *  `?preset=` / `?view=` / filter in the URL the viewer's role preset
+ *  (defaultPresetFor — or their default saved view, which wins) is applied,
+ *  and `?lane=activity` opens the Recent activity lane (the bell's View All). */
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { SOURCE_TYPE_LABEL, type ActionItem } from '@/lib/actionItems'
 import {
-  ACTION_STATUS_KEYS, ACTION_TYPE_FILTERS, normalizeActionConfig, presetById,
+  ACTION_STATUS_KEYS, availableTypeFilters, defaultPresetFor, normalizeActionConfig, presetById,
   type ActionSectionKey, type ActionStatusKey, type ActionViewConfig, type PresetViewer,
 } from '@/lib/actionPresets'
 import { isDbError, isDismissable, type ActionStateOp } from '@/lib/actionState'
 import { markRead } from '@/lib/notifications'
 import { useAuth } from '@/lib/auth'
+import { ciInvolved, useCiContext } from '@/lib/ci'
 import { canReassignCaseWork, useSiu, type CidViewer } from '@/lib/permissions'
 import { useSavedViews } from '@/lib/savedViews'
 import { timeAgo, todayISO } from '@/lib/format'
@@ -54,9 +60,9 @@ import { ViewsMenu } from './ViewsMenu'
 /* ── Filter model — one type filter (?f=) + one status filter (?s=) ──────── */
 
 /** Type chips come from lib/actionPresets (unit-tested to cover every
- *  SOURCE_TYPE_LABEL kind); the status predicates live here. */
-const TYPE_FILTERS = ACTION_TYPE_FILTERS
-
+ *  SOURCE_TYPE_LABEL kind) — `availableTypeFilters(viewer)` in the view, so a
+ *  gated chip (Informants) exists only for the accounts the CI compartment
+ *  involves; the status predicates live here. */
 const STATUS_FILTERS: Record<ActionStatusKey, { label: string; test: (it: ActionItem, today: string) => boolean }> = {
   overdue: { label: 'Overdue', test: (it) => it.status === 'overdue' },
   due: { label: 'Due today', test: (it, today) => !!it.dueAt && it.dueAt.slice(0, 10) === today },
@@ -288,6 +294,7 @@ const EMPTY_SECTIONS = (): Record<SectionKey, ActionItem[]> =>
 export function ActionCenterView() {
   const { state, profile, isCommand, isOwner, canEdit, justiceRole } = useAuth()
   const siu = useSiu()
+  const ci = useCiContext()
   const queue = useActionQueue()
   const { items, snoozed, dismissed, suppressedCount, loading, refreshing, error, refresh, lastRefreshed, setState, counts } = queue
   const router = useRouter()
@@ -311,7 +318,9 @@ export function ActionCenterView() {
   const bParam = sp.get('b')
   const presetParam = sp.get('preset')
   const viewParam = sp.get('view')
-  const typeFilter = TYPE_FILTERS.find((t) => t.key === fParam) ?? null
+  /** `?lane=activity` (the bell's View All): the Recent activity lane renders
+   *  expanded — and renders even when the active preset hides it. */
+  const activityOpen = sp.get('lane') === 'activity'
   const statusFilter = isStatusKey(sParam) ? sParam : null
   const bureauFilter = bParam && (PERMANENT_BUREAUS as readonly string[]).includes(bParam) ? bParam : null
 
@@ -372,19 +381,6 @@ export function ActionCenterView() {
     if (changed) router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }, [activeConfig, sp, router, pathname])
 
-  // The member's DEFAULT saved view opens once per mount — only on a clean
-  // slate (no filter, preset or view in the URL), so it never stomps a deep link.
-  const defaultApplied = useRef(false)
-  useEffect(() => {
-    if (defaultApplied.current || !sv.loaded) return
-    defaultApplied.current = true
-    if (sp.get('f') || sp.get('s') || sp.get('b') || sp.get('preset') || sp.get('view')) return
-    const d = sv.defaultView
-    if (d) router.replace(`${pathname}?view=${encodeURIComponent(d.name)}`, { scroll: false })
-    // Snapshot semantics: runs once when the views finish loading.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sv.loaded])
-
   /* ── Viewer shapes for the cosmetic gates ── */
 
   const inlineViewer = useMemo<InlineViewer>(() => ({ isCommand, canEdit, userId: profile?.id ?? null }), [isCommand, canEdit, profile?.id])
@@ -392,10 +388,39 @@ export function ActionCenterView() {
     id: profile?.id ?? null, role: profile?.role ?? null, division: profile?.division ?? null,
     active: profile?.active ?? null, is_owner: profile?.is_owner ?? null,
   }), [profile?.id, profile?.role, profile?.division, profile?.active, profile?.is_owner])
+  const ciOn = ciInvolved(ci.ctx)
   const presetViewer = useMemo<PresetViewer>(() => ({
     role: profile?.role ?? null, isCommand, isOwner, justiceRole,
     sib: { canAccess: siu.canAccess, isAgent: siu.isAgent, isCommand: siu.isCommand },
-  }), [profile?.role, isCommand, isOwner, justiceRole, siu.canAccess, siu.isAgent, siu.isCommand])
+    ci: ciOn,
+  }), [profile?.role, isCommand, isOwner, justiceRole, siu.canAccess, siu.isAgent, siu.isCommand, ciOn])
+  /** The type chips this viewer is offered; an `?f=` naming a chip they are
+   *  not offered filters nothing (the URL is left alone). */
+  const typeFilters = useMemo(() => availableTypeFilters(presetViewer), [presetViewer])
+  const typeFilter = typeFilters.find((t) => t.key === fParam) ?? null
+
+  // The default view opens once per mount — only on a clean slate (no filter,
+  // preset or view in the URL), so it never stomps a deep link. The member's
+  // DEFAULT saved view wins; otherwise the role preset (defaultPresetFor).
+  // Waits for the saved views, the profile and the SIB standing so the
+  // preset is chosen for the real viewer, not a half-loaded one. Other params
+  // (`?lane=`) ride along.
+  const defaultApplied = useRef(false)
+  useEffect(() => {
+    if (defaultApplied.current || !sv.loaded || state !== 'in' || !profile || siu.loading) return
+    defaultApplied.current = true
+    if (sp.get('f') || sp.get('s') || sp.get('b') || sp.get('preset') || sp.get('view')) return
+    const params = new URLSearchParams(sp.toString())
+    const d = sv.defaultView
+    if (d) params.set('view', d.name)
+    else {
+      const preset = defaultPresetFor(presetViewer)
+      if (preset) params.set('preset', preset)
+    }
+    if (params.toString() !== sp.toString()) router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+    // Snapshot semantics: runs once when the inputs finish loading.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sv.loaded, state, profile, siu.loading])
 
   /** The row's inline actions — B's table, with Reassign additionally gated
    *  by the permissions mirror (lead / command / Owner, active). */
@@ -616,7 +641,7 @@ export function ActionCenterView() {
               aria-label="Queue filters"
             >
               <FilterChip active={!typeFilter} onClick={() => setParam('f', null)}>All</FilterChip>
-              {TYPE_FILTERS.map((t) => (
+              {typeFilters.map((t) => (
                 <FilterChip
                   key={t.key}
                   active={typeFilter?.key === t.key}
@@ -676,15 +701,15 @@ export function ActionCenterView() {
               title="You're all caught up."
               hint={snoozed.length
                 ? `Nothing needs your action right now — ${snoozed.length} snoozed item${snoozed.length === 1 ? '' : 's'} will come back later.`
-                : 'Nothing needs your action right now. My Dashboard keeps the broader overview of your cases, drafts and mentions.'}
-              action={{ label: 'Open My Dashboard', onClick: () => router.push('/inbox') }}
+                : 'Nothing needs your action right now. My Dashboard keeps the broader overview of your cases, drafts and watched items.'}
+              action={{ label: 'Open My Dashboard', onClick: () => router.push('/dashboard') }}
             />
           ))}
 
           {/* The queue proper: keyboard selection scope + the sticky bulk bar. */}
           <div onKeyDown={onQueueKey} className="space-y-5">
             {/* Wide screens: the Overdue lane stays full-width on top, the rest
-                flow into two columns (InboxView's grid idiom). Source order and
+                flow into two columns (My Dashboard's grid idiom). Source order and
                 section semantics are untouched — layout only. */}
             <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
               {SECTION_ORDER.filter((s) => laneOn(s.key)).map(({ key, title, subtitle, empty, gate }) => (
@@ -703,13 +728,16 @@ export function ActionCenterView() {
               ))}
             </div>
 
-            {laneOn('activity') && sections.activity.length > 0 && (
-              <details>
+            {(activityOpen || (laneOn('activity') && sections.activity.length > 0)) && (
+              <details id="ac-lane-activity" open={activityOpen || undefined}>
                 <summary className="flex min-h-[44px] cursor-pointer items-center rounded text-[13px] font-semibold text-white transition hover:text-slate-300 lg:min-h-0">
                   <h2 className="inline">Recent activity ({sections.activity.length})</h2>
                 </summary>
+                <p className="mb-2 mt-0.5 text-xs text-slate-400">Notifications and informational items — the bell shows the latest few; the full history is here.</p>
                 <div className="mt-2">
-                  <RowList items={sections.activity} muted h={h} />
+                  {sections.activity.length
+                    ? <RowList items={sections.activity} muted h={h} />
+                    : <EmptyState title="No recent activity." />}
                 </div>
               </details>
             )}
@@ -731,9 +759,8 @@ export function ActionCenterView() {
       )}
 
       <p className="text-xs text-slate-400">
-        This is the actionable slice of{' '}
-        <Link href="/inbox" className="rounded font-semibold text-badge-200 transition hover:text-white">My Dashboard</Link>
-        {' '}— the same reviews and tasks appear there in context.
+        <Link href="/dashboard" className="rounded font-semibold text-badge-200 transition hover:text-white">My Dashboard</Link>
+        {' '}keeps the broader overview — your cases, drafts, open workspace tabs and watched items.
         {suppressedCount > 0 && <> {suppressedCount} low-signal notification{suppressedCount === 1 ? ' was' : 's were'} folded into the items above.</>}
         {' '}Select rows to mark read, snooze or dismiss several at once (Shift+click for a range, Ctrl/⌘+A for all).
       </p>

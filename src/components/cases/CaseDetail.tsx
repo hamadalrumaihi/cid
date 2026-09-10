@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { DetailSkeleton } from '@/components/ui/Skeleton'
 import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { SectionTabs, panelDomId, type SectionTab } from '@/components/ui/SectionTabs'
-import { CASE_TABS, CASE_TAB_GROUPS, CASE_TAB_LABELS, type CaseTabId } from './caseTabs'
+import { CASE_TABS, CASE_TAB_GROUPS_ALL, CASE_TAB_LABELS, CASE_TAB_OPTIONAL, type CaseTabId } from './caseTabs'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { countRows, list, rpc, withRetry } from '@/lib/db'
@@ -52,6 +52,7 @@ import type { BlockerRow } from './tabs/CaseBlockersPanel'
 import { ChargesTab } from './tabs/ChargesTab'
 import { RicoTab } from './tabs/RicoTab'
 import { IntelTab } from './tabs/IntelTab'
+import { CiIntelligenceTab, useCiCaseCount } from './tabs/CiIntelligenceTab'
 import { SurveillanceTab } from './tabs/SurveillanceTab'
 import { ExtractionsTab } from './tabs/ExtractionsTab'
 import { LegalTab } from './tabs/LegalTab'
@@ -76,10 +77,18 @@ const CaseGraphTab = dynamic(() => import('./CaseGraphTab').then((m) => m.CaseGr
 
 // Tab ids/labels/grouping live in caseTabs.ts so the in-app User Guide renders
 // the real rail (aliased here to keep the 30+ existing references unchanged).
+// This strip uses the COMPLETE grouping (incl. the conditional `ci` tab); the
+// guide and the phone screen render CASE_TAB_GROUPS without it.
 const TABS = CASE_TABS
 type TabId = CaseTabId
 const TAB_LABELS = CASE_TAB_LABELS
-const TAB_GROUPS = CASE_TAB_GROUPS
+const TAB_GROUPS = CASE_TAB_GROUPS_ALL
+
+/** Optional tabs that carry no count at all (graph, timeline) fold into
+ *  More… whenever they are not active; the count-bearing optional tabs fold
+ *  once their count is known to be 0 (never while it is still loading, so
+ *  the strip does not shrink after first paint). */
+const NO_COUNT_TABS: ReadonlySet<TabId> = new Set<TabId>(['graph', 'timeline'])
 
 /** Slim media projection — the metric count + Overview recap, plus the
  *  title/category the health advisory reads (undescribed-media flag). */
@@ -143,6 +152,11 @@ export function CaseDetail({ id, onBack, onChanged, embedded = false, section, o
   const { profile, canEdit: authCanEdit, canDelete: authCanDelete, isCommand, isOwner } = auth
   const siu = useSiu()
   const narrow = useNarrow()
+  // CI Intelligence tab gate (§6.4): the count is fetched only for accounts
+  // the compartment involves (the hook short-circuits to 0 otherwise). null →
+  // unknown yet; the tab exists only while the count is > 0 — never a lock,
+  // a placeholder or a zero pill.
+  const ciCount = useCiCaseCount(id)
   const operations = useOperationsStore((s) => s.operations)
   // DB-backed pins (user_pins) — replaces the localStorage pinnedCases toggle
   // so a pin follows the member across devices. The Store-key readers stay in
@@ -524,8 +538,13 @@ export function CaseDetail({ id, onBack, onChanged, embedded = false, section, o
 
   // Counts stay cheap: every number below is already in the workflow snapshot
   // (shared rows or the added HEAD counts) — no tab pill triggers a new heavy
-  // query. Timeline/chat/graph deliberately carry none.
-  const tabDefs: Array<SectionTab<TabId>> = TABS.filter((t) => t !== 'rico' || ricoOn).map((t) => ({
+  // query. Timeline/chat/graph deliberately carry none. The `ci` tab is listed
+  // only with a positive count (a deep link to ?tab=ci without one lands on
+  // the Brief, like any unknown section).
+  const ciOn = (ciCount ?? 0) > 0
+  const tabDefs: Array<SectionTab<TabId>> = TABS
+    .filter((t) => (t !== 'rico' || ricoOn) && (t !== 'ci' || ciOn))
+    .map((t) => ({
     id: t,
     label: TAB_LABELS[t],
     count:
@@ -538,6 +557,7 @@ export function CaseDetail({ id, onBack, onChanged, embedded = false, section, o
       : t === 'surveillance' ? wf?.surveillanceTargets
       : t === 'extractions' ? wf?.extractions
       : t === 'rico' ? wf?.rico
+      : t === 'ci' ? ciCount ?? undefined
       : undefined,
     marker:
       t === 'signoff' ? awaitingSignoff
@@ -551,6 +571,13 @@ export function CaseDetail({ id, onBack, onChanged, embedded = false, section, o
       : t === 'reports' ? 'Draft reports awaiting finalization'
       : undefined,
   }))
+  // More…: rarely-populated tabs fold behind the chip while empty and not
+  // active (CASE_TAB_OPTIONAL — `ci` is never optional: present or absent).
+  const folds = (t: SectionTab<TabId>) =>
+    CASE_TAB_OPTIONAL.has(t.id) && t.id !== tab
+    && (t.count === 0 || (t.count === undefined && NO_COUNT_TABS.has(t.id)))
+  const stripTabs = tabDefs.filter((t) => !folds(t))
+  const moreTabs = tabDefs.filter(folds)
 
   return (
     <div className="space-y-4">
@@ -665,7 +692,8 @@ export function CaseDetail({ id, onBack, onChanged, embedded = false, section, o
           />
         ) : (
           <SectionTabs<TabId>
-            tabs={tabDefs}
+            tabs={stripTabs}
+            more={moreTabs}
             groups={TAB_GROUPS}
             active={tab}
             onChange={setTab}
@@ -679,7 +707,7 @@ export function CaseDetail({ id, onBack, onChanged, embedded = false, section, o
           display:none when inactive — the ToolsView pattern) so tab-local
           filters, drafts and pagination survive switching. aria-label instead
           of aria-labelledby: on phones the tablist buttons don't exist. */}
-      {TABS.filter((t) => visited.has(t)).map((t) => {
+      {TABS.filter((t) => visited.has(t) && (t !== 'ci' || ciOn)).map((t) => {
         const active = t === tab
         return (
           <section
@@ -713,6 +741,7 @@ export function CaseDetail({ id, onBack, onChanged, embedded = false, section, o
             {t === 'activity' && <ActivitySection c={c} />}
             {t === 'media' && <MediaTab c={c} canEdit={canEdit} canDelete={canDelete} holdActive={!!hold} />}
             {t === 'intel' && <IntelTab c={c} canEdit={canEdit && !c.archived_at} />}
+            {t === 'ci' && <CiIntelligenceTab caseId={c.id} />}
             {t === 'surveillance' && <SurveillanceTab c={c} />}
             {t === 'extractions' && <ExtractionsTab c={c} canEdit={canEdit} />}
             {t === 'charges' && <ChargesTab c={c} canEdit={canEdit} onChanged={fetchCase} />}

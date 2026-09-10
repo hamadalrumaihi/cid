@@ -4,8 +4,8 @@
  *    #case=<id>  → /cases?case=<id>   (case detail — contract for the Cases slice)
  *    #reports    → /cases             (legacy leaf, vanilla folds it into cases)
  *    #<tab>      → /<tab>
- *  otherwise My Dashboard (/inbox) — the personal work-at-a-glance surface is
- *  the default landing.
+ *  otherwise the Action Center (/inbox) — the personal queue is the default
+ *  landing (My Dashboard, the broad overview, lives on /dashboard).
  *
  *  Auth-callback safety: if Supabase lands an OAuth/magic-link response on '/'
  *  (hash tokens or ?code=), do NOT strip it — let supabase-js consume it via
@@ -40,8 +40,8 @@ export default function RootRedirect() {
     if (caseLink) { router.replace(`/cases?case=${encodeURIComponent(caseLink[1])}`); return }
     if (hash === 'reports') { router.replace('/cases'); return }
     if (hash && isValidTab(hash)) { router.replace(`/${hash}`); return }
-    // Default landing is My Dashboard (the personal home) — an explicit hash
-    // deep-link above still wins, so shared links and auth callbacks are
+    // Default landing is the Action Center (the personal home) — an explicit
+    // hash deep-link above still wins, so shared links and auth callbacks are
     // unaffected; only a bare app open lands here.
     router.replace('/inbox')
   }, [router])

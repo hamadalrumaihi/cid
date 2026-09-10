@@ -1,19 +1,16 @@
 'use client'
 
-/** My Dashboard (/inbox) — the personal landing surface (Phase-2A rebuild of
- *  the old "My Desk"). One prioritized "Needs your attention" panel (the TOP
- *  slice of the ONE Action Center queue — useActionQueue via ActionSlice)
- *  replaces the former
- *  dead metric strip and the duplicated sign-off / returned / follow-up /
- *  task / mention panels — and their big unprojected table loads went with
- *  them. Everything this view fetches itself is a slim projection with a
- *  limit, RLS-scoped as ever. Empty panels render nothing (DashPanel
- *  `empty`); every count is clickable through to its owning surface. */
+/** My Dashboard (/dashboard) — the broad personal overview: My cases, Jump
+ *  back in, Open workspace tabs, Report drafts and Watched items. The queue
+ *  itself is the Action Center (/inbox, the default landing) — this view
+ *  carries ONE line pointing there ("n items need your attention") from the
+ *  shared useActionQueue counts, never a second rendering of the items.
+ *  Everything this view fetches itself is a slim projection with a limit,
+ *  RLS-scoped as ever. Empty panels render nothing (DashPanel `empty`); every
+ *  count is clickable through to its owning surface. */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ActionSlice } from '@/components/actioncenter/ActionSlice'
 import { useActionQueue } from '@/components/actioncenter/useActionQueue'
-import { isFieldOnlyAccount } from '@/components/command-center/lib/membershipPending'
 import { DashPanel } from '@/components/dash/DashPanel'
 import { DashRow } from '@/components/dash/DashRow'
 import { JumpBack } from './JumpBack'
@@ -25,14 +22,12 @@ import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { useAuth } from '@/lib/auth'
 import { caseLink } from '@/lib/caseLinks'
-import type { Json, Tables } from '@/lib/database.types'
+import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
-import { useFieldStanding } from '@/lib/fieldStanding'
 import { timeAgo } from '@/lib/format'
-import { useJusticeRoster } from '@/lib/justiceRoster'
 import { humanize } from '@/lib/legalWorkflow'
 import { TAB_LABEL } from '@/lib/nav'
-import { officerName, useProfilesStore } from '@/lib/profiles'
+import { useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { ROLE_LABEL, bureauShort } from '@/lib/roles'
 import { signoffLabel } from '@/lib/signoff'
@@ -52,47 +47,25 @@ type MyCaseRow = Pick<Tables<'cases'>,
   | 'created_by' | 'summary' | 'follow_up_at' | 'signoff_status'
   | 'signoff_submitted_by' | 'updated_at'>
 type ReportLite = Pick<Tables<'reports'>, 'id' | 'case_id' | 'template' | 'finalized' | 'updated_at'>
-type MessageLite = Pick<Tables<'case_messages'>,
-  'id' | 'case_id' | 'author_id' | 'author_name' | 'body' | 'mentions' | 'created_at'>
-type LegalLite = Pick<Tables<'legal_requests'>,
-  'id' | 'request_number' | 'request_type' | 'review_status' | 'updated_at'>
 
 const MY_CASE_COLS =
   'id,case_number,title,status,bureau,lead_detective_id,created_by,summary,'
   + 'follow_up_at,signoff_status,signoff_submitted_by,updated_at'
 const REPORT_COLS = 'id,case_id,template,finalized,updated_at'
-const MESSAGE_COLS = 'id,case_id,author_id,author_name,body,mentions,created_at'
-const LEGAL_COLS = 'id,request_number,request_type,review_status,updated_at'
 
 interface DeskData {
   myCases: MyCaseRow[]
-  /** Cases I submitted for sign-off (any state) — feeds the returned badge
-   *  and the recent-decisions slice of the activity panel. */
+  /** Cases I submitted for sign-off (any state) — feeds the returned badge. */
   submissions: MyCaseRow[]
   watched: WatchTarget[]
   /** Unfinalized report rows only — saved user_drafts are the Action Center
-   *  queue's `draft` items (the slice above), not a second list here. */
+   *  queue's `draft` items, not a second list here. */
   reports: ReportLite[]
-  messages: MessageLite[]
-  legal: LegalLite[]
 }
 
-const EMPTY: DeskData = { myCases: [], submissions: [], watched: [], reports: [], messages: [], legal: [] }
+const EMPTY: DeskData = { myCases: [], submissions: [], watched: [], reports: [] }
 
 const RETURNED_SIGNOFF = new Set(['changes_requested', 'denied'])
-/** Sign-off states that represent a DECISION on a submission (for the
- *  activity feed) — everything except open/awaiting. */
-const DECIDED_SIGNOFF = new Set(['changes_requested', 'denied', 'approved_deputy', 'approved_complete', 'ready_doj'])
-
-const isJsonArray = (v: Json): v is Json[] => Array.isArray(v)
-
-function jsonHasId(v: Json, id: string): boolean {
-  if (!id) return false
-  if (typeof v === 'string') return v === id
-  if (isJsonArray(v)) return v.some((x) => jsonHasId(x, id))
-  if (v && typeof v === 'object') return Object.values(v).some((x) => jsonHasId((x ?? null) as Json, id))
-  return false
-}
 
 /* ── open workspace tabs (sessionStorage mirror, ids only) ────────────────
  * The unified workspace's per-user mirror (lib/workspace/storage readMirror;
@@ -116,20 +89,12 @@ function readToolTabs(uid: string | null): OpenToolTab[] {
   return out
 }
 
-interface ActivityRow { key: string; ts: string; title: string; why: string; href: string }
-
-export function InboxView() {
-  const { profile, state, isCommand, canEdit } = useAuth()
+export function MyDashboardView() {
+  const { profile, state, canEdit } = useAuth()
   const create = useCreate()
   const { openHref } = useToolNav()
   const ac = useActionQueue()
   const fetchProfiles = useProfilesStore((s) => s.fetch)
-  const rosterProfiles = useProfilesStore((s) => s.profiles)
-  const justiceByUser = useJusticeRoster((s) => s.byUser)
-  const fetchJustice = useJusticeRoster((s) => s.fetch)
-  const fieldIds = useFieldStanding((s) => s.ids)
-  const fieldLoaded = useFieldStanding((s) => s.loaded)
-  const fetchFieldStanding = useFieldStanding((s) => s.fetch)
 
   const [data, setData] = useState<DeskData>(EMPTY)
   const [loading, setLoading] = useState(true)
@@ -139,13 +104,10 @@ export function InboxView() {
   const [openTabs, setOpenTabs] = useState<OpenToolTab[]>([])
 
   const vCases = useTableVersion('cases')
-  const vMessages = useTableVersion('case_messages')
   const vReports = useTableVersion('reports')
   const vWatch = useTableVersion('watchlist')
-  const vLegal = useTableVersion('legal_requests')
   const vPersons = useTableVersion('persons')
   const vVehicles = useTableVersion('vehicles')
-  const vJustice = useTableVersion('justice_memberships')
 
   const refresh = useCallback(async () => {
     if (state !== 'in' || !profile) return
@@ -153,16 +115,15 @@ export function InboxView() {
     setLoading(true)
     setErr(null)
     try {
-      await fetchProfiles() // officerName for mention authors / case leads
-      if (isCommand) { void fetchJustice(); void fetchFieldStanding() }
+      await fetchProfiles() // officerName for case leads
       const me = profile.id
-      const [myCases, submissions, watched, reports, messages, legal] = await Promise.all([
+      const [myCases, submissions, watched, reports] = await Promise.all([
         // My cases: lead OR creator = me, live rows, newest movement first.
         list('cases', {
           select: MY_CASE_COLS, or: `lead_detective_id.eq.${me},created_by.eq.${me}`,
           is: { archived_at: null }, order: 'updated_at', ascending: false, limit: 40,
         }).then((r) => r as unknown as MyCaseRow[]),
-        // My sign-off submissions — recent decisions + the returned badge.
+        // My sign-off submissions — the returned badge.
         list('cases', {
           select: MY_CASE_COLS, eq: { signoff_submitted_by: me },
           order: 'updated_at', ascending: false, limit: 10,
@@ -173,18 +134,9 @@ export function InboxView() {
         list('reports', {
           select: REPORT_COLS, eq: { author_id: me }, order: 'updated_at', ascending: false, limit: 20,
         }).then((r) => r as unknown as ReportLite[]).catch(() => [] as ReportLite[]),
-        // Recent case chat — mention matching happens client-side over one
-        // bounded page (RLS scopes it to cases I can read).
-        list('case_messages', {
-          select: MESSAGE_COLS, order: 'created_at', ascending: false, limit: 40,
-        }).then((r) => r as unknown as MessageLite[]).catch(() => [] as MessageLite[]),
-        // My legal requests, newest movement first — activity feed only.
-        list('legal_requests', {
-          select: LEGAL_COLS, eq: { created_by: me }, order: 'updated_at', ascending: false, limit: 5,
-        }).then((r) => r as unknown as LegalLite[]).catch(() => [] as LegalLite[]),
       ])
-      setData({ myCases, submissions, watched, reports, messages, legal })
-      // profiles.id IS the auth uid — the same key ToolsView persists under.
+      setData({ myCases, submissions, watched, reports })
+      // profiles.id IS the auth uid — the same key the workspace persists under.
       setOpenTabs(readToolTabs(profile.id))
     } catch (e) {
       // humanizeError: raw PostgREST/RLS text (table/policy names) must never
@@ -193,21 +145,12 @@ export function InboxView() {
     } finally {
       setLoading(false)
     }
-  }, [fetchProfiles, fetchJustice, fetchFieldStanding, isCommand, profile, state])
+  }, [fetchProfiles, profile, state])
 
   useEffect(() => {
     const id = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(id)
-  }, [refresh, vCases, vMessages, vReports, vWatch, vLegal, vPersons, vVehicles, vJustice])
-
-  // Command-only banner count: pending CID sign-ins awaiting a decision.
-  // Mirrors the roster rule — an inactive member holding an active justice
-  // identity was moved out by an organization correction, and a Field
-  // Intelligence submitter is inactive by design (applied for nothing).
-  const pendingApprovals = isCommand
-    ? rosterProfiles.filter((p) => !p.active && !p.removed_at && !justiceByUser[p.id]
-        && !isFieldOnlyAccount(p.id, fieldLoaded ? fieldIds : null)).length
-    : 0
+  }, [refresh, vCases, vReports, vWatch, vPersons, vVehicles])
 
   const model = useMemo(() => {
     const myId = profile?.id ?? ''
@@ -226,32 +169,7 @@ export function InboxView() {
       })
       .sort((a, b) => Number(b.fresh) - Number(a.fresh) || String(b.ts ?? '').localeCompare(String(a.ts ?? '')))
     const draftReports = data.reports.filter((r) => !r.finalized).slice(0, 5)
-    const mentions = data.messages.filter((m) => m.author_id !== myId
-      && (jsonHasId(m.mentions, myId)
-        || (!!profile?.display_name && m.body.toLowerCase().includes(`@${profile.display_name.toLowerCase()}`))))
-
-    // Recent activity: three bounded self-scoped sources, merged newest-first.
-    const activity: ActivityRow[] = [
-      ...mentions.slice(0, 6).map((m) => ({
-        key: `msg:${m.id}`, ts: m.created_at,
-        title: `${m.author_name || officerName(m.author_id) || 'Officer'} mentioned you`,
-        why: m.body, href: caseLink(m.case_id, 'chat'),
-      })),
-      ...data.legal.map((l) => ({
-        key: `legal:${l.id}`, ts: l.updated_at,
-        title: `${l.request_number} — ${humanize(l.request_type || 'request')}`,
-        why: `Your legal request · ${humanize(l.review_status || 'submitted')}`,
-        href: `/legal?request=${encodeURIComponent(l.id)}`,
-      })),
-      ...data.submissions.filter((c) => DECIDED_SIGNOFF.has(c.signoff_status)).slice(0, 5).map((c) => ({
-        key: `signoff:${c.id}`, ts: c.updated_at,
-        title: `${c.case_number} · ${c.title || 'Untitled case'}`,
-        why: `Sign-off decision on your submission — ${signoffLabel(c.signoff_status)}`,
-        href: caseLink(c.id, 'signoff'),
-      })),
-    ].sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 8)
-
-    return { myId, myCases, returnedIds, watched, draftReports, activity }
+    return { myId, myCases, returnedIds, watched, draftReports }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seenVer invalidates the Store-read watchSeen map
   }, [data, profile, seenVer])
 
@@ -264,13 +182,16 @@ export function InboxView() {
 
   if (state !== 'in') return <p className="px-3 py-2.5 text-sm text-slate-400">Sign in to view your dashboard.</p>
 
+  // The ONE Action Center pointer: everything waiting on the viewer
+  // personally plus the command decisions they own (0 for non-command).
+  const attention = ac.counts.personal + ac.counts.command
   const draftsCount = model.draftReports.length
-  const allQuiet = !loading && !ac.loading && ac.items.length === 0 && model.myCases.length === 0
-    && openTabs.length === 0 && draftsCount === 0 && model.watched.length === 0 && model.activity.length === 0
+  const allQuiet = !loading && !ac.loading && attention === 0 && model.myCases.length === 0
+    && openTabs.length === 0 && draftsCount === 0 && model.watched.length === 0
 
   return (
     <section className="view-in space-y-4">
-      {/* The visible page title lives in the shell Header (PAGE_META.inbox);
+      {/* The visible page title lives in the shell Header (PAGE_META.dashboard);
           this keeps the one-h1-per-view contract without duplicating it. */}
       <h1 className="sr-only">My Dashboard</h1>
 
@@ -301,39 +222,29 @@ export function InboxView() {
           live on their own dashboard. */}
       <SiuAccessRequestCard />
 
-      {isCommand && (
+      {/* One line, not a second queue: the Action Center owns the items. */}
+      {!ac.loading && (
         <button
-          onClick={() => openHref('/command-center')}
-          className="flex w-full flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-left transition hover:border-amber-300/40 hover:bg-amber-500/15"
+          type="button"
+          onClick={() => openHref('/inbox')}
+          className={`flex min-h-[44px] w-full flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-2.5 text-left text-sm transition ${
+            attention > 0
+              ? 'border-amber-400/25 bg-amber-500/10 text-amber-100 hover:border-amber-300/40 hover:bg-amber-500/15'
+              : 'border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/5'
+          }`}
         >
-          <span className="text-sm font-bold text-amber-100">
-            Command administration
-            <span className="ml-2 font-normal text-amber-200/80">
-              {pendingApprovals > 0
-                ? `${pendingApprovals} sign-in ${pendingApprovals === 1 ? 'request' : 'requests'} awaiting approval`
-                : 'Approvals, promotions & transfers'}
-            </span>
+          <span>
+            {attention > 0
+              ? <><span className="font-semibold">{attention} item{attention === 1 ? '' : 's'}</span> need{attention === 1 ? 's' : ''} your attention</>
+              : 'Nothing needs your action right now'}
           </span>
-          <span className="flex items-center gap-2">
-            {pendingApprovals > 0 && <span className="rounded bg-amber-400/20 px-2 py-0.5 text-[11px] font-semibold text-amber-100">{pendingApprovals}</span>}
-            <span className="text-xs font-semibold text-amber-200">Open Command Center →</span>
-          </span>
+          <span className={`text-xs font-semibold ${attention > 0 ? 'text-amber-200' : 'text-badge-200'}`}>Action Center →</span>
         </button>
       )}
 
       {loading && <p className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm text-slate-400">Loading your dashboard…</p>}
 
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2 2xl:grid-cols-3">
-        {/* The TOP slice of the one Action Center queue — same items, same
-            ranking, one fetch (Phase 7 AC7). Saved drafts live here too. */}
-        <ActionSlice
-          title="Needs your attention"
-          filter={() => true}
-          limit={8}
-          emptyText="Nothing needs your action right now."
-          href="/action"
-        />
-
         <DashPanel
           title="My cases"
           count={model.myCases.length}
@@ -425,12 +336,6 @@ export function InboxView() {
                 openHref(it.href)
               }}
             />
-          ))}
-        </DashPanel>
-
-        <DashPanel title="Recent activity" count={model.activity.length} empty={model.activity.length === 0}>
-          {model.activity.map((r) => (
-            <DashRow key={r.key} title={r.title} why={r.why} meta={timeAgo(r.ts)} onClick={() => openHref(r.href)} />
           ))}
         </DashPanel>
       </div>

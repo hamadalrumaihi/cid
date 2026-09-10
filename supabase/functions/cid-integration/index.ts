@@ -146,7 +146,7 @@ const OPERATIONS: Record<string, (env: Envelope) => Response> = {
   // Surveillance — identity: service_role (machine); backing: the EXISTING
   // bridge_ingest_event RPC (idempotent on (source, source_event_id),
   // quarantine-not-discard, unverified by default). Deliberately not an
-  // officer op — see docs/MDT-BRIDGE-CONTRACT.md §Inbound contract.
+  // officer op — see docs/archive/MDT-BRIDGE-CONTRACT.md §Inbound contract.
   'surveillance.ingest': () => notActivated(),
 
   // Legal — identity: officer; backing: existing RPCs (create_legal_request,

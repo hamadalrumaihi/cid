@@ -1,6 +1,6 @@
 # Records & Requests Domain — Delta Implementation Report
 
-**Foundation PR:** [#193](https://github.com/hamadalrumaihi/cid/pull/193) (merged to `main`) · **Spec:** `docs/RECORDS-REQUESTS-SPEC.md`
+**Foundation PR:** [#193](https://github.com/hamadalrumaihi/cid/pull/193) (merged to `main`) · **Spec:** `docs/archive/RECORDS-REQUESTS-SPEC.md`
 **Status:** all 7 deltas delivered and merged. D1–D4, D6, D7 landed in the foundation PR #193;
 D5 (in-app deadline reminders) shipped in Phase 6 (PR #205). Applied to the live `cid` Supabase
 project and RLS-verified. Later phases (2–6) hardened these flows further — see `CHANGELOG.md`.
@@ -11,7 +11,7 @@ project and RLS-verified. Later phases (2–6) hardened these flows further — 
 
 A requirements Q&A (Batches 8–14) defined the "records & requests" domain. Rather than
 build blind, we first **grounded every requirement against the real codebase** and wrote a
-decision log + gap analysis (`docs/RECORDS-REQUESTS-SPEC.md`). That analysis found the
+decision log + gap analysis (`docs/archive/RECORDS-REQUESTS-SPEC.md`). That analysis found the
 majority of the domain already existed (legal requests, MDT projections, person/vehicle/media
 registries, global search, indicators, notifications, tombstone deletion) and isolated the work
 into **seven net-new deltas, D1–D7**.
@@ -131,7 +131,7 @@ real records in the production database. The UI is thin and wired to already-liv
 ## 6. Deferred follow-ups (documented in the PR)
 
 - **D5 — notifications:** Discord-for-high-priority + daily digest need a Discord edge-function
-  redeploy + scheduled-job infra (`pg_cron` / `pg_net` run the SOP sync live but were not yet declared in migrations when this was written — see `docs/PLAN-PORTAL-IMPROVEMENTS.md` Phase 0, P0-04). Code-only parts
+  redeploy + scheduled-job infra (`pg_cron` / `pg_net` run the SOP sync live but were not yet declared in migrations when this was written — see `docs/archive/PLAN-PORTAL-IMPROVEMENTS.md` Phase 0, P0-04). Code-only parts
   (per-type default deadlines, deadline-clock pause) also remain.
 - **D2 automation:** auto-parse return content → Intelligence-Review items; return-driven
   account-ownership auto-confirm hook. The confidence ladder + confirm-stamp trigger already exist;

@@ -1,64 +1,10 @@
 /** Owner Console — pure derivations for the Owner Dashboard.
  *
- *  Hook-free on purpose: the pending-action queue, the curated admin audit
- *  set and the ledger reference counter are plain functions with a unit test
- *  beside them (ownerQueue.test.ts), so the dashboard's judgement calls are
- *  verifiable without a fetch layer. */
-
-export interface OwnerQueueInput {
-  /** Each signal: a count, or null = not checked / the fetch failed. A null
-   *  never produces a queue row — "unknown" is not "pending". */
-  clientErrors: number | null
-  securityFailures: number | null
-  fixtureIssues: number | null
-  openFeedback: number | null
-}
-
-export interface OwnerQueueItem {
-  id: 'client_errors' | 'security_failures' | 'fixture_issues' | 'open_feedback'
-  label: string
-  /** Why this row needs the owner — the DashRow `why` line. */
-  why: string
-  count: number
-  /** Owner Console section (?s=) the row deep-links to. */
-  section: 'security' | 'feedback'
-}
-
-/** The owner's pending-action queue, derived from the real health signals
- *  only (client errors, RLS-suite failures, fixture drift, open feedback).
- *  Nothing here is invented — no uptime/backup/upload monitors exist. */
-export function ownerQueue(input: OwnerQueueInput): OwnerQueueItem[] {
-  const out: OwnerQueueItem[] = []
-  if (input.clientErrors) {
-    out.push({
-      id: 'client_errors', count: input.clientErrors, section: 'security',
-      label: 'Client errors reported',
-      why: 'Uncaught exceptions from members’ browsers — triage, then clear',
-    })
-  }
-  if (input.securityFailures) {
-    out.push({
-      id: 'security_failures', count: input.securityFailures, section: 'security',
-      label: 'Security suite failures',
-      why: 'The live RLS suites reported failing assertions on their latest runs',
-    })
-  }
-  if (input.fixtureIssues) {
-    out.push({
-      id: 'fixture_issues', count: input.fixtureIssues, section: 'security',
-      label: 'Fixture health issues',
-      why: 'rls-test fixtures missing or drifted from their expected identity',
-    })
-  }
-  if (input.openFeedback) {
-    out.push({
-      id: 'open_feedback', count: input.openFeedback, section: 'feedback',
-      label: 'Open feedback',
-      why: 'Submissions not yet resolved, archived, rejected or marked duplicate',
-    })
-  }
-  return out
-}
+ *  Hook-free on purpose: the curated admin audit set and the ledger reference
+ *  counter are plain functions with a unit test beside them
+ *  (ownerQueue.test.ts), so the dashboard's judgement calls are verifiable
+ *  without a fetch layer. The former pending-action queue is gone — the
+ *  Action Center's Owner signals (lib/actionItems) carry those rows now. */
 
 /** Curated audit_log actions that count as ADMINISTRATIVE changes for the
  *  dashboard's "Recent administrative changes" panel. These are the named

@@ -9,25 +9,48 @@ import { parseNotifPayload, type NotifPayload } from './schemas'
 
 export type NotificationRow = Tables<'notifications'>
 
-/** The ONE title map (Phase 7, P7-07): `notificationTitles.json` carries every
- *  kind the portal emits with its human title AND its Discord category; the
- *  discord-notify Edge Function ships a byte-identical copy (scripts/
- *  sync-notification-titles.mjs, gate `check:notif-titles`). Unknown types
+/** The ONE notification registry (Phase 7, P7-07; typed in the CI release):
+ *  `notificationTitles.json` carries every kind the portal emits with its
+ *  human title, its category and the optional flags below; the discord-notify
+ *  Edge Function ships a byte-identical copy (scripts/sync-notification-
+ *  titles.mjs, gate `check:notif-titles`) and decides from the same fields.
+ *  lib/notifications derives the in-app mute groups and the Discord opt-in
+ *  categories from this registry — nothing lists a kind twice. Unknown types
  *  fall back to the raw type string, never to JSON. */
-type TitleEntry = { title: string; category: string }
-const TITLES = titles as Record<string, TitleEntry>
+export interface NotifEntry {
+  title: string
+  /** Category key — copy lives in lib/notifications NOTIF_CATEGORY_META. */
+  category: string
+  /** `portal` = in-app only: the edge function skips it before any lookup,
+   *  and its category never appears in the Discord opt-in list. */
+  destination?: 'portal'
+  /** A clearly-optional FYI stream a member may mute in-app. Absent =
+   *  mandatory (assignments, mentions, decisions, legal, security …). */
+  mutable?: true
+  priority?: 'high' | 'normal' | 'low'
+}
+export const NOTIF_REGISTRY: Record<string, NotifEntry> = titles as Record<string, NotifEntry>
 
-/** Human titles per type — derived from the JSON so the bell, My Desk, the
- *  Action Center and the Discord DM all say the same words. */
+/** Human titles per type — derived from the registry so the bell, My Desk,
+ *  the Action Center and the Discord DM all say the same words. */
 export const NOTIF_LABEL: Record<string, string> = Object.fromEntries(
-  Object.entries(TITLES).map(([k, v]) => [k, v.title]),
+  Object.entries(NOTIF_REGISTRY).map(([k, v]) => [k, v.title]),
 )
 
-/** Discord opt-in category per type (`other` when the JSON has no entry —
- *  always sent when a title exists). */
+/** Category per type (`other` when the JSON has no entry — always sent when
+ *  a title exists). */
 export const NOTIF_CATEGORY: Record<string, string> = Object.fromEntries(
-  Object.entries(TITLES).map(([k, v]) => [k, v.category]),
+  Object.entries(NOTIF_REGISTRY).map(([k, v]) => [k, v.category]),
 )
+
+/** Where a kind is delivered: `portal` (in-app only) or `all` (in-app, and a
+ *  Discord DM when the recipient opted in). Unknown types are `all` — the
+ *  edge function then refuses them for having no title. */
+export const notifDestination = (type: string): 'portal' | 'all' =>
+  NOTIF_REGISTRY[type]?.destination === 'portal' ? 'portal' : 'all'
+
+/** May a member mute this kind in-app? False for unknown types. */
+export const isMutableNotif = (type: string): boolean => NOTIF_REGISTRY[type]?.mutable === true
 
 const isIntel = (t: string): boolean => t.startsWith('intel_')
 
@@ -94,6 +117,19 @@ const NOTIF_CASE_TAB: Record<string, string> = {
   restricted_access_revoked: 'media',
   // Surveillance decisions land on the case's Surveillance tab.
   surveillance_decided: 'surveillance',
+  // Sanitized intelligence released to a case (names no CI) — the Intel tab.
+  case_intel_released: 'intel',
+}
+
+/** The Informants compartment (mirrors lib/ci `ciHref` and the requests panel link
+ *  without importing that module here). Request kinds open the requests
+ *  panel; every other `ci_*` kind opens the source's profile — and nothing
+ *  when the payload carries no `ci_id` (ids only by contract; a missing id
+ *  must never fall through to a case link or a generic surface). */
+const CI_REQUEST_KINDS = new Set(['ci_capacity_request', 'ci_request_decided'])
+const ciNotifHref = (type: string, p: NotifPayload): string | null => {
+  if (CI_REQUEST_KINDS.has(type)) return '/informants?requests=1'
+  return typeof p.ci_id === 'string' && p.ci_id ? `/informants?ci=${encodeURIComponent(p.ci_id)}` : null
 }
 
 /** Where clicking a notification should take the member — so bell rows are
@@ -114,7 +150,10 @@ export function notifHref(n: NotificationRow, opts: { command?: boolean } = {}):
     if (p.kind === 'task_overdue') return caseLink(p.case_id, 'tasks', { task: p.source_id })
     return caseLink(p.case_id)
   }
-  if (t === 'action_escalated') return '/action?f=escalated'
+  if (t === 'action_escalated') return '/inbox?f=escalated'
+  // Confidential-informant kinds route to the compartment BEFORE the generic
+  // case arm — a CI notification never lands on a case surface.
+  if (t.startsWith('ci_')) return ciNotifHref(t, p)
   // Report notifications carry report_id — land on THAT report (?report=),
   // not just the Reports tab (contract §4 deep link).
   if (p.case_id) return caseLink(p.case_id, NOTIF_CASE_TAB[t], { report: typeof p.report_id === 'string' ? p.report_id : undefined })
@@ -139,13 +178,13 @@ export function notifHref(n: NotificationRow, opts: { command?: boolean } = {}):
   // all — "Question for you" is surfaced on the shell's home screen instead,
   // so no separate officer href exists to route to.
   if (isIntel(t)) return intelReviewHref(p.submission_id)
-  if (t === 'membership_request' || t === 'access_requested') return '/command-center?s=approvals'
+  if (t === 'membership_request' || t === 'access_requested') return '/command-center?s=membership'
   if (t.startsWith('transfer')) return '/command-center?s=promotions'
   // membership_update doubles as the transfer-status fan-out (transfer_id in
   // the payload): reviewers open the transfer queue, the member their profile.
   if (t === 'membership_update') return p.transfer_id && opts.command ? '/command-center?s=promotions' : '/profile'
   if (t === 'member_approved') return '/guide'
-  if (t.startsWith('tracker')) return '/command'
+  if (t.startsWith('tracker')) return '/command-center?s=ops'
   // Caseless mentions come from announcement fan-outs (announce_id payload).
   if (t === 'announcement' || t === 'mention') return '/announce'
   if (t === 'client_error') return '/owner'

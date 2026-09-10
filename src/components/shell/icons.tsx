@@ -32,8 +32,8 @@ export const CategoryIcon = ({ cat, size }: { cat: string; size?: number }) => {
       return <T size={size}><path d="M3.5 3.5h7v7h-7zM13.5 3.5h7v7h-7zM3.5 13.5h7v7h-7zM13.5 13.5h7v7h-7z" /></T>
     case 'cases':
       return <T size={size}><path d="M3 7.5a2 2 0 0 1 2-2h4.2l1.8 2H19a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></T>
-    case 'intel':
-      return <T size={size}><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4" /><path d="M12 12l6-6" /></T>
+    case 'owner':
+      return <T size={size}><circle cx="12" cy="12" r="3" /><path d="M12 3.5v2.3M12 18.2v2.3M3.5 12h2.3M18.2 12h2.3M6 6l1.6 1.6M16.4 16.4L18 18M6 18l1.6-1.6M16.4 7.6L18 6" /></T>
     case 'reference':
       return <T size={size}><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5H6.5A2.5 2.5 0 0 0 4 21z" /><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20" /></T>
     case 'oversight':
@@ -200,9 +200,6 @@ export const MapIcon = (p: IconProps) => (
 )
 export const RadioIcon = (p: IconProps) => (
   <T {...p}><circle cx="12" cy="12" r="2" /><path d="M7.8 16.2a6 6 0 0 1 0-8.4M16.2 7.8a6 6 0 0 1 0 8.4" /><path d="M5 19a10 10 0 0 1 0-14M19 5a10 10 0 0 1 0 14" /></T>
-)
-export const SettingsIcon = (p: IconProps) => (
-  <T {...p}><circle cx="12" cy="12" r="3" /><path d="M12 2.8l1.2 2.4 2.6.5 1.9-1 1.4 1.4-1 1.9.5 2.6 2.4 1.2v0l-2.4 1.2-.5 2.6 1 1.9-1.4 1.4-1.9-1-2.6.5L12 21.2l-1.2-2.4-2.6-.5-1.9 1-1.4-1.4 1-1.9-.5-2.6L2.8 12l2.4-1.2.5-2.6-1-1.9 1.4-1.4 1.9 1 2.6-.5z" /></T>
 )
 export const SlidersIcon = (p: IconProps) => (
   <T {...p}><path d="M5 4v6M5 14v6M12 4v2M12 10v10M19 4v10M19 18v2" /><path d="M3 10h4M10 6h4M17 14h4" /></T>

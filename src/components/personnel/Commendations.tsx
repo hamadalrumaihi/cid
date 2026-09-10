@@ -2,12 +2,12 @@
 
 /** Medals & support commendations — vanilla personnel.js:51-96. Flat tinted
  *  cards (Card idiom: rounded-lg, quiet wash); any active member can
- *  award/edit, command can delete (with undo). Recipient is free text with
+ *  award/edit, command can delete (soft — Trash + Undo). Recipient is free text with
  *  the roster cache as fallback name resolution. */
 import { useState } from 'react'
 import type { Tables } from '@/lib/database.types'
-import { insert, remove, update } from '@/lib/db'
-import { uiConfirm } from '@/components/ui/dialog'
+import { insert, update } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { useAuth } from '@/lib/auth'
 import { officerName } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
@@ -98,16 +98,17 @@ function CommendModal({ record, onClose, onSaved }: { record: CommendationRow | 
     onSaved()
   }
 
-  // commendations is not a soft-delete table: this is a real delete with no
-  // Trash and no Undo, and the confirm says so.
+  // Soft delete like every other member-created record: the commendation goes
+  // to the Trash (Undo on the toast, restore from /trash).
   const del = async () => {
     if (!record) return
-    if (!(await uiConfirm(`Delete the commendation "${record.title}"? This cannot be undone — it is removed for good, not moved to the Trash.`, { title: 'Delete commendation', confirmText: 'Delete permanently' }))) return
-    const res = await remove('commendations', record.id)
-    if (res.error) { toast(res.error.message, 'danger'); return }
-    toast('Commendation deleted', 'success')
-    onClose()
-    onSaved()
+    const ok = await deleteRecord('commendations', record, {
+      label: `commendation "${record.title}"`,
+      confirmTitle: 'Delete commendation',
+      confirmText: 'Delete',
+      after: onSaved,
+    })
+    if (ok) onClose()
   }
 
   const dirty = () =>

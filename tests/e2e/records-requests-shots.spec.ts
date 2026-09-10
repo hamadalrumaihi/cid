@@ -281,7 +281,7 @@ test.describe('Records & Requests — Phase-0 screenshot verification', () => {
     test.setTimeout(120_000)
     const errs = watch(page)
     await inject(page, fx().actors.lsb)
-    await page.goto('/command')
+    await page.goto('/inbox')
     await page.waitForTimeout(1500)
     await page.keyboard.press('Control+k')
     const input = page.getByRole('textbox', { name: 'Search everything' })

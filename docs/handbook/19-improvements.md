@@ -42,7 +42,7 @@ shipped. Effort: S < 1d, M = days, L = week+.
   drafts.ts, registry-hook extraction.
 - **Performance**: pagination (when data grows), scanner bounds.
 - **Security**: RLS tests, bootstrap RPC removal, nonce CSP, dashboard
-  checklist completion (`HARDENING.md`).
+  checklist completion (`docs/archive/HARDENING.md`).
 - **DX**: guide generation script, JSON typing, more unit tests around
   pure domain logic (penal totals, matchKey).
 - **UX/A11y**: heat-tint labels, keyboard board moves; ~~notification

@@ -26,11 +26,10 @@ import { useTableVersion } from '@/lib/realtime'
 import { useRegistry } from '@/lib/useRegistry'
 import { useNarrow } from '@/lib/useNarrow'
 import { useNow } from '@/lib/useNow'
-import { useSavedViews, type SavedViewsApi } from '@/lib/savedViews'
+import { useSavedViews } from '@/lib/savedViews'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
-import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -41,6 +40,7 @@ import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { useToolNav } from '@/components/tools/useToolNav'
+import { ViewsMenu } from '@/components/shared/ViewsMenu'
 import { PersonProfile } from './PersonProfile'
 import { PersonModal } from './PersonModal'
 import { boloState, classificationLabel, PERSON_REVIEW_DAYS } from './personIntel'
@@ -64,60 +64,6 @@ interface VehicleLite { id: string; owner_id: string | null }
 interface PersonVehicleLite { person_id: string; vehicle_id: string }
 
 type EditorState = { record: RegistryPerson | null; prefillName?: string } | null
-
-/** Compact saved-views control for the registry toolbar: an apply select, a
- *  Save button, and (for the applied view) an overflow menu with rename /
- *  set-default / delete. Deliberately small — no layout blowup. */
-function RegistrySavedViews({ sv, active, currentConfig, onApply, onActive }: {
-  sv: SavedViewsApi<RegistryViewConfig>
-  active: string
-  currentConfig: RegistryViewConfig
-  onApply: (name: string, cfg: RegistryViewConfig) => void
-  onActive: (name: string) => void
-}) {
-  const isDefault = sv.defaultView?.name === active
-  const menu: ActionItem[] = [
-    { label: 'Rename…', onClick: () => { void sv.renameViaPrompt(active).then((n) => { if (n) onActive(n) }) } },
-    {
-      label: isDefault ? 'Clear default' : 'Set as default',
-      onClick: () => {
-        void sv.setDefault(isDefault ? null : active).then((ok) => {
-          if (ok) toast(isDefault ? 'Default view cleared.' : `"${active}" now applies when you open the registry.`, 'success')
-        })
-      },
-    },
-    {
-      label: `Delete "${active}"`, danger: true, separatorBefore: true,
-      onClick: () => { void sv.remove(active).then((ok) => { if (ok) { onActive(''); toast('View deleted.', 'success') } }) },
-    },
-  ]
-  return (
-    <div className="flex items-center gap-1.5">
-      <select
-        aria-label="Saved registry views"
-        value={sv.views.some((v) => v.name === active) ? active : ''}
-        onChange={(e) => {
-          const v = sv.views.find((x) => x.name === e.target.value)
-          if (v) onApply(v.name, v.config)
-          else onActive('')
-        }}
-        className="min-h-[40px] max-w-[11rem] rounded-lg border border-white/10 bg-ink-850 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-badge-500"
-      >
-        <option value="">Saved views</option>
-        {sv.views.map((v) => <option key={v.name} value={v.name}>{v.name}{v.isDefault ? ' · default' : ''}</option>)}
-      </select>
-      <Button
-        size="sm"
-        className="min-h-[40px]"
-        title="Save the current filters, sort, layout and search as a named view"
-        onClick={() => { void sv.saveViaPrompt(currentConfig, 'Name this registry view.').then((n) => { if (n) onActive(n) }) }}
-      >
-        Save view
-      </Button>
-      {active && <ActionMenu label={`Actions for view "${active}"`} buttonClassName="min-h-[40px]" items={menu} />}
-    </div>
-  )
-}
 
 /** live / syncing presence chip — stale rows stay visible while refreshing. */
 function PresenceChip({ busy }: { busy: boolean }) {
@@ -492,12 +438,19 @@ export function PersonsView() {
             <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)} className={`min-h-[36px] rounded-md px-2.5 py-1 text-xs font-semibold capitalize ${view === v ? 'bg-badge-500 text-ink-950' : 'text-slate-300 hover:bg-white/10'}`}>{v}</button>
           ))}
         </div>
-        <RegistrySavedViews
+        <ViewsMenu<RegistryViewConfig>
+          label="Registry view"
+          emptyLabel="All persons"
           sv={savedViews}
-          active={activeView}
-          onActive={setActiveView}
+          activeView={activeView || null}
           currentConfig={{ filters, sort, view, q: query }}
-          onApply={applySavedView}
+          onSelect={(sel) => {
+            if (!sel?.view) { setActiveView(''); return }
+            const v = savedViews.views.find((x) => x.name === sel.view)
+            if (v) applySavedView(v.name, v.config)
+            else setActiveView(sel.view)
+          }}
+          savePrompt="Name this registry view."
         />
         <Button onClick={() => void refresh()}>Refresh</Button>
       </div>

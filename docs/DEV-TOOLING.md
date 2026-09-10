@@ -9,7 +9,7 @@ and runs identically with every item here disconnected — that is a hard design
 rule, not an aspiration. Nothing below sends case data, reports, evidence,
 personnel records, audit logs, or authentication data to any external service.
 
-Companion to [`RUNBOOK.md`](RUNBOOK.md) (operating the live project).
+Companion to [`OPERATIONS.md`](OPERATIONS.md) (operating the live project).
 
 ---
 

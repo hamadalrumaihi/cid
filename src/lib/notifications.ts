@@ -4,7 +4,7 @@
  *  read anywhere behaves the same everywhere. RLS scopes every query here to
  *  the signed-in user's own rows. */
 import { countRows, list, rpc, updateWhere, upsert, type DbError } from './db'
-import { NOTIF_CATEGORY } from './notifText'
+import { NOTIF_CATEGORY, NOTIF_LABEL, NOTIF_REGISTRY } from './notifText'
 
 const chunk = <T,>(xs: readonly T[], n: number): T[][] => {
   const out: T[][] = []
@@ -75,6 +75,34 @@ export async function resolveNotifications(ids: readonly string[]): Promise<Map<
   return out
 }
 
+/* ---- categories (the ONE place category copy lives) ----------------------- */
+
+export interface NotifCategoryMeta { label: string; hint: string }
+
+/** Label + hint per registry category, in display order. Every `category`
+ *  the JSON assigns must be a key here (the sync script and the tests pin
+ *  it); `informants` is portal-only by contract and `other` is never offered
+ *  (always DM'd when a title exists). */
+export const NOTIF_CATEGORY_META: Record<string, NotifCategoryMeta> = {
+  assignments: { label: 'Assignments', hint: 'Tasks, blockers, cases and SIB cases assigned to you' },
+  decisions: { label: 'Decisions', hint: 'Sign-offs, access, membership, SIB, restricted media, tracker and suggestion decisions' },
+  legal: { label: 'Legal', hint: 'Legal requests, comments and instrument deadlines' },
+  mentions: { label: 'Mentions', hint: 'Chat, note and announcement mentions' },
+  escalations: { label: 'Escalations', hint: 'Work escalated to you and stale-case reminders' },
+  intel: { label: 'Intelligence', hint: 'Field intelligence assigned, questions and replies' },
+  reports: { label: 'Reports', hint: 'Report review, returns and finalizations' },
+  announcements: { label: 'Announcements', hint: 'Department-wide posts' },
+  security: { label: 'Security', hint: 'Portal access changes, audit and app errors' },
+  informants: { label: 'Informants', hint: 'Confidential-source assignments, contacts, intelligence and requests (in-app only)' },
+  other: { label: 'Other', hint: 'Everything else — always delivered' },
+}
+
+const CATEGORY_ORDER: readonly string[] = Object.keys(NOTIF_CATEGORY_META)
+const registryKinds = (pred: (e: { category: string; destination?: 'portal'; mutable?: true }) => boolean): string[] =>
+  Object.entries(NOTIF_REGISTRY).filter(([, e]) => pred(e)).map(([k]) => k)
+const categoriesOf = (kinds: readonly string[]): string[] =>
+  CATEGORY_ORDER.filter((c) => kinds.some((k) => NOTIF_CATEGORY[k] === c))
+
 /* ---- mute preferences (user_prefs key 'notif_muted') ---------------------- */
 
 const PREF_KEY = 'notif_muted'
@@ -86,16 +114,20 @@ export interface NotifCategory {
   types: readonly string[]
 }
 
-/** The ONLY mutable categories — clearly-optional FYI streams. Assignments,
- *  mentions, sign-off decisions, legal, access and security types are
- *  mandatory and deliberately absent: muting those would hide work. */
-export const OPTIONAL_NOTIF_CATEGORIES: readonly NotifCategory[] = [
-  { key: 'announcements', label: 'Announcements', hint: 'Department-wide posts', types: ['announcement'] },
-  { key: 'tracker', label: 'Tracker authorizations', hint: 'A tracker request was authorized', types: ['tracker_authorized'] },
-  { key: 'doc_suggestions', label: 'Document suggestions', hint: 'Library suggestion status updates', types: ['document_suggestion'] },
-  { key: 'stale', label: 'Stale-case reminders', hint: 'Cases of yours going quiet', types: ['stale_case', 'case_stale'] },
-  { key: 'signoff_fyi', label: 'Sign-off heads-ups', hint: 'A deputy approved a case (FYI only)', types: ['signoff_heads_up'] },
-]
+/** The mutable groups — derived from the registry: every category holding at
+ *  least one `mutable` kind, `types` = exactly those kinds. Assignments,
+ *  mentions, sign-off decisions, legal, access and security kinds carry no
+ *  `mutable` flag and so can never appear here: muting those would hide
+ *  work. The hint names the kinds the group actually mutes (a category such
+ *  as `decisions` holds mandatory kinds too, which stay delivered). */
+export const OPTIONAL_NOTIF_CATEGORIES: readonly NotifCategory[] = (() => {
+  const mutable = registryKinds((e) => e.mutable === true)
+  return categoriesOf(mutable).map((key) => {
+    const types = mutable.filter((k) => NOTIF_CATEGORY[k] === key)
+    const titles = [...new Set(types.map((t) => NOTIF_LABEL[t].replace(/^[^\p{L}\p{N}]+/u, '')))]
+    return { key, label: NOTIF_CATEGORY_META[key].label, hint: titles.join(' · '), types }
+  })
+})()
 
 /** Every type a member may mute — the allow-list both load and save enforce,
  *  so a stale or hand-edited pref can never silence a mandatory type. */
@@ -132,22 +164,18 @@ export interface DiscordCategory {
   hint: string
 }
 
-/** The opt-in categories a member with a linked Discord may choose. A type's
- *  category is the JSON's `category` (lib/notifText NOTIF_CATEGORY); a type
- *  outside every category is `other` and is always DM'd when a title exists.
- *  A missing pref row = every category (today's behaviour). The edge function
- *  reads the same row with the service role and skips a muted category. */
-export const DISCORD_CATEGORIES: readonly DiscordCategory[] = [
-  { key: 'assignments', label: 'Assignments', hint: 'Tasks, blockers, cases and SIB cases assigned to you' },
-  { key: 'decisions', label: 'Decisions', hint: 'Sign-offs, access, membership, SIB, restricted media, tracker and suggestion decisions' },
-  { key: 'legal', label: 'Legal', hint: 'Legal requests, comments and instrument deadlines' },
-  { key: 'mentions', label: 'Mentions', hint: 'Chat, note and announcement mentions' },
-  { key: 'escalations', label: 'Escalations', hint: 'Work escalated to you and stale-case reminders' },
-  { key: 'intel', label: 'Intelligence', hint: 'Field intelligence assigned, questions and replies' },
-  { key: 'reports', label: 'Reports', hint: 'Report review, returns and finalizations' },
-  { key: 'announcements', label: 'Announcements', hint: 'Department-wide posts' },
-  { key: 'security', label: 'Security', hint: 'Portal access changes, audit and app errors' },
-]
+/** The opt-in categories a member with a linked Discord may choose — derived
+ *  from the registry: every category with at least one kind whose
+ *  destination is not `portal`, excluding `other` (an unmapped type is
+ *  `other` and is always DM'd when a title exists). A portal-only category
+ *  (`informants`) can therefore never be offered. A missing pref row = every
+ *  category (today's behaviour). The edge function reads the same row with
+ *  the service role, derives the same set from its titles.json copy, and
+ *  skips a muted category. */
+export const DISCORD_CATEGORIES: readonly DiscordCategory[] =
+  categoriesOf(registryKinds((e) => e.destination !== 'portal'))
+    .filter((key) => key !== 'other')
+    .map((key) => ({ key, ...NOTIF_CATEGORY_META[key] }))
 
 export const ALL_DISCORD_CATEGORY_KEYS: readonly string[] = DISCORD_CATEGORIES.map((c) => c.key)
 

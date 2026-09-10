@@ -3,7 +3,8 @@
 import { describe, expect, it } from 'vitest'
 import { SOURCE_TYPE_LABEL } from './actionItems'
 import {
-  ACTION_PRESETS, ACTION_STATUS_KEYS, ACTION_TYPE_FILTERS, ALL_SECTIONS, availablePresets, defaultPresetFor, presetById,
+  ACTION_PRESETS, ACTION_STATUS_KEYS, ACTION_TYPE_FILTERS, ALL_SECTIONS, availablePresets, availableTypeFilters,
+  defaultPresetFor, presetById,
   type PresetViewer,
 } from './actionPresets'
 
@@ -22,6 +23,17 @@ describe('ACTION_TYPE_FILTERS — every queue kind has exactly one chip', () => 
     const keys = ACTION_TYPE_FILTERS.map((g) => g.key)
     expect(new Set(keys).size).toBe(keys.length)
     for (const g of ACTION_TYPE_FILTERS) expect(g.label.length).toBeGreaterThan(0)
+  })
+  it('the Informants chip is offered only to an involved viewer; every other chip is unconditional', () => {
+    const base: PresetViewer = { role: 'detective', isCommand: false, isOwner: false, justiceRole: null, sib: { canAccess: false, isAgent: false, isCommand: false } }
+    const ci = ACTION_TYPE_FILTERS.find((g) => g.key === 'ci')!
+    expect(ci.types).toEqual(['ci_contact_due', 'ci_capacity_request', 'ci_intel_followup'])
+    expect(availableTypeFilters(base).map((g) => g.key)).not.toContain('ci')
+    expect(availableTypeFilters({ ...base, ci: true }).map((g) => g.key)).toContain('ci')
+    // An uninvolved director gets no chip either — involvement, not rank.
+    expect(availableTypeFilters({ ...base, role: 'director', isCommand: true, isOwner: true }).map((g) => g.key)).not.toContain('ci')
+    expect(availableTypeFilters(base)).toHaveLength(ACTION_TYPE_FILTERS.length - 1)
+    for (const g of ACTION_TYPE_FILTERS) if (g.key !== 'ci') expect(g.available, g.key).toBeUndefined()
   })
   it('every preset filter names a real chip / status key', () => {
     for (const p of ACTION_PRESETS) {

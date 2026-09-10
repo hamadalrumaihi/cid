@@ -1,10 +1,11 @@
 'use client'
 
-/** Top bar — port of the vanilla <header> (index.html:136-160) + the auth
- *  slot auth.js showApp() renders into it (role-caps chip, LOA, sign out).
- *  Global search: Enter in the box (or Cmd/Ctrl-K anywhere) opens the search
- *  palette; `/` focuses the box (vanilla parity). Bell: NotificationsBell. */
+/** Top bar — drawer toggle, category / page breadcrumb, global search, the
+ *  + Create menu, the notifications bell and the auth slot (profile chip, LOA,
+ *  sign out). Global search: Enter in the box (or Cmd/Ctrl-K anywhere) opens
+ *  the search palette; `/` focuses the box. Bell: NotificationsBell. */
 import { useEffect, useRef, useState } from 'react'
+import { ciInvolved, useCiContext } from '@/lib/ci'
 import { NAV_CATEGORIES, PAGE_META, TAB_CATEGORY } from '@/lib/nav'
 import { useAuth } from '@/lib/auth'
 import { roleLabel } from '@/lib/roles'
@@ -18,7 +19,7 @@ import { useNav } from './useNav'
 
 /* eslint-disable @next/next/no-img-element -- tiny external avatar, see Sidebar */
 
-/** Access summary per role — vanilla auth.js:62-68. */
+/** Access summary per role — the profile chip's tooltip. */
 const ROLE_CAPS: Record<string, string> = {
   detective: 'View & edit records, add case photos, author reports, submit cases for sign-off.',
   senior_detective: 'View & edit records, add case photos, author reports, submit cases for sign-off.',
@@ -86,14 +87,22 @@ const roleShort = (r: string) => roleLabel(r)
 
 export function Header({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   const { activeTab } = useNav()
-  const meta = PAGE_META[activeTab] ?? PAGE_META.command
+  // Legacy redirect ids carry no PAGE_META; the Action Center's meta shows
+  // for the frame the redirect takes.
+  // The compartment's route carries no title for an account that is not
+  // involved with a source (the view renders the ordinary nothing-here
+  // surface): the bar must not announce what the route is for either.
+  const ciOn = ciInvolved(useCiContext().ctx)
+  const meta = activeTab === 'informants' && !ciOn
+    ? { title: 'Nothing here', sub: '' }
+    : (PAGE_META[activeTab] ?? PAGE_META.inbox)
   // Breadcrumb context: the owning nav category, when the tab has one. The
   // page itself renders its own <h1>; the bar shows where you are, once.
   const catLabel = NAV_CATEGORIES.find((c) => c.id === TAB_CATEGORY[activeTab])?.label
   const searchRef = useRef<HTMLInputElement>(null)
   const [palette, setPalette] = useState<{ open: boolean; query: string }>({ open: false, query: '' })
 
-  // Global hotkeys (vanilla parity): Cmd/Ctrl-K opens the palette anywhere;
+  // Global hotkeys: Cmd/Ctrl-K opens the palette anywhere;
   // `/` focuses the header search box when not already typing in a field.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

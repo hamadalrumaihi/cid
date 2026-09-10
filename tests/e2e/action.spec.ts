@@ -107,14 +107,14 @@ test.describe('Action Center — E2E smoke', () => {
   const fx = (): Fixtures => { if (!f) throw new Error('fixtures not built'); return f }
   const openQueue = async (page: Page, query = '') => {
     await inject(page, fx().actors.lsb)
-    await page.goto(`/action${query}`)
+    await page.goto(`/inbox${query}`)
     await expect(page.getByRole('heading', { name: 'Action Center' })).toBeVisible({ timeout: 30_000 })
   }
   /** The row checkboxes — `aria-label="Select <title>"` per §4.5. */
   const selectBoxes = (page: Page) => page.getByRole('checkbox', { name: /^Select / })
 
   /* ── 1 · the queue renders with its presets ─────────────────────────── */
-  test('/action renders; the preset chips are offered (aria-pressed) and ?preset= applies one', async ({ page }) => {
+  test('/inbox renders; the preset chips are offered (aria-pressed) and ?preset= applies one', async ({ page }) => {
     test.setTimeout(120_000)
     await openQueue(page)
     // Presets are toggle chips (aria-pressed) — a menu button named "Presets" / "Views" is the narrow fallback.

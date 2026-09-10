@@ -66,9 +66,12 @@ async function settle(page: Page, path: string) {
 }
 
 const routes: Array<{ key: string; path: string; account: LiveAccount }> = [
-  { key: '/inbox', path: '/inbox', account: LIVE.lsb },
+  // Baseline keys keep the pre-rename names so the accepted-debt history
+  // stays attached to the same screens: '/inbox' is My Dashboard (now at
+  // /dashboard); '/action' is the Action Center (now at /inbox).
+  { key: '/inbox', path: '/dashboard', account: LIVE.lsb },
   // Director sees the fullest Action Center (command decisions + personal work).
-  { key: '/action', path: '/action', account: LIVE.director },
+  { key: '/action', path: '/inbox', account: LIVE.director },
   { key: '/cases', path: '/cases', account: LIVE.lsb },
   // Gangs/Persons now render inside the Investigative Tools workspace
   // (/tools?tool=…). Baseline keys keep the legacy names so the accepted-debt

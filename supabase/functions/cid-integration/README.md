@@ -44,5 +44,5 @@ authentication envelope, and the idempotency envelope — every handler returns
 - CID casework executes as the **officer's own session** (`auth.uid()`),
   with all existing RLS/RPC authority unchanged.
 - The patrol lane (`mdt_patrol_feed` / `bridge_ingest_event` /
-  `mdt_bridge_ack`, [docs/MDT-BRIDGE-CONTRACT.md](../../../docs/MDT-BRIDGE-CONTRACT.md))
+  `mdt_bridge_ack`, [docs/archive/MDT-BRIDGE-CONTRACT.md](../../../docs/archive/MDT-BRIDGE-CONTRACT.md))
   is unaffected and never widens.

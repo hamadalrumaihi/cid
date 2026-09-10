@@ -15,7 +15,7 @@ const SECTIONS = [
   { title: 'The codebase', files: ['02-repository-tour.md', '03-architecture.md', '06-components.md', 'appendix-file-index.md'] },
   { title: 'Features & pages', files: ['04-features.md', '05-pages.md'] },
   { title: 'Data & API', files: ['07-api.md', '08-database.md', '10-state.md', '11-dependency-map.md', '21-integration.md', '22-versions-trash.md'] },
-  { title: 'Security & auth', files: ['09-auth.md', '18-security.md'] },
+  { title: 'Security & auth', files: ['09-auth.md', '18-security.md', '23-confidential-informants.md'] },
   { title: 'Working on it', files: ['14-development-workflow.md', '15-conventions.md', '16-best-practices.md', '12-change-impact.md', '13-debugging.md', '17-performance.md', '19-improvements.md'] },
   { title: 'Reference', files: ['appendix-glossary.md', 'appendix-quick-reference.md', 'appendix-faq.md'] },
 ]

@@ -14,7 +14,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { updateNoSelect } from '@/lib/db'
-import { DISCORD_CATEGORIES, loadDiscordCategories, saveDiscordCategories } from '@/lib/notifications'
+import {
+  DISCORD_CATEGORIES, OPTIONAL_NOTIF_CATEGORIES, loadDiscordCategories, loadMutedTypes, saveDiscordCategories, saveMutedTypes,
+  type NotifCategory,
+} from '@/lib/notifications'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { useProfilesStore } from '@/lib/profiles'
@@ -401,7 +404,67 @@ function DiscordCategoriesField() {
   )
 }
 
-/* ---- Notifications (informational) -------------------------------------- */
+/* ---- In-app mutes (user_prefs 'notif_muted') ------------------------------ */
+
+/** "Notification settings" — the optional in-app streams a member may mute
+ *  (lib/notifications OPTIONAL_NOTIF_CATEGORIES, derived from the registry's
+ *  `mutable` kinds). Moved here from the bell in the portal cleanup: same
+ *  behaviour — muted rows are hidden and uncounted, never deleted; mandatory
+ *  kinds (assignments, mentions, decisions, legal, security) have no toggle.
+ *  Each change saves immediately and reverts with a toast on failure. */
+function MuteCategoriesField() {
+  const [muted, setMuted] = useState<string[]>([])
+  const [loaded, setLoaded] = useState(false)
+  useEffect(() => {
+    let live = true
+    void loadMutedTypes().then((m) => { if (live) { setMuted(m); setLoaded(true) } })
+    return () => { live = false }
+  }, [])
+  const toggle = async (c: NotifCategory) => {
+    const isMuted = c.types.every((t) => muted.includes(t))
+    const next = isMuted
+      ? muted.filter((t) => !c.types.includes(t))
+      : [...new Set([...muted, ...c.types])]
+    setMuted(next)
+    const err = await saveMutedTypes(next)
+    if (err) { toast(err.message, 'danger'); setMuted(muted) }
+  }
+  return (
+    <fieldset className="rounded-lg border border-white/10 bg-ink-900 p-3" aria-busy={!loaded || undefined}>
+      <legend className="px-1 text-xs font-semibold text-slate-300">Notification settings</legend>
+      <p className="mb-2 text-[11px] text-slate-400">
+        Optional streams only — assignments, mentions, sign-offs, legal and security notices are always delivered.
+        A muted stream is hidden from the bell and the Action Center, not deleted.
+      </p>
+      {!loaded ? (
+        <p className="text-xs text-slate-400">Loading…</p>
+      ) : (
+        <div className="grid gap-1 sm:grid-cols-2">
+          {OPTIONAL_NOTIF_CATEGORIES.map((c) => {
+            const isMuted = c.types.every((t) => muted.includes(t))
+            return (
+              <label key={c.key} className="flex min-h-[40px] cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm text-slate-200 transition hover:bg-white/5">
+                <input
+                  type="checkbox"
+                  checked={!isMuted}
+                  onChange={() => void toggle(c)}
+                  aria-label={`Receive ${c.label} notifications`}
+                  className="h-4 w-4 flex-shrink-0 accent-amber-400"
+                />
+                <span className="min-w-0">
+                  <span className="block">{c.label}</span>
+                  <span className="block text-[11px] text-slate-400">{c.hint}</span>
+                </span>
+              </label>
+            )
+          })}
+        </div>
+      )}
+    </fieldset>
+  )
+}
+
+/* ---- Notifications ------------------------------------------------------- */
 
 function NotificationsSection() {
   const { profile } = useAuth()
@@ -416,6 +479,7 @@ function NotificationsSection() {
         </div>
         <Badge tone="good">On</Badge>
       </div>
+      <MuteCategoriesField />
       <div className="flex items-center justify-between gap-2 rounded-lg bg-ink-950/50 p-4">
         <div>
           <p className="font-semibold text-white">Discord DM notifications</p>
@@ -425,7 +489,6 @@ function NotificationsSection() {
           ? <Badge tone="good">Linked</Badge>
           : <button onClick={() => router.replace('/profile?s=profile')} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Link Discord</button>}
       </div>
-      <p className="text-[11px] text-slate-500">Per-type notification controls aren’t available yet — they’d sync to your account (a future update).</p>
     </section>
   )
 }

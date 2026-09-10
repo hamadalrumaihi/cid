@@ -26,7 +26,15 @@ describe('trash — kinds and groups', () => {
     expect(trashGroupOf('report')).toBe('material')
     expect(trashGroupOf('person')).toBe('registry')
     expect(trashGroupOf('person_vehicle')).toBe('links')
+    expect(trashGroupOf('case_template')).toBe('admin')
+    expect(trashGroupOf('commendation')).toBe('admin')
     expect(trashGroupOf('something_new')).toBe('registry')
+  })
+  it('labels the two administrative kinds that joined the soft-delete rule', () => {
+    expect(TRASH_KIND_LABEL.case_template).toBe('Case template')
+    expect(TRASH_KIND_LABEL.commendation).toBe('Commendation')
+    expect(tableForKind('case_template')).toBe('case_templates')
+    expect(tableForKind('commendation')).toBe('commendations')
   })
   it('degrades an unknown kind to a readable label', () => {
     expect(trashKindLabel('case_note')).toBe('Case note')
@@ -85,6 +93,10 @@ describe('trashHref — where a restored row lives', () => {
   it('media without a case opens the vault; media with a case opens the case', () => {
     expect(trashHref(row({ kind: 'media', id: 'm1', case_id: null }))).toBe('/workspace?tool=media')
     expect(trashHref(row({ kind: 'media', id: 'm1', case_id: 'c1' }))).toBe('/workspace?case=c1&tab=media')
+  })
+  it('administrative rows open where they are managed', () => {
+    expect(trashHref(row({ kind: 'case_template', id: 'tpl1', case_id: null }))).toBe('/cases?new=1')
+    expect(trashHref(row({ kind: 'commendation', id: 'cm1', case_id: null }))).toBe('/personnel')
   })
   it('link rows fall back to their case, or have no address', () => {
     expect(trashHref(row({ kind: 'gang_member', id: 'g1', case_id: 'c1' }))).toBe('/workspace?case=c1')

@@ -70,7 +70,7 @@ export const DEP_NODES: DepNode[] = [
   { id: 'rpc/create_notification', kind: 'rpc', label: 'create_notification', about: 'Insert-for-another-user with server-stamped actor.', dependsOn: ['tbl/own-row'], ifChanged: 'All notification producers; forgery protection lives here.', risk: 'medium' },
 
   // ---- services & config ---------------------------------------------
-  { id: 'svc/supabase', kind: 'service', label: 'Supabase', about: 'Postgres + Auth + PostgREST + Realtime.', dependsOn: [], ifChanged: 'Everything. Dashboard settings (OTP expiry, backups) documented in HARDENING.md.', risk: 'high' },
+  { id: 'svc/supabase', kind: 'service', label: 'Supabase', about: 'Postgres + Auth + PostgREST + Realtime.', dependsOn: [], ifChanged: 'Everything. Dashboard settings (OTP expiry, backups) documented in docs/archive/HARDENING.md.', risk: 'high' },
   { id: 'svc/fivemanage', kind: 'service', label: 'FiveManage', about: 'External media hosting (URLs only in DB).', dependsOn: ['cfg/csp'], ifChanged: 'Uploads in Attachments + Media Vault; connect-src must allow it.', risk: 'medium' },
   { id: 'svc/discord', kind: 'service', label: 'Discord', about: 'OAuth provider + optional DM via edge function.', dependsOn: ['svc/supabase'], ifChanged: 'Sign-in flow + best-effort DMs (failures already swallowed).', risk: 'medium' },
   { id: 'svc/vercel', kind: 'service', label: 'Vercel + GitHub Actions', about: 'Hosting/previews/rollback + the four CI gates.', dependsOn: ['cfg/csp', 'env'], ifChanged: 'vercel.json and ci.yml duplicate the env values — keep them agreeing.', risk: 'medium' },

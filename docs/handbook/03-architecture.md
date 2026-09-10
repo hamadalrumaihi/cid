@@ -24,7 +24,7 @@ not hypotheticals.
 - **Risk: MEDIUM-HIGH.** `nav.ts` is a three-way contract (PAGE_META keys
   = URL slugs = TAB_LABEL keys) plus the `[tab]` switch.
 - **Investigative Tools**: the former Intelligence category's 14 tabs are
-  one nav item (`/tools`) in both CID and SIB sidebars. `toolsModel.ts` is
+  one workspace (`/workspace?tool=…`, the tool directory under Investigations) in both CID and SIB sidebars. `toolsModel.ts` is
   the data-only model (`TOOL_TABS`, `TOOL_GROUPS`, record deep-link params,
   `RECORD_TAB_TOOLS`, RLS title sources); `components/tools/` renders it —
   directory + keep-alive tab strip (`ToolsView`: open tabs stay mounted,

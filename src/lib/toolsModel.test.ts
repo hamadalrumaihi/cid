@@ -3,7 +3,7 @@ import {
   RECORD_PARAM, RECORD_TAB_TOOLS, RECORD_TITLE_SOURCE, TOOL_GROUPS, TOOL_TABS,
   hasRecordTabs, isToolTab, type ToolId,
 } from './toolsModel'
-import { PAGE_META, TAB_LABEL, isValidTab } from './nav'
+import { LEGACY_REDIRECT_TABS, PAGE_META, TAB_LABEL, TOOL_META, isValidTab } from './nav'
 
 /** The Investigative Tools workspace consolidated the Intelligence category's
  *  14 leaf tabs behind `/tools`. This pin is what keeps that consolidation
@@ -21,12 +21,15 @@ describe('toolsModel — TOOL_TABS', () => {
     ])
   })
 
-  it('every tool keeps its PAGE_META entry and TAB_LABEL (legacy routes stay registered)', () => {
+  it('every tool keeps its TOOL_META entry and TAB_LABEL, and stays a legacy redirect route (not a PAGE_META leaf)', () => {
     for (const t of TOOL_TABS) {
-      expect(PAGE_META[t], `PAGE_META['${t}']`).toBeTruthy()
-      expect(PAGE_META[t].title, `PAGE_META['${t}'].title`).toBeTruthy()
-      expect(PAGE_META[t].sub, `PAGE_META['${t}'].sub — the directory renders it`).toBeTruthy()
+      expect(TOOL_META[t], `TOOL_META['${t}']`).toBeTruthy()
+      expect(TOOL_META[t].title, `TOOL_META['${t}'].title`).toBeTruthy()
+      expect(TOOL_META[t].sub, `TOOL_META['${t}'].sub — the directory renders it`).toBeTruthy()
       expect(TAB_LABEL[t], `TAB_LABEL['${t}']`).toBeTruthy()
+      // The tools are workspace tabs, not pages: their addresses redirect.
+      expect(t in PAGE_META, `PAGE_META['${t}'] must not exist`).toBe(false)
+      expect(LEGACY_REDIRECT_TABS, `LEGACY_REDIRECT_TABS ∋ '${t}'`).toContain(t)
       // Deep links (`/persons?person=…` etc.) must keep resolving: the [tab]
       // route only renders the redirect shim for tabs isValidTab admits.
       expect(isValidTab(t), `isValidTab('${t}')`).toBe(true)

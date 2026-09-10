@@ -1,7 +1,7 @@
 'use client'
 
 /** Followed-target resolution for My Dashboard's "Watched items" panel.
- *  Extracted from the old InboxView's module-private resolveWatchItems, but
+ *  Extracted from the original dashboard view's module-private resolveWatchItems, but
  *  re-based on BOUNDED projected fetches: one page of the viewer's own
  *  watchlist (owner-only RLS) plus one `in:{id}` projected read per target
  *  type — never the former full-table persons/vehicles/cases caches. Targets

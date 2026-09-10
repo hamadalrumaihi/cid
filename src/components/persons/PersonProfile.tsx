@@ -71,6 +71,7 @@ import {
 } from './ProfileAssets'
 import { BoloStateBadge, LegalSection, ManageBoloModal } from './ProfileLegal'
 import { PersonAccountsSection } from './PersonAccountsSection'
+import { PersonCiPanel } from './PersonCiPanel'
 import { ReportMentions } from '@/components/cases/tabs/reports/ReportMentions'
 import { PersonDuplicatesModal } from './PersonMergeModal'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
@@ -479,6 +480,9 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
             {section === 'overview' && (
               <div className="space-y-4">
                 <MetricStrip metrics={metrics} />
+                {/* Confidential-source panel (CI §6.4): nothing at all unless the
+                    viewer is inside the compartment AND the person is a source. */}
+                <PersonCiPanel personId={p.id} />
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                   <div className="lg:col-span-2">
                     <PersonIntelligenceSummary person={p} canEdit={mayEdit} onEdit={() => setSummaryOpen(true)} />

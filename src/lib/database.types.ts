@@ -1136,6 +1136,67 @@ export type Database = {
           },
         ]
       }
+      case_intel_releases: {
+        Row: {
+          body: string
+          case_id: string
+          handling: string
+          id: string
+          released_at: string
+          released_by: string | null
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          title: string
+        }
+        Insert: {
+          body: string
+          case_id: string
+          handling?: string
+          id?: string
+          released_at?: string
+          released_by?: string | null
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          title: string
+        }
+        Update: {
+          body?: string
+          case_id?: string
+          handling?: string
+          id?: string
+          released_at?: string
+          released_by?: string | null
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_intel_releases_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_intel_releases_released_by_fkey"
+            columns: ["released_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_intel_releases_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       case_links: {
         Row: {
           case_id: string
@@ -1439,6 +1500,10 @@ export type Database = {
           bureau: Database["public"]["Enums"]["bureau"] | null
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           icon: string | null
           id: string
           name: string
@@ -1456,6 +1521,10 @@ export type Database = {
           bureau?: Database["public"]["Enums"]["bureau"] | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           icon?: string | null
           id?: string
           name: string
@@ -1473,6 +1542,10 @@ export type Database = {
           bureau?: Database["public"]["Enums"]["bureau"] | null
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           icon?: string | null
           id?: string
           name?: string
@@ -1485,6 +1558,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "case_templates_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "case_templates_created_by_fkey"
             columns: ["created_by"]
@@ -1691,6 +1771,819 @@ export type Database = {
           },
         ]
       }
+      ci_handlers: {
+        Row: {
+          assigned_at: string
+          assigned_by: string | null
+          ci_id: string
+          counts_toward_capacity: boolean
+          end_reason: string | null
+          ended_at: string | null
+          ended_by: string | null
+          id: string
+          reason: string | null
+          role: string
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by?: string | null
+          ci_id: string
+          counts_toward_capacity?: boolean
+          end_reason?: string | null
+          ended_at?: string | null
+          ended_by?: string | null
+          id?: string
+          reason?: string | null
+          role: string
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string | null
+          ci_id?: string
+          counts_toward_capacity?: boolean
+          end_reason?: string | null
+          ended_at?: string | null
+          ended_by?: string | null
+          id?: string
+          reason?: string | null
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ci_handlers_ci_id_fkey"
+            columns: ["ci_id"]
+            isOneToOne: false
+            referencedRelation: "confidential_informants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_handlers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_handlers_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_handlers_ended_by_fkey"
+            columns: ["ended_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ci_handler_capacity: {
+        Row: {
+          approved_at: string
+          approved_by: string
+          expires_at: string | null
+          limit_override: number
+          reason: string
+          request_id: string | null
+          user_id: string
+        }
+        Insert: {
+          approved_at?: string
+          approved_by: string
+          expires_at?: string | null
+          limit_override: number
+          reason: string
+          request_id?: string | null
+          user_id: string
+        }
+        Update: {
+          approved_at?: string
+          approved_by?: string
+          expires_at?: string | null
+          limit_override?: number
+          reason?: string
+          request_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ci_handler_capacity_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_handler_capacity_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ci_capacity_requests: {
+        Row: {
+          bureau: Database["public"]["Enums"]["bureau"] | null
+          case_id: string | null
+          comments: string | null
+          created_at: string
+          created_ci_id: string | null
+          current_count: number
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          estimated_risk: string | null
+          expected_usefulness: string | null
+          id: string
+          kind: string
+          operational_need: string | null
+          proposed_motive: string | null
+          proposed_person_id: string | null
+          reason: string
+          requested_capacity: number | null
+          requester_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          bureau?: Database["public"]["Enums"]["bureau"] | null
+          case_id?: string | null
+          comments?: string | null
+          created_at?: string
+          created_ci_id?: string | null
+          current_count: number
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          estimated_risk?: string | null
+          expected_usefulness?: string | null
+          id?: string
+          kind: string
+          operational_need?: string | null
+          proposed_motive?: string | null
+          proposed_person_id?: string | null
+          reason: string
+          requested_capacity?: number | null
+          requester_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          bureau?: Database["public"]["Enums"]["bureau"] | null
+          case_id?: string | null
+          comments?: string | null
+          created_at?: string
+          created_ci_id?: string | null
+          current_count?: number
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          estimated_risk?: string | null
+          expected_usefulness?: string | null
+          id?: string
+          kind?: string
+          operational_need?: string | null
+          proposed_motive?: string | null
+          proposed_person_id?: string | null
+          reason?: string
+          requested_capacity?: number | null
+          requester_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ci_capacity_requests_requester_id_fkey"
+            columns: ["requester_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_capacity_requests_proposed_person_id_fkey"
+            columns: ["proposed_person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_capacity_requests_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_capacity_requests_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_capacity_requests_created_ci_id_fkey"
+            columns: ["created_ci_id"]
+            isOneToOne: false
+            referencedRelation: "confidential_informants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ci_intelligence: {
+        Row: {
+          body: string | null
+          case_id: string | null
+          ci_id: string
+          corroboration: string
+          corroboration_note: string | null
+          created_at: string
+          created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          follow_up_done_at: string | null
+          follow_up_required: boolean
+          handler_id: string
+          handler_notes: string | null
+          id: string
+          received_at: string
+          reliability: string
+          sensitivity: string
+          summary: string
+          updated_at: string
+        }
+        Insert: {
+          body?: string | null
+          case_id?: string | null
+          ci_id: string
+          corroboration?: string
+          corroboration_note?: string | null
+          created_at?: string
+          created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          follow_up_done_at?: string | null
+          follow_up_required?: boolean
+          handler_id: string
+          handler_notes?: string | null
+          id?: string
+          received_at?: string
+          reliability?: string
+          sensitivity?: string
+          summary: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string | null
+          case_id?: string | null
+          ci_id?: string
+          corroboration?: string
+          corroboration_note?: string | null
+          created_at?: string
+          created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          follow_up_done_at?: string | null
+          follow_up_required?: boolean
+          handler_id?: string
+          handler_notes?: string | null
+          id?: string
+          received_at?: string
+          reliability?: string
+          sensitivity?: string
+          summary?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ci_intelligence_ci_id_fkey"
+            columns: ["ci_id"]
+            isOneToOne: false
+            referencedRelation: "confidential_informants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_intelligence_handler_id_fkey"
+            columns: ["handler_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_intelligence_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_intelligence_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_intelligence_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ci_intelligence_links: {
+        Row: {
+          created_at: string
+          id: string
+          intel_id: string
+          kind: string
+          note: string | null
+          target_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          intel_id: string
+          kind: string
+          note?: string | null
+          target_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          intel_id?: string
+          kind?: string
+          note?: string | null
+          target_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ci_intelligence_links_intel_id_fkey"
+            columns: ["intel_id"]
+            isOneToOne: false
+            referencedRelation: "ci_intelligence"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ci_contacts: {
+        Row: {
+          case_id: string | null
+          ci_id: string
+          created_at: string
+          created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          follow_up_required: boolean
+          handler_id: string
+          id: string
+          location: string | null
+          method: string
+          next_contact_at: string | null
+          occurred_at: string
+          restricted_notes: string | null
+          summary: string
+          updated_at: string
+        }
+        Insert: {
+          case_id?: string | null
+          ci_id: string
+          created_at?: string
+          created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          follow_up_required?: boolean
+          handler_id: string
+          id?: string
+          location?: string | null
+          method: string
+          next_contact_at?: string | null
+          occurred_at: string
+          restricted_notes?: string | null
+          summary: string
+          updated_at?: string
+        }
+        Update: {
+          case_id?: string | null
+          ci_id?: string
+          created_at?: string
+          created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          follow_up_required?: boolean
+          handler_id?: string
+          id?: string
+          location?: string | null
+          method?: string
+          next_contact_at?: string | null
+          occurred_at?: string
+          restricted_notes?: string | null
+          summary?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ci_contacts_ci_id_fkey"
+            columns: ["ci_id"]
+            isOneToOne: false
+            referencedRelation: "confidential_informants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_contacts_handler_id_fkey"
+            columns: ["handler_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_contacts_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_contacts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_contacts_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ci_assessments: {
+        Row: {
+          access: string | null
+          assessed_at: string
+          assessed_by: string | null
+          ci_id: string
+          compromise_likelihood: string | null
+          credibility: string | null
+          id: string
+          note: string | null
+          reliability: string | null
+          risk: string | null
+          usefulness: string | null
+        }
+        Insert: {
+          access?: string | null
+          assessed_at?: string
+          assessed_by?: string | null
+          ci_id: string
+          compromise_likelihood?: string | null
+          credibility?: string | null
+          id?: string
+          note?: string | null
+          reliability?: string | null
+          risk?: string | null
+          usefulness?: string | null
+        }
+        Update: {
+          access?: string | null
+          assessed_at?: string
+          assessed_by?: string | null
+          ci_id?: string
+          compromise_likelihood?: string | null
+          credibility?: string | null
+          id?: string
+          note?: string | null
+          reliability?: string | null
+          risk?: string | null
+          usefulness?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ci_assessments_ci_id_fkey"
+            columns: ["ci_id"]
+            isOneToOne: false
+            referencedRelation: "confidential_informants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_assessments_assessed_by_fkey"
+            columns: ["assessed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ci_payments: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          approved_by: string | null
+          case_id: string | null
+          ci_id: string
+          created_at: string
+          created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          handler_id: string
+          id: string
+          intel_id: string | null
+          notes: string | null
+          paid_at: string
+          reason: string
+        }
+        Insert: {
+          amount: number
+          approved_at?: string | null
+          approved_by?: string | null
+          case_id?: string | null
+          ci_id: string
+          created_at?: string
+          created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          handler_id: string
+          id?: string
+          intel_id?: string | null
+          notes?: string | null
+          paid_at: string
+          reason: string
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          case_id?: string | null
+          ci_id?: string
+          created_at?: string
+          created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          handler_id?: string
+          id?: string
+          intel_id?: string | null
+          notes?: string | null
+          paid_at?: string
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ci_payments_ci_id_fkey"
+            columns: ["ci_id"]
+            isOneToOne: false
+            referencedRelation: "confidential_informants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_payments_handler_id_fkey"
+            columns: ["handler_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_payments_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_payments_intel_id_fkey"
+            columns: ["intel_id"]
+            isOneToOne: false
+            referencedRelation: "ci_intelligence"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_payments_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_payments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_payments_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ci_case_links: {
+        Row: {
+          case_id: string
+          ci_id: string
+          id: string
+          linked_at: string
+          linked_by: string | null
+          note: string | null
+          unlink_reason: string | null
+          unlinked_at: string | null
+          unlinked_by: string | null
+        }
+        Insert: {
+          case_id: string
+          ci_id: string
+          id?: string
+          linked_at?: string
+          linked_by?: string | null
+          note?: string | null
+          unlink_reason?: string | null
+          unlinked_at?: string | null
+          unlinked_by?: string | null
+        }
+        Update: {
+          case_id?: string
+          ci_id?: string
+          id?: string
+          linked_at?: string
+          linked_by?: string | null
+          note?: string | null
+          unlink_reason?: string | null
+          unlinked_at?: string | null
+          unlinked_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ci_case_links_ci_id_fkey"
+            columns: ["ci_id"]
+            isOneToOne: false
+            referencedRelation: "confidential_informants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_case_links_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_case_links_linked_by_fkey"
+            columns: ["linked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_case_links_unlinked_by_fkey"
+            columns: ["unlinked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ci_releases: {
+        Row: {
+          case_release_id: string
+          ci_id: string
+          id: string
+          intel_id: string
+          released_at: string
+          released_by: string | null
+        }
+        Insert: {
+          case_release_id: string
+          ci_id: string
+          id?: string
+          intel_id: string
+          released_at?: string
+          released_by?: string | null
+        }
+        Update: {
+          case_release_id?: string
+          ci_id?: string
+          id?: string
+          intel_id?: string
+          released_at?: string
+          released_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ci_releases_intel_id_fkey"
+            columns: ["intel_id"]
+            isOneToOne: false
+            referencedRelation: "ci_intelligence"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_releases_ci_id_fkey"
+            columns: ["ci_id"]
+            isOneToOne: false
+            referencedRelation: "confidential_informants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_releases_case_release_id_fkey"
+            columns: ["case_release_id"]
+            isOneToOne: false
+            referencedRelation: "case_intel_releases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ci_releases_released_by_fkey"
+            columns: ["released_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ci_audit_events: {
+        Row: {
+          action: string
+          actor_id: string | null
+          ci_id: string | null
+          created_at: string
+          detail: Json | null
+          entity: string
+          entity_id: string | null
+          id: number
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          ci_id?: string | null
+          created_at?: string
+          detail?: Json | null
+          entity: string
+          entity_id?: string | null
+          id?: never
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          ci_id?: string | null
+          created_at?: string
+          detail?: Json | null
+          entity?: string
+          entity_id?: string | null
+          id?: never
+        }
+        Relationships: [
+        ]
+      }
+      ci_events: {
+        Row: {
+          at: string
+          ci_id: string | null
+          id: number
+          kind: string
+          user_id: string | null
+        }
+        Insert: {
+          at?: string
+          ci_id?: string | null
+          id?: never
+          kind: string
+          user_id?: string | null
+        }
+        Update: {
+          at?: string
+          ci_id?: string | null
+          id?: never
+          kind?: string
+          user_id?: string | null
+        }
+        Relationships: [
+        ]
+      }
       cid_records: {
         Row: {
           bureau: string | null
@@ -1787,6 +2680,10 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           icon: string | null
           id: string
           note: string | null
@@ -1799,6 +2696,10 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           icon?: string | null
           id?: string
           note?: string | null
@@ -1811,6 +2712,10 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           icon?: string | null
           id?: string
           note?: string | null
@@ -1822,6 +2727,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "commendations_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "commendations_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -1831,6 +2743,129 @@ export type Database = {
           {
             foreignKeyName: "commendations_recipient_id_fkey"
             columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      confidential_informants: {
+        Row: {
+          alias: string | null
+          bureau: Database["public"]["Enums"]["bureau"]
+          ci_number: string
+          created_at: string
+          created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          id: string
+          last_contact_at: string | null
+          motive_explanation: string | null
+          motive_primary: string | null
+          motive_secondary: string[]
+          next_contact_at: string | null
+          person_id: string
+          recruited_at: string | null
+          recruited_by: string | null
+          recruitment_notes: string | null
+          reliability: string
+          risk: string
+          status: string
+          status_changed_at: string
+          status_reason: string | null
+          supervising_lead_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          alias?: string | null
+          bureau: Database["public"]["Enums"]["bureau"]
+          ci_number: string
+          created_at?: string
+          created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          last_contact_at?: string | null
+          motive_explanation?: string | null
+          motive_primary?: string | null
+          motive_secondary?: string[]
+          next_contact_at?: string | null
+          person_id: string
+          recruited_at?: string | null
+          recruited_by?: string | null
+          recruitment_notes?: string | null
+          reliability?: string
+          risk?: string
+          status?: string
+          status_changed_at?: string
+          status_reason?: string | null
+          supervising_lead_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          alias?: string | null
+          bureau?: Database["public"]["Enums"]["bureau"]
+          ci_number?: string
+          created_at?: string
+          created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          last_contact_at?: string | null
+          motive_explanation?: string | null
+          motive_primary?: string | null
+          motive_secondary?: string[]
+          next_contact_at?: string | null
+          person_id?: string
+          recruited_at?: string | null
+          recruited_by?: string | null
+          recruitment_notes?: string | null
+          reliability?: string
+          risk?: string
+          status?: string
+          status_changed_at?: string
+          status_reason?: string | null
+          supervising_lead_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "confidential_informants_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "confidential_informants_recruited_by_fkey"
+            columns: ["recruited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "confidential_informants_supervising_lead_id_fkey"
+            columns: ["supervising_lead_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "confidential_informants_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "confidential_informants_deleted_by_fkey"
+            columns: ["deleted_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -15514,6 +16549,211 @@ export type Database = {
       }
       case_note_mention: {
         Args: { p_note: string; p_user_ids: string[] }
+        Returns: Json
+      }
+      ci_context: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      ci_list: {
+        Args: { p_filters?: Json; p_limit?: number }
+        Returns: {
+          id: string
+          ci_number: string
+          alias: string | null
+          person_id: string
+          person_name: string
+          status: string
+          bureau: Database["public"]["Enums"]["bureau"]
+          motive_primary: string | null
+          motive_secondary: string[]
+          reliability: string
+          risk: string
+          last_contact_at: string | null
+          next_contact_at: string | null
+          primary_handler_id: string | null
+          primary_handler_name: string | null
+          secondary_handler_id: string | null
+          secondary_handler_name: string | null
+          linked_cases: number
+          open_followups: number
+          deleted_at: string | null
+        }[]
+      }
+      ci_get: {
+        Args: { p_ci: string }
+        Returns: Json
+      }
+      ci_stats: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      ci_create: {
+        Args: { p_person: string; p_alias?: string | null; p_bureau: Database["public"]["Enums"]["bureau"]; p_primary_handler: string; p_secondary_handler?: string | null; p_status?: string; p_motive_primary?: string | null; p_motive_secondary?: string[]; p_motive_explanation?: string | null; p_recruitment_notes?: string | null; p_reliability?: string; p_risk?: string; p_recruited_at?: string | null; p_override_reason?: string | null }
+        Returns: Json
+      }
+      ci_update: {
+        Args: { p_ci: string; p_patch: Json }
+        Returns: Json
+      }
+      ci_set_status: {
+        Args: { p_ci: string; p_status: string; p_reason: string }
+        Returns: Json
+      }
+      ci_handler_set: {
+        Args: { p_ci: string; p_user: string; p_role: string; p_reason: string; p_override_reason?: string | null; p_counts?: boolean }
+        Returns: Json
+      }
+      ci_handler_remove: {
+        Args: { p_ci: string; p_user: string; p_reason: string }
+        Returns: Json
+      }
+      ci_capacity_request_submit: {
+        Args: { p_kind: string; p_reason: string; p_requested_capacity?: number | null; p_operational_need?: string | null; p_case?: string | null; p_proposed_person?: string | null; p_proposed_motive?: string | null; p_estimated_risk?: string | null; p_expected_usefulness?: string | null; p_bureau?: Database["public"]["Enums"]["bureau"] | null; p_comments?: string | null }
+        Returns: Json
+      }
+      ci_capacity_request_decide: {
+        Args: { p_request: string; p_decision: string; p_note?: string | null; p_new_capacity?: number | null; p_expires_at?: string | null }
+        Returns: Json
+      }
+      ci_capacity_request_withdraw: {
+        Args: { p_request: string }
+        Returns: Json
+      }
+      ci_capacity_set: {
+        Args: { p_user: string; p_limit?: number | null; p_reason: string; p_expires_at?: string | null }
+        Returns: Json
+      }
+      ci_contact_log: {
+        Args: { p_ci: string; p_occurred_at: string; p_method: string; p_summary: string; p_location?: string | null; p_follow_up_required?: boolean; p_next_contact_at?: string | null; p_case?: string | null; p_restricted_notes?: string | null }
+        Returns: Json
+      }
+      ci_contact_update: {
+        Args: { p_contact: string; p_patch: Json }
+        Returns: Json
+      }
+      ci_contact_delete: {
+        Args: { p_contact: string; p_reason?: string | null }
+        Returns: Json
+      }
+      ci_assess: {
+        Args: { p_ci: string; p_reliability?: string | null; p_credibility?: string | null; p_access?: string | null; p_risk?: string | null; p_compromise_likelihood?: string | null; p_usefulness?: string | null; p_note?: string | null }
+        Returns: Json
+      }
+      ci_intel_create: {
+        Args: { p_ci: string; p_summary: string; p_body?: string | null; p_case?: string | null; p_received_at?: string | null; p_reliability?: string; p_corroboration?: string; p_sensitivity?: string; p_follow_up_required?: boolean; p_handler_notes?: string | null; p_links?: Json }
+        Returns: Json
+      }
+      ci_intel_update: {
+        Args: { p_intel: string; p_patch: Json }
+        Returns: Json
+      }
+      ci_intel_set_corroboration: {
+        Args: { p_intel: string; p_corroboration: string; p_note?: string | null }
+        Returns: Json
+      }
+      ci_intel_links_set: {
+        Args: { p_intel: string; p_links: Json }
+        Returns: Json
+      }
+      ci_intel_delete: {
+        Args: { p_intel: string; p_reason?: string | null }
+        Returns: Json
+      }
+      ci_case_intel: {
+        Args: { p_case: string; p_limit?: number }
+        Returns: {
+          id: string
+          ci_id: string
+          ci_number: string
+          handler_id: string
+          handler_name: string | null
+          received_at: string
+          case_id: string | null
+          summary: string
+          body: string | null
+          reliability: string
+          corroboration: string
+          corroboration_note: string | null
+          sensitivity: string
+          follow_up_required: boolean
+          follow_up_done_at: string | null
+          handler_notes: string | null
+          links: Json
+          release_count: number
+          created_at: string
+          updated_at: string
+        }[]
+      }
+      ci_case_counts: {
+        Args: { p_cases: string[] }
+        Returns: {
+          case_id: string
+          n: number
+        }[]
+      }
+      ci_case_link: {
+        Args: { p_ci: string; p_case: string; p_note?: string | null }
+        Returns: Json
+      }
+      ci_case_unlink: {
+        Args: { p_ci: string; p_case: string; p_reason?: string | null }
+        Returns: Json
+      }
+      ci_release: {
+        Args: { p_intel: string; p_title: string; p_body: string; p_handling?: string }
+        Returns: Json
+      }
+      ci_release_revoke: {
+        Args: { p_release: string; p_reason: string }
+        Returns: Json
+      }
+      ci_payment_record: {
+        Args: { p_ci: string; p_amount: number; p_paid_at: string; p_reason: string; p_intel?: string | null; p_case?: string | null; p_notes?: string | null }
+        Returns: Json
+      }
+      ci_payment_approve: {
+        Args: { p_payment: string }
+        Returns: Json
+      }
+      ci_export: {
+        Args: { p_ci?: string | null; p_scope?: string }
+        Returns: Json
+      }
+      ci_search: {
+        Args: { p_q: string; p_limit?: number }
+        Returns: {
+          id: string
+          ci_number: string
+          alias: string | null
+          person_name: string
+          status: string
+        }[]
+      }
+      ci_person_status: {
+        Args: { p_person: string }
+        Returns: Json
+      }
+      ci_audit_list: {
+        Args: { p_ci?: string | null; p_limit?: number }
+        Returns: {
+          id: number
+          ci_id: string | null
+          actor_id: string | null
+          actor_name: string | null
+          action: string
+          entity: string
+          entity_id: string | null
+          detail: Json
+          created_at: string
+        }[]
+      }
+      ci_sweep_run: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      rls_test_ci_sweep: {
+        Args: { p_ci: string }
         Returns: Json
       }
     }

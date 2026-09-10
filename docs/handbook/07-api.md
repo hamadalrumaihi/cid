@@ -163,7 +163,7 @@ The **machine-only bridge functions** — `mdt_patrol_feed`,
 `bridge_ingest_event`, `mdt_bridge_ack` — are deliberately absent from the
 client list above: EXECUTE is service_role-only and no consumer is deployed.
 See [Ch. 21](21-integration.md) and
-[`docs/MDT-BRIDGE-CONTRACT.md`](../MDT-BRIDGE-CONTRACT.md).
+[`docs/archive/MDT-BRIDGE-CONTRACT.md`](../archive/MDT-BRIDGE-CONTRACT.md).
 
 **Error handling**: RPCs come back through `rpc()` as `{error}` — callers
 toast it. RPC-internal permission failures raise exceptions that surface

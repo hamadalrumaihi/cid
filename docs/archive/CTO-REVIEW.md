@@ -7,7 +7,7 @@ This is a **dated snapshot**: every count, score, and recommendation below
 describes the platform *as of v1.1.1*. Many items have since shipped (e.g.
 `gen:guide` + its drift check, the RLS suites in CI, the accessibility spec,
 Lighthouse/bundle budgets, the `useRegistry` extraction, the GangsView
-split) — treat the code and [`DEFERRED.md`](DEFERRED.md) (the live
+split) — treat the code and [`DEFERRED.md`](../DEFERRED.md) (the live
 deferred-work register) as current, not this file. Rankings use **Impact**
 (what it buys) / **Effort** (S ≤ half a day, M ≤ 2 days, L = a week+) /
 **Risk** (chance of breaking something that works today).

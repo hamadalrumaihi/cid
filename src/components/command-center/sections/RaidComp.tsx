@@ -1,11 +1,11 @@
 'use client'
 
-/** Raid compensation calculator (command.js:574-596) — local preview only,
- *  never saved; the authorized split is recorded on the Raid Seizure
- *  Allocation form. */
+/** Raid compensation calculator (Command Center → Trackers & Raid Comp) —
+ *  local preview only, never saved; the authorized split is recorded on the
+ *  Raid Seizure Allocation form. */
 import { useState } from 'react'
 import { fmtUSD } from '@/lib/format'
-import { BRACKETS, COMP_SPLIT, findBracket } from '@/components/command-center/lib/commandUtils'
+import { BRACKETS, COMP_SPLIT, findBracket } from '../lib/commandUtils'
 import { Card } from '@/components/ui/Card'
 
 export function RaidComp() {

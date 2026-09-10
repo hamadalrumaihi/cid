@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { MUTABLE_NOTIF_TYPES, OPTIONAL_NOTIF_CATEGORIES } from './notifications'
-import { NOTIF_LABEL } from './notifText'
+import { MUTABLE_NOTIF_TYPES, NOTIF_CATEGORY_META, OPTIONAL_NOTIF_CATEGORIES } from './notifications'
+import { NOTIF_LABEL, NOTIF_REGISTRY, isMutableNotif, notifDestination } from './notifText'
 
 /** Governance pins for the mute allow-list — the constants are pure; the db
  *  helpers themselves are covered by the RLS/MSW suites. */
@@ -27,6 +27,25 @@ describe('OPTIONAL_NOTIF_CATEGORIES', () => {
     for (const t of MANDATORY) expect(MUTABLE_NOTIF_TYPES.has(t), t).toBe(false)
   })
 
+  it('is derived from the registry: exactly the six historical FYI kinds, nothing else', () => {
+    // The mute allow-list used to be a hand-written list; it is now the
+    // registry's `mutable` flags. Pin the set so a flag added by accident
+    // (or one dropped) is a visible test change.
+    expect([...MUTABLE_NOTIF_TYPES].sort()).toEqual(
+      ['announcement', 'case_stale', 'document_suggestion', 'signoff_heads_up', 'stale_case', 'tracker_authorized'],
+    )
+    for (const t of MUTABLE_NOTIF_TYPES) expect(isMutableNotif(t)).toBe(true)
+    expect(isMutableNotif('task_assigned')).toBe(false)
+    expect(isMutableNotif('made_up')).toBe(false)
+    // Every group is a real registry category and carries only its own kinds.
+    for (const c of OPTIONAL_NOTIF_CATEGORIES) {
+      expect(NOTIF_CATEGORY_META[c.key], c.key).toBeDefined()
+      expect(c.label).toBe(NOTIF_CATEGORY_META[c.key].label)
+      for (const t of c.types) expect(NOTIF_REGISTRY[t].category).toBe(c.key)
+    }
+    expect(OPTIONAL_NOTIF_CATEGORIES.map((c) => c.key)).toEqual(['decisions', 'escalations', 'announcements'])
+  })
+
   it('categories stay small, labelled and non-overlapping', () => {
     expect(OPTIONAL_NOTIF_CATEGORIES.length).toBeLessThanOrEqual(5)
     const all = OPTIONAL_NOTIF_CATEGORIES.flatMap((c) => c.types)
@@ -44,9 +63,14 @@ import { ALL_DISCORD_CATEGORY_KEYS, DISCORD_CATEGORIES, discordCategoryOf } from
 import { NOTIF_CATEGORY } from './notifText'
 
 describe('DISCORD_CATEGORIES', () => {
-  it('every category the JSON assigns is one the profile UI offers (or "other")', () => {
+  it('every category the JSON assigns is offered, "other", or portal-only (never DM\'d)', () => {
     const offered = new Set([...ALL_DISCORD_CATEGORY_KEYS, 'other'])
-    for (const [type, cat] of Object.entries(NOTIF_CATEGORY)) expect(offered.has(cat), `${type} → ${cat}`).toBe(true)
+    for (const [type, cat] of Object.entries(NOTIF_CATEGORY)) {
+      if (offered.has(cat)) continue
+      // A category outside the opt-in list must be one the edge function
+      // skips before any lookup — otherwise a kind would be DM'd unmuted.
+      expect(notifDestination(type), `${type} → ${cat}`).toBe('portal')
+    }
   })
 
   it('pins the contract mapping for the load-bearing kinds', () => {
@@ -101,6 +125,34 @@ describe('DISCORD_CATEGORIES', () => {
       expect(c.label.length).toBeGreaterThan(0)
       expect(c.hint.length).toBeGreaterThan(0)
     }
+  })
+
+  it('is derived from the registry and equals the hand-written Phase 7 list exactly', () => {
+    expect(ALL_DISCORD_CATEGORY_KEYS).toEqual(
+      ['assignments', 'decisions', 'legal', 'mentions', 'escalations', 'intel', 'reports', 'announcements', 'security'],
+    )
+    // Copy comes from the one META table.
+    for (const c of DISCORD_CATEGORIES) expect(c).toEqual({ key: c.key, ...NOTIF_CATEGORY_META[c.key] })
+  })
+
+  it('never offers a portal-only category — nothing portal-only can be DM\'d', () => {
+    expect(ALL_DISCORD_CATEGORY_KEYS).not.toContain('informants')
+    expect(ALL_DISCORD_CATEGORY_KEYS).not.toContain('other')
+    for (const key of ALL_DISCORD_CATEGORY_KEYS) {
+      const kinds = Object.entries(NOTIF_REGISTRY).filter(([, e]) => e.category === key)
+      expect(kinds.some(([t]) => notifDestination(t) === 'all'), key).toBe(true)
+    }
+    // Every informants kind is portal-only; the released-intel kind is not
+    // (it names no CI and may DM the case lead).
+    for (const [t, e] of Object.entries(NOTIF_REGISTRY)) {
+      if (e.category === 'informants') expect(notifDestination(t), t).toBe('portal')
+    }
+    expect(notifDestination('case_intel_released')).toBe('all')
+    expect(notifDestination('made_up')).toBe('all')
+  })
+
+  it('every registry category has copy in NOTIF_CATEGORY_META', () => {
+    for (const [t, cat] of Object.entries(NOTIF_CATEGORY)) expect(NOTIF_CATEGORY_META[cat], `${t} → ${cat}`).toBeDefined()
   })
 })
 

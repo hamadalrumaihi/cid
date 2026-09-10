@@ -454,6 +454,25 @@ alter table public.case_intel_links add constraint case_intel_links_pkey PRIMARY
 alter table public.case_intel_links add constraint case_intel_links_case_id_kind_ref_id_key UNIQUE (case_id, kind, ref_id);
 alter table public.case_intel_links enable row level security;
 
+create table public.case_intel_releases (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  title text not null,
+  body text not null,
+  handling text not null default 'law_enforcement_sensitive'::text,
+  released_by uuid,
+  released_at timestamp with time zone not null default now(),
+  revoked_at timestamp with time zone,
+  revoked_by uuid,
+  revoke_reason text
+);
+alter table public.case_intel_releases add constraint case_intel_releases_handling_check CHECK ((handling = ANY (ARRAY['official_use'::text, 'law_enforcement_sensitive'::text, 'court_disclosable'::text])));
+alter table public.case_intel_releases add constraint case_intel_releases_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
+alter table public.case_intel_releases add constraint case_intel_releases_released_by_fkey FOREIGN KEY (released_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.case_intel_releases add constraint case_intel_releases_revoked_by_fkey FOREIGN KEY (revoked_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.case_intel_releases add constraint case_intel_releases_pkey PRIMARY KEY (id);
+alter table public.case_intel_releases enable row level security;
+
 create table public.case_links (
   id uuid not null default gen_random_uuid(),
   case_id uuid not null,
@@ -577,9 +596,14 @@ create table public.case_templates (
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
   tasks jsonb not null default '[]'::jsonb,
-  followup_days integer
+  followup_days integer,
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
 );
 alter table public.case_templates add constraint case_templates_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
+alter table public.case_templates add constraint case_templates_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.case_templates add constraint case_templates_pkey PRIMARY KEY (id);
 alter table public.case_templates enable row level security;
 
@@ -654,6 +678,263 @@ alter table public.cases add constraint cases_pkey PRIMARY KEY (id);
 alter table public.cases add constraint cases_case_number_key UNIQUE (case_number);
 alter table public.cases enable row level security;
 
+create table public.ci_assessments (
+  id uuid not null default gen_random_uuid(),
+  ci_id uuid not null,
+  assessed_by uuid,
+  assessed_at timestamp with time zone not null default now(),
+  reliability text,
+  credibility text,
+  access text,
+  risk text,
+  compromise_likelihood text,
+  usefulness text,
+  note text
+);
+alter table public.ci_assessments add constraint ci_assessments_access_check CHECK (((access IS NULL) OR (access = ANY (ARRAY['unknown'::text, 'low'::text, 'moderate'::text, 'high'::text]))));
+alter table public.ci_assessments add constraint ci_assessments_compromise_likelihood_check CHECK (((compromise_likelihood IS NULL) OR (compromise_likelihood = ANY (ARRAY['unknown'::text, 'low'::text, 'moderate'::text, 'high'::text]))));
+alter table public.ci_assessments add constraint ci_assessments_credibility_check CHECK (((credibility IS NULL) OR (credibility = ANY (ARRAY['unknown'::text, 'low'::text, 'moderate'::text, 'high'::text]))));
+alter table public.ci_assessments add constraint ci_assessments_reliability_check CHECK (((reliability IS NULL) OR (reliability = ANY (ARRAY['unknown'::text, 'low'::text, 'moderate'::text, 'high'::text, 'proven'::text]))));
+alter table public.ci_assessments add constraint ci_assessments_risk_check CHECK (((risk IS NULL) OR (risk = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
+alter table public.ci_assessments add constraint ci_assessments_usefulness_check CHECK (((usefulness IS NULL) OR (usefulness = ANY (ARRAY['unknown'::text, 'low'::text, 'moderate'::text, 'high'::text]))));
+alter table public.ci_assessments add constraint ci_assessments_assessed_by_fkey FOREIGN KEY (assessed_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.ci_assessments add constraint ci_assessments_ci_id_fkey FOREIGN KEY (ci_id) REFERENCES confidential_informants(id) ON DELETE CASCADE;
+alter table public.ci_assessments add constraint ci_assessments_pkey PRIMARY KEY (id);
+alter table public.ci_assessments enable row level security;
+
+create table public.ci_audit_events (
+  id bigint generated always as identity not null,
+  ci_id uuid,
+  actor_id uuid,
+  action text not null,
+  entity text not null,
+  entity_id uuid,
+  detail jsonb,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.ci_audit_events add constraint ci_audit_events_pkey PRIMARY KEY (id);
+alter table public.ci_audit_events enable row level security;
+
+create table public.ci_capacity_requests (
+  id uuid not null default gen_random_uuid(),
+  kind text not null,
+  requester_id uuid not null,
+  bureau bureau,
+  current_count integer not null,
+  requested_capacity integer,
+  proposed_person_id uuid,
+  proposed_motive text,
+  estimated_risk text,
+  expected_usefulness text,
+  reason text not null,
+  operational_need text,
+  case_id uuid,
+  comments text,
+  status text not null default 'pending'::text,
+  decided_by uuid,
+  decided_at timestamp with time zone,
+  decision_note text,
+  created_ci_id uuid,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.ci_capacity_requests add constraint ci_capacity_requests_kind_check CHECK ((kind = ANY (ARRAY['capacity'::text, 'assignment'::text])));
+alter table public.ci_capacity_requests add constraint ci_capacity_requests_requested_capacity_check CHECK (((requested_capacity IS NULL) OR ((requested_capacity >= 1) AND (requested_capacity <= 30))));
+alter table public.ci_capacity_requests add constraint ci_capacity_requests_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'denied'::text, 'returned'::text, 'withdrawn'::text])));
+alter table public.ci_capacity_requests add constraint ci_capacity_requests_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL;
+alter table public.ci_capacity_requests add constraint ci_capacity_requests_created_ci_id_fkey FOREIGN KEY (created_ci_id) REFERENCES confidential_informants(id) ON DELETE SET NULL;
+alter table public.ci_capacity_requests add constraint ci_capacity_requests_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.ci_capacity_requests add constraint ci_capacity_requests_proposed_person_id_fkey FOREIGN KEY (proposed_person_id) REFERENCES persons(id) ON DELETE SET NULL;
+alter table public.ci_capacity_requests add constraint ci_capacity_requests_requester_id_fkey FOREIGN KEY (requester_id) REFERENCES profiles(id) ON DELETE CASCADE;
+alter table public.ci_capacity_requests add constraint ci_capacity_requests_pkey PRIMARY KEY (id);
+alter table public.ci_capacity_requests enable row level security;
+
+create table public.ci_case_links (
+  id uuid not null default gen_random_uuid(),
+  ci_id uuid not null,
+  case_id uuid not null,
+  linked_by uuid,
+  linked_at timestamp with time zone not null default now(),
+  note text,
+  unlinked_at timestamp with time zone,
+  unlinked_by uuid,
+  unlink_reason text
+);
+alter table public.ci_case_links add constraint ci_case_links_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
+alter table public.ci_case_links add constraint ci_case_links_ci_id_fkey FOREIGN KEY (ci_id) REFERENCES confidential_informants(id) ON DELETE CASCADE;
+alter table public.ci_case_links add constraint ci_case_links_linked_by_fkey FOREIGN KEY (linked_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.ci_case_links add constraint ci_case_links_unlinked_by_fkey FOREIGN KEY (unlinked_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.ci_case_links add constraint ci_case_links_pkey PRIMARY KEY (id);
+alter table public.ci_case_links enable row level security;
+
+create table public.ci_contacts (
+  id uuid not null default gen_random_uuid(),
+  ci_id uuid not null,
+  handler_id uuid not null,
+  occurred_at timestamp with time zone not null,
+  method text not null,
+  location text,
+  summary text not null,
+  follow_up_required boolean not null default false,
+  next_contact_at timestamp with time zone,
+  case_id uuid,
+  restricted_notes text,
+  created_by uuid,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
+);
+alter table public.ci_contacts add constraint ci_contacts_method_check CHECK ((method = ANY (ARRAY['in_person'::text, 'phone'::text, 'message'::text, 'other'::text])));
+alter table public.ci_contacts add constraint ci_contacts_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL;
+alter table public.ci_contacts add constraint ci_contacts_ci_id_fkey FOREIGN KEY (ci_id) REFERENCES confidential_informants(id) ON DELETE CASCADE;
+alter table public.ci_contacts add constraint ci_contacts_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.ci_contacts add constraint ci_contacts_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.ci_contacts add constraint ci_contacts_handler_id_fkey FOREIGN KEY (handler_id) REFERENCES profiles(id);
+alter table public.ci_contacts add constraint ci_contacts_pkey PRIMARY KEY (id);
+alter table public.ci_contacts enable row level security;
+
+create table public.ci_events (
+  id bigint generated always as identity not null,
+  ci_id uuid,
+  user_id uuid,
+  kind text not null,
+  at timestamp with time zone not null default now()
+);
+alter table public.ci_events add constraint ci_events_pkey PRIMARY KEY (id);
+alter table public.ci_events enable row level security;
+
+create table public.ci_handler_capacity (
+  user_id uuid not null,
+  limit_override integer not null,
+  reason text not null,
+  approved_by uuid not null,
+  approved_at timestamp with time zone not null default now(),
+  expires_at timestamp with time zone,
+  request_id uuid
+);
+alter table public.ci_handler_capacity add constraint ci_handler_capacity_limit_override_check CHECK (((limit_override >= 1) AND (limit_override <= 30)));
+alter table public.ci_handler_capacity add constraint ci_handler_capacity_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES profiles(id);
+alter table public.ci_handler_capacity add constraint ci_handler_capacity_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+alter table public.ci_handler_capacity add constraint ci_handler_capacity_pkey PRIMARY KEY (user_id);
+alter table public.ci_handler_capacity enable row level security;
+
+create table public.ci_handlers (
+  id uuid not null default gen_random_uuid(),
+  ci_id uuid not null,
+  user_id uuid not null,
+  role text not null,
+  counts_toward_capacity boolean not null default true,
+  assigned_by uuid,
+  assigned_at timestamp with time zone not null default now(),
+  reason text,
+  ended_at timestamp with time zone,
+  ended_by uuid,
+  end_reason text
+);
+alter table public.ci_handlers add constraint ci_handlers_role_check CHECK ((role = ANY (ARRAY['primary'::text, 'secondary'::text])));
+alter table public.ci_handlers add constraint ci_handlers_assigned_by_fkey FOREIGN KEY (assigned_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.ci_handlers add constraint ci_handlers_ci_id_fkey FOREIGN KEY (ci_id) REFERENCES confidential_informants(id) ON DELETE CASCADE;
+alter table public.ci_handlers add constraint ci_handlers_ended_by_fkey FOREIGN KEY (ended_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.ci_handlers add constraint ci_handlers_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+alter table public.ci_handlers add constraint ci_handlers_pkey PRIMARY KEY (id);
+alter table public.ci_handlers enable row level security;
+
+create table public.ci_intelligence (
+  id uuid not null default gen_random_uuid(),
+  ci_id uuid not null,
+  handler_id uuid not null,
+  received_at timestamp with time zone not null default now(),
+  case_id uuid,
+  summary text not null,
+  body text,
+  reliability text not null default 'unknown'::text,
+  corroboration text not null default 'unverified'::text,
+  corroboration_note text,
+  sensitivity text not null default 'sensitive'::text,
+  follow_up_required boolean not null default false,
+  follow_up_done_at timestamp with time zone,
+  handler_notes text,
+  created_by uuid,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
+);
+alter table public.ci_intelligence add constraint ci_intelligence_corroboration_check CHECK ((corroboration = ANY (ARRAY['unverified'::text, 'partially_corroborated'::text, 'corroborated'::text, 'contradicted'::text, 'unable_to_verify'::text])));
+alter table public.ci_intelligence add constraint ci_intelligence_reliability_check CHECK ((reliability = ANY (ARRAY['unknown'::text, 'low'::text, 'moderate'::text, 'high'::text, 'proven'::text])));
+alter table public.ci_intelligence add constraint ci_intelligence_sensitivity_check CHECK ((sensitivity = ANY (ARRAY['routine'::text, 'sensitive'::text, 'highly_sensitive'::text])));
+alter table public.ci_intelligence add constraint ci_intelligence_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL;
+alter table public.ci_intelligence add constraint ci_intelligence_ci_id_fkey FOREIGN KEY (ci_id) REFERENCES confidential_informants(id) ON DELETE CASCADE;
+alter table public.ci_intelligence add constraint ci_intelligence_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.ci_intelligence add constraint ci_intelligence_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.ci_intelligence add constraint ci_intelligence_handler_id_fkey FOREIGN KEY (handler_id) REFERENCES profiles(id);
+alter table public.ci_intelligence add constraint ci_intelligence_pkey PRIMARY KEY (id);
+alter table public.ci_intelligence enable row level security;
+
+create table public.ci_intelligence_links (
+  id uuid not null default gen_random_uuid(),
+  intel_id uuid not null,
+  kind text not null,
+  target_id uuid not null,
+  note text,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.ci_intelligence_links add constraint ci_intelligence_links_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'vehicle'::text, 'gang'::text, 'place'::text, 'narcotic'::text, 'evidence'::text, 'media'::text])));
+alter table public.ci_intelligence_links add constraint ci_intelligence_links_intel_id_fkey FOREIGN KEY (intel_id) REFERENCES ci_intelligence(id) ON DELETE CASCADE;
+alter table public.ci_intelligence_links add constraint ci_intelligence_links_pkey PRIMARY KEY (id);
+alter table public.ci_intelligence_links add constraint ci_intelligence_links_intel_id_kind_target_id_key UNIQUE (intel_id, kind, target_id);
+alter table public.ci_intelligence_links enable row level security;
+
+create table public.ci_payments (
+  id uuid not null default gen_random_uuid(),
+  ci_id uuid not null,
+  amount numeric(12,2) not null,
+  paid_at date not null,
+  handler_id uuid not null,
+  approved_by uuid,
+  approved_at timestamp with time zone,
+  reason text not null,
+  intel_id uuid,
+  case_id uuid,
+  notes text,
+  created_by uuid,
+  created_at timestamp with time zone not null default now(),
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
+);
+alter table public.ci_payments add constraint ci_payments_amount_check CHECK ((amount >= (0)::numeric));
+alter table public.ci_payments add constraint ci_payments_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.ci_payments add constraint ci_payments_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL;
+alter table public.ci_payments add constraint ci_payments_ci_id_fkey FOREIGN KEY (ci_id) REFERENCES confidential_informants(id) ON DELETE CASCADE;
+alter table public.ci_payments add constraint ci_payments_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.ci_payments add constraint ci_payments_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.ci_payments add constraint ci_payments_handler_id_fkey FOREIGN KEY (handler_id) REFERENCES profiles(id);
+alter table public.ci_payments add constraint ci_payments_intel_id_fkey FOREIGN KEY (intel_id) REFERENCES ci_intelligence(id) ON DELETE SET NULL;
+alter table public.ci_payments add constraint ci_payments_pkey PRIMARY KEY (id);
+alter table public.ci_payments enable row level security;
+
+create table public.ci_releases (
+  id uuid not null default gen_random_uuid(),
+  intel_id uuid not null,
+  ci_id uuid not null,
+  case_release_id uuid not null,
+  released_by uuid,
+  released_at timestamp with time zone not null default now()
+);
+alter table public.ci_releases add constraint ci_releases_case_release_id_fkey FOREIGN KEY (case_release_id) REFERENCES case_intel_releases(id) ON DELETE CASCADE;
+alter table public.ci_releases add constraint ci_releases_ci_id_fkey FOREIGN KEY (ci_id) REFERENCES confidential_informants(id) ON DELETE CASCADE;
+alter table public.ci_releases add constraint ci_releases_intel_id_fkey FOREIGN KEY (intel_id) REFERENCES ci_intelligence(id) ON DELETE CASCADE;
+alter table public.ci_releases add constraint ci_releases_released_by_fkey FOREIGN KEY (released_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.ci_releases add constraint ci_releases_pkey PRIMARY KEY (id);
+alter table public.ci_releases enable row level security;
+
 create table public.cid_records (
   id uuid not null default gen_random_uuid(),
   name text not null,
@@ -698,12 +979,59 @@ create table public.commendations (
   tint text default 'amber'::text,
   created_by uuid default auth.uid(),
   created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now()
+  updated_at timestamp with time zone not null default now(),
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
 );
 alter table public.commendations add constraint commendations_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
+alter table public.commendations add constraint commendations_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.commendations add constraint commendations_recipient_id_fkey FOREIGN KEY (recipient_id) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.commendations add constraint commendations_pkey PRIMARY KEY (id);
 alter table public.commendations enable row level security;
+
+create table public.confidential_informants (
+  id uuid not null default gen_random_uuid(),
+  ci_number text not null,
+  person_id uuid not null,
+  alias text,
+  status text not null default 'candidate'::text,
+  bureau bureau not null,
+  recruited_at date,
+  recruited_by uuid,
+  supervising_lead_id uuid,
+  motive_primary text,
+  motive_secondary text[] not null default '{}'::text[],
+  motive_explanation text,
+  reliability text not null default 'unknown'::text,
+  risk text not null default 'medium'::text,
+  recruitment_notes text,
+  last_contact_at timestamp with time zone,
+  next_contact_at timestamp with time zone,
+  status_changed_at timestamp with time zone not null default now(),
+  status_reason text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
+);
+alter table public.confidential_informants add constraint confidential_informants_motive_primary_check CHECK (((motive_primary IS NULL) OR (motive_primary = ANY (ARRAY['money'::text, 'political'::text, 'religious'::text, 'patriotism'::text, 'revenge'::text, 'personal_benefit'::text, 'protection'::text, 'leniency'::text, 'rivalry'::text, 'ideological'::text, 'safety'::text, 'other'::text]))));
+alter table public.confidential_informants add constraint confidential_informants_motive_secondary_check CHECK ((motive_secondary <@ ARRAY['money'::text, 'political'::text, 'religious'::text, 'patriotism'::text, 'revenge'::text, 'personal_benefit'::text, 'protection'::text, 'leniency'::text, 'rivalry'::text, 'ideological'::text, 'safety'::text, 'other'::text]));
+alter table public.confidential_informants add constraint confidential_informants_reliability_check CHECK ((reliability = ANY (ARRAY['unknown'::text, 'low'::text, 'moderate'::text, 'high'::text, 'proven'::text])));
+alter table public.confidential_informants add constraint confidential_informants_risk_check CHECK ((risk = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text])));
+alter table public.confidential_informants add constraint confidential_informants_status_check CHECK ((status = ANY (ARRAY['candidate'::text, 'active'::text, 'dormant'::text, 'suspended'::text, 'compromised'::text, 'retired'::text, 'terminated'::text])));
+alter table public.confidential_informants add constraint confidential_informants_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.confidential_informants add constraint confidential_informants_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.confidential_informants add constraint confidential_informants_person_id_fkey FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE RESTRICT;
+alter table public.confidential_informants add constraint confidential_informants_recruited_by_fkey FOREIGN KEY (recruited_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.confidential_informants add constraint confidential_informants_supervising_lead_id_fkey FOREIGN KEY (supervising_lead_id) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.confidential_informants add constraint confidential_informants_pkey PRIMARY KEY (id);
+alter table public.confidential_informants add constraint confidential_informants_ci_number_key UNIQUE (ci_number);
+alter table public.confidential_informants enable row level security;
 
 create table public.custody_chain (
   id uuid not null default gen_random_uuid(),
@@ -5033,6 +5361,9 @@ CREATE INDEX case_intel_links_created_by_fkey_idx ON public.case_intel_links USI
 CREATE INDEX case_intel_links_delete_batch_idx ON public.case_intel_links USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
 CREATE INDEX case_intel_links_deleted_at_idx ON public.case_intel_links USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX case_intel_links_ref_idx ON public.case_intel_links USING btree (kind, ref_id);
+CREATE INDEX case_intel_releases_case_id_idx ON public.case_intel_releases USING btree (case_id);
+CREATE INDEX case_intel_releases_released_by_idx ON public.case_intel_releases USING btree (released_by);
+CREATE INDEX case_intel_releases_revoked_by_idx ON public.case_intel_releases USING btree (revoked_by);
 CREATE UNIQUE INDEX case_links_pair_live_key ON public.case_links USING btree (case_id, related_case_id) WHERE (deleted_at IS NULL);
 CREATE INDEX case_links_related_idx ON public.case_links USING btree (related_case_id) WHERE (deleted_at IS NULL);
 CREATE INDEX case_messages_author_id_fkey_idx ON public.case_messages USING btree (author_id);
@@ -5050,6 +5381,8 @@ CREATE INDEX case_tasks_deleted_at_idx ON public.case_tasks USING btree (deleted
 CREATE INDEX case_tasks_parent_id_idx ON public.case_tasks USING btree (parent_id);
 CREATE INDEX case_tasks_title_trgm ON public.case_tasks USING gin (title gin_trgm_ops);
 CREATE INDEX case_templates_created_by_fkey_idx ON public.case_templates USING btree (created_by);
+CREATE INDEX case_templates_deleted_at_idx ON public.case_templates USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+CREATE INDEX case_templates_deleted_by_idx ON public.case_templates USING btree (deleted_by);
 CREATE INDEX cases_archived_by_idx ON public.cases USING btree (archived_by);
 CREATE INDEX cases_bureau_status_idx ON public.cases USING btree (bureau, status);
 CREATE INDEX cases_casenum_trgm ON public.cases USING gin (case_number gin_trgm_ops);
@@ -5068,10 +5401,67 @@ CREATE INDEX cases_siu_authority_idx ON public.cases USING btree (case_authority
 CREATE INDEX cases_siu_stage_idx ON public.cases USING btree (siu_stage) WHERE (siu_stage IS NOT NULL);
 CREATE INDEX cases_summary_trgm ON public.cases USING gin (summary gin_trgm_ops);
 CREATE INDEX cases_title_trgm ON public.cases USING gin (title gin_trgm_ops);
+CREATE INDEX ci_assessments_assessed_by_idx ON public.ci_assessments USING btree (assessed_by);
+CREATE INDEX ci_assessments_ci_id_idx ON public.ci_assessments USING btree (ci_id, assessed_at DESC);
+CREATE INDEX ci_audit_events_actor_id_idx ON public.ci_audit_events USING btree (actor_id);
+CREATE INDEX ci_audit_events_ci_id_idx ON public.ci_audit_events USING btree (ci_id, created_at DESC);
+CREATE INDEX ci_capacity_requests_case_id_idx ON public.ci_capacity_requests USING btree (case_id);
+CREATE INDEX ci_capacity_requests_created_ci_id_idx ON public.ci_capacity_requests USING btree (created_ci_id);
+CREATE INDEX ci_capacity_requests_decided_by_idx ON public.ci_capacity_requests USING btree (decided_by);
+CREATE INDEX ci_capacity_requests_pending_idx ON public.ci_capacity_requests USING btree (status, created_at) WHERE (status = 'pending'::text);
+CREATE INDEX ci_capacity_requests_proposed_person_id_idx ON public.ci_capacity_requests USING btree (proposed_person_id);
+CREATE INDEX ci_capacity_requests_requester_id_idx ON public.ci_capacity_requests USING btree (requester_id);
+CREATE INDEX ci_case_links_case_id_idx ON public.ci_case_links USING btree (case_id);
+CREATE INDEX ci_case_links_ci_id_idx ON public.ci_case_links USING btree (ci_id);
+CREATE INDEX ci_case_links_linked_by_idx ON public.ci_case_links USING btree (linked_by);
+CREATE UNIQUE INDEX ci_case_links_live_uidx ON public.ci_case_links USING btree (ci_id, case_id) WHERE (unlinked_at IS NULL);
+CREATE INDEX ci_case_links_unlinked_by_idx ON public.ci_case_links USING btree (unlinked_by);
+CREATE INDEX ci_contacts_case_id_idx ON public.ci_contacts USING btree (case_id);
+CREATE INDEX ci_contacts_ci_id_idx ON public.ci_contacts USING btree (ci_id);
+CREATE INDEX ci_contacts_created_by_idx ON public.ci_contacts USING btree (created_by);
+CREATE INDEX ci_contacts_deleted_by_idx ON public.ci_contacts USING btree (deleted_by);
+CREATE INDEX ci_contacts_handler_id_idx ON public.ci_contacts USING btree (handler_id);
+CREATE INDEX ci_events_ci_id_idx ON public.ci_events USING btree (ci_id, at DESC);
+CREATE INDEX ci_events_user_id_idx ON public.ci_events USING btree (user_id);
+CREATE INDEX ci_handler_capacity_approved_by_idx ON public.ci_handler_capacity USING btree (approved_by);
+CREATE INDEX ci_handlers_assigned_by_idx ON public.ci_handlers USING btree (assigned_by);
+CREATE INDEX ci_handlers_ci_id_idx ON public.ci_handlers USING btree (ci_id);
+CREATE INDEX ci_handlers_ended_by_idx ON public.ci_handlers USING btree (ended_by);
+CREATE UNIQUE INDEX ci_handlers_role_live_uidx ON public.ci_handlers USING btree (ci_id, role) WHERE (ended_at IS NULL);
+CREATE INDEX ci_handlers_user_id_idx ON public.ci_handlers USING btree (user_id);
+CREATE UNIQUE INDEX ci_handlers_user_live_uidx ON public.ci_handlers USING btree (ci_id, user_id) WHERE (ended_at IS NULL);
+CREATE INDEX ci_intelligence_case_id_idx ON public.ci_intelligence USING btree (case_id);
+CREATE INDEX ci_intelligence_ci_id_idx ON public.ci_intelligence USING btree (ci_id);
+CREATE INDEX ci_intelligence_created_by_idx ON public.ci_intelligence USING btree (created_by);
+CREATE INDEX ci_intelligence_deleted_by_idx ON public.ci_intelligence USING btree (deleted_by);
+CREATE INDEX ci_intelligence_followup_idx ON public.ci_intelligence USING btree (ci_id) WHERE ((deleted_at IS NULL) AND follow_up_required AND (follow_up_done_at IS NULL));
+CREATE INDEX ci_intelligence_handler_id_idx ON public.ci_intelligence USING btree (handler_id);
+CREATE INDEX ci_intelligence_links_intel_id_idx ON public.ci_intelligence_links USING btree (intel_id);
+CREATE INDEX ci_intelligence_links_target_idx ON public.ci_intelligence_links USING btree (kind, target_id);
+CREATE INDEX ci_payments_approved_by_idx ON public.ci_payments USING btree (approved_by);
+CREATE INDEX ci_payments_case_id_idx ON public.ci_payments USING btree (case_id);
+CREATE INDEX ci_payments_ci_id_idx ON public.ci_payments USING btree (ci_id);
+CREATE INDEX ci_payments_created_by_idx ON public.ci_payments USING btree (created_by);
+CREATE INDEX ci_payments_deleted_by_idx ON public.ci_payments USING btree (deleted_by);
+CREATE INDEX ci_payments_handler_id_idx ON public.ci_payments USING btree (handler_id);
+CREATE INDEX ci_payments_intel_id_idx ON public.ci_payments USING btree (intel_id);
+CREATE INDEX ci_releases_case_release_id_idx ON public.ci_releases USING btree (case_release_id);
+CREATE INDEX ci_releases_ci_id_idx ON public.ci_releases USING btree (ci_id);
+CREATE INDEX ci_releases_intel_id_idx ON public.ci_releases USING btree (intel_id);
+CREATE INDEX ci_releases_released_by_idx ON public.ci_releases USING btree (released_by);
 CREATE INDEX cid_records_created_by_fkey_idx ON public.cid_records USING btree (created_by);
 CREATE INDEX client_errors_reporter_id_idx ON public.client_errors USING btree (reporter_id);
 CREATE INDEX commendations_created_by_fkey_idx ON public.commendations USING btree (created_by);
+CREATE INDEX commendations_deleted_at_idx ON public.commendations USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+CREATE INDEX commendations_deleted_by_idx ON public.commendations USING btree (deleted_by);
 CREATE INDEX commendations_recipient_id_fkey_idx ON public.commendations USING btree (recipient_id);
+CREATE INDEX confidential_informants_created_by_idx ON public.confidential_informants USING btree (created_by);
+CREATE INDEX confidential_informants_deleted_by_idx ON public.confidential_informants USING btree (deleted_by);
+CREATE INDEX confidential_informants_person_id_idx ON public.confidential_informants USING btree (person_id);
+CREATE UNIQUE INDEX confidential_informants_person_live_uidx ON public.confidential_informants USING btree (person_id) WHERE (deleted_at IS NULL);
+CREATE INDEX confidential_informants_recruited_by_idx ON public.confidential_informants USING btree (recruited_by);
+CREATE INDEX confidential_informants_status_next_idx ON public.confidential_informants USING btree (status, next_contact_at) WHERE (deleted_at IS NULL);
+CREATE INDEX confidential_informants_supervising_lead_id_idx ON public.confidential_informants USING btree (supervising_lead_id);
 CREATE INDEX custody_chain_evidence_id_at_idx ON public.custody_chain USING btree (evidence_id, at);
 CREATE INDEX custody_chain_transferred_by_fkey_idx ON public.custody_chain USING btree (transferred_by);
 CREATE INDEX deleted_member_ledger_deleted_by_fkey_idx ON public.deleted_member_ledger USING btree (deleted_by);
@@ -6926,6 +7316,7 @@ begin
            (select c.case_number from public.cases c where c.id = p_case), a.detail
       from public.audit_log a
      where a.entity not in ('cases', 'legal_requests', 'audit_log') and a.entity_id <> p_case
+       and a.entity not in ('confidential_informants') and a.entity not like 'ci\_%'
        and a.detail ->> 'case_id' = p_case::text
   )
   select x.id::bigint, x.created_at, x.actor_id, x.action, x.entity, x.entity_id, x.kind, x.label,
@@ -7695,6 +8086,1411 @@ begin
     'reason', 'Your role is now ' || initcap(replace(p_new_role::text, '_', ' ')) || '. Reason: ' || p_reason,
     'actor_id', v_uid, 'actor_name', me.display_name));
   return t;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_assess(p_ci uuid, p_reliability text DEFAULT NULL::text, p_credibility text DEFAULT NULL::text, p_access text DEFAULT NULL::text, p_risk text DEFAULT NULL::text, p_compromise_likelihood text DEFAULT NULL::text, p_usefulness text DEFAULT NULL::text, p_note text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); c public.confidential_informants; v_id uuid; v_note text := nullif(btrim(coalesce(p_note, '')), '');
+begin
+  if v_uid is null or not private.is_active() or not private.can_access_ci(p_ci) then
+    perform private.perm_raise('edit', 'ci', p_ci, 'no_access', 'not authorized');
+  end if;
+  select * into c from public.confidential_informants where id = p_ci for update;
+  if c.deleted_at is not null then return jsonb_build_object('ok', false, 'code', 'deleted', 'message', 'this source record is in the Trash'); end if;
+  if coalesce(p_reliability, p_credibility, p_access, p_risk, p_compromise_likelihood, p_usefulness, v_note) is null then
+    return jsonb_build_object('ok', false, 'code', 'empty', 'message', 'assess at least one dimension');
+  end if;
+  if p_reliability is not null and not (p_reliability = any (private.ci_enum('reliability'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown reliability');
+  end if;
+  if p_risk is not null and not (p_risk = any (private.ci_enum('risk'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown risk');
+  end if;
+  if (p_credibility is not null and not (p_credibility = any (private.ci_enum('scale'))))
+     or (p_access is not null and not (p_access = any (private.ci_enum('scale'))))
+     or (p_compromise_likelihood is not null and not (p_compromise_likelihood = any (private.ci_enum('scale'))))
+     or (p_usefulness is not null and not (p_usefulness = any (private.ci_enum('scale')))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'the scale is unknown, low, moderate or high');
+  end if;
+  insert into public.ci_assessments (ci_id, assessed_by, reliability, credibility, access, risk, compromise_likelihood, usefulness, note)
+  values (p_ci, v_uid, p_reliability, p_credibility, p_access, p_risk, p_compromise_likelihood, p_usefulness, left(v_note, 4000))
+  returning id into v_id;
+  update public.confidential_informants
+     set reliability = coalesce(p_reliability, reliability), risk = coalesce(p_risk, risk), updated_at = now()
+   where id = p_ci;
+  perform private.ci_audit(p_ci, 'CI_ASSESSED', 'ci_assessments', v_id,
+    jsonb_build_object('reliability', p_reliability, 'credibility', p_credibility, 'access', p_access, 'risk', p_risk,
+                       'compromise_likelihood', p_compromise_likelihood, 'usefulness', p_usefulness));
+  perform private.ci_event(p_ci, 'assessed');
+  return jsonb_build_object('ok', true, 'id', v_id, 'ci_id', p_ci);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_audit_list(p_ci uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 100)
+ RETURNS TABLE(id bigint, ci_id uuid, actor_id uuid, actor_name text, action text, entity text, entity_id uuid, detail jsonb, created_at timestamp with time zone)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select a.id, a.ci_id, a.actor_id, (select p.display_name from public.profiles p where p.id = a.actor_id), a.action, a.entity, a.entity_id,
+         coalesce(a.detail, '{}'::jsonb), a.created_at
+    from public.ci_audit_events a
+   where (p_ci is null or a.ci_id = p_ci)
+   order by a.created_at desc, a.id desc
+   limit greatest(1, least(coalesce(p_limit, 100), 500))
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_capacity_request_decide(p_request uuid, p_decision text, p_note text DEFAULT NULL::text, p_new_capacity integer DEFAULT NULL::integer, p_expires_at timestamp with time zone DEFAULT NULL::timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid()); r public.ci_capacity_requests; v_note text := nullif(btrim(coalesce(p_note, '')), '');
+  v_limit integer; v_from integer; v_created uuid; v_res jsonb; v_override text;
+begin
+  if v_uid is null or not private.is_active() or not private.has_full_ci_access() then
+    perform private.perm_raise('decide', 'ci_capacity', p_request, 'not_ci_command', 'only CI command may decide a request');
+  end if;
+  select * into r from public.ci_capacity_requests where id = p_request for update;
+  if not found then return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'request not found'); end if;
+  if r.status <> 'pending' then return jsonb_build_object('ok', false, 'code', 'not_pending', 'message', 'this request was already decided'); end if;
+  if r.requester_id = v_uid then
+    perform private.perm_raise('decide', 'ci_capacity', p_request, 'own_request', 'you cannot decide your own request');
+  end if;
+  if p_decision is null or p_decision not in ('approved', 'denied', 'returned') then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'the decision is approved, denied or returned');
+  end if;
+  if p_decision in ('denied', 'returned') and (v_note is null or length(v_note) < 3) then
+    return jsonb_build_object('ok', false, 'code', 'note_required', 'message', 'tell the requester why');
+  end if;
+  if p_decision = 'approved' then
+    if r.kind = 'capacity' then
+      v_limit := coalesce(p_new_capacity, r.requested_capacity);
+      if v_limit is null or v_limit < 1 or v_limit > 30 then
+        return jsonb_build_object('ok', false, 'code', 'bad_capacity', 'message', 'the new capacity is between 1 and 30');
+      end if;
+      if p_expires_at is not null and p_expires_at <= now() then
+        return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'the expiry must be in the future');
+      end if;
+      v_from := private.ci_capacity(r.requester_id);
+      perform private.ci_capacity_raise(r.requester_id, v_limit, 'Approved request ' || r.id::text || coalesce(': ' || v_note, ''), p_expires_at, r.id);
+      perform private.ci_audit(null, 'CI_CAPACITY_CHANGED', 'ci_handler_capacity', r.requester_id,
+        jsonb_build_object('user_id', r.requester_id, 'requester_id', r.requester_id, 'request_id', r.id, 'from', v_from, 'to', v_limit,
+                           'expires_at', p_expires_at));
+    elsif r.proposed_person_id is not null then
+      if private.ci_active_count(r.requester_id) >= private.ci_capacity(r.requester_id) then
+        v_override := 'Approved assignment request ' || r.id::text;
+      end if;
+      v_res := public.ci_create(
+        p_person := r.proposed_person_id, p_alias := null, p_bureau := coalesce(r.bureau, (select p.division from public.profiles p where p.id = r.requester_id), 'JTF'::public.bureau),
+        p_primary_handler := r.requester_id, p_secondary_handler := null, p_status := 'active',
+        p_motive_primary := case when r.proposed_motive = any (private.ci_enum('motive')) then r.proposed_motive end,
+        p_motive_secondary := '{}'::text[], p_motive_explanation := null,
+        p_recruitment_notes := concat_ws(E'\n', nullif(r.operational_need, ''), nullif(r.expected_usefulness, '')),
+        p_reliability := 'unknown', p_risk := case when r.estimated_risk = any (private.ci_enum('risk')) then r.estimated_risk else 'medium' end,
+        p_recruited_at := current_date, p_override_reason := v_override);
+      if not coalesce((v_res ->> 'ok')::boolean, false) then
+        return jsonb_build_object('ok', false, 'code', 'create_failed', 'message', coalesce(v_res ->> 'message', 'the source could not be designated'),
+                                  'detail', v_res);
+      end if;
+      v_created := (v_res ->> 'id')::uuid;
+      if r.case_id is not null and private.can_read_case(r.case_id) then
+        perform private.ci_case_autolink(v_created, r.case_id, 'from assignment request');
+      end if;
+    end if;
+  end if;
+  update public.ci_capacity_requests
+     set status = p_decision, decided_by = v_uid, decided_at = now(), decision_note = left(v_note, 1000),
+         created_ci_id = coalesce(v_created, created_ci_id), updated_at = now()
+   where id = r.id;
+  perform private.ci_audit(null, 'CI_CAPACITY_REQUEST_DECIDED', 'ci_capacity_requests', r.id,
+    jsonb_build_object('request_id', r.id, 'requester_id', r.requester_id, 'kind', r.kind, 'decision', p_decision,
+                       'new_capacity', v_limit, 'created_ci_id', v_created));
+  perform private.action_notify(r.requester_id, 'ci_request_decided',
+    jsonb_build_object('request_id', r.id) || case when v_created is null then '{}'::jsonb else jsonb_build_object('ci_id', v_created) end);
+  perform private.ci_event(null, 'request', r.requester_id);
+  return jsonb_build_object('ok', true, 'id', r.id, 'status', p_decision, 'created_ci_id', v_created, 'capacity', v_limit);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_capacity_request_submit(p_kind text, p_reason text, p_requested_capacity integer DEFAULT NULL::integer, p_operational_need text DEFAULT NULL::text, p_case uuid DEFAULT NULL::uuid, p_proposed_person uuid DEFAULT NULL::uuid, p_proposed_motive text DEFAULT NULL::text, p_estimated_risk text DEFAULT NULL::text, p_expected_usefulness text DEFAULT NULL::text, p_bureau bureau DEFAULT NULL::bureau, p_comments text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid()); v_reason text := nullif(btrim(coalesce(p_reason, '')), ''); v_bureau public.bureau;
+  v_count integer; cap integer; v_id uuid; n integer;
+begin
+  if v_uid is null or not private.is_active() then
+    perform private.perm_raise('request', 'ci_capacity', null, 'inactive', 'your account is not active');
+  end if;
+  if p_kind is null or p_kind not in ('capacity', 'assignment') then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'the request is for capacity or an assignment');
+  end if;
+  if p_kind = 'capacity' and not private.ci_is_handler() then
+    perform private.perm_raise('request', 'ci_capacity', null, 'not_handler', 'only a current handler can request more capacity');
+  end if;
+  if v_reason is null or length(v_reason) < 3 then
+    return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'say why you are asking');
+  end if;
+  v_count := private.ci_active_count(v_uid); cap := private.ci_capacity(v_uid);
+  if p_kind = 'capacity' then
+    if p_requested_capacity is null or p_requested_capacity <= cap or p_requested_capacity > 30 then
+      return jsonb_build_object('ok', false, 'code', 'bad_capacity',
+        'message', format('ask for more than your current capacity of %s and at most 30', cap));
+    end if;
+  end if;
+  if p_proposed_motive is not null and not (p_proposed_motive = any (private.ci_enum('motive'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown motive');
+  end if;
+  if p_estimated_risk is not null and not (p_estimated_risk = any (private.ci_enum('risk'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown risk');
+  end if;
+  if p_case is not null and not private.can_read_case(p_case) then
+    return jsonb_build_object('ok', false, 'code', 'bad_case', 'message', 'that case is not available');
+  end if;
+  if p_proposed_person is not null and (
+       not exists (select 1 from public.persons p where p.id = p_proposed_person and p.deleted_at is null and p.lifecycle <> 'merged')
+       or not private.perm_registry_visible('person', p_proposed_person)) then
+    return jsonb_build_object('ok', false, 'code', 'bad_person', 'message', 'that person record is not available');
+  end if;
+  if exists (select 1 from public.ci_capacity_requests r where r.requester_id = v_uid and r.kind = p_kind and r.status = 'pending') then
+    return jsonb_build_object('ok', false, 'code', 'pending_exists', 'message', 'you already have a pending request of this kind');
+  end if;
+  v_bureau := coalesce(p_bureau, (select p.division from public.profiles p where p.id = v_uid));
+  insert into public.ci_capacity_requests (kind, requester_id, bureau, current_count, requested_capacity, proposed_person_id,
+    proposed_motive, estimated_risk, expected_usefulness, reason, operational_need, case_id, comments)
+  values (p_kind, v_uid, v_bureau, v_count, case when p_kind = 'capacity' then p_requested_capacity end, p_proposed_person,
+          p_proposed_motive, p_estimated_risk, nullif(btrim(coalesce(p_expected_usefulness, '')), ''), left(v_reason, 2000),
+          nullif(btrim(coalesce(p_operational_need, '')), ''), p_case, nullif(btrim(coalesce(p_comments, '')), ''))
+  returning id into v_id;
+  perform private.ci_audit(null, case when p_kind = 'capacity' then 'CI_CAPACITY_REQUESTED' else 'CI_ASSIGNMENT_REQUESTED' end,
+    'ci_capacity_requests', v_id,
+    jsonb_build_object('request_id', v_id, 'requester_id', v_uid, 'kind', p_kind, 'current_count', v_count, 'capacity', cap,
+                       'requested_capacity', p_requested_capacity));
+  n := private.ci_notify_full_access(v_bureau, 'ci_capacity_request', jsonb_build_object('request_id', v_id));
+  perform private.ci_event(null, 'request', v_uid);
+  return jsonb_build_object('ok', true, 'id', v_id, 'kind', p_kind, 'notified', n);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_capacity_request_withdraw(p_request uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); r public.ci_capacity_requests;
+begin
+  if v_uid is null or not private.is_active() then
+    perform private.perm_raise('request', 'ci_capacity', p_request, 'inactive', 'your account is not active');
+  end if;
+  select * into r from public.ci_capacity_requests where id = p_request and requester_id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'request not found'); end if;
+  if r.status <> 'pending' then return jsonb_build_object('ok', false, 'code', 'not_pending', 'message', 'this request was already decided'); end if;
+  update public.ci_capacity_requests set status = 'withdrawn', updated_at = now() where id = r.id;
+  perform private.ci_audit(null, 'CI_CAPACITY_REQUEST_WITHDRAWN', 'ci_capacity_requests', r.id,
+    jsonb_build_object('request_id', r.id, 'requester_id', v_uid, 'kind', r.kind));
+  perform private.ci_event(null, 'request', v_uid);
+  return jsonb_build_object('ok', true, 'id', r.id, 'status', 'withdrawn');
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_capacity_set(p_user uuid, p_limit integer DEFAULT NULL::integer, p_reason text DEFAULT NULL::text, p_expires_at timestamp with time zone DEFAULT NULL::timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_reason text := nullif(btrim(coalesce(p_reason, '')), ''); v_from integer;
+begin
+  if v_uid is null or not private.is_active() or not private.has_full_ci_access() then
+    perform private.perm_raise('decide', 'ci_capacity', p_user, 'not_ci_command', 'only CI command may set a handler''s capacity');
+  end if;
+  if p_user is null or not exists (select 1 from public.profiles p where p.id = p_user and p.active and p.removed_at is null) then
+    return jsonb_build_object('ok', false, 'code', 'bad_user', 'message', 'that member is not active');
+  end if;
+  if v_reason is null or length(v_reason) < 3 then
+    return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'say why the capacity changes');
+  end if;
+  if p_limit is not null and (p_limit < 1 or p_limit > 30) then
+    return jsonb_build_object('ok', false, 'code', 'bad_capacity', 'message', 'the capacity is between 1 and 30');
+  end if;
+  if p_expires_at is not null and p_expires_at <= now() then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'the expiry must be in the future');
+  end if;
+  v_from := private.ci_capacity(p_user);
+  if p_limit is null then
+    delete from public.ci_handler_capacity where user_id = p_user;
+  else
+    perform private.ci_capacity_raise(p_user, p_limit, v_reason, p_expires_at);
+  end if;
+  perform private.ci_audit(null, 'CI_CAPACITY_CHANGED', 'ci_handler_capacity', p_user,
+    jsonb_build_object('user_id', p_user, 'from', v_from, 'to', coalesce(p_limit, 6), 'expires_at', p_expires_at, 'reason', left(v_reason, 500)));
+  perform private.ci_event(null, 'capacity', p_user);
+  return jsonb_build_object('ok', true, 'user_id', p_user, 'capacity', private.ci_capacity(p_user));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_case_counts(p_cases uuid[])
+ RETURNS TABLE(case_id uuid, n integer)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid());
+begin
+  if v_uid is null or not private.is_active() or p_cases is null or cardinality(p_cases) = 0 then return; end if;
+  if not (private.has_full_ci_access() or private.ci_is_handler()) then return; end if;
+  return query
+  select x.case_id, count(*)::int
+    from (
+      select i.case_id from public.ci_intelligence i join public.confidential_informants c on c.id = i.ci_id
+       where i.case_id = any (p_cases[1:500]) and i.deleted_at is null and c.deleted_at is null and private.can_access_ci(i.ci_id)
+      union all
+      select l.case_id from public.ci_case_links l join public.confidential_informants c on c.id = l.ci_id
+       where l.case_id = any (p_cases[1:500]) and l.unlinked_at is null and c.deleted_at is null and private.can_access_ci(l.ci_id)
+    ) x
+   where private.can_read_case(x.case_id)
+   group by x.case_id
+  having count(*) > 0;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_case_intel(p_case uuid, p_limit integer DEFAULT 100)
+ RETURNS TABLE(id uuid, ci_id uuid, ci_number text, handler_id uuid, handler_name text, received_at timestamp with time zone, case_id uuid, summary text, body text, reliability text, corroboration text, corroboration_note text, sensitivity text, follow_up_required boolean, follow_up_done_at timestamp with time zone, handler_notes text, links jsonb, release_count integer, created_at timestamp with time zone, updated_at timestamp with time zone)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_limit integer := greatest(1, least(coalesce(p_limit, 100), 500));
+begin
+  if v_uid is null or not private.is_active() or p_case is null then return; end if;
+  if not (private.has_full_ci_access() or private.ci_is_handler()) then return; end if;
+  if not private.can_read_case(p_case) then return; end if;
+  return query
+  select i.id, i.ci_id, c.ci_number, i.handler_id, p.display_name, i.received_at, i.case_id, i.summary, i.body, i.reliability,
+         i.corroboration, i.corroboration_note, i.sensitivity, i.follow_up_required, i.follow_up_done_at, i.handler_notes,
+         coalesce((select jsonb_agg(jsonb_build_object('id', l.id, 'kind', l.kind, 'target_id', l.target_id, 'note', l.note,
+                                                       'label', private.ci_link_label(l.kind, l.target_id)) order by l.created_at)
+                     from public.ci_intelligence_links l where l.intel_id = i.id and private.perm_registry_visible(l.kind, l.target_id)), '[]'::jsonb),
+         (select count(*)::int from public.ci_releases r join public.case_intel_releases x on x.id = r.case_release_id
+           where r.intel_id = i.id and x.revoked_at is null),
+         i.created_at, i.updated_at
+    from public.ci_intelligence i
+    join public.confidential_informants c on c.id = i.ci_id
+    left join public.profiles p on p.id = i.handler_id
+   where i.case_id = p_case and i.deleted_at is null and c.deleted_at is null and private.can_access_ci(i.ci_id)
+   order by i.received_at desc, i.created_at desc
+   limit v_limit;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_case_link(p_ci uuid, p_case uuid, p_note text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_added boolean;
+begin
+  if v_uid is null or not private.is_active() or not private.can_access_ci(p_ci) then
+    perform private.perm_raise('edit', 'ci', p_ci, 'no_access', 'not authorized');
+  end if;
+  if exists (select 1 from public.confidential_informants c where c.id = p_ci and c.deleted_at is not null) then
+    return jsonb_build_object('ok', false, 'code', 'deleted', 'message', 'this source record is in the Trash');
+  end if;
+  if p_case is null or not private.can_read_case(p_case) then
+    return jsonb_build_object('ok', false, 'code', 'bad_case', 'message', 'that case is not available');
+  end if;
+  v_added := private.ci_case_autolink(p_ci, p_case, p_note);
+  if not v_added then return jsonb_build_object('ok', false, 'code', 'exists', 'message', 'the source is already linked to that case'); end if;
+  perform private.ci_event(p_ci, 'cases');
+  return jsonb_build_object('ok', true, 'ci_id', p_ci, 'case_id', p_case);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_case_unlink(p_ci uuid, p_case uuid, p_reason text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); l public.ci_case_links;
+begin
+  if v_uid is null or not private.is_active() or not private.can_access_ci(p_ci) then
+    perform private.perm_raise('edit', 'ci', p_ci, 'no_access', 'not authorized');
+  end if;
+  if p_case is null or not private.can_read_case(p_case) then
+    return jsonb_build_object('ok', false, 'code', 'bad_case', 'message', 'that case is not available');
+  end if;
+  select * into l from public.ci_case_links x where x.ci_id = p_ci and x.case_id = p_case and x.unlinked_at is null for update;
+  if not found then return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'the source is not linked to that case'); end if;
+  update public.ci_case_links set unlinked_at = now(), unlinked_by = v_uid, unlink_reason = left(nullif(btrim(coalesce(p_reason, '')), ''), 500) where id = l.id;
+  perform private.ci_audit(p_ci, 'CI_CASE_UNLINKED', 'ci_case_links', l.id, jsonb_build_object('case_id', p_case, 'reason', left(p_reason, 500)));
+  perform private.ci_event(p_ci, 'cases');
+  return jsonb_build_object('ok', true, 'ci_id', p_ci, 'case_id', p_case);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_contact_delete(p_contact uuid, p_reason text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); k public.ci_contacts; v_reason text := left(nullif(btrim(coalesce(p_reason, '')), ''), 500);
+begin
+  if v_uid is null or not private.is_active() then perform private.perm_raise('soft_delete', 'ci_contact', p_contact, 'no_access', 'not authorized'); end if;
+  select * into k from public.ci_contacts where id = p_contact for update;
+  if not found or not private.can_access_ci(k.ci_id) or not (k.handler_id = v_uid or private.has_full_ci_access()) then
+    perform private.perm_raise('soft_delete', 'ci_contact', p_contact, 'no_access', 'not authorized');
+  end if;
+  if k.deleted_at is not null then return jsonb_build_object('ok', false, 'code', 'already_deleted', 'message', 'this contact is already deleted'); end if;
+  update public.ci_contacts set deleted_at = now(), deleted_by = v_uid, delete_reason = v_reason, delete_batch = gen_random_uuid() where id = p_contact;
+  perform private.ci_audit(k.ci_id, 'CI_CONTACT_DELETED', 'ci_contacts', p_contact, jsonb_build_object('reason', v_reason));
+  perform private.ci_event(k.ci_id, 'contact');
+  return jsonb_build_object('ok', true, 'id', p_contact);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_contact_log(p_ci uuid, p_occurred_at timestamp with time zone, p_method text, p_summary text, p_location text DEFAULT NULL::text, p_follow_up_required boolean DEFAULT false, p_next_contact_at timestamp with time zone DEFAULT NULL::timestamp with time zone, p_case uuid DEFAULT NULL::uuid, p_restricted_notes text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); c public.confidential_informants; v_id uuid; v_summary text := nullif(btrim(coalesce(p_summary, '')), '');
+begin
+  if v_uid is null or not private.is_active() or not private.can_access_ci(p_ci) then
+    perform private.perm_raise('edit', 'ci_contact', null, 'no_access', 'not authorized');
+  end if;
+  select * into c from public.confidential_informants where id = p_ci for update;
+  if c.deleted_at is not null then return jsonb_build_object('ok', false, 'code', 'deleted', 'message', 'this source record is in the Trash'); end if;
+  if p_occurred_at is null then return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'when did the contact happen?'); end if;
+  if p_method is null or not (p_method = any (private.ci_enum('method'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown contact method');
+  end if;
+  if v_summary is null then return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'a summary is required'); end if;
+  if p_case is not null and not private.can_read_case(p_case) then
+    return jsonb_build_object('ok', false, 'code', 'bad_case', 'message', 'that case is not available');
+  end if;
+  insert into public.ci_contacts (ci_id, handler_id, occurred_at, method, location, summary, follow_up_required, next_contact_at, case_id,
+    restricted_notes, created_by)
+  values (p_ci, v_uid, p_occurred_at, p_method, nullif(btrim(coalesce(p_location, '')), ''), v_summary, coalesce(p_follow_up_required, false),
+          p_next_contact_at, p_case, nullif(btrim(coalesce(p_restricted_notes, '')), ''), v_uid)
+  returning id into v_id;
+  update public.confidential_informants
+     set last_contact_at = greatest(coalesce(last_contact_at, p_occurred_at), p_occurred_at),
+         next_contact_at = case when p_next_contact_at is not null then p_next_contact_at
+                                when next_contact_at is not null and next_contact_at <= p_occurred_at then null
+                                else next_contact_at end,
+         updated_at = now()
+   where id = p_ci;
+  perform private.ci_audit(p_ci, 'CI_CONTACT_LOGGED', 'ci_contacts', v_id,
+    jsonb_build_object('method', p_method, 'occurred_at', p_occurred_at, 'case_id', p_case, 'follow_up_required', coalesce(p_follow_up_required, false)));
+  perform private.ci_event(p_ci, 'contact');
+  return jsonb_build_object('ok', true, 'id', v_id, 'ci_id', p_ci);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_contact_update(p_contact uuid, p_patch jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid()); k public.ci_contacts; key text; v_keys text[] := '{}'; v_case uuid;
+  v_allowed text[] := array['occurred_at', 'method', 'summary', 'location', 'follow_up_required', 'next_contact_at', 'case_id', 'restricted_notes'];
+begin
+  if v_uid is null or not private.is_active() then perform private.perm_raise('edit', 'ci_contact', p_contact, 'no_access', 'not authorized'); end if;
+  select * into k from public.ci_contacts where id = p_contact for update;
+  if not found or not private.can_access_ci(k.ci_id) or not (k.handler_id = v_uid or private.has_full_ci_access()) then
+    perform private.perm_raise('edit', 'ci_contact', p_contact, 'no_access', 'not authorized');
+  end if;
+  if k.deleted_at is not null then return jsonb_build_object('ok', false, 'code', 'deleted', 'message', 'this contact is in the Trash'); end if;
+  if p_patch is null or jsonb_typeof(p_patch) <> 'object' or p_patch = '{}'::jsonb then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'nothing to change');
+  end if;
+  for key in select jsonb_object_keys(p_patch) loop
+    if not (key = any (v_allowed)) then return jsonb_build_object('ok', false, 'code', 'bad_key', 'message', format('%s cannot be changed here', key)); end if;
+    v_keys := v_keys || key;
+  end loop;
+  if p_patch ? 'method' and not ((p_patch ->> 'method') = any (private.ci_enum('method'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown contact method');
+  end if;
+  if p_patch ? 'summary' and nullif(btrim(coalesce(p_patch ->> 'summary', '')), '') is null then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'a summary is required');
+  end if;
+  if p_patch ? 'case_id' and p_patch ->> 'case_id' is not null then
+    if not ((p_patch ->> 'case_id') ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$') then
+      return jsonb_build_object('ok', false, 'code', 'bad_case', 'message', 'that case is not available');
+    end if;
+    v_case := (p_patch ->> 'case_id')::uuid;
+    if not private.can_read_case(v_case) then return jsonb_build_object('ok', false, 'code', 'bad_case', 'message', 'that case is not available'); end if;
+  end if;
+  begin
+    update public.ci_contacts set
+      occurred_at = case when p_patch ? 'occurred_at' then (p_patch ->> 'occurred_at')::timestamptz else occurred_at end,
+      method = case when p_patch ? 'method' then p_patch ->> 'method' else method end,
+      summary = case when p_patch ? 'summary' then btrim(p_patch ->> 'summary') else summary end,
+      location = case when p_patch ? 'location' then nullif(btrim(coalesce(p_patch ->> 'location', '')), '') else location end,
+      follow_up_required = case when p_patch ? 'follow_up_required' then coalesce((p_patch ->> 'follow_up_required')::boolean, false) else follow_up_required end,
+      next_contact_at = case when p_patch ? 'next_contact_at' then (p_patch ->> 'next_contact_at')::timestamptz else next_contact_at end,
+      case_id = case when p_patch ? 'case_id' then v_case else case_id end,
+      restricted_notes = case when p_patch ? 'restricted_notes' then nullif(btrim(coalesce(p_patch ->> 'restricted_notes', '')), '') else restricted_notes end,
+      updated_at = now()
+    where id = p_contact;
+  exception when invalid_text_representation or datetime_field_overflow or invalid_datetime_format then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'a value is not valid');
+  end;
+  perform private.ci_audit(k.ci_id, 'CI_CONTACT_EDITED', 'ci_contacts', p_contact, jsonb_build_object('keys', to_jsonb(v_keys)));
+  perform private.ci_event(k.ci_id, 'contact');
+  return jsonb_build_object('ok', true, 'id', p_contact, 'keys', to_jsonb(v_keys));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_context()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_full boolean; v_handler boolean; v_none jsonb := jsonb_build_object('full_access', false, 'is_handler', false);
+begin
+  if v_uid is null or not private.is_active() then return v_none; end if;
+  v_full := private.has_full_ci_access();
+  v_handler := private.ci_is_handler();
+  if not v_full and not v_handler then return v_none; end if;
+  return jsonb_build_object(
+    'full_access', v_full,
+    'is_handler', v_handler,
+    'active_count', private.ci_active_count(v_uid),
+    'capacity', private.ci_capacity(v_uid),
+    'pending_requests', (select count(*)::int from public.ci_capacity_requests r
+                          where r.status = 'pending' and (v_full or r.requester_id = v_uid)),
+    'contacts_due', (select count(*)::int from public.confidential_informants c
+                      where c.deleted_at is null and c.status = 'active' and c.next_contact_at < now()
+                        and private.can_access_ci(c.id)),
+    'followups_due', (select coalesce(sum(private.ci_open_followups(c.id)), 0)::int from public.confidential_informants c
+                       where c.deleted_at is null and private.can_access_ci(c.id)));
+exception when others then
+  return v_none;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_create(p_person uuid, p_alias text DEFAULT NULL::text, p_bureau bureau DEFAULT NULL::bureau, p_primary_handler uuid DEFAULT NULL::uuid, p_secondary_handler uuid DEFAULT NULL::uuid, p_status text DEFAULT 'candidate'::text, p_motive_primary text DEFAULT NULL::text, p_motive_secondary text[] DEFAULT '{}'::text[], p_motive_explanation text DEFAULT NULL::text, p_recruitment_notes text DEFAULT NULL::text, p_reliability text DEFAULT 'unknown'::text, p_risk text DEFAULT 'medium'::text, p_recruited_at date DEFAULT CURRENT_DATE, p_override_reason text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid()); v_full boolean; v_status text := coalesce(nullif(btrim(coalesce(p_status, '')), ''), 'candidate');
+  v_id uuid; v_number text; h uuid; n integer; cap integer; v_name text; v_override text := nullif(btrim(coalesce(p_override_reason, '')), '');
+  v_overrides jsonb := '[]'::jsonb; v_role text;
+begin
+  if v_uid is null or not private.is_active() then
+    perform private.perm_raise('create', 'ci', null, 'inactive', 'your account is not active');
+  end if;
+  v_full := private.has_full_ci_access();
+  -- Self-recruitment is for a caller already inside the compartment (an active
+  -- handler). A member outside it is designated by CI command or asks for an
+  -- assignment — so ci_create never tells an outsider whether a person is a source.
+  if not (v_full or (p_primary_handler = v_uid and p_secondary_handler is null and private.ci_is_handler())) then
+    perform private.perm_raise('create', 'ci', null, 'not_ci_command',
+      'only CI command may designate a source for another handler');
+  end if;
+  if p_person is null or p_bureau is null or p_primary_handler is null then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'person, bureau and primary handler are required');
+  end if;
+  if not (v_status = any (private.ci_enum('status'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown status');
+  end if;
+  if p_motive_primary is not null and not (p_motive_primary = any (private.ci_enum('motive'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown motive');
+  end if;
+  if not (coalesce(p_motive_secondary, '{}'::text[]) <@ private.ci_enum('motive')) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown secondary motive');
+  end if;
+  if not (coalesce(p_reliability, 'unknown') = any (private.ci_enum('reliability'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown reliability');
+  end if;
+  if not (coalesce(p_risk, 'medium') = any (private.ci_enum('risk'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown risk');
+  end if;
+  if p_secondary_handler = p_primary_handler then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'the secondary handler must differ from the primary');
+  end if;
+  -- the person: live, not merged, visible to the caller
+  if not exists (select 1 from public.persons p where p.id = p_person and p.deleted_at is null and p.lifecycle <> 'merged')
+     or not private.perm_registry_visible('person', p_person) then
+    return jsonb_build_object('ok', false, 'code', 'bad_person', 'message', 'that person record is not available');
+  end if;
+  if exists (select 1 from public.confidential_informants c where c.person_id = p_person and c.deleted_at is null) then
+    perform private.ci_audit(c.id, 'CI_DESIGNATION_REFUSED', 'persons', p_person, jsonb_build_object('requester_id', v_uid))
+      from public.confidential_informants c where c.person_id = p_person and c.deleted_at is null;
+    return jsonb_build_object('ok', false, 'code', 'unavailable', 'message', 'This person cannot be designated right now.');
+  end if;
+  -- the handlers: active members, fixtures only for a fixture caller
+  foreach h in array array_remove(array[p_primary_handler, p_secondary_handler], null) loop
+    if not exists (select 1 from public.profiles p where p.id = h and p.active and p.removed_at is null and not p.is_system) then
+      return jsonb_build_object('ok', false, 'code', 'bad_handler', 'message', 'that member cannot handle a source');
+    end if;
+    if private.ci_is_fixture(h) and not private.ci_is_fixture(v_uid) then
+      return jsonb_build_object('ok', false, 'code', 'bad_handler', 'message', 'that member cannot handle a source');
+    end if;
+  end loop;
+  -- capacity (an active source counts)
+  if v_status = 'active' then
+    foreach h in array array_remove(array[p_primary_handler, p_secondary_handler], null) loop
+      n := private.ci_active_count(h); cap := private.ci_capacity(h);
+      if n >= cap then
+        select p.display_name into v_name from public.profiles p where p.id = h;
+        if not v_full then
+          return jsonb_build_object('ok', false, 'code', 'capacity',
+            'message', format('You are at capacity (%s / %s). Request additional capacity or an assignment.', n, cap));
+        end if;
+        if v_override is null then
+          return jsonb_build_object('ok', false, 'code', 'capacity',
+            'message', format('%s is at capacity (%s / %s). Confirm the override with a reason.', v_name, n, cap));
+        end if;
+        if n + 1 > 30 then
+          return jsonb_build_object('ok', false, 'code', 'capacity',
+            'message', format('%s is at the hard limit of 30 active sources.', v_name));
+        end if;
+        v_overrides := v_overrides || jsonb_build_object('user_id', h, 'from', cap, 'to', n + 1);
+      end if;
+    end loop;
+  end if;
+
+  v_number := private.ci_next_number();
+  insert into public.confidential_informants (ci_number, person_id, alias, status, bureau, recruited_at, recruited_by,
+    supervising_lead_id, motive_primary, motive_secondary, motive_explanation, reliability, risk, recruitment_notes, created_by)
+  values (v_number, p_person, nullif(btrim(coalesce(p_alias, '')), ''), v_status, p_bureau, coalesce(p_recruited_at, current_date), v_uid,
+          null, p_motive_primary, coalesce(p_motive_secondary, '{}'::text[]), nullif(btrim(coalesce(p_motive_explanation, '')), ''),
+          coalesce(p_reliability, 'unknown'), coalesce(p_risk, 'medium'), nullif(btrim(coalesce(p_recruitment_notes, '')), ''), v_uid)
+  returning id into v_id;
+  perform private.ci_audit(v_id, 'CI_CREATED', 'confidential_informants', v_id,
+    jsonb_build_object('ci_number', v_number, 'status', v_status, 'bureau', p_bureau));
+  perform private.ci_audit(v_id, 'CI_PERSON_DESIGNATED', 'persons', p_person, jsonb_build_object('ci_number', v_number));
+  foreach h in array array_remove(array[p_primary_handler, p_secondary_handler], null) loop
+    v_role := case when h = p_primary_handler then 'primary' else 'secondary' end;
+    insert into public.ci_handlers (ci_id, user_id, role, assigned_by, reason) values (v_id, h, v_role, v_uid, 'designated with the source');
+    perform private.ci_audit(v_id, 'CI_HANDLER_ASSIGNED', 'ci_handlers', null, jsonb_build_object('user_id', h, 'role', v_role));
+    perform private.action_notify(h, 'ci_assigned', jsonb_build_object('ci_id', v_id));
+  end loop;
+  if jsonb_array_length(v_overrides) > 0 then
+    for h, n in select (o ->> 'user_id')::uuid, (o ->> 'to')::int from jsonb_array_elements(v_overrides) o loop
+      perform private.ci_capacity_raise(h, n, 'Override authorized by CI command');
+      perform private.ci_audit(v_id, 'CI_CAPACITY_OVERRIDE', 'ci_handler_capacity', h,
+        jsonb_build_object('user_id', h, 'to', n, 'reason', left(v_override, 500)));
+    end loop;
+  end if;
+  perform private.ci_event(v_id, 'created');
+  return jsonb_build_object('ok', true, 'id', v_id, 'ci_number', v_number);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_export(p_ci uuid DEFAULT NULL::uuid, p_scope text DEFAULT 'profile'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_scope text := coalesce(nullif(btrim(coalesce(p_scope, '')), ''), 'profile'); v_out jsonb; v_rows jsonb; n integer;
+begin
+  if v_uid is null or not private.is_active() then return null; end if;
+  if p_ci is null then
+    if not private.has_full_ci_access() then return null; end if;
+    select coalesce(jsonb_agg(to_jsonb(r)), '[]'::jsonb), count(*) into v_rows, n from public.ci_list('{}'::jsonb, 500) r;
+    perform private.ci_audit(null, 'CI_EXPORTED', 'confidential_informants', null,
+      jsonb_build_object('scope', 'roster', 'rows', n, 'requester_id', v_uid));
+    return jsonb_build_object('scope', 'roster', 'exported_at', now(), 'rows', v_rows);
+  end if;
+  if not private.can_access_ci(p_ci) then return null; end if;
+  v_out := public.ci_get(p_ci);
+  if v_out is null then return null; end if;
+  v_out := jsonb_build_object('scope', v_scope, 'exported_at', now(), 'ci', v_out);
+  if v_scope = 'profile' then
+    v_out := v_out || jsonb_build_object(
+      'intelligence', coalesce((select jsonb_agg(to_jsonb(i) order by i.received_at desc) from public.ci_intelligence i where i.ci_id = p_ci and i.deleted_at is null), '[]'::jsonb),
+      'contacts', coalesce((select jsonb_agg(to_jsonb(k) order by k.occurred_at desc) from public.ci_contacts k where k.ci_id = p_ci and k.deleted_at is null), '[]'::jsonb),
+      'payments', coalesce((select jsonb_agg(to_jsonb(y) order by y.paid_at desc) from public.ci_payments y where y.ci_id = p_ci and y.deleted_at is null), '[]'::jsonb),
+      'assessments', coalesce((select jsonb_agg(to_jsonb(a) order by a.assessed_at desc) from public.ci_assessments a where a.ci_id = p_ci), '[]'::jsonb),
+      'releases', coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'intel_id', r.intel_id, 'release_id', r.case_release_id,
+                                'case_id', x.case_id, 'title', x.title, 'handling', x.handling, 'released_at', x.released_at, 'revoked_at', x.revoked_at)
+                              order by x.released_at desc)
+                     from public.ci_releases r join public.case_intel_releases x on x.id = r.case_release_id where r.ci_id = p_ci), '[]'::jsonb));
+  end if;
+  perform private.ci_audit(p_ci, 'CI_EXPORTED', 'confidential_informants', p_ci,
+    jsonb_build_object('scope', v_scope,
+      'intelligence', coalesce(jsonb_array_length(v_out -> 'intelligence'), 0), 'contacts', coalesce(jsonb_array_length(v_out -> 'contacts'), 0),
+      'payments', coalesce(jsonb_array_length(v_out -> 'payments'), 0), 'assessments', coalesce(jsonb_array_length(v_out -> 'assessments'), 0),
+      'releases', coalesce(jsonb_array_length(v_out -> 'releases'), 0)));
+  return v_out;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_get(p_ci uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_full boolean; c public.confidential_informants; v_out jsonb;
+begin
+  if v_uid is null or not private.is_active() or p_ci is null or not private.can_access_ci(p_ci) then return null; end if;
+  v_full := private.has_full_ci_access();
+  select * into c from public.confidential_informants where id = p_ci;
+  if not found then return null; end if;
+  v_out := to_jsonb(c) - 'delete_batch';
+  v_out := v_out || jsonb_build_object(
+    'person', (select jsonb_build_object('id', p.id, 'name', p.name, 'alias', p.alias, 'mugshot_url', p.mugshot_url,
+                                         'deleted_at', p.deleted_at, 'lifecycle', p.lifecycle)
+                 from public.persons p where p.id = c.person_id),
+    'person_name', (select p.name from public.persons p where p.id = c.person_id),
+    'person_alias', (select p.alias from public.persons p where p.id = c.person_id),
+    'recruited_by_name', (select p.display_name from public.profiles p where p.id = c.recruited_by),
+    'supervising_lead_name', (select p.display_name from public.profiles p where p.id = c.supervising_lead_id),
+    'handlers', coalesce((select jsonb_agg(jsonb_build_object(
+                    'id', h.id, 'user_id', h.user_id, 'name', p.display_name, 'role', h.role,
+                    'counts_toward_capacity', h.counts_toward_capacity, 'assigned_at', h.assigned_at,
+                    'assigned_by', h.assigned_by, 'reason', h.reason, 'ended_at', h.ended_at, 'ended_by', h.ended_by, 'end_reason', h.end_reason,
+                    'active_count', private.ci_active_count(h.user_id), 'capacity', private.ci_capacity(h.user_id))
+                  order by h.role, h.assigned_at)
+                  from public.ci_handlers h join public.profiles p on p.id = h.user_id
+                 where h.ci_id = c.id and h.ended_at is null), '[]'::jsonb),
+    'latest_assessment', (select to_jsonb(a) || jsonb_build_object('assessed_by_name', (select p.display_name from public.profiles p where p.id = a.assessed_by))
+                     from public.ci_assessments a where a.ci_id = c.id order by a.assessed_at desc, a.id desc limit 1),
+    'cases', coalesce((select jsonb_agg(jsonb_build_object(
+                    'link_id', l.id, 'case_id', l.case_id, 'case_number', k.case_number, 'title', k.title, 'status', k.status,
+                    'linked_at', l.linked_at, 'linked_by', l.linked_by, 'note', l.note)
+                  order by l.linked_at desc)
+                  from public.ci_case_links l join public.cases k on k.id = l.case_id
+                 where l.ci_id = c.id and l.unlinked_at is null and private.can_read_case(l.case_id)), '[]'::jsonb),
+    'counts', jsonb_build_object(
+      'intel', (select count(*) from public.ci_intelligence i where i.ci_id = c.id and i.deleted_at is null),
+      'open_followups', private.ci_open_followups(c.id),
+      'contacts', (select count(*) from public.ci_contacts k where k.ci_id = c.id and k.deleted_at is null),
+      'payments', (select count(*) from public.ci_payments y where y.ci_id = c.id and y.deleted_at is null),
+      'assessments', (select count(*) from public.ci_assessments a where a.ci_id = c.id),
+      'releases', (select count(*) from public.ci_releases r where r.ci_id = c.id),
+      'cases', (select count(*) from public.ci_case_links l where l.ci_id = c.id and l.unlinked_at is null)));
+  if v_full then
+    v_out := v_out || jsonb_build_object(
+      'handler_history', coalesce((select jsonb_agg(jsonb_build_object(
+                    'id', h.id, 'user_id', h.user_id, 'name', p.display_name, 'role', h.role,
+                    'counts_toward_capacity', h.counts_toward_capacity, 'assigned_at', h.assigned_at, 'assigned_by', h.assigned_by,
+                    'reason', h.reason, 'ended_at', h.ended_at, 'ended_by', h.ended_by, 'end_reason', h.end_reason)
+                  order by h.assigned_at desc)
+                  from public.ci_handlers h join public.profiles p on p.id = h.user_id
+                 where h.ci_id = c.id), '[]'::jsonb));
+  end if;
+  return v_out;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_handler_remove(p_ci uuid, p_user uuid, p_reason text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); c public.confidential_informants; h public.ci_handlers; v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+begin
+  if v_uid is null or not private.is_active() or not private.has_full_ci_access() then
+    perform private.perm_raise('assign_handler', 'ci', p_ci, 'not_ci_command', 'only CI command may remove a handler');
+  end if;
+  select * into c from public.confidential_informants where id = p_ci for update;
+  if not found then return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'source not found'); end if;
+  select * into h from public.ci_handlers x where x.ci_id = p_ci and x.user_id = p_user and x.ended_at is null;
+  if not found then return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'that member does not handle this source'); end if;
+  if v_reason is null or length(v_reason) < 3 then
+    return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'say why the handler is removed');
+  end if;
+  if h.role = 'primary' and c.status in ('active', 'candidate') then
+    return jsonb_build_object('ok', false, 'code', 'primary_required', 'message', 'Assign a new primary handler first.');
+  end if;
+  update public.ci_handlers set ended_at = now(), ended_by = v_uid, end_reason = left(v_reason, 500) where id = h.id;
+  perform private.ci_audit(p_ci, 'CI_HANDLER_REMOVED', 'ci_handlers', h.id,
+    jsonb_build_object('user_id', p_user, 'role', h.role, 'reason', left(v_reason, 500)));
+  perform private.action_notify(p_user, 'ci_handler_removed', jsonb_build_object('ci_id', p_ci));
+  perform private.ci_event(p_ci, 'handlers');
+  return jsonb_build_object('ok', true, 'id', h.id, 'ci_id', p_ci, 'user_id', p_user);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_handler_set(p_ci uuid, p_user uuid, p_role text, p_reason text, p_override_reason text DEFAULT NULL::text, p_counts boolean DEFAULT true)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid()); c public.confidential_informants; v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+  v_override text := nullif(btrim(coalesce(p_override_reason, '')), ''); v_old public.ci_handlers; v_same public.ci_handlers;
+  n integer; cap integer; v_name text; v_id uuid; v_already boolean; u uuid; v_counts boolean := coalesce(p_counts, true);
+begin
+  if v_uid is null or not private.is_active() or not private.has_full_ci_access() then
+    perform private.perm_raise('assign_handler', 'ci', p_ci, 'not_ci_command', 'only CI command may assign a handler');
+  end if;
+  select * into c from public.confidential_informants where id = p_ci for update;
+  if not found then return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'source not found'); end if;
+  if c.deleted_at is not null then return jsonb_build_object('ok', false, 'code', 'deleted', 'message', 'this source record is in the Trash'); end if;
+  if p_role is null or p_role not in ('primary', 'secondary') then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'the role is primary or secondary');
+  end if;
+  if v_reason is null or length(v_reason) < 3 then
+    return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'say why the handler changes');
+  end if;
+  if p_user is null or not exists (select 1 from public.profiles p where p.id = p_user and p.active and p.removed_at is null and not p.is_system) then
+    return jsonb_build_object('ok', false, 'code', 'bad_handler', 'message', 'that member cannot handle a source');
+  end if;
+  if private.ci_is_fixture(p_user) and not private.ci_is_fixture(v_uid) then
+    return jsonb_build_object('ok', false, 'code', 'bad_handler', 'message', 'that member cannot handle a source');
+  end if;
+  select * into v_old from public.ci_handlers h where h.ci_id = p_ci and h.role = p_role and h.ended_at is null;
+  if v_old.user_id = p_user then
+    return jsonb_build_object('ok', false, 'code', 'unchanged', 'message', 'that member already holds this role');
+  end if;
+  select * into v_same from public.ci_handlers h where h.ci_id = p_ci and h.user_id = p_user and h.ended_at is null;
+  v_already := v_same.id is not null;
+  if c.status = 'active' and v_counts and not v_already then
+    n := private.ci_active_count(p_user); cap := private.ci_capacity(p_user);
+    if n >= cap then
+      select p.display_name into v_name from public.profiles p where p.id = p_user;
+      if v_override is null then
+        return jsonb_build_object('ok', false, 'code', 'capacity',
+          'message', format('%s is at capacity (%s / %s). Confirm the override with a reason.', v_name, n, cap));
+      end if;
+      if n + 1 > 30 then
+        return jsonb_build_object('ok', false, 'code', 'capacity', 'message', format('%s is at the hard limit of 30 active sources.', v_name));
+      end if;
+      perform private.ci_capacity_raise(p_user, n + 1, 'Override authorized by CI command');
+      perform private.ci_audit(p_ci, 'CI_CAPACITY_OVERRIDE', 'ci_handler_capacity', p_user,
+        jsonb_build_object('user_id', p_user, 'to', n + 1, 'reason', left(v_override, 500)));
+    end if;
+  end if;
+
+  if v_same.id is not null then
+    update public.ci_handlers set ended_at = now(), ended_by = v_uid, end_reason = 'role changed: ' || left(v_reason, 480) where id = v_same.id;
+  end if;
+  if v_old.id is not null then
+    update public.ci_handlers set ended_at = now(), ended_by = v_uid, end_reason = left(v_reason, 500) where id = v_old.id;
+  end if;
+  insert into public.ci_handlers (ci_id, user_id, role, counts_toward_capacity, assigned_by, reason)
+  values (p_ci, p_user, p_role, v_counts, v_uid, left(v_reason, 500)) returning id into v_id;
+  if v_old.id is null then
+    perform private.ci_audit(p_ci, 'CI_HANDLER_ASSIGNED', 'ci_handlers', v_id,
+      jsonb_build_object('user_id', p_user, 'role', p_role, 'reason', left(v_reason, 500)));
+  else
+    perform private.ci_audit(p_ci, 'CI_HANDLER_CHANGED', 'ci_handlers', v_id,
+      jsonb_build_object('role', p_role, 'from', v_old.user_id, 'to', p_user, 'reason', left(v_reason, 500)));
+  end if;
+  if not v_already then perform private.action_notify(p_user, 'ci_assigned', jsonb_build_object('ci_id', p_ci)); end if;
+  if v_old.id is not null and v_old.user_id <> p_user then
+    perform private.action_notify(v_old.user_id, 'ci_handler_removed', jsonb_build_object('ci_id', p_ci));
+  end if;
+  for u in select * from private.ci_handlers_of(p_ci) loop
+    if u <> p_user then perform private.action_notify(u, 'ci_handler_changed', jsonb_build_object('ci_id', p_ci)); end if;
+  end loop;
+  if c.supervising_lead_id is not null and c.supervising_lead_id <> p_user then
+    perform private.action_notify(c.supervising_lead_id, 'ci_handler_changed', jsonb_build_object('ci_id', p_ci));
+  end if;
+  perform private.ci_event(p_ci, 'handlers');
+  return jsonb_build_object('ok', true, 'id', v_id, 'ci_id', p_ci, 'user_id', p_user, 'role', p_role,
+                            'replaced', v_old.user_id);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_intel_create(p_ci uuid, p_summary text, p_body text DEFAULT NULL::text, p_case uuid DEFAULT NULL::uuid, p_received_at timestamp with time zone DEFAULT now(), p_reliability text DEFAULT 'unknown'::text, p_corroboration text DEFAULT 'unverified'::text, p_sensitivity text DEFAULT 'sensitive'::text, p_follow_up_required boolean DEFAULT false, p_handler_notes text DEFAULT NULL::text, p_links jsonb DEFAULT '[]'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); c public.confidential_informants; v_id uuid; v_summary text := nullif(btrim(coalesce(p_summary, '')), ''); v_err text; u uuid;
+begin
+  if v_uid is null or not private.is_active() or not private.can_access_ci(p_ci) then
+    perform private.perm_raise('edit', 'ci_intelligence', null, 'no_access', 'not authorized');
+  end if;
+  select * into c from public.confidential_informants where id = p_ci for update;
+  if c.deleted_at is not null then return jsonb_build_object('ok', false, 'code', 'deleted', 'message', 'this source record is in the Trash'); end if;
+  if v_summary is null then return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'a summary is required'); end if;
+  if not (coalesce(p_reliability, 'unknown') = any (private.ci_enum('reliability'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown reliability');
+  end if;
+  if not (coalesce(p_corroboration, 'unverified') = any (private.ci_enum('corroboration'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown corroboration');
+  end if;
+  if not (coalesce(p_sensitivity, 'sensitive') = any (private.ci_enum('sensitivity'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown sensitivity');
+  end if;
+  if p_case is not null and not private.can_read_case(p_case) then
+    return jsonb_build_object('ok', false, 'code', 'bad_case', 'message', 'that case is not available');
+  end if;
+  v_err := private.ci_links_check(p_links);
+  if v_err is not null then return jsonb_build_object('ok', false, 'code', v_err, 'message', 'a mention is not available'); end if;
+  insert into public.ci_intelligence (ci_id, handler_id, received_at, case_id, summary, body, reliability, corroboration, sensitivity,
+    follow_up_required, handler_notes, created_by)
+  values (p_ci, v_uid, coalesce(p_received_at, now()), p_case, left(v_summary, 2000), nullif(btrim(coalesce(p_body, '')), ''),
+          coalesce(p_reliability, 'unknown'), coalesce(p_corroboration, 'unverified'), coalesce(p_sensitivity, 'sensitive'),
+          coalesce(p_follow_up_required, false), nullif(btrim(coalesce(p_handler_notes, '')), ''), v_uid)
+  returning id into v_id;
+  perform private.ci_links_write(v_id, p_links);
+  perform private.ci_case_autolink(p_ci, p_case, 'intelligence on the case');
+  perform private.ci_audit(p_ci, 'CI_INTEL_CREATED', 'ci_intelligence', v_id,
+    jsonb_build_object('intel_id', v_id, 'case_id', p_case, 'sensitivity', coalesce(p_sensitivity, 'sensitive'),
+                       'links', coalesce(jsonb_array_length(case when jsonb_typeof(p_links) = 'array' then p_links end), 0)));
+  for u in select * from private.ci_handlers_of(p_ci) loop
+    perform private.action_notify(u, 'ci_intel_added', jsonb_build_object('ci_id', p_ci, 'intel_id', v_id));
+  end loop;
+  perform private.ci_event(p_ci, 'intel');
+  return jsonb_build_object('ok', true, 'id', v_id, 'ci_id', p_ci);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_intel_delete(p_intel uuid, p_reason text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); i public.ci_intelligence; v_reason text := left(nullif(btrim(coalesce(p_reason, '')), ''), 500);
+begin
+  if v_uid is null or not private.is_active() then perform private.perm_raise('soft_delete', 'ci_intelligence', p_intel, 'no_access', 'not authorized'); end if;
+  select * into i from public.ci_intelligence where id = p_intel for update;
+  if not found or not private.can_access_ci(i.ci_id) or not (i.handler_id = v_uid or private.has_full_ci_access()) then
+    perform private.perm_raise('soft_delete', 'ci_intelligence', p_intel, 'no_access', 'not authorized');
+  end if;
+  if i.deleted_at is not null then return jsonb_build_object('ok', false, 'code', 'already_deleted', 'message', 'this intelligence is already archived'); end if;
+  update public.ci_intelligence set deleted_at = now(), deleted_by = v_uid, delete_reason = v_reason, delete_batch = gen_random_uuid() where id = p_intel;
+  perform private.ci_audit(i.ci_id, 'CI_INTEL_ARCHIVED', 'ci_intelligence', p_intel, jsonb_build_object('intel_id', p_intel, 'reason', v_reason));
+  perform private.ci_event(i.ci_id, 'intel');
+  return jsonb_build_object('ok', true, 'id', p_intel);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_intel_links_set(p_intel uuid, p_links jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); i public.ci_intelligence; v_err text; n integer;
+begin
+  if v_uid is null or not private.is_active() then perform private.perm_raise('edit', 'ci_intelligence', p_intel, 'no_access', 'not authorized'); end if;
+  select * into i from public.ci_intelligence where id = p_intel for update;
+  if not found or not private.can_access_ci(i.ci_id) or not (i.handler_id = v_uid or private.has_full_ci_access()) then
+    perform private.perm_raise('edit', 'ci_intelligence', p_intel, 'no_access', 'not authorized');
+  end if;
+  if i.deleted_at is not null then return jsonb_build_object('ok', false, 'code', 'deleted', 'message', 'this intelligence is archived'); end if;
+  v_err := private.ci_links_check(coalesce(p_links, '[]'::jsonb));
+  if v_err is not null then return jsonb_build_object('ok', false, 'code', v_err, 'message', 'a mention is not available'); end if;
+  n := private.ci_links_write(p_intel, coalesce(p_links, '[]'::jsonb));
+  perform private.ci_audit(i.ci_id, 'CI_INTEL_LINKS_SET', 'ci_intelligence', p_intel, jsonb_build_object('intel_id', p_intel, 'links', n));
+  perform private.ci_event(i.ci_id, 'intel');
+  return jsonb_build_object('ok', true, 'id', p_intel, 'links', n);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_intel_set_corroboration(p_intel uuid, p_corroboration text, p_note text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); i public.ci_intelligence;
+begin
+  if v_uid is null or not private.is_active() then perform private.perm_raise('edit', 'ci_intelligence', p_intel, 'no_access', 'not authorized'); end if;
+  select * into i from public.ci_intelligence where id = p_intel for update;
+  if not found or not private.can_access_ci(i.ci_id) then
+    perform private.perm_raise('edit', 'ci_intelligence', p_intel, 'no_access', 'not authorized');
+  end if;
+  if i.deleted_at is not null then return jsonb_build_object('ok', false, 'code', 'deleted', 'message', 'this intelligence is archived'); end if;
+  if p_corroboration is null or not (p_corroboration = any (private.ci_enum('corroboration'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown corroboration');
+  end if;
+  update public.ci_intelligence set corroboration = p_corroboration, corroboration_note = left(nullif(btrim(coalesce(p_note, '')), ''), 2000), updated_at = now()
+   where id = p_intel;
+  perform private.ci_audit(i.ci_id, 'CI_INTEL_CORROBORATION', 'ci_intelligence', p_intel,
+    jsonb_build_object('intel_id', p_intel, 'from', i.corroboration, 'to', p_corroboration));
+  perform private.ci_event(i.ci_id, 'intel');
+  return jsonb_build_object('ok', true, 'id', p_intel, 'corroboration', p_corroboration);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_intel_update(p_intel uuid, p_patch jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid()); i public.ci_intelligence; key text; v_keys text[] := '{}'; v_case uuid;
+  v_allowed text[] := array['summary', 'body', 'received_at', 'reliability', 'sensitivity', 'follow_up_required', 'follow_up_done_at', 'handler_notes', 'case_id'];
+begin
+  if v_uid is null or not private.is_active() then perform private.perm_raise('edit', 'ci_intelligence', p_intel, 'no_access', 'not authorized'); end if;
+  select * into i from public.ci_intelligence where id = p_intel for update;
+  if not found or not private.can_access_ci(i.ci_id) or not (i.handler_id = v_uid or private.has_full_ci_access()) then
+    perform private.perm_raise('edit', 'ci_intelligence', p_intel, 'no_access', 'not authorized');
+  end if;
+  if i.deleted_at is not null then return jsonb_build_object('ok', false, 'code', 'deleted', 'message', 'this intelligence is archived'); end if;
+  if p_patch is null or jsonb_typeof(p_patch) <> 'object' or p_patch = '{}'::jsonb then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'nothing to change');
+  end if;
+  for key in select jsonb_object_keys(p_patch) loop
+    if not (key = any (v_allowed)) then return jsonb_build_object('ok', false, 'code', 'bad_key', 'message', format('%s cannot be changed here', key)); end if;
+    v_keys := v_keys || key;
+  end loop;
+  if p_patch ? 'summary' and nullif(btrim(coalesce(p_patch ->> 'summary', '')), '') is null then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'a summary is required');
+  end if;
+  if p_patch ? 'reliability' and not ((p_patch ->> 'reliability') = any (private.ci_enum('reliability'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown reliability');
+  end if;
+  if p_patch ? 'sensitivity' and not ((p_patch ->> 'sensitivity') = any (private.ci_enum('sensitivity'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown sensitivity');
+  end if;
+  if p_patch ? 'case_id' and p_patch ->> 'case_id' is not null then
+    if not ((p_patch ->> 'case_id') ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$') then
+      return jsonb_build_object('ok', false, 'code', 'bad_case', 'message', 'that case is not available');
+    end if;
+    v_case := (p_patch ->> 'case_id')::uuid;
+    if not private.can_read_case(v_case) then return jsonb_build_object('ok', false, 'code', 'bad_case', 'message', 'that case is not available'); end if;
+  end if;
+  begin
+    update public.ci_intelligence set
+      summary = case when p_patch ? 'summary' then left(btrim(p_patch ->> 'summary'), 2000) else summary end,
+      body = case when p_patch ? 'body' then nullif(btrim(coalesce(p_patch ->> 'body', '')), '') else body end,
+      received_at = case when p_patch ? 'received_at' then coalesce((p_patch ->> 'received_at')::timestamptz, received_at) else received_at end,
+      reliability = case when p_patch ? 'reliability' then p_patch ->> 'reliability' else reliability end,
+      sensitivity = case when p_patch ? 'sensitivity' then p_patch ->> 'sensitivity' else sensitivity end,
+      follow_up_required = case when p_patch ? 'follow_up_required' then coalesce((p_patch ->> 'follow_up_required')::boolean, false) else follow_up_required end,
+      follow_up_done_at = case when p_patch ? 'follow_up_done_at' then (p_patch ->> 'follow_up_done_at')::timestamptz else follow_up_done_at end,
+      handler_notes = case when p_patch ? 'handler_notes' then nullif(btrim(coalesce(p_patch ->> 'handler_notes', '')), '') else handler_notes end,
+      case_id = case when p_patch ? 'case_id' then v_case else case_id end,
+      updated_at = now()
+    where id = p_intel;
+  exception when invalid_text_representation or datetime_field_overflow or invalid_datetime_format then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'a value is not valid');
+  end;
+  if v_case is not null then perform private.ci_case_autolink(i.ci_id, v_case, 'intelligence on the case'); end if;
+  perform private.ci_audit(i.ci_id, 'CI_INTEL_EDITED', 'ci_intelligence', p_intel, jsonb_build_object('intel_id', p_intel, 'keys', to_jsonb(v_keys)));
+  perform private.ci_event(i.ci_id, 'intel');
+  return jsonb_build_object('ok', true, 'id', p_intel, 'keys', to_jsonb(v_keys));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_list(p_filters jsonb DEFAULT '{}'::jsonb, p_limit integer DEFAULT 200)
+ RETURNS TABLE(id uuid, ci_number text, alias text, person_id uuid, person_name text, status text, bureau bureau, motive_primary text, motive_secondary text[], reliability text, risk text, last_contact_at timestamp with time zone, next_contact_at timestamp with time zone, primary_handler_id uuid, primary_handler_name text, secondary_handler_id uuid, secondary_handler_name text, linked_cases integer, open_followups integer, deleted_at timestamp with time zone)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid()); v_full boolean; f jsonb := coalesce(p_filters, '{}'::jsonb);
+  v_status text[]; v_handler uuid; v_bureau text; v_motive text; v_rel text; v_risk text; v_case uuid; v_q text; v_contact text;
+  v_deleted boolean; v_followups boolean; v_limit integer := greatest(1, least(coalesce(p_limit, 200), 500));
+  v_uuid_re text := '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$';
+begin
+  if v_uid is null or not private.is_active() then return; end if;
+  v_full := private.has_full_ci_access();
+  if not v_full and not private.ci_is_handler() then return; end if;
+  v_status := case jsonb_typeof(f -> 'status')
+                when 'array' then array(select jsonb_array_elements_text(f -> 'status'))
+                when 'string' then array[f ->> 'status'] end;
+  if v_status is not null and cardinality(v_status) = 0 then v_status := null; end if;
+  v_handler := case when (f ->> 'handler') ~* v_uuid_re then (f ->> 'handler')::uuid end;
+  v_case := case when (f ->> 'case_id') ~* v_uuid_re then (f ->> 'case_id')::uuid end;
+  v_bureau := nullif(btrim(coalesce(f ->> 'bureau', '')), '');
+  v_motive := nullif(btrim(coalesce(f ->> 'motive', '')), '');
+  v_rel := nullif(btrim(coalesce(f ->> 'reliability', '')), '');
+  v_risk := nullif(btrim(coalesce(f ->> 'risk', '')), '');
+  v_q := nullif(btrim(coalesce(f ->> 'q', '')), '');
+  if v_q is not null then v_q := '%' || replace(replace(replace(v_q, '\', '\\'), '%', '\%'), '_', '\_') || '%'; end if;
+  v_contact := case when f ->> 'contact' in ('overdue', 'due_7d') then f ->> 'contact' end;
+  v_deleted := v_full and lower(coalesce(f ->> 'include_deleted', '')) in ('true', '1');
+  v_followups := lower(coalesce(f ->> 'followups', '')) in ('true', '1');
+  return query
+  select c.id, c.ci_number, c.alias, c.person_id, p.name, c.status, c.bureau, c.motive_primary, c.motive_secondary,
+         c.reliability, c.risk, c.last_contact_at, c.next_contact_at,
+         hp.user_id, hp.display_name, hs.user_id, hs.display_name,
+         (select count(*)::int from public.ci_case_links l where l.ci_id = c.id and l.unlinked_at is null),
+         private.ci_open_followups(c.id),
+         c.deleted_at
+    from public.confidential_informants c
+    join public.persons p on p.id = c.person_id
+    left join lateral (select h.user_id, pr.display_name from public.ci_handlers h join public.profiles pr on pr.id = h.user_id
+                        where h.ci_id = c.id and h.role = 'primary' and h.ended_at is null limit 1) hp on true
+    left join lateral (select h.user_id, pr.display_name from public.ci_handlers h join public.profiles pr on pr.id = h.user_id
+                        where h.ci_id = c.id and h.role = 'secondary' and h.ended_at is null limit 1) hs on true
+   where private.can_access_ci(c.id)
+     and (c.deleted_at is null or v_deleted)
+     and (v_status is null or c.status = any (v_status))
+     and (v_handler is null or exists (select 1 from public.ci_handlers h where h.ci_id = c.id and h.user_id = v_handler and h.ended_at is null))
+     and (v_bureau is null or c.bureau::text = v_bureau)
+     and (v_motive is null or c.motive_primary = v_motive or v_motive = any (c.motive_secondary))
+     and (v_rel is null or c.reliability = v_rel)
+     and (v_risk is null or c.risk = v_risk)
+     and (v_case is null or exists (select 1 from public.ci_case_links l where l.ci_id = c.id and l.case_id = v_case and l.unlinked_at is null))
+     and (v_q is null or c.ci_number ilike v_q or coalesce(c.alias, '') ilike v_q or p.name ilike v_q or coalesce(p.alias, '') ilike v_q)
+     and (v_contact is null
+          or (v_contact = 'overdue' and c.next_contact_at < now())
+          or (v_contact = 'due_7d' and c.next_contact_at >= now() and c.next_contact_at < now() + interval '7 days'))
+     and (not v_followups or private.ci_open_followups(c.id) > 0)
+   order by array_position(private.ci_enum('status'), c.status), c.next_contact_at nulls last, c.ci_number
+   limit v_limit;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_payment_approve(p_payment uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); y public.ci_payments;
+begin
+  if v_uid is null or not private.is_active() or not private.has_full_ci_access() then
+    perform private.perm_raise('record', 'ci_payment', p_payment, 'not_ci_command', 'only CI command may approve a payment');
+  end if;
+  select * into y from public.ci_payments where id = p_payment for update;
+  if not found or y.deleted_at is not null then return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'payment not found'); end if;
+  if y.approved_at is not null then return jsonb_build_object('ok', false, 'code', 'already_approved', 'message', 'this payment is already approved'); end if;
+  update public.ci_payments set approved_by = v_uid, approved_at = now() where id = p_payment;
+  perform private.ci_audit(y.ci_id, 'CI_PAYMENT_APPROVED', 'ci_payments', p_payment, jsonb_build_object('amount', y.amount, 'handler_id', y.handler_id));
+  perform private.ci_event(y.ci_id, 'payment');
+  return jsonb_build_object('ok', true, 'id', p_payment);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_payment_record(p_ci uuid, p_amount numeric, p_paid_at date, p_reason text, p_intel uuid DEFAULT NULL::uuid, p_case uuid DEFAULT NULL::uuid, p_notes text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); c public.confidential_informants; v_full boolean; v_id uuid; v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+begin
+  if v_uid is null or not private.is_active() or not private.can_access_ci(p_ci) then
+    perform private.perm_raise('record', 'ci_payment', p_ci, 'no_access', 'not authorized');
+  end if;
+  v_full := private.has_full_ci_access();
+  select * into c from public.confidential_informants where id = p_ci for update;
+  if c.deleted_at is not null then return jsonb_build_object('ok', false, 'code', 'deleted', 'message', 'this source record is in the Trash'); end if;
+  if p_amount is null or p_amount < 0 or p_amount > 999999999 then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'the amount must be zero or more');
+  end if;
+  if p_paid_at is null then return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'when was it paid?'); end if;
+  if v_reason is null or length(v_reason) < 3 then return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'say what the payment was for'); end if;
+  if p_intel is not null and not exists (select 1 from public.ci_intelligence i where i.id = p_intel and i.ci_id = p_ci and i.deleted_at is null) then
+    return jsonb_build_object('ok', false, 'code', 'bad_intel', 'message', 'that intelligence does not belong to this source');
+  end if;
+  if p_case is not null and not private.can_read_case(p_case) then
+    return jsonb_build_object('ok', false, 'code', 'bad_case', 'message', 'that case is not available');
+  end if;
+  insert into public.ci_payments (ci_id, amount, paid_at, handler_id, approved_by, approved_at, reason, intel_id, case_id, notes, created_by)
+  values (p_ci, p_amount, p_paid_at, v_uid, case when v_full then v_uid end, case when v_full then now() end, left(v_reason, 1000), p_intel, p_case,
+          nullif(btrim(coalesce(p_notes, '')), ''), v_uid)
+  returning id into v_id;
+  perform private.ci_audit(p_ci, 'CI_PAYMENT_RECORDED', 'ci_payments', v_id,
+    jsonb_build_object('amount', p_amount, 'paid_at', p_paid_at, 'intel_id', p_intel, 'case_id', p_case, 'approved', v_full));
+  perform private.ci_event(p_ci, 'payment');
+  return jsonb_build_object('ok', true, 'id', v_id, 'ci_id', p_ci, 'approved', v_full);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_person_status(p_person uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); c record;
+begin
+  if v_uid is null or not private.is_active() or p_person is null then return null; end if;
+  select x.id, x.ci_number, x.status into c from public.confidential_informants x where x.person_id = p_person and x.deleted_at is null limit 1;
+  if not found or not private.can_access_ci(c.id) then return null; end if;
+  return jsonb_build_object('ci_id', c.id, 'ci_number', c.ci_number, 'status', c.status);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_release(p_intel uuid, p_title text, p_body text, p_handling text DEFAULT 'law_enforcement_sensitive'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid()); i public.ci_intelligence; k public.cases; v_title text := nullif(btrim(coalesce(p_title, '')), '');
+  v_body text := nullif(btrim(coalesce(p_body, '')), ''); v_release uuid; v_link uuid; v_handling text := coalesce(p_handling, 'law_enforcement_sensitive');
+begin
+  if v_uid is null or not private.is_active() or not private.has_full_ci_access() then
+    perform private.perm_raise('release', 'ci_intelligence', p_intel, 'not_ci_command', 'only CI command may release source intelligence');
+  end if;
+  select * into i from public.ci_intelligence where id = p_intel;
+  if not found or i.deleted_at is not null then return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'intelligence not found'); end if;
+  if i.case_id is null then return jsonb_build_object('ok', false, 'code', 'no_case', 'message', 'attach the intelligence to a case first'); end if;
+  select * into k from public.cases where id = i.case_id;
+  if not found or k.deleted_at is not null then return jsonb_build_object('ok', false, 'code', 'bad_case', 'message', 'that case is not available'); end if;
+  if v_title is null or length(v_title) < 3 or v_body is null or length(v_body) < 3 then
+    return jsonb_build_object('ok', false, 'code', 'bad_text', 'message', 'a title and a body are required');
+  end if;
+  if not (v_handling = any (private.ci_enum('handling'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown handling');
+  end if;
+  if not private.ci_sanitized(i.ci_id, v_title || ' ' || v_body) then
+    return jsonb_build_object('ok', false, 'code', 'unsanitized',
+      'message', 'The text names the source — remove the CI number, name, alias or handler.');
+  end if;
+  insert into public.case_intel_releases (case_id, title, body, handling, released_by)
+  values (i.case_id, left(v_title, 200), v_body, v_handling, v_uid) returning id into v_release;
+  insert into public.ci_releases (intel_id, ci_id, case_release_id, released_by)
+  values (i.id, i.ci_id, v_release, v_uid) returning id into v_link;
+  perform private.ci_audit(i.ci_id, 'CI_INTEL_RELEASED', 'ci_releases', v_link,
+    jsonb_build_object('intel_id', i.id, 'release_id', v_release, 'case_id', i.case_id, 'handling', v_handling));
+  perform private.action_notify(coalesce(k.lead_detective_id, k.created_by), 'case_intel_released',
+    jsonb_build_object('case_id', i.case_id, 'release_id', v_release));
+  perform private.ci_event(i.ci_id, 'release');
+  return jsonb_build_object('ok', true, 'release_id', v_release, 'case_id', i.case_id);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_release_revoke(p_release uuid, p_reason text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); x public.case_intel_releases; v_ci uuid; v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+begin
+  if v_uid is null or not private.is_active() or not private.has_full_ci_access() then
+    perform private.perm_raise('release', 'ci_intelligence', p_release, 'not_ci_command', 'only CI command may revoke a release');
+  end if;
+  select * into x from public.case_intel_releases where id = p_release for update;
+  if not found then return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'release not found'); end if;
+  if x.revoked_at is not null then return jsonb_build_object('ok', false, 'code', 'already_revoked', 'message', 'this release was already revoked'); end if;
+  if v_reason is null or length(v_reason) < 3 then
+    return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'say why the release is revoked');
+  end if;
+  update public.case_intel_releases set revoked_at = now(), revoked_by = v_uid, revoke_reason = left(v_reason, 500) where id = p_release;
+  select r.ci_id into v_ci from public.ci_releases r where r.case_release_id = p_release limit 1;
+  perform private.ci_audit(v_ci, 'CI_RELEASE_REVOKED', 'case_intel_releases', p_release,
+    jsonb_build_object('release_id', p_release, 'case_id', x.case_id, 'reason', left(v_reason, 500)));
+  if v_ci is not null then perform private.ci_event(v_ci, 'release'); end if;
+  return jsonb_build_object('ok', true, 'release_id', p_release);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_search(p_q text, p_limit integer DEFAULT 10)
+ RETURNS TABLE(id uuid, ci_number text, alias text, person_name text, status text)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_q text := nullif(btrim(coalesce(p_q, '')), ''); v_limit integer := greatest(1, least(coalesce(p_limit, 10), 50));
+begin
+  if v_uid is null or not private.is_active() or v_q is null or length(v_q) < 2 then return; end if;
+  if not (private.has_full_ci_access() or private.ci_is_handler()) then return; end if;
+  v_q := '%' || replace(replace(replace(v_q, '\', '\\'), '%', '\%'), '_', '\_') || '%';
+  return query
+  select c.id, c.ci_number, c.alias, p.name, c.status
+    from public.confidential_informants c join public.persons p on p.id = c.person_id
+   where c.deleted_at is null and private.can_access_ci(c.id)
+     and (c.ci_number ilike v_q or coalesce(c.alias, '') ilike v_q or p.name ilike v_q or coalesce(p.alias, '') ilike v_q)
+   order by c.ci_number
+   limit v_limit;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_set_status(p_ci uuid, p_status text, p_reason text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); c public.confidential_informants; v_reason text := nullif(btrim(coalesce(p_reason, '')), ''); u uuid;
+begin
+  if v_uid is null or not private.is_active() or not private.has_full_ci_access() then
+    perform private.perm_raise('set_status', 'ci', p_ci, 'not_ci_command', 'only CI command may change a source''s status');
+  end if;
+  select * into c from public.confidential_informants where id = p_ci for update;
+  if not found then return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'source not found'); end if;
+  if c.deleted_at is not null then return jsonb_build_object('ok', false, 'code', 'deleted', 'message', 'this source record is in the Trash'); end if;
+  if p_status is null or not (p_status = any (private.ci_enum('status'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown status');
+  end if;
+  if v_reason is null or length(v_reason) < 3 then
+    return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'say why the status changes');
+  end if;
+  if c.status = p_status then return jsonb_build_object('ok', false, 'code', 'unchanged', 'message', 'the source already has that status'); end if;
+  update public.confidential_informants
+     set status = p_status, status_changed_at = now(), status_reason = left(v_reason, 500), updated_at = now()
+   where id = p_ci;
+  perform private.ci_audit(p_ci, 'CI_STATUS_CHANGED', 'confidential_informants', p_ci,
+    jsonb_build_object('from', c.status, 'to', p_status, 'reason', left(v_reason, 500)));
+  if p_status = 'compromised' then
+    for u in select * from private.ci_handlers_of(p_ci) loop
+      perform private.action_notify(u, 'ci_compromised', jsonb_build_object('ci_id', p_ci));
+    end loop;
+    if c.supervising_lead_id is not null then
+      perform private.action_notify(c.supervising_lead_id, 'ci_compromised', jsonb_build_object('ci_id', p_ci));
+    end if;
+    perform private.ci_notify_full_access(c.bureau, 'ci_compromised', jsonb_build_object('ci_id', p_ci));
+  end if;
+  perform private.ci_event(p_ci, 'status');
+  return jsonb_build_object('ok', true, 'id', p_ci, 'status', p_status);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_stats()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid());
+begin
+  if v_uid is null or not private.is_active() or not private.has_full_ci_access() then return null; end if;
+  return jsonb_build_object(
+    'active', (select count(*) from public.confidential_informants c where c.deleted_at is null and c.status = 'active'),
+    'candidate', (select count(*) from public.confidential_informants c where c.deleted_at is null and c.status = 'candidate'),
+    'dormant', (select count(*) from public.confidential_informants c where c.deleted_at is null and c.status = 'dormant'),
+    'high_risk', (select count(*) from public.confidential_informants c where c.deleted_at is null and c.risk in ('high', 'critical')
+                    and c.status not in ('retired', 'terminated')),
+    'compromised', (select count(*) from public.confidential_informants c where c.deleted_at is null and c.status = 'compromised'),
+    'contacts_overdue', (select count(*) from public.confidential_informants c where c.deleted_at is null and c.status = 'active'
+                           and c.next_contact_at < now()),
+    'open_followups', (select coalesce(sum(private.ci_open_followups(c.id)), 0) from public.confidential_informants c where c.deleted_at is null),
+    'handlers_at_capacity', (select count(*) from (
+        select distinct h.user_id from public.ci_handlers h join public.confidential_informants c on c.id = h.ci_id
+         where h.ended_at is null and c.deleted_at is null) u
+       where private.ci_active_count(u.user_id) >= private.ci_capacity(u.user_id)),
+    'pending_requests', (select count(*) from public.ci_capacity_requests r where r.status = 'pending'),
+    'handlers', coalesce((select jsonb_agg(jsonb_build_object(
+                    'user_id', u.user_id, 'name', p.display_name, 'bureau', p.division, 'role', p.role,
+                    'active_count', private.ci_active_count(u.user_id), 'capacity', private.ci_capacity(u.user_id),
+                    'ci_ids', u.ci_ids) order by p.display_name)
+                  from (select h.user_id, array_agg(distinct c.id) as ci_ids
+                          from public.ci_handlers h join public.confidential_informants c on c.id = h.ci_id
+                         where h.ended_at is null and c.deleted_at is null group by h.user_id) u
+                  join public.profiles p on p.id = u.user_id), '[]'::jsonb));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_sweep_run()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_out jsonb;
+begin
+  if not private.is_owner() then
+    perform private.perm_deny('sweep', 'ci', null, 'not_owner');
+    return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'only the Owner may run the contact sweep');
+  end if;
+  v_out := private.ci_sweep();
+  perform private.ci_audit(null, 'CI_SWEEP_RUN', 'ci_events', null, v_out);
+  return jsonb_build_object('ok', true) || v_out;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ci_update(p_ci uuid, p_patch jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid()); v_full boolean; c public.confidential_informants; k text; v_keys text[] := '{}';
+  v_allowed text[] := array['alias', 'motive_primary', 'motive_secondary', 'motive_explanation', 'recruitment_notes',
+                            'next_contact_at', 'reliability', 'risk', 'bureau', 'supervising_lead_id'];
+  v_sec text[]; v_lead uuid; v_bureau public.bureau;
+begin
+  if v_uid is null or not private.is_active() or not private.can_access_ci(p_ci) then
+    perform private.perm_raise('edit', 'ci', p_ci, 'no_access', 'not authorized');
+  end if;
+  v_full := private.has_full_ci_access();
+  select * into c from public.confidential_informants where id = p_ci for update;
+  if c.deleted_at is not null then
+    return jsonb_build_object('ok', false, 'code', 'deleted', 'message', 'this source record is in the Trash');
+  end if;
+  if p_patch is null or jsonb_typeof(p_patch) <> 'object' or p_patch = '{}'::jsonb then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'nothing to change');
+  end if;
+  for k in select jsonb_object_keys(p_patch) loop
+    if not (k = any (v_allowed)) then
+      return jsonb_build_object('ok', false, 'code', 'bad_key', 'message', format('%s cannot be changed here', k));
+    end if;
+    v_keys := v_keys || k;
+  end loop;
+  if ('bureau' = any (v_keys) or 'supervising_lead_id' = any (v_keys)) and not v_full then
+    perform private.perm_raise('edit', 'ci', p_ci, 'not_ci_command', 'only CI command may change the bureau or the supervising lead');
+  end if;
+  if p_patch ? 'motive_primary' and p_patch ->> 'motive_primary' is not null
+     and not ((p_patch ->> 'motive_primary') = any (private.ci_enum('motive'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown motive');
+  end if;
+  if p_patch ? 'motive_secondary' then
+    v_sec := case jsonb_typeof(p_patch -> 'motive_secondary') when 'array' then array(select jsonb_array_elements_text(p_patch -> 'motive_secondary')) else '{}'::text[] end;
+    if not (v_sec <@ private.ci_enum('motive')) then
+      return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown secondary motive');
+    end if;
+  end if;
+  if p_patch ? 'reliability' and not ((p_patch ->> 'reliability') = any (private.ci_enum('reliability'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown reliability');
+  end if;
+  if p_patch ? 'risk' and not ((p_patch ->> 'risk') = any (private.ci_enum('risk'))) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown risk');
+  end if;
+  if p_patch ? 'bureau' then
+    begin v_bureau := (p_patch ->> 'bureau')::public.bureau;
+    exception when others then return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown bureau'); end;
+  end if;
+  if p_patch ? 'supervising_lead_id' and p_patch ->> 'supervising_lead_id' is not null then
+    if not ((p_patch ->> 'supervising_lead_id') ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$') then
+      return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown supervising lead');
+    end if;
+    v_lead := (p_patch ->> 'supervising_lead_id')::uuid;
+    if not exists (select 1 from public.profiles p where p.id = v_lead and p.active and p.removed_at is null) then
+      return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown supervising lead');
+    end if;
+  end if;
+  if p_patch ? 'next_contact_at' and p_patch ->> 'next_contact_at' is not null then
+    begin perform (p_patch ->> 'next_contact_at')::timestamptz;
+    exception when others then return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'next contact is not a valid time'); end;
+  end if;
+
+  update public.confidential_informants set
+    alias = case when p_patch ? 'alias' then nullif(btrim(coalesce(p_patch ->> 'alias', '')), '') else alias end,
+    motive_primary = case when p_patch ? 'motive_primary' then p_patch ->> 'motive_primary' else motive_primary end,
+    motive_secondary = case when p_patch ? 'motive_secondary' then v_sec else motive_secondary end,
+    motive_explanation = case when p_patch ? 'motive_explanation' then nullif(btrim(coalesce(p_patch ->> 'motive_explanation', '')), '') else motive_explanation end,
+    recruitment_notes = case when p_patch ? 'recruitment_notes' then nullif(btrim(coalesce(p_patch ->> 'recruitment_notes', '')), '') else recruitment_notes end,
+    next_contact_at = case when p_patch ? 'next_contact_at' then (p_patch ->> 'next_contact_at')::timestamptz else next_contact_at end,
+    reliability = case when p_patch ? 'reliability' then p_patch ->> 'reliability' else reliability end,
+    risk = case when p_patch ? 'risk' then p_patch ->> 'risk' else risk end,
+    bureau = case when p_patch ? 'bureau' then v_bureau else bureau end,
+    supervising_lead_id = case when p_patch ? 'supervising_lead_id' then v_lead else supervising_lead_id end,
+    updated_at = now()
+  where id = p_ci;
+  perform private.ci_audit(p_ci, 'CI_UPDATED', 'confidential_informants', p_ci, jsonb_build_object('keys', to_jsonb(v_keys)));
+  perform private.ci_event(p_ci, 'updated');
+  return jsonb_build_object('ok', true, 'id', p_ci, 'keys', to_jsonb(v_keys));
 end $function$
 ;
 
@@ -14601,19 +16397,24 @@ AS $function$
            case when n.payload->>'blocker_id'    ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then (n.payload->>'blocker_id')::uuid end    as blocker_id,
            case when n.payload->>'submission_id' ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then (n.payload->>'submission_id')::uuid end as submission_id,
            case when n.payload->>'request_id'    ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then (n.payload->>'request_id')::uuid end    as request_id,
-           case when n.payload->>'case_id'       ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then (n.payload->>'case_id')::uuid end       as case_id
+           case when n.payload->>'case_id'       ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then (n.payload->>'case_id')::uuid end       as case_id,
+           case when n.payload->>'ci_id'         ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then (n.payload->>'ci_id')::uuid end         as ci_id
       from public.notifications n
      where n.id = any(p_ids[1:100]) and n.user_id = (select auth.uid())
   ),
   k as (
     select n.id, n.type,
-           case when n.report_id is not null then 'report'
+           case when n.type in ('ci_capacity_request', 'ci_request_decided') and n.request_id is not null then 'ci_request'
+                when n.type like 'ci\_%' and n.ci_id is not null then 'ci'
+                when n.report_id is not null then 'report'
                 when n.task_id is not null then 'case_task'
                 when n.blocker_id is not null then 'case_blocker'
                 when n.submission_id is not null then 'field_submission'
                 when n.request_id is not null then 'legal'
                 when n.case_id is not null then 'case' end as subject_kind,
-           coalesce(n.report_id, n.task_id, n.blocker_id, n.submission_id, n.request_id, n.case_id) as subject_id
+           case when n.type in ('ci_capacity_request', 'ci_request_decided') and n.request_id is not null then n.request_id
+                when n.type like 'ci\_%' and n.ci_id is not null then n.ci_id
+                else coalesce(n.report_id, n.task_id, n.blocker_id, n.submission_id, n.request_id, n.case_id) end as subject_id
       from n
   )
   select k.id, k.type, k.subject_kind, k.subject_id,
@@ -14624,6 +16425,8 @@ AS $function$
            when 'field_submission' then exists (select 1 from public.field_submissions s where s.id = k.subject_id)
            when 'legal'            then exists (select 1 from public.legal_requests l where l.id = k.subject_id)
            when 'case'             then exists (select 1 from public.cases c where c.id = k.subject_id)
+           when 'ci'               then exists (select 1 from public.confidential_informants c where c.id = k.subject_id)
+           when 'ci_request'       then exists (select 1 from public.ci_capacity_requests q where q.id = k.subject_id)
            else false end as visible,
          case k.subject_kind
            when 'report'           then (select r.kind::text from public.reports r where r.id = k.subject_id)
@@ -14632,6 +16435,8 @@ AS $function$
            when 'field_submission' then (select s.submission_no from public.field_submissions s where s.id = k.subject_id)
            when 'legal'            then (select l.request_number from public.legal_requests l where l.id = k.subject_id)
            when 'case'             then (select c.case_number from public.cases c where c.id = k.subject_id)
+           when 'ci'               then (select c.ci_number from public.confidential_informants c where c.id = k.subject_id)
+           when 'ci_request'       then (select q.kind || ' request' from public.ci_capacity_requests q where q.id = k.subject_id)
            else null end as label
     from k
 $function$
@@ -16830,7 +18635,10 @@ begin
       ('case_intel_link',     'case_intel_links',     'case_id',      'cases'),
       ('case_blocker',        'case_blockers',        'case_id',      'cases'),
       ('rico_case',           'rico_cases',           'case_id',      'cases'),
-      ('predicate_act',       'predicate_acts',       'rico_case_id', 'rico_cases')) as x(kind, tbl, col, parent)
+      ('predicate_act',       'predicate_acts',       'rico_case_id', 'rico_cases'),
+      ('ci_intelligence',     'ci_intelligence',      'ci_id',        'confidential_informants'),
+      ('ci_contact',          'ci_contacts',          'ci_id',        'confidential_informants'),
+      ('ci_payment',          'ci_payments',          'ci_id',        'confidential_informants')) as x(kind, tbl, col, parent)
     where x.kind = v_kind
   loop
     execute format(
@@ -16848,8 +18656,8 @@ begin
   get diagnostics n = row_count;
   v_restored := jsonb_build_object(v_table, n);
 
-  if st.p_batch is not null and v_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'case', 'report', 'media', 'evidence', 'rico_case') then
-    foreach t in array array['persons', 'vehicles', 'gangs', 'places', 'accounts', 'indicators', 'narcotics', 'operations', 'trackers', 'gang_members', 'gang_turf', 'person_places', 'person_vehicles', 'person_relationships', 'account_links', 'cases', 'reports', 'media', 'evidence', 'case_tasks', 'case_messages', 'case_intel_links', 'case_blockers', 'rico_cases', 'predicate_acts'] loop
+  if st.p_batch is not null and v_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'case', 'report', 'media', 'evidence', 'rico_case', 'ci') then
+    foreach t in array array['persons', 'vehicles', 'gangs', 'places', 'accounts', 'indicators', 'narcotics', 'operations', 'trackers', 'gang_members', 'gang_turf', 'person_places', 'person_vehicles', 'person_relationships', 'account_links', 'cases', 'reports', 'media', 'evidence', 'case_tasks', 'case_messages', 'case_intel_links', 'case_blockers', 'rico_cases', 'predicate_acts', 'confidential_informants', 'ci_intelligence', 'ci_contacts', 'ci_payments'] loop
       if t = v_table then continue; end if;
       execute format('update public.%I set deleted_at = null, deleted_by = null, delete_reason = null, delete_batch = null where delete_batch = $1 and deleted_at is not null', t)
         using st.p_batch;
@@ -16861,6 +18669,11 @@ begin
   insert into public.audit_log (actor_id, action, entity, entity_id, detail)
   values (v_uid, 'RECORD_RESTORED', v_table, p_id,
           jsonb_build_object('kind', v_kind, 'reason', v_reason, 'batch', st.p_batch, 'restored', v_restored));
+  if v_kind in ('ci', 'ci_intelligence', 'ci_contact', 'ci_payment') then
+    perform private.ci_audit(private.ci_row_ci(v_kind, p_id), case when v_kind = 'ci' then 'CI_RESTORED' else 'CI_RECORD_RESTORED' end, v_table, p_id,
+      jsonb_build_object('kind', v_kind, 'reason', v_reason, 'batch', st.p_batch, 'restored', v_restored));
+    perform private.ci_event(private.ci_row_ci(v_kind, p_id), 'restored');
+  end if;
   return jsonb_build_object('ok', true, 'kind', v_kind, 'id', p_id, 'restored', v_restored);
 end $function$
 ;
@@ -17852,6 +19665,26 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.rls_test_ci_sweep(p_ci uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_email text; v_owner_email text;
+begin
+  select email into v_email from public.profiles where id = v_uid;
+  if v_email is null or v_email not like 'rls-test-%@cidportal.test' then
+    raise exception 'rls_test_ci_sweep: caller is not a test fixture';
+  end if;
+  select p.email into v_owner_email from public.confidential_informants c join public.profiles p on p.id = c.created_by where c.id = p_ci;
+  if v_owner_email is null or v_owner_email not like 'rls-test-%@cidportal.test' then
+    raise exception 'rls_test_ci_sweep: source is not fixture-owned';
+  end if;
+  return jsonb_build_object('ok', true) || private.ci_sweep(p_ci);
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.rls_test_cleanup()
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -18003,6 +19836,20 @@ begin
   delete from public.field_submissions where officer_id = any(ids) or created_by = any(ids);
   delete from public.action_escalations where case_id = any(case_ids);
   delete from public.action_item_state where user_id = any(ids);
+  perform set_config('cid.ci_audit_purge', 'on', true);
+  delete from public.ci_events where ci_id in (select id from public.confidential_informants where created_by = any(ids)) or user_id = any(ids);
+  delete from public.ci_releases where ci_id in (select id from public.confidential_informants where created_by = any(ids)) or released_by = any(ids);
+  delete from public.case_intel_releases where case_id = any(case_ids) or released_by = any(ids);
+  delete from public.ci_audit_events where actor_id = any(ids) or ci_id in (select id from public.confidential_informants where created_by = any(ids));
+  delete from public.ci_capacity_requests where requester_id = any(ids);
+  delete from public.ci_handler_capacity where user_id = any(ids);
+  delete from public.ci_intelligence where created_by = any(ids) or handler_id = any(ids);
+  delete from public.ci_contacts where created_by = any(ids) or handler_id = any(ids);
+  delete from public.ci_payments where created_by = any(ids) or handler_id = any(ids);
+  delete from public.ci_assessments where assessed_by = any(ids);
+  delete from public.ci_case_links where case_id = any(case_ids) or linked_by = any(ids);
+  delete from public.ci_handlers where user_id = any(ids);
+  delete from public.confidential_informants where created_by = any(ids);
   delete from public.reports where case_id = any(case_ids);
   get diagnostics n_reports = row_count;
   select count(*) into n from public.reports r
@@ -22048,7 +23895,7 @@ begin
     perform private.perm_deny('soft_delete', v_kind, p_id, 'not_permitted');
     return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'you may not delete this record');
   end if;
-  if v_reason is null and v_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'case', 'report', 'media', 'evidence', 'rico_case') then
+  if v_reason is null and v_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'case', 'report', 'media', 'evidence', 'rico_case', 'ci') then
     return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'a reason is required to delete this record');
   end if;
   select * into st from private.soft_delete_state(v_kind, p_id);
@@ -22084,7 +23931,10 @@ begin
       ('case',      'case_intel_links',     'case_id'),
       ('case',      'case_blockers',        'case_id'),
       ('case',      'rico_cases',           'case_id'),
-      ('rico_case', 'predicate_acts',       'rico_case_id')) as x(kind, tbl, col)
+      ('rico_case', 'predicate_acts',       'rico_case_id'),
+      ('ci',        'ci_intelligence',      'ci_id'),
+      ('ci',        'ci_contacts',          'ci_id'),
+      ('ci',        'ci_payments',          'ci_id')) as x(kind, tbl, col)
     where x.kind = v_kind
   loop
     execute format('update public.%I set deleted_at = $1, deleted_by = $2, delete_reason = $3, delete_batch = $4 where %I = $5 and deleted_at is null', c.tbl, c.col)
@@ -22106,6 +23956,11 @@ begin
   insert into public.audit_log (actor_id, action, entity, entity_id, detail)
   values (v_uid, 'RECORD_SOFT_DELETED', v_table, p_id,
           jsonb_build_object('kind', v_kind, 'reason', v_reason, 'batch', v_batch, 'cascaded', v_cascaded));
+  if v_kind in ('ci', 'ci_intelligence', 'ci_contact', 'ci_payment') then
+    perform private.ci_audit(private.ci_row_ci(v_kind, p_id), case when v_kind = 'ci' then 'CI_DELETED' else 'CI_RECORD_DELETED' end, v_table, p_id,
+      jsonb_build_object('kind', v_kind, 'reason', v_reason, 'batch', v_batch, 'cascaded', v_cascaded));
+    perform private.ci_event(private.ci_row_ci(v_kind, p_id), 'deleted');
+  end if;
   return jsonb_build_object('ok', true, 'kind', v_kind, 'id', p_id, 'deleted_at', v_now, 'batch', v_batch, 'cascaded', v_cascaded);
 end $function$
 ;
@@ -23082,7 +24937,8 @@ declare
                           'tracker', 'gang_member', 'gang_turf', 'person_place', 'person_vehicle',
                           'person_relationship', 'account_link', 'case', 'report', 'media', 'evidence',
                           'case_task', 'case_message', 'case_intel_link', 'case_blocker', 'rico_case',
-                          'predicate_act', 'case_note', 'case_link'];
+                          'predicate_act', 'case_note', 'case_link', 'ci', 'ci_intelligence', 'ci_contact', 'ci_payment',
+                          'case_template', 'commendation'];
   v_limit integer := greatest(1, least(coalesce(p_limit, 300), 500));
   v_owner boolean := private.is_owner();
   k text; t text; v_case text; v_extra text; v_sql text := '';
@@ -23097,6 +24953,8 @@ begin
     t := private.soft_delete_table(k);
     v_case := private.trash_case_expr(t);
     v_extra := case
+      when t in ('ci_intelligence', 'ci_contacts', 'ci_payments') then ' and (x.case_id is null or private.can_read_case(x.case_id)) and private.can_access_ci(x.ci_id)'
+      when t = 'confidential_informants' then ' and private.can_access_ci(x.id)'
       when t = 'cases' or v_case = 'null::uuid' then ''
       else format(' and private.can_read_case(%s)', v_case) end
       || case when t = 'media' then ' and (not x.restricted or private.is_owner())' else '' end;
@@ -23108,7 +24966,7 @@ begin
       k, v_case, t, t, k, v_extra, v_limit);
   end loop;
   return query execute format(
-    'select u.kind, u.id, private.permanent_delete_record_label(u.tbl, u.id), u.case_id,
+    'select u.kind, u.id, coalesce(private.ci_trash_label(u.tbl, u.id), private.permanent_delete_record_label(u.tbl, u.id)), u.case_id,
             (select c.case_number from public.cases c where c.id = u.case_id),
             u.deleted_at, u.deleted_by,
             (select p.display_name from public.profiles p where p.id = u.deleted_by),
@@ -23595,7 +25453,7 @@ AS $function$
                                         'restricted', 'sib_access', 'mdt_export', 'field_access',
                                         'tracker', 'justice', 'siu_conflict', 'surv_tgt', 'surv_alert',
                                         'document_approval', 'document_suggestion', 'narcotic',
-                                        'claim', 'legal', 'legal_queue', 'report', 'gang_dup')
+                                        'claim', 'legal', 'legal_queue', 'report', 'gang_dup', 'ci_request')
       then 'decision'
     else 'work' end
 $function$
@@ -23622,11 +25480,11 @@ begin
     v_payload := v_payload || jsonb_build_object('actor_id', (select auth.uid()),
       'actor_name', (select display_name from public.profiles where id = (select auth.uid())));
   end if;
-  v_subject := coalesce(v_payload->>'task_id', v_payload->>'blocker_id', v_payload->>'source_id', v_payload->>'case_id');
+  v_subject := coalesce(v_payload->>'task_id', v_payload->>'blocker_id', v_payload->>'source_id', v_payload->>'intel_id', v_payload->>'release_id', v_payload->>'request_id', v_payload->>'ci_id', v_payload->>'case_id');
   if exists (select 1 from public.notifications n
               where n.user_id = p_user and n.type = p_kind and not n.read
                 and n.created_at > now() - interval '1 hour'
-                and coalesce(n.payload->>'task_id', n.payload->>'blocker_id', n.payload->>'source_id', n.payload->>'case_id')
+                and coalesce(n.payload->>'task_id', n.payload->>'blocker_id', n.payload->>'source_id', n.payload->>'intel_id', n.payload->>'release_id', n.payload->>'request_id', n.payload->>'ci_id', n.payload->>'case_id')
                     is not distinct from v_subject) then
     return false;
   end if;
@@ -24457,6 +26315,20 @@ AS $function$
     or private.has_joint_access(p_cid)
     or private.has_op_joint_access(p_cid)
   ) end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.can_access_ci(p_ci uuid, p_user uuid DEFAULT NULL::uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select exists (
+    select 1 from public.confidential_informants c
+     where c.id = p_ci
+       and (private.has_full_ci_access(p_user)
+            or (c.deleted_at is null and private.ci_is_active_handler(p_ci, p_user))))
 $function$
 ;
 
@@ -25396,6 +27268,469 @@ AS $function$
   select private.can_access_case(p_case)
      and exists (select 1 from public.cases c
                   where c.id = p_case and c.archived_at is null and c.deleted_at is null)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_active_count(p_user uuid)
+ RETURNS integer
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select count(distinct c.id)::integer
+    from public.confidential_informants c join public.ci_handlers h on h.ci_id = c.id
+   where h.user_id = p_user and h.ended_at is null and h.counts_toward_capacity
+     and c.status = 'active' and c.deleted_at is null
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_audit(p_ci uuid, p_action text, p_entity text, p_entity_id uuid, p_detail jsonb DEFAULT NULL::jsonb)
+ RETURNS void
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  insert into public.ci_audit_events (ci_id, actor_id, action, entity, entity_id, detail)
+  values (p_ci, (select auth.uid()), p_action, p_entity, p_entity_id, p_detail)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_audit_immutable()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if coalesce(current_setting('cid.ci_audit_purge', true), '') = 'on' then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+  raise exception 'ci_audit_events is append-only' using errcode = 'P0403';
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_block_merge_delete()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if coalesce(current_setting('cid.version_source', true), '') = 'merge' then
+    raise exception '%', case when private.has_full_ci_access()
+      then 'both persons carry a live confidential-informant record — CI command must retire or delete one before they can be merged'
+      else 'these records cannot be merged right now' end
+      using errcode = 'P0403';
+  end if;
+  return old;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_capacity(p_user uuid)
+ RETURNS integer
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce((select o.limit_override from public.ci_handler_capacity o
+                    where o.user_id = p_user and (o.expires_at is null or o.expires_at > now())), 6)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_capacity_raise(p_user uuid, p_new integer, p_reason text, p_expires timestamp with time zone DEFAULT NULL::timestamp with time zone, p_request uuid DEFAULT NULL::uuid)
+ RETURNS void
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  insert into public.ci_handler_capacity as o (user_id, limit_override, reason, approved_by, approved_at, expires_at, request_id)
+  values (p_user, least(greatest(p_new, 1), 30), left(p_reason, 500), (select auth.uid()), now(), p_expires, p_request)
+  on conflict (user_id) do update
+    set limit_override = excluded.limit_override, reason = excluded.reason, approved_by = excluded.approved_by,
+        approved_at = now(), expires_at = excluded.expires_at, request_id = coalesce(excluded.request_id, o.request_id)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_case_autolink(p_ci uuid, p_case uuid, p_note text DEFAULT NULL::text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_id uuid;
+begin
+  if p_case is null then return false; end if;
+  if exists (select 1 from public.ci_case_links l where l.ci_id = p_ci and l.case_id = p_case and l.unlinked_at is null) then
+    return false;
+  end if;
+  insert into public.ci_case_links (ci_id, case_id, linked_by, note) values (p_ci, p_case, (select auth.uid()), left(p_note, 500))
+  returning id into v_id;
+  perform private.ci_audit(p_ci, 'CI_CASE_LINKED', 'ci_case_links', v_id, jsonb_build_object('case_id', p_case));
+  return true;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_enum(p_set text)
+ RETURNS text[]
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  select case p_set
+    when 'status' then array['candidate', 'active', 'dormant', 'suspended', 'compromised', 'retired', 'terminated']
+    when 'motive' then array['money', 'political', 'religious', 'patriotism', 'revenge', 'personal_benefit', 'protection',
+                             'leniency', 'rivalry', 'ideological', 'safety', 'other']
+    when 'reliability' then array['unknown', 'low', 'moderate', 'high', 'proven']
+    when 'risk' then array['low', 'medium', 'high', 'critical']
+    when 'corroboration' then array['unverified', 'partially_corroborated', 'corroborated', 'contradicted', 'unable_to_verify']
+    when 'sensitivity' then array['routine', 'sensitive', 'highly_sensitive']
+    when 'method' then array['in_person', 'phone', 'message', 'other']
+    when 'scale' then array['unknown', 'low', 'moderate', 'high']
+    when 'handling' then array['official_use', 'law_enforcement_sensitive', 'court_disclosable']
+    when 'link_kind' then array['person', 'vehicle', 'gang', 'place', 'narcotic', 'evidence', 'media']
+    else '{}'::text[] end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_event(p_ci uuid, p_kind text, p_user uuid DEFAULT NULL::uuid)
+ RETURNS void
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  insert into public.ci_events (ci_id, user_id, kind) values (p_ci, p_user, p_kind)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_handlers_of(p_ci uuid)
+ RETURNS SETOF uuid
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select h.user_id from public.ci_handlers h join public.profiles p on p.id = h.user_id
+   where h.ci_id = p_ci and h.ended_at is null and p.active and p.removed_at is null
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_is_active_handler(p_ci uuid, p_user uuid DEFAULT NULL::uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select exists (
+    select 1 from public.ci_handlers h join public.profiles p on p.id = h.user_id
+     where h.ci_id = p_ci and h.user_id = coalesce(p_user, (select auth.uid()))
+       and h.ended_at is null and p.active and p.removed_at is null)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_is_fixture(p_user uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.is_test_user(p_user)
+      or exists (select 1 from auth.users u where u.id = p_user and u.email like 'rls-test-%@cidportal.test')
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_is_handler(p_user uuid DEFAULT NULL::uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select exists (
+    select 1 from public.ci_handlers h join public.confidential_informants c on c.id = h.ci_id
+     where h.user_id = coalesce(p_user, (select auth.uid())) and h.ended_at is null and c.deleted_at is null)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_kind_deletable(p_kind text, p_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce((
+    select st.p_exists and st.p_deleted_at is null
+       and (private.has_full_ci_access()
+            or (p_kind <> 'ci' and private.can_access_ci(private.ci_row_ci(p_kind, p_id))
+                and case p_kind
+                      when 'ci_intelligence' then exists (select 1 from public.ci_intelligence i where i.id = p_id and i.handler_id = (select auth.uid()))
+                      when 'ci_contact' then exists (select 1 from public.ci_contacts k where k.id = p_id and k.handler_id = (select auth.uid()))
+                      when 'ci_payment' then exists (select 1 from public.ci_payments y where y.id = p_id and y.handler_id = (select auth.uid()))
+                      else false end))
+      from private.soft_delete_state(p_kind, p_id) st), false)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_kind_readable(p_kind text, p_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce((
+    select st.p_exists and (st.p_deleted_at is null or private.has_full_ci_access())
+       and private.can_access_ci(private.ci_row_ci(p_kind, p_id))
+      from private.soft_delete_state(p_kind, p_id) st), false)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_link_label(p_kind text, p_id uuid)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select case p_kind
+    when 'person' then (select p.name from public.persons p where p.id = p_id)
+    when 'vehicle' then (select concat_ws(' · ', v.plate, v.model) from public.vehicles v where v.id = p_id)
+    when 'gang' then (select g.name from public.gangs g where g.id = p_id)
+    when 'place' then (select pl.name from public.places pl where pl.id = p_id)
+    when 'narcotic' then (select n.name from public.narcotics n where n.id = p_id)
+    when 'evidence' then (select e.item_code from public.evidence e where e.id = p_id)
+    when 'media' then (select m.title from public.media m where m.id = p_id)
+    end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_links_check(p_links jsonb)
+ RETURNS text
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare l jsonb; v_kind text; v_target uuid;
+begin
+  if p_links is null or jsonb_typeof(p_links) = 'null' then return null; end if;
+  if jsonb_typeof(p_links) <> 'array' then return 'bad_link'; end if;
+  if jsonb_array_length(p_links) > 50 then return 'bad_link'; end if;
+  for l in select * from jsonb_array_elements(p_links) loop
+    v_kind := l ->> 'kind';
+    if v_kind is null or not (v_kind = any (private.ci_enum('link_kind'))) then return 'bad_link'; end if;
+    if not ((l ->> 'target_id') ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$') then return 'bad_link'; end if;
+    v_target := (l ->> 'target_id')::uuid;
+    -- perm_registry_visible answers the wall, not existence: the row must be
+    -- there and live as well.
+    if not exists (select 1 from private.soft_delete_state(v_kind, v_target) st where st.p_exists and st.p_deleted_at is null) then
+      return 'bad_link';
+    end if;
+    if not private.perm_registry_visible(v_kind, v_target) then return 'bad_link'; end if;
+  end loop;
+  return null;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_links_write(p_intel uuid, p_links jsonb)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare n integer := 0;
+begin
+  delete from public.ci_intelligence_links where intel_id = p_intel;
+  if p_links is null or jsonb_typeof(p_links) <> 'array' then return 0; end if;
+  insert into public.ci_intelligence_links (intel_id, kind, target_id, note)
+  select p_intel, l ->> 'kind', (l ->> 'target_id')::uuid, left(l ->> 'note', 500)
+    from jsonb_array_elements(p_links) l
+  on conflict (intel_id, kind, target_id) do nothing;
+  get diagnostics n = row_count;
+  return n;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_next_number()
+ RETURNS text
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select 'CI-' || lpad(nextval('private.ci_number_seq')::text, 4, '0')
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_notify_full_access(p_bureau bureau, p_kind text, p_payload jsonb)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare u uuid; n integer := 0;
+begin
+  for u in select * from private.ci_reviewers(p_bureau) loop
+    if private.action_notify(u, p_kind, p_payload) then n := n + 1; end if;
+  end loop;
+  return n;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_open_followups(p_ci uuid)
+ RETURNS integer
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select (select count(*)::integer from public.ci_intelligence i
+           where i.ci_id = p_ci and i.deleted_at is null and i.follow_up_required and i.follow_up_done_at is null)
+       + (select count(*)::integer from public.ci_contacts k
+           where k.ci_id = p_ci and k.deleted_at is null and k.follow_up_required and k.next_contact_at < now())
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_reviewers(p_bureau bureau)
+ RETURNS SETOF uuid
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select p.id from public.profiles p
+   where p.active and p.removed_at is null and not p.is_system
+     and ((p.role = 'bureau_lead' and (p_bureau is null or p.division = p_bureau))
+          or p.role in ('deputy_director', 'director'))
+  union
+  select m.user_id from public.siu_memberships m join public.profiles p on p.id = m.user_id
+   where m.active and not m.oversight_only and m.siu_role = 'special_agent_in_charge'
+     and p.active and p.removed_at is null
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_row_ci(p_kind text, p_id uuid)
+ RETURNS uuid
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select case p_kind
+    when 'ci' then (select c.id from public.confidential_informants c where c.id = p_id)
+    when 'ci_intelligence' then (select i.ci_id from public.ci_intelligence i where i.id = p_id)
+    when 'ci_contact' then (select k.ci_id from public.ci_contacts k where k.id = p_id)
+    when 'ci_payment' then (select y.ci_id from public.ci_payments y where y.id = p_id)
+    end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_sanitized(p_ci uuid, p_text text)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  with t as (select regexp_replace(lower(coalesce(p_text, '')), '[^a-z0-9]+', '', 'g') as txt),
+  src as (
+      select c.ci_number as v from public.confidential_informants c where c.id = p_ci
+      union all select c.alias from public.confidential_informants c where c.id = p_ci
+      union all select p.name from public.confidential_informants c join public.persons p on p.id = c.person_id where c.id = p_ci
+      union all select p.alias from public.confidential_informants c join public.persons p on p.id = c.person_id where c.id = p_ci
+      union all select pr.display_name from public.ci_handlers h join public.profiles pr on pr.id = h.user_id where h.ci_id = p_ci
+      union all select tok from public.confidential_informants c join public.persons p on p.id = c.person_id,
+                 regexp_split_to_table(coalesce(p.name, '') || ' ' || coalesce(p.alias, '') || ' ' || coalesce(c.alias, ''), '[^[:alnum:]]+') tok
+                 where c.id = p_ci and length(tok) >= 4
+  ),
+  norm as (select regexp_replace(lower(coalesce(v, '')), '[^a-z0-9]+', '', 'g') as v from src)
+  select not exists (select 1 from norm, t where length(norm.v) >= 2 and position(norm.v in t.txt) > 0)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_sweep(p_only_ci uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare x record; u uuid; n_over integer := 0; n_silent integer := 0; v_told integer;
+begin
+  for x in
+    select c.id, c.created_by
+      from public.confidential_informants c
+     where c.deleted_at is null and c.status = 'active'
+       and (p_only_ci is null or c.id = p_only_ci)
+       and c.next_contact_at < now()
+       and not exists (select 1 from public.notifications n
+                        where n.type = 'ci_contact_overdue' and n.payload ->> 'ci_id' = c.id::text
+                          and n.created_at > now() - interval '24 hours')
+     order by c.next_contact_at limit 200
+  loop
+    v_told := 0;
+    for u in select * from private.ci_handlers_of(x.id) loop
+      if private.action_notify(u, 'ci_contact_overdue', jsonb_build_object('ci_id', x.id, 'kind', 'overdue'), x.created_by) then
+        v_told := v_told + 1;
+      end if;
+    end loop;
+    if v_told > 0 then
+      perform private.ci_event(x.id, 'overdue');
+      n_over := n_over + 1;
+    end if;
+  end loop;
+
+  for x in
+    select c.id, c.created_by, c.supervising_lead_id
+      from public.confidential_informants c
+     where c.deleted_at is null and c.status = 'active'
+       and (p_only_ci is null or c.id = p_only_ci)
+       and coalesce(c.last_contact_at, c.status_changed_at, c.created_at) < now() - interval '30 days'
+       and not exists (select 1 from public.notifications n
+                        where n.type = 'ci_contact_overdue' and n.payload ->> 'ci_id' = c.id::text
+                          and n.created_at > now() - interval '24 hours')
+     order by c.last_contact_at nulls first limit 200
+  loop
+    v_told := 0;
+    for u in select * from private.ci_handlers_of(x.id) loop
+      if private.action_notify(u, 'ci_contact_overdue', jsonb_build_object('ci_id', x.id, 'kind', 'silent_30d'), x.created_by) then
+        v_told := v_told + 1;
+      end if;
+    end loop;
+    if x.supervising_lead_id is not null
+       and private.action_notify(x.supervising_lead_id, 'ci_contact_overdue', jsonb_build_object('ci_id', x.id, 'kind', 'silent_30d'), x.created_by) then
+      v_told := v_told + 1;
+    end if;
+    if v_told > 0 then
+      perform private.ci_event(x.id, 'overdue');
+      n_silent := n_silent + 1;
+    end if;
+  end loop;
+  return jsonb_build_object('overdue', n_over, 'silent_30d', n_silent);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_sweep_job()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_run bigint; v_out jsonb;
+begin
+  v_run := private.job_begin('ci_contact_sweep');
+  begin
+    v_out := private.ci_sweep();
+    perform private.job_end(v_run, 'succeeded', v_out);
+  exception when others then
+    perform private.job_end(v_run, 'failed', jsonb_build_object('error', left(sqlerrm, 300)));
+    raise;
+  end;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.ci_trash_label(p_table text, p_id uuid)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select case p_table
+    when 'confidential_informants' then (select c.ci_number from public.confidential_informants c where c.id = p_id)
+    when 'ci_intelligence' then (select c.ci_number || ' · intelligence ' || to_char(i.received_at, 'YYYY-MM-DD')
+                                   from public.ci_intelligence i join public.confidential_informants c on c.id = i.ci_id where i.id = p_id)
+    when 'ci_contacts' then (select c.ci_number || ' · contact ' || to_char(k.occurred_at, 'YYYY-MM-DD')
+                               from public.ci_contacts k join public.confidential_informants c on c.id = k.ci_id where k.id = p_id)
+    when 'ci_payments' then (select c.ci_number || ' · payment ' || to_char(y.paid_at, 'YYYY-MM-DD')
+                               from public.ci_payments y join public.confidential_informants c on c.id = y.ci_id where y.id = p_id)
+    end
 $function$
 ;
 
@@ -27244,6 +29579,22 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.has_full_ci_access(p_user uuid DEFAULT NULL::uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select exists (
+    select 1 from public.profiles p
+     where p.id = coalesce(p_user, (select auth.uid()))
+       and p.active and p.removed_at is null
+       and (p.is_owner
+            or p.role in ('bureau_lead', 'deputy_director', 'director')
+            or private.siu_membership_role(p.id) is not null))
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.has_joint_access(cid uuid)
  RETURNS boolean
  LANGUAGE sql
@@ -28902,6 +31253,61 @@ AS $function$
       select 1 from public.case_assignments a where a.id = p_id and a.removed_at is null
          and a.assignment_source = 'standard'
          and private.can_delete_case_child(a.case_id) and private.case_writable(a.case_id))
+    -- CI compartment (20261103120000): the catalog actions and the four
+    -- soft-deletable CI kinds, placed BEFORE the registry arm. A read answers
+    -- false alike for "not yours" and "does not exist" (never raises). For
+    -- ('record', 'ci_payment') p_id is the CI (or null: "may record at all").
+    when p_kind = 'ci' and p_action in ('access', 'create', 'set_status', 'assign_handler', 'export', 'sweep') then case p_action
+      when 'access'         then private.can_access_ci(p_id)
+      when 'create'         then private.has_full_ci_access() or private.ci_is_handler()
+      when 'set_status'     then private.has_full_ci_access() and (p_id is null or private.can_access_ci(p_id))
+      when 'assign_handler' then private.has_full_ci_access() and (p_id is null or private.can_access_ci(p_id))
+      when 'export'         then case when p_id is null then private.has_full_ci_access() else private.can_access_ci(p_id) end
+      when 'sweep'          then private.is_owner()
+      else false end
+    when p_kind = 'ci_capacity' then case p_action
+      when 'request' then private.is_active()
+      when 'decide'  then private.has_full_ci_access()
+      else false end
+    when p_kind = 'ci_intelligence' and p_action = 'release' then
+      private.has_full_ci_access() and (p_id is null or private.ci_kind_readable('ci_intelligence', p_id))
+    when p_kind = 'ci_payment' and p_action = 'record' then
+      case when p_id is null then private.is_active() and (private.has_full_ci_access() or private.ci_is_handler())
+           else private.can_access_ci(p_id) end
+    when p_kind in ('ci', 'ci_intelligence', 'ci_contact', 'ci_payment') then case p_action
+      when 'read'        then private.ci_kind_readable(p_kind, p_id)
+      when 'edit'        then private.ci_kind_readable(p_kind, p_id)
+      when 'soft_delete' then private.ci_kind_deletable(p_kind, p_id)
+      when 'delete'      then private.ci_kind_deletable(p_kind, p_id)
+      when 'restore'     then private.has_full_ci_access()
+                              and (select st.p_exists and st.p_deleted_at is not null from private.soft_delete_state(p_kind, p_id) st)
+      when 'permanent_delete' then private.is_owner() and private.has_full_ci_access()
+                              and (select st.p_exists and st.p_deleted_at is not null from private.soft_delete_state(p_kind, p_id) st)
+      else false end
+    -- Soft delete for case templates and commendations (20261104120000):
+    -- read = any active member (a deleted row only the Owner); edit / delete =
+    -- command or the Owner (a commendation also by its creator); restore = the
+    -- Owner or command; permanent delete = the Owner's armed protocol. Before
+    -- the registry arm, which does not list these kinds.
+    when p_kind in ('case_template', 'commendation') then (
+      select case p_action
+        when 'read' then st.p_exists and private.is_active() and (st.p_deleted_at is null or private.is_owner())
+        when 'edit' then st.p_exists and st.p_deleted_at is null
+                         and (private.is_command() or private.is_owner()
+                              or (p_kind = 'commendation' and private.is_active()
+                                  and exists (select 1 from public.commendations x where x.id = p_id and x.created_by = (select auth.uid()))))
+        when 'soft_delete' then st.p_exists and st.p_deleted_at is null
+                         and (private.is_command() or private.is_owner()
+                              or (p_kind = 'commendation' and private.is_active()
+                                  and exists (select 1 from public.commendations x where x.id = p_id and x.created_by = (select auth.uid()))))
+        when 'delete' then st.p_exists and st.p_deleted_at is null
+                         and (private.is_command() or private.is_owner()
+                              or (p_kind = 'commendation' and private.is_active()
+                                  and exists (select 1 from public.commendations x where x.id = p_id and x.created_by = (select auth.uid()))))
+        when 'restore' then st.p_exists and st.p_deleted_at is not null and (private.is_owner() or private.is_command())
+        when 'permanent_delete' then private.is_owner() and st.p_exists and st.p_deleted_at is not null
+        else false end
+      from private.soft_delete_state(p_kind, p_id) st)
     when p_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'gang_member', 'gang_turf', 'person_place', 'person_vehicle', 'person_relationship', 'account_link', 'case', 'report', 'media', 'evidence', 'case_task', 'case_message', 'case_intel_link', 'case_blocker', 'rico_case', 'predicate_act', 'case_note', 'case_link') then (
       select case p_action
         when 'read' then st.p_exists and (st.p_deleted_at is null or private.is_owner())
@@ -29329,7 +31735,7 @@ declare j jsonb;
 begin
   execute format('select to_jsonb(t) from public.%I t where t.id = $1', p_table) into j using p_id;
   if j is null then return null; end if;
-  return coalesce(nullif(btrim(coalesce(j ->> 'case_number', '')), ''), nullif(btrim(coalesce(j ->> 'name', '')), ''),
+  return coalesce(nullif(btrim(coalesce(j ->> 'ci_number', '')), ''), nullif(btrim(coalesce(j ->> 'case_number', '')), ''), nullif(btrim(coalesce(j ->> 'name', '')), ''),
                   nullif(btrim(coalesce(j ->> 'plate', '')), ''), nullif(btrim(coalesce(j ->> 'title', '')), ''),
                   nullif(btrim(coalesce(j ->> 'label', '')), ''), nullif(btrim(coalesce(j ->> 'item_code', '')), ''),
                   nullif(btrim(coalesce(j ->> 'value', '')), ''), nullif(btrim(coalesce(j ->> 'code', '')), ''),
@@ -30786,6 +33192,12 @@ AS $function$
     when 'predicate_act' then 'predicate_acts'
     when 'case_note' then 'case_notes'
     when 'case_link' then 'case_links'
+    when 'ci' then 'confidential_informants'
+    when 'ci_intelligence' then 'ci_intelligence'
+    when 'ci_contact' then 'ci_contacts'
+    when 'ci_payment' then 'ci_payments'
+    when 'case_template' then 'case_templates'
+    when 'commendation' then 'commendations'
   end
 $function$
 ;
@@ -31099,6 +33511,7 @@ AS $function$
     when 'evidence' then 'x.case_id' when 'case_tasks' then 'x.case_id' when 'case_messages' then 'x.case_id'
     when 'case_intel_links' then 'x.case_id' when 'case_blockers' then 'x.case_id' when 'rico_cases' then 'x.case_id'
     when 'case_notes' then 'x.case_id' when 'case_links' then 'x.case_id'
+    when 'ci_intelligence' then 'x.case_id' when 'ci_contacts' then 'x.case_id' when 'ci_payments' then 'x.case_id'
     else 'null::uuid' end
 $function$
 ;
@@ -31380,6 +33793,7 @@ CREATE TRIGGER case_tasks_block_direct_soft_delete BEFORE INSERT OR UPDATE ON pu
 CREATE TRIGGER case_tasks_block_direct_waive BEFORE UPDATE ON public.case_tasks FOR EACH ROW EXECUTE FUNCTION private.block_direct_task_waive();
 CREATE TRIGGER case_tasks_touch BEFORE UPDATE ON public.case_tasks FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER case_templates_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_templates FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER case_templates_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.case_templates FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER case_templates_touch BEFORE UPDATE ON public.case_templates FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER cases_audit AFTER INSERT OR DELETE OR UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER cases_block_archive_cols BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_archive();
@@ -31394,9 +33808,20 @@ CREATE TRIGGER trg_block_direct_siu_case_cols BEFORE INSERT OR UPDATE ON public.
 CREATE TRIGGER trg_case_closed_at BEFORE UPDATE OF status ON public.cases FOR EACH ROW EXECUTE FUNCTION set_case_closed_at();
 CREATE TRIGGER trg_default_case_originating_bureau BEFORE INSERT ON public.cases FOR EACH ROW EXECUTE FUNCTION private.default_case_originating_bureau();
 CREATE TRIGGER trg_sync_case_operation_link AFTER INSERT OR UPDATE OF operation_id ON public.cases FOR EACH ROW EXECUTE FUNCTION private.sync_case_operation_link();
+CREATE TRIGGER ci_audit_events_immutable BEFORE DELETE OR UPDATE ON public.ci_audit_events FOR EACH ROW EXECUTE FUNCTION private.ci_audit_immutable();
+CREATE TRIGGER ci_capacity_requests_touch BEFORE UPDATE ON public.ci_capacity_requests FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER ci_contacts_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.ci_contacts FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
+CREATE TRIGGER ci_contacts_touch BEFORE UPDATE ON public.ci_contacts FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER ci_intelligence_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.ci_intelligence FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
+CREATE TRIGGER ci_intelligence_touch BEFORE UPDATE ON public.ci_intelligence FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER ci_payments_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.ci_payments FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER cid_records_touch BEFORE UPDATE ON public.cid_records FOR EACH ROW EXECUTE FUNCTION cid_touch_updated_at();
 CREATE TRIGGER client_errors_notify AFTER INSERT ON public.client_errors FOR EACH ROW EXECUTE FUNCTION private.notify_owners_client_error();
+CREATE TRIGGER commendations_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.commendations FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER commendations_touch BEFORE UPDATE ON public.commendations FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER confidential_informants_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.confidential_informants FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
+CREATE TRIGGER confidential_informants_block_merge_delete BEFORE DELETE ON public.confidential_informants FOR EACH ROW EXECUTE FUNCTION private.ci_block_merge_delete();
+CREATE TRIGGER confidential_informants_touch BEFORE UPDATE ON public.confidential_informants FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER custody_chain_audit AFTER INSERT OR DELETE OR UPDATE ON public.custody_chain FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER document_reading_campaigns_audit AFTER INSERT OR DELETE OR UPDATE ON public.document_reading_campaigns FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER document_reading_campaigns_touch BEFORE UPDATE ON public.document_reading_campaigns FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -31801,6 +34226,10 @@ create policy case_intel_links_upd on public.case_intel_links
   using (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id)))
   with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.case_writable(case_id)));
 
+create policy case_intel_releases_sel on public.case_intel_releases
+  as permissive for select to authenticated
+  using ((private.can_read_case(case_id) AND ((revoked_at IS NULL) OR private.has_full_ci_access())));
+
 create policy case_links_ins on public.case_links
   as permissive for insert to authenticated
   with check ((private.case_writable(case_id) AND private.can_read_case(related_case_id) AND (created_by = ( SELECT auth.uid() AS uid))));
@@ -31867,7 +34296,7 @@ create policy case_templates_ins on public.case_templates
 
 create policy case_templates_sel on public.case_templates
   as permissive for select to authenticated
-  using (( SELECT private.is_active() AS is_active));
+  using ((( SELECT private.is_active() AS is_active) AND ((deleted_at IS NULL) OR private.is_owner())));
 
 create policy case_templates_upd on public.case_templates
   as permissive for update to authenticated
@@ -31886,6 +34315,60 @@ create policy cases_upd on public.cases
   as permissive for update to authenticated
   using (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case_row(bureau, lead_detective_id, created_by, id) AND (archived_at IS NULL)))
   with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.can_access_case_row(bureau, lead_detective_id, created_by, id) AND (archived_at IS NULL)));
+
+create policy ci_assessments_sel on public.ci_assessments
+  as permissive for select to authenticated
+  using (private.can_access_ci(ci_id));
+
+create policy ci_audit_events_sel on public.ci_audit_events
+  as permissive for select to authenticated
+  using ((((ci_id IS NOT NULL) AND private.can_access_ci(ci_id)) OR ((ci_id IS NULL) AND (private.has_full_ci_access() OR (actor_id = ( SELECT auth.uid() AS uid)) OR (
+CASE
+    WHEN ((detail ->> 'requester_id'::text) ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'::text) THEN ((detail ->> 'requester_id'::text))::uuid
+    ELSE NULL::uuid
+END = ( SELECT auth.uid() AS uid))))));
+
+create policy ci_capacity_requests_sel on public.ci_capacity_requests
+  as permissive for select to authenticated
+  using (((requester_id = ( SELECT auth.uid() AS uid)) OR private.has_full_ci_access()));
+
+create policy ci_case_links_sel on public.ci_case_links
+  as permissive for select to authenticated
+  using (private.can_access_ci(ci_id));
+
+create policy ci_contacts_sel on public.ci_contacts
+  as permissive for select to authenticated
+  using (private.can_access_ci(ci_id));
+
+create policy ci_events_sel on public.ci_events
+  as permissive for select to authenticated
+  using ((((ci_id IS NOT NULL) AND private.can_access_ci(ci_id)) OR ((ci_id IS NULL) AND ((user_id = ( SELECT auth.uid() AS uid)) OR private.has_full_ci_access()))));
+
+create policy ci_handler_capacity_sel on public.ci_handler_capacity
+  as permissive for select to authenticated
+  using (((user_id = ( SELECT auth.uid() AS uid)) OR private.has_full_ci_access()));
+
+create policy ci_handlers_sel on public.ci_handlers
+  as permissive for select to authenticated
+  using (private.can_access_ci(ci_id));
+
+create policy ci_intelligence_sel on public.ci_intelligence
+  as permissive for select to authenticated
+  using (private.can_access_ci(ci_id));
+
+create policy ci_intelligence_links_sel on public.ci_intelligence_links
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM ci_intelligence i
+  WHERE ((i.id = ci_intelligence_links.intel_id) AND private.can_access_ci(i.ci_id)))));
+
+create policy ci_payments_sel on public.ci_payments
+  as permissive for select to authenticated
+  using (private.can_access_ci(ci_id));
+
+create policy ci_releases_sel on public.ci_releases
+  as permissive for select to authenticated
+  using (private.can_access_ci(ci_id));
 
 create policy cid_delete on public.cid_records
   as permissive for delete to authenticated
@@ -31926,12 +34409,16 @@ create policy comm_ins on public.commendations
 
 create policy comm_sel on public.commendations
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active() AND ((deleted_at IS NULL) OR private.is_owner())));
 
 create policy comm_upd on public.commendations
   as permissive for update to authenticated
   using (private.is_active())
   with check (private.is_active());
+
+create policy ci_sel on public.confidential_informants
+  as permissive for select to authenticated
+  using (private.can_access_ci(id));
 
 create policy custody_ins on public.custody_chain
   as permissive for insert to authenticated
@@ -33660,6 +36147,7 @@ create policy wl_sel on public.watchlist
 --   public.case_tasks
 --   public.case_templates
 --   public.cases
+--   public.ci_events
 --   public.cid_records
 --   public.client_errors
 --   public.commendations
@@ -33749,6 +36237,7 @@ create policy wl_sel on public.watchlist
 --   case_charges -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_files -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_intel_links -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_intel_releases -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_links -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_messages -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_notes -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -33756,9 +36245,22 @@ create policy wl_sel on public.watchlist
 --   case_tasks -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_templates -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   cases -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   ci_assessments -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   ci_audit_events -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   ci_capacity_requests -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   ci_case_links -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   ci_contacts -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   ci_events -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   ci_handler_capacity -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   ci_handlers -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   ci_intelligence -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   ci_intelligence_links -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   ci_payments -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   ci_releases -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   cid_records -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   client_errors -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   commendations -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   confidential_informants -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   custody_chain -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   deleted_member_ledger -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   deleted_record_ledger -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -34071,6 +36573,7 @@ create policy wl_sel on public.watchlist
 --   private.can_access_case(cid uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.can_access_case_number(cn text): default (PUBLIC)
 --   private.can_access_case_row(p_bureau bureau, p_lead uuid, p_created_by uuid, p_cid uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.can_access_ci(p_ci uuid, p_user uuid): {postgres=X/postgres,authenticated=X/postgres}
 --   private.can_amend_legal(p_request uuid, p_user uuid): {postgres=X/postgres}
 --   private.can_announce(): default (PUBLIC)
 --   private.can_approve_document(p_category text, p_class text): default (PUBLIC)
@@ -34125,6 +36628,33 @@ create policy wl_sel on public.watchlist
 --   private.case_open_task_count(p_case uuid): {postgres=X/postgres}
 --   private.case_service_notify(p_recipient uuid, p_type text, p_payload jsonb): {postgres=X/postgres,service_role=X/postgres}
 --   private.case_writable(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.ci_active_count(p_user uuid): {postgres=X/postgres}
+--   private.ci_audit(p_ci uuid, p_action text, p_entity text, p_entity_id uuid, p_detail jsonb): {postgres=X/postgres}
+--   private.ci_audit_immutable(): {postgres=X/postgres}
+--   private.ci_block_merge_delete(): {postgres=X/postgres}
+--   private.ci_capacity(p_user uuid): {postgres=X/postgres}
+--   private.ci_capacity_raise(p_user uuid, p_new integer, p_reason text, p_expires timestamp with time zone, p_request uuid): {postgres=X/postgres}
+--   private.ci_case_autolink(p_ci uuid, p_case uuid, p_note text): {postgres=X/postgres}
+--   private.ci_enum(p_set text): {postgres=X/postgres}
+--   private.ci_event(p_ci uuid, p_kind text, p_user uuid): {postgres=X/postgres}
+--   private.ci_handlers_of(p_ci uuid): {postgres=X/postgres}
+--   private.ci_is_active_handler(p_ci uuid, p_user uuid): {postgres=X/postgres}
+--   private.ci_is_fixture(p_user uuid): {postgres=X/postgres}
+--   private.ci_is_handler(p_user uuid): {postgres=X/postgres}
+--   private.ci_kind_deletable(p_kind text, p_id uuid): {postgres=X/postgres}
+--   private.ci_kind_readable(p_kind text, p_id uuid): {postgres=X/postgres}
+--   private.ci_link_label(p_kind text, p_id uuid): {postgres=X/postgres}
+--   private.ci_links_check(p_links jsonb): {postgres=X/postgres}
+--   private.ci_links_write(p_intel uuid, p_links jsonb): {postgres=X/postgres}
+--   private.ci_next_number(): {postgres=X/postgres}
+--   private.ci_notify_full_access(p_bureau bureau, p_kind text, p_payload jsonb): {postgres=X/postgres}
+--   private.ci_open_followups(p_ci uuid): {postgres=X/postgres}
+--   private.ci_reviewers(p_bureau bureau): {postgres=X/postgres}
+--   private.ci_row_ci(p_kind text, p_id uuid): {postgres=X/postgres}
+--   private.ci_sanitized(p_ci uuid, p_text text): {postgres=X/postgres}
+--   private.ci_sweep(p_only_ci uuid): {postgres=X/postgres}
+--   private.ci_sweep_job(): {postgres=X/postgres}
+--   private.ci_trash_label(p_table text, p_id uuid): {postgres=X/postgres}
 --   private.cid_role_rank(p_role app_role): default (PUBLIC)
 --   private.city2_reset(p_confirm text): {postgres=X/postgres}
 --   private.city2_reset_preview(): {postgres=X/postgres}
@@ -34179,6 +36709,7 @@ create policy wl_sel on public.watchlist
 --   private.guard_surveillance_event(): default (PUBLIC)
 --   private.guard_surveillance_observation(): default (PUBLIC)
 --   private.handle_new_user(): {=X/postgres,postgres=X/postgres,authenticated=X/postgres}
+--   private.has_full_ci_access(p_user uuid): {postgres=X/postgres,authenticated=X/postgres}
 --   private.has_joint_access(cid uuid): default (PUBLIC)
 --   private.has_media_break_glass(p_case uuid, p_user uuid): default (PUBLIC)
 --   private.has_op_joint_access(cid uuid): {postgres=X/postgres}
@@ -34415,6 +36946,41 @@ create policy wl_sel on public.watchlist
 --   public.case_task_waive(p_task uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_timeline(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.change_member_role(p_target uuid, p_new_role app_role, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_assess(p_ci uuid, p_reliability text, p_credibility text, p_access text, p_risk text, p_compromise_likelihood text, p_usefulness text, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_audit_list(p_ci uuid, p_limit integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_capacity_request_decide(p_request uuid, p_decision text, p_note text, p_new_capacity integer, p_expires_at timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_capacity_request_submit(p_kind text, p_reason text, p_requested_capacity integer, p_operational_need text, p_case uuid, p_proposed_person uuid, p_proposed_motive text, p_estimated_risk text, p_expected_usefulness text, p_bureau bureau, p_comments text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_capacity_request_withdraw(p_request uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_capacity_set(p_user uuid, p_limit integer, p_reason text, p_expires_at timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_case_counts(p_cases uuid[]): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_case_intel(p_case uuid, p_limit integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_case_link(p_ci uuid, p_case uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_case_unlink(p_ci uuid, p_case uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_contact_delete(p_contact uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_contact_log(p_ci uuid, p_occurred_at timestamp with time zone, p_method text, p_summary text, p_location text, p_follow_up_required boolean, p_next_contact_at timestamp with time zone, p_case uuid, p_restricted_notes text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_contact_update(p_contact uuid, p_patch jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_context(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_create(p_person uuid, p_alias text, p_bureau bureau, p_primary_handler uuid, p_secondary_handler uuid, p_status text, p_motive_primary text, p_motive_secondary text[], p_motive_explanation text, p_recruitment_notes text, p_reliability text, p_risk text, p_recruited_at date, p_override_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_export(p_ci uuid, p_scope text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_get(p_ci uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_handler_remove(p_ci uuid, p_user uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_handler_set(p_ci uuid, p_user uuid, p_role text, p_reason text, p_override_reason text, p_counts boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_intel_create(p_ci uuid, p_summary text, p_body text, p_case uuid, p_received_at timestamp with time zone, p_reliability text, p_corroboration text, p_sensitivity text, p_follow_up_required boolean, p_handler_notes text, p_links jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_intel_delete(p_intel uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_intel_links_set(p_intel uuid, p_links jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_intel_set_corroboration(p_intel uuid, p_corroboration text, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_intel_update(p_intel uuid, p_patch jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_list(p_filters jsonb, p_limit integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_payment_approve(p_payment uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_payment_record(p_ci uuid, p_amount numeric, p_paid_at date, p_reason text, p_intel uuid, p_case uuid, p_notes text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_person_status(p_person uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_release(p_intel uuid, p_title text, p_body text, p_handling text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_release_revoke(p_release uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_search(p_q text, p_limit integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_set_status(p_ci uuid, p_status text, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_stats(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_sweep_run(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.ci_update(p_ci uuid, p_patch jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.cid_touch_updated_at(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.claim_legal_request_as_judge(p_request uuid): {postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}
 --   public.close_legal_request(p_request uuid, p_outcome text, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -34630,6 +37196,7 @@ create policy wl_sel on public.watchlist
 --   public.review_legal_request_as_da(p_request uuid, p_decision text, p_note text, p_signature text): {postgres=X/postgres,service_role=X/postgres}
 --   public.review_legal_request_as_prosecutor(p_request uuid, p_decision text, p_note text, p_signature text, p_capacity text): {postgres=X/postgres,service_role=X/postgres}
 --   public.review_membership_request(p_request uuid, p_decision text, p_final_bureau bureau, p_final_role app_role, p_applicant_note text, p_internal_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.rls_test_ci_sweep(p_ci uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.rls_test_cleanup(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.rls_test_cleanup_visibility(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.rls_test_escalation_run(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}

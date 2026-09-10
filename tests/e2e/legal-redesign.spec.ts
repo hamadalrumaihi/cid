@@ -311,7 +311,7 @@ test.describe('Legal workflow — E2E', () => {
   /* ── 9 · Action Center legal items ─────────────────────────────────────── */
   test('Action Center: a returned-to-me legal request ranks under "Returned to you"; the Legal filter isolates it', async ({ page }) => {
     await as(page, fx().actors.lsb)
-    await page.goto('/action')
+    await page.goto('/inbox')
     await expect(page.getByRole('heading', { level: 1, name: /Action Center/i })).toBeVisible({ timeout: 30_000 })
 
     const returnedSection = page.locator('section', { has: page.getByRole('heading', { name: /Returned to you/ }) })
