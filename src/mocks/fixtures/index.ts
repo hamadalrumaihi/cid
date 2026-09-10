@@ -9,6 +9,7 @@ export {
   fieldSubmissionPersonRow, fieldSubmissionReviewRow, fieldSubmissionRow, intelGroupCaseRow, intelGroupMemberRow, intelGroupRow,
   confidentialInformantRow, ciHandlerRow, ciHandlerCapacityRow, ciCapacityRequestRow, ciIntelligenceRow, ciIntelligenceLinkRow,
   ciContactRow, ciAssessmentRow, ciPaymentRow, ciCaseLinkRow, caseIntelReleaseRow, ciReleaseRow, ciAuditEventRow, ciEventRow,
+  MEDIA_INTEGRITY_DEFAULTS,
 } from './rows'
 export {
   emptyCase, populatedCase, archivedCase, legalHoldCase, restrictedMediaCase,

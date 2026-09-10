@@ -109,6 +109,14 @@ export function caseTaskRow(overrides: Partial<Tables<'case_tasks'>> & Pick<Tabl
   }
 }
 
+/** Integrity / custody / derivative columns (2026-11 platform upgrade) — null until `evidence_register` runs. */
+export const MEDIA_INTEGRITY_DEFAULTS = {
+  byte_size: null, classification: null, collected_at: null, collected_by: null, current_custodian: null, derivative_service: null,
+  derivative_service_version: null, derivative_type: null, evidence_number: null, integrity_status: null, last_integrity_check: null,
+  location_collected: null, mime: null, original_filename: null, parent_media_id: null, parent_sha256: null, sealed_at: null, sealed_by: null,
+  sha256: null, source: null,
+} as const
+
 export function mediaRow(overrides: Partial<Tables<'media'>> = {}): Tables<'media'> {
   return {
     archived_at: null,
@@ -123,6 +131,7 @@ export function mediaRow(overrides: Partial<Tables<'media'>> = {}): Tables<'medi
     evidence_designated_by: null,
     evidence_ref: null,
     external_url: 'https://r2.fivemanage.com/mock/evidence-1.png',
+    ...MEDIA_INTEGRITY_DEFAULTS,
     featured: false,
     gang_id: null,
     id: mockId(),
