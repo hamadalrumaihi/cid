@@ -51,12 +51,53 @@
   E2E in CI.
 
 ## 5. Items parked by the Portal Improvements plan
-See [`PLAN-PORTAL-IMPROVEMENTS.md` §19](PLAN-PORTAL-IMPROVEMENTS.md): FiveM
-lane activation, anonymous intake, drawn signatures, absorbing `siu_referrals`
-into `field_submissions`, shared saved views, mirroring external media into
-Supabase storage, Discord approvals, renaming `siu_*` identifiers, a
-full-parity mobile editor, section-level indexing of reports.
+
+Phases 0–8 of [`PLAN-PORTAL-IMPROVEMENTS.md`](PLAN-PORTAL-IMPROVEMENTS.md) are
+delivered (release 1.18.0; the record is
+[`HANDOFF-PORTAL-IMPROVEMENTS.md`](HANDOFF-PORTAL-IMPROVEMENTS.md)). What the
+plan explicitly left out (§19) and what the phases left open:
+
+**Out of scope by decision (plan §19)** — activating the FiveM / MDT lanes or
+touching any `service_role` grant (`integration-package/` untouched);
+server-side pagination of the case list (§1 above) beyond the bounded
+cross-reference RPC; anonymous or public intake forms; drawn / image
+signatures; absorbing `siu_referrals` into `field_submissions`; shared or
+bureau-published saved views; mirroring FiveManage media into Supabase
+storage; Discord slash commands or approvals via Discord; renaming `siu_*`
+identifiers or dropping retired enum values; a full-parity mobile editor for
+reports and legal drafting (Phase 8 ships **narrative-only** mobile report
+editing — RB11); full-text section indexing of reports (`document_sections`
+stays documents-only).
+
+**Left open by Phases 0–8**
+
+- **#299 — provision the RLS / e2e fixtures and the CI secrets.** Every
+  `tests/rls/v18x` / `v190a` suite and every live e2e spec self-skips until the
+  `rls-test-*@cidportal.test` roster exists again and `RLS_TEST_PASSWORD_*`
+  reach CI; the v18x and v190a suites have never run against live fixtures.
+  Owner-gated.
+- **#300 — the site-wide a11y ratchet.** P7-08 delivered the Action Center's
+  part (44 px targets, keyboard bulk selection, the axe pass on `/action`);
+  the site-wide axe ratchet in CI is not wired.
+- **`discord-notify` redeploy** — the edge function must be redeployed with
+  the shared `notification_titles.json` and the per-category opt-in
+  (`user_prefs.notif_discord`) before the Phase 7 DM categories reach Discord.
+- **The restore drill itself** — [`OPERATIONS.md` §5](OPERATIONS.md) is now a
+  numbered runbook, but a real restore into a scratch project needs a paid
+  branch / project; the log row records "not performed".
+- **`perm_deny` + `raise` → `perm_raise`** in the Phase 4–5 RPCs (legal,
+  report flow): a `perm_deny` row written before a RAISE rolls back with the
+  statement, so those refusals are not yet in the denial ledger. Phases 6–8
+  raise through `perm_raise` (P0403).
+- **History mounts without a detail surface** — `RecordHistory` is mounted
+  where one exists (person / vehicle / gang dossiers, the case Overview
+  "History" disclosure, notes, report drafts, draft legal requests — compare
+  only — and intel records). **Not mounted**: `place`, `account`, `narcotic`
+  and `evidence` — the versions are written and `record_history` answers for
+  them, but there is no dossier to hang the viewer on until those registries
+  gain one.
+- **Plan §20 open questions** — unchanged.
 
 ---
 
-_Last reviewed: 2026-09-05._
+_Last reviewed: 2026-09-09._

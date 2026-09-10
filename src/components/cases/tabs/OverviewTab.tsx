@@ -8,7 +8,9 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Field, Textarea } from '@/components/ui/Field'
 import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
-import { insert, list, deleteWithUndo, rpc } from '@/lib/db'
+import { RecordHistory } from '@/components/shared/RecordHistory'
+import { insert, list, rpc } from '@/lib/db'
+import { uiConfirm } from '@/components/ui/dialog'
 import { caseLink } from '@/lib/caseLinks'
 import { searchMemberHits, type EntityHit } from '@/lib/entitySearch'
 import { fmtDate } from '@/lib/format'
@@ -21,7 +23,7 @@ import { bureauLabel, roleLabel } from '@/lib/roles'
 import { useTableVersion } from '@/lib/realtime'
 import type { CaseAssessment, ClosureChecklistItem, NextAction } from '@/lib/caseWorkflow'
 import { Store } from '@/lib/store'
-import { toast } from '@/lib/toast'
+import { humanizeError, toast } from '@/lib/toast'
 import type { WorkflowRows } from '../CaseDetail'
 import { JointCaseModal, isActiveAssignment } from '../JointCaseModal'
 import { CaseBlockersPanel } from './CaseBlockersPanel'
@@ -72,9 +74,25 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
 
   const [addSupportOpen, setAddSupportOpen] = useState(false)
 
+  // Unassignment, not deletion: case_assignments never hard-delete (there is
+  // no delete policy) and are not a Trash kind. A standard assignment ends by
+  // stamping removed_at / removed_by (case_assignments_upd: standard rows on
+  // a writable case); the row stays as history. No undo — re-add the officer.
+  const unassign = async (a: AssignmentRow) => {
+    const who = officerName(a.officer_id) || 'this officer'
+    if (!(await uiConfirm(`Remove ${who} from the case? The assignment ends now (it was never an access grant — case visibility follows bureau, lead and grants). This is not undoable — add them again if needed.`, { title: 'Remove officer', confirmText: 'Remove' }))) return
+    // Bureau Lead+ (the case-child delete authority), stamped and audited
+    // server-side; the UPDATE policy no longer lets a client end a row.
+    const res = await rpc('case_assignment_end', { p_assignment: a.id })
+    if (res.error) { toast(humanizeError(res.error.message), 'danger'); return }
+    toast(`${officerName(a.officer_id) || 'Officer'} removed from the case.`, 'success')
+    void refresh()
+  }
+
   // Joint rows render in their own panel below; the standard panel keeps its
   // existing behavior for 'standard'/'manual_access' rows only.
   const standardRows = assignments.filter((a) => a.assignment_source !== 'joint_case')
+  const activeStandard = standardRows.filter((a) => isActiveAssignment(a))
   const jointRows = assignments.filter((a) => a.assignment_source === 'joint_case')
   // Active = not removed AND not expired — mirrors the server's access rule, so
   // an expired member never renders as if they still had access.
@@ -107,7 +125,7 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
               Updated live up there now (with Unit/Responsible), so only the
               non-duplicative tiles remain. */}
           <div className="grid grid-cols-2 gap-3">
-            <Stat label="Officers" value={standardRows.filter((a) => isActiveAssignment(a)).length} />
+            <Stat label="Officers" value={activeStandard.length} />
             <Stat label="Opened" value={fmtDate(c.created_at)} />
           </div>
           {/* Why this investigation exists. Renders nothing when the case was
@@ -121,13 +139,15 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
               {canEdit && <Button onClick={() => setAddSupportOpen(true)}>Add support</Button>}
             </div>
             <div className="flex flex-wrap gap-2">
-              {standardRows.map((a) => (
+              {/* Live rows only — an unassigned officer keeps a removed_at row
+                  for history and must not read as still assigned. */}
+              {activeStandard.map((a) => (
                 <span key={a.id} className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-sm text-slate-200">
                   {officerName(a.officer_id) || 'Officer'} <span className="text-xs text-slate-500">{a.role}</span>
-                  {canDelete && <button aria-label={`Remove ${officerName(a.officer_id) || 'officer'} from case`} onClick={() => void deleteWithUndo('case_assignments', a, { confirmTitle: 'Remove officer', confirmMessage: `Remove ${officerName(a.officer_id) || 'this officer'} from the case? You can undo this for a few seconds.`, confirmText: 'Remove', label: 'assignment', after: refresh })} className="text-rose-300 hover:text-rose-200">×</button>}
+                  {canDelete && <button aria-label={`Remove ${officerName(a.officer_id) || 'officer'} from case`} onClick={() => void unassign(a)} className="grid h-6 w-6 place-items-center rounded-full text-rose-300 hover:bg-rose-500/10 hover:text-rose-200">×</button>}
                 </span>
               ))}
-              {!standardRows.length && <p className="text-sm text-slate-500">No support assignments recorded.</p>}
+              {!activeStandard.length && <p className="text-sm text-slate-500">No support assignments recorded.</p>}
             </div>
             {addSupportOpen && (
               <AddSupportModal
@@ -161,6 +181,10 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
               </div>
             </div>
           )}
+          {/* Field-level versions of the case row (record_versions, P8-04) —
+              loads only when opened. Restore is offered where the case is
+              writable; restore_version re-checks server-side. */}
+          <CaseHistoryPanel caseId={c.id} canRestore={canEdit && !c.archived_at} onRestored={onWorkflowChanged} />
           {showJointPanel && (
             <JointMembersPanel
               c={c}
@@ -175,6 +199,29 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
         </div>
       </div>
     </div>
+  )
+}
+
+/* ── Record history (disclosure) ────────────────────────────────────────── */
+function CaseHistoryPanel({ caseId, canRestore, onRestored }: { caseId: string; canRestore: boolean; onRestored: () => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <section aria-label="Case record history" className="rounded-lg border border-white/10 bg-ink-950/50">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="flex min-h-[44px] w-full items-center justify-between gap-2 px-4 py-3 text-left"
+      >
+        <span className="font-semibold text-white">History</span>
+        <span aria-hidden className="text-xs text-slate-500">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="border-t border-white/10 p-4">
+          <RecordHistory kind="case" id={caseId} canRestore={canRestore ? undefined : false} onRestored={onRestored} />
+        </div>
+      )}
+    </section>
   )
 }
 

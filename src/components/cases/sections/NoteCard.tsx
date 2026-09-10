@@ -4,24 +4,22 @@
  *  / command-only / legacy badges, and the actions the server allows —
  *  pin (author or command), restrict to command (command only), edit
  *  (author or command; draft key `note:<caseId>:<noteId>`), soft delete with
- *  undo (soft_delete kind case_note), and History over record_history
- *  (VersionViewer, body diffs through DiffView). Client checks are
- *  cosmetic; every write reads the refusal (42501 / zero rows). */
-import { useCallback, useEffect, useState } from 'react'
+ *  undo (soft_delete kind case_note — the Trash keeps it), and History over
+ *  record_history (shared RecordHistory: body diffs, compare, restore).
+ *  Client checks are cosmetic; every write reads the refusal (42501 / zero
+ *  rows). */
+import { useState } from 'react'
 import type { Tables } from '@/lib/database.types'
-import { deleteWithUndo, rpc, update } from '@/lib/db'
+import { update } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { fmtDateTime, timeAgo } from '@/lib/format'
 import { renderMarkdown } from '@/lib/markdown'
 import { officerName } from '@/lib/profiles'
-import { historyRows, versionChanges, type VersionRow } from '@/lib/recordHistory'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
-import { ErrorNotice } from '@/components/ui/Notice'
-import { ListSkeleton } from '@/components/ui/Skeleton'
-import { VersionViewer, type VersionItem } from '@/components/shared/VersionViewer'
-import { DiffView } from '@/components/sops/docDiff'
+import { RecordHistory } from '@/components/shared/RecordHistory'
 import { NoteEditor } from './NoteEditor'
 import { writeRefusal } from './sectionShared'
 
@@ -90,8 +88,8 @@ export function NoteCard({ note, canManage, canRestrict, onChanged }: {
           {canManage && (
             <Button
               size="sm" variant="ghost" className="text-rose-300 hover:text-rose-200"
-              onClick={() => void deleteWithUndo('case_notes', note, {
-                confirmTitle: 'Delete note', confirmMessage: 'Move this note to the Trash? You can undo this for a few seconds.',
+              onClick={() => void deleteRecord('case_notes', note, {
+                confirmTitle: 'Delete note', confirmMessage: 'Move this note to the Trash? You can undo this from the toast or the Trash.',
                 confirmText: 'Delete note', label: 'note', after: onChanged,
               })}
             >
@@ -100,57 +98,20 @@ export function NoteCard({ note, canManage, canRestrict, onChanged }: {
           )}
         </div>
       )}
-      {history && <NoteHistory noteId={note.id} onClose={() => setHistory(false)} />}
+      {history && <NoteHistory noteId={note.id} canManage={canManage} onClose={() => setHistory(false)} onChanged={onChanged} />}
     </li>
   )
 }
 
-/* ── History modal — record_history('case_note', id) ─────────────────────── */
-function NoteHistory({ noteId, onClose }: { noteId: string; onClose: () => void }) {
-  const [rows, setRows] = useState<VersionRow[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const load = useCallback(async () => {
-    setError(null)
-    const res = await rpc('record_history', { p_kind: 'case_note', p_id: noteId })
-    if (res.error) { setError(res.error.message); return }
-    setRows(((res.data ?? []) as unknown as Array<Omit<VersionRow, 'old' | 'new'> & { old: unknown; new: unknown }>)
-      .map((r) => ({ ...r, old: (r.old ?? {}) as Record<string, unknown>, new: (r.new ?? {}) as Record<string, unknown> })))
-  }, [noteId])
-  // Versions load when the modal opens (state lives with the modal).
-  useEffect(() => { queueMicrotask(() => { void load() }) }, [load])
-  const ordered = rows ? historyRows(rows) : []
-  const items: VersionItem[] = ordered.map((v) => ({
-    id: String(v.version_no), number: v.version_no, at: v.created_at, byName: officerName(v.actor_id),
-    label: v.changed_fields.join(', ') + (v.burst ? ' · several saves' : ''),
-  }))
+/* ── History modal — RecordHistory kind="case_note" (P8-04) ─────────────── */
+function NoteHistory({ noteId, canManage, onClose, onChanged }: { noteId: string; canManage: boolean; onClose: () => void; onChanged: () => void }) {
   return (
     <Modal open onClose={onClose}>
       <div className="p-6">
         <ModalHeader title="Note history" onClose={onClose} />
-        {error ? <ErrorNotice message={error} onRetry={() => void load()} />
-          : rows === null ? <ListSkeleton count={3} />
-          : (
-            <VersionViewer
-              versions={items}
-              empty="No edits recorded yet — this is the note as first written."
-              renderContent={(item) => {
-                const v = ordered.find((x) => String(x.version_no) === item.id)
-                if (!v) return null
-                return (
-                  <div className="space-y-2">
-                    {versionChanges(v).map((ch) => ch.field === 'body_md' ? (
-                      <DiffView key={ch.field} base={String(ch.from ?? '')} other={String(ch.to ?? '')} />
-                    ) : (
-                      <p key={ch.field} className="text-xs text-slate-300">
-                        <span className="font-semibold">{ch.field}</span>: {String(ch.from ?? '—')} → {String(ch.to ?? '—')}
-                      </p>
-                    ))}
-                    {v.reason && <p className="text-[11px] text-slate-400">Reason: {v.reason}</p>}
-                  </div>
-                )
-              }}
-            />
-          )}
+        {/* canManage is the local edit mirror (author or command on a writable
+            case); restore_version re-checks edit authority server-side. */}
+        <RecordHistory kind="case_note" id={noteId} canRestore={canManage ? undefined : false} onRestored={onChanged} fieldLabels={{ body_md: 'Note' }} />
       </div>
     </Modal>
   )

@@ -70,6 +70,9 @@ export const PAGE_META: Record<string, PageMeta> = {
   action:     { title: 'Action Center', sub: 'Prioritized work requiring your attention across cases, command, and personnel' },
   shifts:     { title: 'Weekly Shift Reports', sub: 'Detective activity rolled up to bureau leadership' },
   audit:      { title: 'Audit Log', sub: 'Division-wide action history (owner-only)' },
+  // Phase 8 (P8-02): the deleted rows the caller may restore (trash_list);
+  // permanent deletion stays the Owner's armed protocol.
+  trash:      { title: 'Trash', sub: 'Deleted records you can restore — permanent deletion is the Owner’s armed protocol' },
   feedback:   { title: 'Feedback', sub: 'Suggest a feature or report a bug' },
   owner:      { title: 'Owner Console', sub: 'Project intelligence, feedback triage & engineering operations (owner-only)' },
   profile:    { title: 'My Profile', sub: 'Your account, appearance and notification settings' },
@@ -128,7 +131,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
   // there, so nothing is lost; the category is just one nav item now.
   { id: 'intel',     label: 'Investigative Tools', tabs: ['workspace'] },
   { id: 'reference', label: 'Reference',    tabs: ['penal', 'sops', 'guide', 'devdocs'] },
-  { id: 'oversight', label: 'Oversight',    tabs: ['calendar', 'shifts', 'audit'] },
+  { id: 'oversight', label: 'Oversight',    tabs: ['calendar', 'shifts', 'audit', 'trash'] },
 ]
 
 /** ── Special Investigations Bureau navigation ─────────────────────────────
@@ -168,7 +171,7 @@ export const SIU_NAV_CATEGORIES: NavCategory[] = [
   { id: 'siu-cases',     label: 'Cases',        tabs: ['cases', 'operations', 'legal', 'case-files', 'rico', 'report-templates'] },
   { id: 'siu-intel',     label: 'Investigative Tools', tabs: ['workspace'] },
   { id: 'siu-ref',       label: 'Reference',    tabs: ['penal', 'sops', 'guide', 'devdocs'] },
-  { id: 'siu-oversight', label: 'Oversight',    tabs: ['calendar', 'shifts', 'audit'] },
+  { id: 'siu-oversight', label: 'Oversight',    tabs: ['calendar', 'shifts', 'audit', 'trash'] },
 ]
 
 /** Labels that differ inside the SIU workspace. Anything absent falls back to
@@ -187,7 +190,7 @@ export const TAB_LABEL: Record<string, string> = {
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
   media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide', devdocs: 'Developer Handbook',
   tools: 'Investigative Tools', workspace: 'Workspace',
-  inbox: 'My Dashboard', action: 'Action Center', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', owner: 'Owner Console', profile: 'My Profile', 'command-center': 'Command Center', siu: 'Special Investigations Bureau',
+  inbox: 'My Dashboard', action: 'Action Center', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', trash: 'Trash', owner: 'Owner Console', profile: 'My Profile', 'command-center': 'Command Center', siu: 'Special Investigations Bureau',
 }
 
 /** Presentational sub-grouping for crowded categories — a visual layer over

@@ -28,7 +28,9 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | `auth.tsx` | ⚠ Sign-in state machine + `useAuth()` context + capability booleans |
 | `autofill.ts` | Pure autofill/save-choice invariants — `buildAutofill` never replaces user input; `diffForMasterUpdate` fills only the master's gaps (no overwrites, no blanks); no I/O |
 | `database.types.ts` | ⚠ Hand-maintained TS mirror of the live schema |
-| `db.ts` | ⚠ THE data layer: list/insert/update/remove/rpc/deleteWithUndo/withRetry |
+| `db.ts` | ⚠ THE data layer: list/insert/update/remove/rpc/softDeleteRecord/restoreRecord/withRetry |
+| `deleteRecord.ts` | the one delete helper — confirm → reason (when required) → `soft_delete` per row → the "deleted · In Trash" Undo toast (`restore_record`) |
+| `trash.ts` | the Trash's client model: `fetchTrash` (`trash_list`), groups, labels, deep links, `restoreFromTrash`, the badge store |
 | `docx.ts` | Dependency-free OOXML writer (byte-fragile ZIP) |
 | `deadlines.ts` | Shared deadline engine (v1.14) — feeds `ui/DeadlineChip`; `justice.ts` delegates to it |
 | `caseHealth.ts` | Pure, clock-injected advisory health flags (hygiene + due/returned signals) — never fetches, skips flags whose inputs weren't passed; renders via `cases/CaseHealthRow` + the CasesView attention marker/"Needs attention" filter |

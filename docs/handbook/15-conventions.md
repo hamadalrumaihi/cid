@@ -49,7 +49,7 @@ export function FeatureView() {
 - `withRetry` for initial loads of important screens; never for writes.
 - Privileged/multi-step flows: `rpc()` only — never re-implement
   client-side.
-- Deletes: `uiConfirm` (or `deleteWithUndo`'s built-in confirm) + Undo;
+- Deletes: `uiConfirm` (or `deleteRecord`'s built-in confirm) + Undo;
   configure `children`/`setNullRefs` to match the FK schema.
 
 ## Effects & async

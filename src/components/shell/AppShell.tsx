@@ -4,7 +4,9 @@
  *  around the active view, mirroring the vanilla #app-shell layout
  *  (index.html:59-165) and drawer behavior (core.js:935-945). */
 import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { Store } from '@/lib/store'
+import { MOBILE_CASE_PATH_PREFIX } from '@/components/mobile/mobileCaseRoute'
 import { BottomNav } from './BottomNav'
 import { ConnBanner } from './ConnBanner'
 import { CreateHost } from './CreateHost'
@@ -18,6 +20,13 @@ import { PortalAssistant } from '@/components/assistant/PortalAssistant'
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { activeTab } = useNav()
+  // The phone-first case route (`/m/…`, P8-01) draws its own top bar (back,
+  // case number, "Open on desktop") and a fixed bottom section switcher, so
+  // the shell keeps only what a phone still needs: skip link, the main
+  // landmark, the BottomNav and the connection banner. No sidebar, header,
+  // sub-tabs or assistant — nothing to overlap the switcher.
+  const pathname = usePathname()
+  const mobileRoute = pathname.startsWith(MOBILE_CASE_PATH_PREFIX)
 
   // Persist the last tab on EVERY route change — clicks, direct loads,
   // back/forward — matching vanilla navigate() (core.js:928), so the shared
@@ -43,6 +52,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       document.body.classList.remove('overflow-hidden', 'lg:overflow-auto')
     }
   }, [drawerOpen])
+
+  if (mobileRoute) {
+    return (
+      // CreateHost stays: the mobile entity picker's "create & link" path
+      // opens the person modal through useCreate().
+      <CreateHost>
+        <div className="flex min-h-screen">
+          <a href="#main" className="skip-link">Skip to content</a>
+          <main id="main" tabIndex={-1} className="min-w-0 flex-1 outline-none">{children}</main>
+          <BottomNav />
+          <ConnBanner />
+        </div>
+      </CreateHost>
+    )
+  }
 
   return (
     // CreateHost wraps the whole shell so the Header's + Create button and the

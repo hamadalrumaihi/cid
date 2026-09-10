@@ -9,8 +9,11 @@
  *  With nothing active the directory shows: the tool directory plus a strip
  *  of the open cases. `/tools` renders this same view; the provider mirrors
  *  the URL to `/workspace` so old bookmarks keep landing. */
-import { Suspense, useMemo } from 'react'
+import { Suspense, useEffect, useMemo, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { ViewPlaceholder } from '@/components/ViewPlaceholder'
+import { desktopOnMobile, mobileCaseHref } from '@/components/mobile/mobileCaseRoute'
+import { useNarrow } from '@/lib/useNarrow'
 import { ToolDirectory } from '@/components/tools/ToolDirectory'
 import { TOOL_LIST_COMPONENT, TOOL_RECORD_COMPONENT } from '@/components/tools/toolRegistry'
 import { CaseWorkspaceTab } from '@/components/cases/CaseWorkspaceTab'
@@ -35,6 +38,24 @@ export function WorkspaceView() {
 
 function WorkspaceBody() {
   const ws = useWorkspace()
+  const router = useRouter()
+  const narrow = useNarrow()
+  // Phone-first case screen (P8-01): on a narrow viewport an ACTIVE case tab
+  // hands over to `/m/cases/<id>?s=<section>` — unless this browser tab chose
+  // the desktop ("Open on desktop" sets the session flag before navigating
+  // here, so there is no bounce). The mobile route never redirects back on
+  // its own, and each (case, section) pair fires at most once per mount.
+  const activeCase = ws?.restored ? ws.tabs.find((t) => t.key === ws.activeKey && t.kind === 'case') ?? null : null
+  const caseId = activeCase?.id ?? null
+  const caseSection = activeCase?.section ?? null
+  const handedOff = useRef<string | null>(null)
+  useEffect(() => {
+    if (!narrow || !caseId) return
+    const key = `${caseId}:${caseSection ?? ''}`
+    if (handedOff.current === key || desktopOnMobile()) return
+    handedOff.current = key
+    router.replace(mobileCaseHref(caseId, caseSection))
+  }, [narrow, caseId, caseSection, router])
   if (!ws) return null
   const { tabs, activeKey } = ws
 

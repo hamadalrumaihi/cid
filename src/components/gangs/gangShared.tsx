@@ -44,10 +44,3 @@ export const densityTint = (d: string | null | undefined) => {
   return 'bg-emerald-500/15 text-emerald-300'
 }
 
-export const GANG_DELETE_CHILDREN = [
-  { table: 'gang_members' as const, column: 'gang_id' },
-  { table: 'gang_ranks' as const, column: 'gang_id' },
-  { table: 'gang_turf' as const, column: 'gang_id' },
-]
-
-export const GANG_NULL_REFS = [{ table: 'persons' as const, column: 'gang_id' }]

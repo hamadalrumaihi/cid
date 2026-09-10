@@ -15,7 +15,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { Tables } from '@/lib/database.types'
-import { deleteWithUndo, list } from '@/lib/db'
+import { list } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { useCaseTableVersion } from '@/lib/realtime'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -137,9 +138,9 @@ export function EntitySection({ c, kind, canEdit }: { c: CaseRow; kind: EntitySe
                           <Button
                             size="sm" variant="ghost" className="text-rose-300 hover:text-rose-200"
                             aria-label={`Unlink ${name}`}
-                            onClick={() => void deleteWithUndo('case_intel_links', l, {
+                            onClick={() => void deleteRecord('case_intel_links', l, {
                               confirmTitle: 'Remove link',
-                              confirmMessage: `Unlink ${name} from this case? The ${meta.one} record itself is kept — only the link is removed. You can undo this for a few seconds.`,
+                              confirmMessage: `Unlink ${name} from this case? The ${meta.one} record itself is kept — only the link is removed. You can undo this from the toast or the Trash.`,
                               confirmText: 'Unlink', label: 'link', after: () => void refresh(),
                             })}
                           >

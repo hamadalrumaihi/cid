@@ -83,6 +83,11 @@ Two browsers (or one normal + one incognito) signed in as different
 users; change data in one, watch the other. Preview deployments work too.
 
 **Who can delete things?**
-Command only, everywhere (RLS `can_delete()`), always with Undo. If Undo
-restores a parent without its children, the `deleteWithUndo` cascade
-config is missing entries — fix the config, not the pattern.
+Nobody destroys anything from a browser: a delete is `soft_delete`
+(command for registries and cases, the author for their own task / note /
+blocker / message — RLS `perm_registry_delete`), always with Undo and the
+Trash behind it. The server cascades a parent's exclusive children under
+one `delete_batch` and `restore_record` brings the batch back; if a child
+seems missing after a restore, look at the migration's cascade list, not at
+the client. Permanent deletion is the Owner's armed protocol
+([Ch. 22](22-versions-trash.md)).

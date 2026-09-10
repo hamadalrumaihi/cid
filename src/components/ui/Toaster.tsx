@@ -4,6 +4,7 @@
  *  (colors, position, popIn entrance), with the status glyphs drawn from the
  *  shared icon set instead of emoji. Sits above the mobile bottom bar
  *  (bottom-20) and at bottom-6 on desktop, same as #toast-root. */
+import Link from 'next/link'
 import { useToastStore, type ToastType } from '@/lib/toast'
 import { AlertIcon, CheckIcon, InfoIcon, UndoIcon, XMarkIcon } from '@/components/shell/icons'
 
@@ -36,6 +37,15 @@ export function Toaster() {
           >
             <span aria-hidden="true" className="flex-shrink-0"><Icon size={16} /></span>
             <span>{t.message}</span>
+            {t.link && (
+              <Link
+                href={t.link.href}
+                onClick={() => dismiss(t.id)}
+                className="ml-1 rounded-md px-1.5 py-0.5 text-xs font-semibold underline underline-offset-2 hover:bg-white/10"
+              >
+                {t.link.label}
+              </Link>
+            )}
             {t.onUndo && (
               <button
                 className="ml-1 rounded-md border border-amber-300/40 bg-amber-300/10 px-2 py-0.5 text-xs font-semibold text-amber-50 transition hover:bg-amber-300/20"

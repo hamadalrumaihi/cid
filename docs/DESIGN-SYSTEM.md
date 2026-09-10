@@ -85,12 +85,46 @@ label always renders; color is never the only signal.
 white text + 2px accent underline on a hairline baseline; inactive = muted
 text. No filled pill tabs.
 
+**Workspace tabs** (`/workspace`, `/tools`): one keep-alive tab strip
+(`role="tablist"`, name "Open tabs") whose tabs are labelled by what they
+hold — a case by its number (`<number> case`), a record by its label, a tool
+by its name — each with a `Close <label>` button; the case's own sections
+sit below in a second strip ("Case sections"). Eight open tabs is the cap;
+the ninth asks which to close. Inactive tabs stay mounted (`display:none`),
+so switching never re-fetches; the section per case is provider memory. On a
+narrow viewport the section strip becomes `CaseSectionSwitcher`'s bottom bar.
+
 ## Tables vs cards
 
 Registry and list data renders in `ui/DataTable` (sorting, filtering,
 selection, CSV, mobile card fallback via `mobileCard`). Cards are for
 genuinely visual or heterogeneous content (mugshot boards, media, dashboards
 of unlike panels) — never the default because a grid is easy.
+
+Three list surfaces are **cards by design**, not by default:
+
+- **Action Center rows** (`/action`) — heterogeneous items (a decision, a
+  task, a notification, an expiring grant) each with its own inline action
+  and deep link; on a narrow viewport they collapse to stacked cards with
+  44 px targets and keyboard bulk selection (the bulk bar offers read /
+  snooze / dismiss only — never a decision in bulk). The *Escalated* badge is
+  read from the shared ledger, so it is the same for everyone who may see
+  the case.
+- **Trash rows** (`/trash`) — grouped by kind (Cases / Case material /
+  Registry / Links) behind filter chips, a search on the label, and per row:
+  the label, the case number, who deleted it, when, the reason, **Restore**
+  (a confirm; a reason is *offered*, never demanded, for the kinds whose
+  delete needed one) and, for the Owner only, **Permanently delete**. Under
+  `useNarrow` the rows are cards. The list refreshes on focus, after an
+  action and every 60 s rather than through `useTableVersion` — twenty-seven
+  tables is too broad a subscription.
+- **The phone-first case route** (`/m/cases/[id]`) — no tables at all:
+  every phone section (Overview, Tasks, Notes, People, Vehicles, Gangs,
+  Locations, Media, Reports, Activity — a desktop-only section renders an
+  "Open on desktop" card) is read-only cards over the same row data the desktop tabs load,
+  a bottom section switcher, and quick actions (add / complete a task, add a
+  note, link an entity, edit a report's own narrative) that make exactly the
+  writes the desktop makes; everything else is an "Open on desktop" link.
 
 ## States
 
@@ -111,7 +145,14 @@ reason written in a comment.
 - **Sidebar**: flat brand tile, grouped nav with sentence-case group labels,
   one `navItemCls` recipe (quiet fill + 2px accent rail when active),
   meaningful count badges only, collapsible rail with flyout labels, drawer
-  below `lg`.
+  below `lg`. The count badges are the Action Center's queue and the
+  **Trash** (`trash_count()`, shown only when > 0, re-read after a delete /
+  undo / restore through `bumpTrash()`); the Trash leaf sits in Oversight
+  next to Audit.
+- **The `/m/` route**: the only screen outside the `[tab]` shell — the
+  sidebar and top bar give way to a slim bar carrying the case number and
+  "Open on desktop" (which sets the per-tab `cid:desktop-on-mobile` flag so
+  the workspace stops redirecting). Nothing else in the shell changes.
 - **Top bar**: fixed `h-14` (`--app-header-h: 3.5rem`), breadcrumb context
   (`Category / Page`), global search with `/` focus + `⌘K` palette, create
   menu, notifications, account controls. The page's `<h1>` lives in the view

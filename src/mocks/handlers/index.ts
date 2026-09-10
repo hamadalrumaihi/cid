@@ -1,6 +1,6 @@
-/** Handler registry. ORDER MATTERS: the Phase 7 action routes (explicit
- *  /rest/v1/rpc/<fn> per function) before the generic rpc catch-all so they
- *  win the match; rpc before the postgrest catch-all so /rest/v1/rpc/:fn
+/** Handler registry. ORDER MATTERS: the Phase 7 action routes and the
+ *  Phase 8 trash routes (explicit /rest/v1/rpc/<fn> per function) before the
+ *  generic rpc catch-all so they win the match; rpc before the postgrest catch-all so /rest/v1/rpc/:fn
  *  never resolves as a table named "rpc"; the legal, report, intel and
  *  action write-refusals (Phase 4 / 5 / 6 / 7 RPC-only tables → 42501)
  *  before the catch-all so a direct INSERT / UPDATE / DELETE never reaches
@@ -13,10 +13,12 @@ import { legalHandlers } from './legal'
 import { postgrestHandlers } from './postgrest'
 import { reportHandlers } from './reports'
 import { rpcHandlers } from './rpc'
+import { trashHandlers } from './trash'
 
 export const handlers = [
   ...authHandlers,
   ...actionHandlers,
+  ...trashHandlers,
   ...rpcHandlers,
   ...legalHandlers,
   ...reportHandlers,

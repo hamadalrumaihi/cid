@@ -389,7 +389,21 @@ When the investigation is done, open **Sign-off** and submit. Routing is automat
 
 **Case packet** exports the full record as a letterheaded, paginated **PDF** (or DOCX / Markdown), ready for court.
 
-## J. Troubleshooting
+## J. Trash, history and your phone
+
+### Trash
+
+Deleting in the portal never destroys anything. When you delete a task, a note, a person, a case — anything — the record moves to the **Trash** and a toast reads **"… deleted · In Trash"** with an **Undo** button and an **Open Trash** link. Undo puts it straight back. If the toast is gone, open **Trash** (sidebar, under Oversight next to Audit — the badge is how many records you could restore) and press **Restore** on the row: the Trash shows every deleted record you are allowed to bring back — your own case material and the links you made; for Bureau Leads and above, every deleted record of the cases they oversee. Rows are grouped (Cases, Case material, Registry, Links), searchable by name, and show who deleted what, when and why. Some kinds ask for a reason when deleted (cases, reports, evidence, media, registry records); restoring them offers a reason too, but never requires one. If a record's case is itself in the Trash, restore the case first — the case brings everything deleted with it back in one go. **Permanent deletion** is the portal owner's alone — a deliberate, confirmed protocol run from the Trash row ("Permanently delete…") — so nothing you do can make a record unrecoverable.
+
+### History
+
+Records keep their history. Wherever you see **History** — a person, vehicle or gang dossier, a case's Overview, a note, a report draft, a legal draft, an intelligence record — you get every saved version: which fields changed, from what to what, by whom and when (edits made within a few minutes by the same person are one entry). **Compare** puts any two versions side by side. If you may edit the record you may also **Restore this version**: give a reason and the older values are written back as a new version — nothing is overwritten, so a restore can itself be undone the same way. Sealed reports and submitted legal requests are read-only history.
+
+### On your phone
+
+Open a case on a phone and you land on a **phone-first screen** — the case number, title, status and lead on top, sections along the bottom (Overview, Tasks, Notes, People, Vehicles, Gangs, Locations, Media, Reports, Activity — the dense desktop-only sections show an **Open on desktop** card), and cards instead of tables. You can add a task and mark one done, add a note, link a person or vehicle, and — for a report you are writing — **edit its narrative** with autosave a moment after you stop typing ("Saved · just now"; a save that fails or happens offline is kept on the phone and retried when you're back). Submitting, sealing and reviewing are desktop actions ("Submit from the desktop"). Anything the phone screen does not offer is one tap away: **Open on desktop** shows the full workspace and keeps showing it until you close the tab. The Action Center is phone-ready too — the same items as cards, with the same actions.
+
+## K. Troubleshooting
 
 | Symptom | What it means — and the fix |
 |---|---|
@@ -405,7 +419,7 @@ When the investigation is done, open **Sign-off** and submit. Routing is automat
 | Your legal request came back | Read the return note on the request, fix the draft, and resubmit. Only declare **material change** if the substance changed — that rewinds it to full command review. |
 | Search finds nothing | Fewer letters (it tolerates typos), or a plate / case-number fragment. **Ctrl-K / ⌘K** opens the full palette. |
 | Changes elsewhere aren't showing | A connection banner appears when you're offline; reload or click Refresh on My Dashboard. |
-| Archived or deleted something by accident | Most deletions show an **Undo** toast for a few seconds. Archived records are restorable. Cases are archived, not deleted — only the portal owner deletes permanently. Ask Command; everything is audit-logged. |
+| Archived or deleted something by accident | Press **Undo** on the toast, or open **Trash** (sidebar → Oversight) and **Restore** the record — deletions move records to the Trash, they never destroy them. Archived cases are restorable by Command. Only the portal owner deletes permanently, and only through a confirmed protocol; everything is audit-logged. |
 | You can't approve your own work | By design, everywhere: sign-off, legal review, membership approvals. A second person must act. |
 
 Questions or ideas? Use **Feedback** (sidebar) — it goes to the portal owner, and you can watch its status as it's triaged.

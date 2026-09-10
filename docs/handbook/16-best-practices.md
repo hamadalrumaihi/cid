@@ -16,7 +16,8 @@
   ~10 places each; consistency IS the maintainability strategy.
 - **Run the four gates before pushing** — CI will catch you anyway, but
   slower.
-- **Give destructive actions an Undo** (`deleteWithUndo`) and a confirm.
+- **Give destructive actions an Undo** (`deleteRecord` — the soft delete's
+  toast, with the Trash behind it) and a confirm.
 - **Test realtime with two browsers** when you touch data flows.
 
 ## Never

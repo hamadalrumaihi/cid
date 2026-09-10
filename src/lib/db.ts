@@ -1,8 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import type { Database, Tables, TablesInsert, TablesUpdate } from './database.types'
-import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
-import { toast, undoToast } from './toast'
 
 type TableName = keyof Database['public']['Tables']
 
@@ -67,9 +65,9 @@ export interface ListOptions<T extends TableName> {
 /** Tables that soft-delete (migrations 20261007120000 …120100 for the
  *  registries, 20261008120001 …120100 for the case tables): the value is
  *  the `kind` the soft_delete / restore_record RPCs take. list() filters
- *  these to live rows, remove() / deleteWithUndo() route their deletes to
- *  the RPC (a client DELETE is refused by grants), and the Undo toast calls
- *  restore_record. */
+ *  these to live rows, remove() / deleteRecord() (lib/deleteRecord) route
+ *  their deletes to the RPC (a client DELETE is refused by grants), and the
+ *  Undo toast / the Trash call restore_record. */
 export const SOFT_DELETE_KIND = {
   persons: 'person', vehicles: 'vehicle', gangs: 'gang', places: 'place', accounts: 'account',
   indicators: 'indicator', narcotics: 'narcotic', operations: 'operation', trackers: 'tracker',
@@ -84,8 +82,9 @@ export const SOFT_DELETE_KIND = {
 } as const satisfies Partial<Record<TableName, string>>
 export type SoftDeleteTable = keyof typeof SOFT_DELETE_KIND
 /** Kinds whose soft_delete requires a reason (the parent records and the
- *  case artefacts; link rows, tasks, messages and blockers do not). */
-const REASON_REQUIRED: ReadonlySet<string> = new Set([
+ *  case artefacts; link rows, tasks, messages and blockers do not). The
+ *  delete helper prompts for it; the Trash offers it on restore. */
+export const REASON_REQUIRED: ReadonlySet<string> = new Set([
   'person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker',
   'case', 'report', 'media', 'evidence', 'rico_case',
 ])
@@ -266,142 +265,6 @@ export async function invokeFunction(name: string, body: unknown): Promise<{ err
   } catch (e) {
     return { error: { message: e instanceof Error ? e.message : String(e) } }
   }
-}
-
-/* ---- deleteWithUndo (vanilla core.js:484-533) -----------------------------
- * Delete a row (or rows) with a 6s "Undo" toast that re-inserts them,
- * preserving ids so references survive. For ON DELETE CASCADE children pass
- * opts.children ([{table, column}]) — snapshotted before the delete and
- * re-inserted (after the parents) on undo. opts.setNullRefs snapshots rows
- * whose FK Postgres nulls on delete, and re-applies the value on undo. */
-export interface DeleteWithUndoOptions {
-  label?: string
-  /** Callers that already showed their own uiConfirm pass true. */
-  noConfirm?: boolean
-  /** Override the confirm body with an intelligent message that names exactly
-   *  what is being removed and warns about related records. Falls back to the
-   *  generic "Delete {label}?" phrasing. */
-  confirmMessage?: string
-  /** Confirm dialog heading (e.g. "Delete task"). */
-  confirmTitle?: string
-  /** Confirm button label (e.g. "Delete task" instead of the generic "Delete"). */
-  confirmText?: string
-  after?: () => void
-  children?: { table: TableName; column: string }[]
-  setNullRefs?: { table: TableName; column: string }[]
-}
-
-export async function deleteWithUndo<T extends TableName>(
-  table: T,
-  rows: Tables<T> | Tables<T>[],
-  opts: DeleteWithUndoOptions = {},
-): Promise<boolean> {
-  const listRows = (Array.isArray(rows) ? rows.slice() : [rows]) as (Tables<T> & { id: string })[]
-  if (!listRows.length) return false
-  if (!opts.noConfirm && !(await uiConfirm(
-    opts.confirmMessage || `Delete ${opts.label || 'this record'}? You can undo this for a few seconds.`,
-    { title: opts.confirmTitle, confirmText: opts.confirmText || 'Delete' },
-  ))) return false
-  const ids = listRows.map((r) => r.id)
-
-  // Soft-deletable registries: the server keeps the rows and cascades the
-  // exclusive links itself, so no snapshot is needed and Undo is a restore.
-  // Parent kinds require a reason (decision P5 — Bureau Lead+ with reason).
-  const softKind = softKindOf(table)
-  if (softKind) {
-    let reason: string | null = null
-    if (REASON_REQUIRED.has(softKind)) {
-      reason = await uiPrompt(`Reason for deleting ${opts.label || 'this record'}`, { title: opts.confirmTitle || 'Reason required', placeholder: 'Why is this record being removed?…', confirmText: opts.confirmText || 'Delete' })
-      if (reason === null) return false
-      if (!reason.trim()) { toast('A reason is required to delete this record.', 'warn'); return false }
-    }
-    const done: string[] = []
-    let sfail = 0
-    for (const row of listRows) {
-      const r = await softDeleteRecord(table as SoftDeleteTable, row.id, reason)
-      if (r.error) { sfail++; if (r.error.code && r.error.code !== 'denied') toast(r.error.message, 'danger') }
-      else done.push(row.id)
-    }
-    opts.after?.()
-    const one = listRows.length === 1
-    const noun = opts.label || (one ? 'Item' : `${listRows.length} items`)
-    if (sfail && !done.length) { toast(`${noun} delete failed`, 'danger'); return false }
-    undoToast(`${one ? noun + ' deleted' : done.length + ' deleted'}${sfail ? ` · ${sfail} failed` : ''}`, () => {
-      void (async () => {
-        let rok = 0, rfail = 0
-        for (const id of done) {
-          const r = await restoreRecord(table as SoftDeleteTable, id, 'undo')
-          if (r.error) rfail++
-          else rok++
-        }
-        toast(rfail ? `Restored ${rok} of ${done.length}` : (one ? `${noun} restored` : `${rok} restored`), rfail ? (rok ? 'warn' : 'danger') : 'success')
-        opts.after?.()
-      })()
-    })
-    return true
-  }
-
-  // Snapshot cascade children BEFORE the delete removes them. If a snapshot
-  // fails, ABORT — deleting anyway would cascade-wipe children we could no
-  // longer restore.
-  const childSnap: { table: TableName; rows: Record<string, unknown>[] }[] = []
-  for (const spec of opts.children ?? []) {
-    const r = await raw().from(spec.table).select('*').in(spec.column, ids)
-    if (r.error) { toast(`Delete aborted — could not snapshot related ${spec.table} for undo.`, 'danger'); return false }
-    childSnap.push({ table: spec.table, rows: (r.data ?? []) as Record<string, unknown>[] })
-  }
-  const refSnap: { table: TableName; column: string; rows: { id: string; [k: string]: unknown }[] }[] = []
-  for (const spec of opts.setNullRefs ?? []) {
-    const r = await raw().from(spec.table).select(`id,${spec.column}`).in(spec.column, ids)
-    if (r.error) { toast(`Delete aborted — could not snapshot ${spec.table} references for undo.`, 'danger'); return false }
-    refSnap.push({ table: spec.table, column: spec.column, rows: (r.data ?? []) as unknown as { id: string }[] })
-  }
-
-  const deleted: (Tables<T> & { id: string })[] = []
-  let ok = 0, fail = 0
-  for (const row of listRows) {
-    const r = await remove(table, row.id)
-    if (r.error) fail++
-    else { ok++; deleted.push(row) }
-  }
-  opts.after?.()
-  const one = listRows.length === 1
-  const noun = opts.label || (one ? 'Item' : `${listRows.length} items`)
-  if (fail && !ok) { toast(`${noun} delete failed`, 'danger'); return false }
-
-  undoToast(`${one ? noun + ' deleted' : ok + ' deleted'}${fail ? ` · ${fail} failed` : ''}`, () => {
-    void (async () => {
-      // Re-insert ONLY the parents that were actually deleted (never-deleted
-      // rows would duplicate-key), then their snapshotted children.
-      let rok = 0, rfail = 0
-      for (const row of deleted) {
-        const r = await insert(table, row as unknown as TablesInsert<T>)
-        if (r.error) rfail++
-        else rok++
-      }
-      let ckid = 0, cfail = 0
-      for (const snap of childSnap) for (const kid of snap.rows) {
-        const r = await raw().from(snap.table).insert(kid)
-        if (r.error) cfail++
-        else ckid++
-      }
-      // Re-apply nulled-out FK references now that the parent exists again.
-      for (const ref of refSnap) for (const rr of ref.rows) {
-        const r = await raw().from(ref.table).update({ [ref.column]: rr[ref.column] }).eq('id', rr.id)
-        if (r.error) cfail++
-        else ckid++
-      }
-      const allOk = rfail === 0 && cfail === 0
-      toast(
-        allOk
-          ? (one ? `${noun} restored` : `${rok} restored`)
-          : `Restored ${rok} of ${deleted.length}${childSnap.length ? ` (+${ckid} related${cfail ? `, ${cfail} failed` : ''})` : ''}`,
-        rok || ckid ? (allOk ? 'success' : 'warn') : 'danger',
-      )
-      opts.after?.()
-    })()
-  })
-  return true
 }
 
 /** One silent retry on transient (network-blip) failures — vanilla withRetry

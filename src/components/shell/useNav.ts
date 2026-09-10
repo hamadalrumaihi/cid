@@ -15,7 +15,10 @@ export function useNav() {
   // First path segment is the tab id ('/cases/…' → 'cases'); default 'inbox'
   // (My Dashboard — the personal home and default landing, src/app/page.tsx).
   const seg = pathname.split('/')[1] || 'inbox'
-  const activeTab = isValidTab(seg) ? seg : 'inbox'
+  // `/m/cases/<id>` (the phone-first case route, P8-01) is outside PAGE_META;
+  // it belongs to the Cases category so the BottomNav lights the right tab and
+  // Store('tab') remembers a case, not the dashboard.
+  const activeTab = isValidTab(seg) ? seg : seg === 'm' ? 'cases' : 'inbox'
   // TAB_CATEGORY now covers every PAGE_META tab; null means "belongs to no
   // category" (profile/owner/command-center/concern/siu/feedback) — no strip
   // highlight, Subtabs suppressed. The 'command' fallback only guards a tab

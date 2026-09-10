@@ -12999,6 +12999,27 @@ export type Database = {
         Args: { p_case: string }
         Returns: Json
       }
+      trash_count: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
+      trash_list: {
+        Args: { p_kind?: string | null; p_limit?: number }
+        Returns: {
+          kind: string
+          id: string
+          label: string | null
+          case_id: string | null
+          case_number: string | null
+          deleted_at: string
+          deleted_by: string | null
+          deleted_by_name: string | null
+          delete_reason: string | null
+          delete_batch: string | null
+          restorable: boolean
+          permanently_deletable: boolean
+        }[]
+      }
       admin_justice_membership_requests: {
         Args: never
         Returns: Database["public"]["Tables"]["justice_membership_requests"]["Row"][]
@@ -13024,6 +13045,10 @@ export type Database = {
       can_record: {
         Args: { p_action: string; p_id: string; p_kind: string }
         Returns: boolean
+      }
+      case_assignment_end: {
+        Args: { p_assignment: string }
+        Returns: Json
       }
       case_access_renew: {
         Args: { p_days?: number; p_grant: string }

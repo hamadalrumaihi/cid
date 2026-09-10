@@ -14,7 +14,8 @@
  *  the referenced ids, never a whole-registry load. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { insert, list, deleteWithUndo } from '@/lib/db'
+import { insert, list } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { searchEntities, type EntityHit } from '@/lib/entitySearch'
 import { useCaseTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
@@ -96,7 +97,7 @@ export function IntelTab({ c, canEdit }: { c: CaseRow; canEdit: boolean }) {
                   {canEdit && (
                     <button
                       aria-label={`Unlink ${label(l)}`}
-                      onClick={() => void deleteWithUndo('case_intel_links', l, { confirmTitle: 'Remove link', confirmMessage: `Unlink ${label(l)} from this case? The ${l.kind} record itself is kept — only the link is removed. You can undo this for a few seconds.`, confirmText: 'Unlink', label: 'link', after: refresh })}
+                      onClick={() => void deleteRecord('case_intel_links', l, { confirmTitle: 'Remove link', confirmMessage: `Unlink ${label(l)} from this case? The ${l.kind} record itself is kept — only the link is removed. You can undo this from the toast or the Trash.`, confirmText: 'Unlink', label: 'link', after: refresh })}
                       className="text-rose-300 hover:text-rose-200"
                     >
                       ×

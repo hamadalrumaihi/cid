@@ -39,6 +39,7 @@ chapter stands alone and cross-links the rest.
 | 19 | [Improvement Ideas](19-improvements.md) | Ranked suggestions (shipped rows marked done) |
 | 20 | [Learning Path](20-learning-path.md) | The order to learn all of this |
 | 21 | [City Integration & Bridges](21-integration.md) | The dormant FiveM/MDT bridges, integration tables, shared case services |
+| 22 | [Versions, Trash and the scheduler](22-versions-trash.md) | Soft delete and the Trash (`trash_list`), record history and restore, the Owner's permanent-delete protocol, the pg_cron jobs |
 
 ## Appendices
 

@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/Badge'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Button } from '@/components/ui/Button'
 import { ListSkeleton } from '@/components/ui/Skeleton'
-import { deleteWithUndo, list, rpc, update } from '@/lib/db'
+import { list, rpc, update } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { createReport } from '@/lib/services/reports'
 import type { Json, Tables } from '@/lib/database.types'
 import { copyText, fmtDateTime, timeAgo } from '@/lib/format'
@@ -28,6 +29,7 @@ import { parseSignatureLike } from '@/lib/reportExport'
 import { parseFormValues } from '@/lib/jsonShapes'
 import { canReopenReport, canReviewReport, canSubmitReport, type CidViewer } from '@/lib/permissions'
 import { SignatureViewer, type SignatureItem } from '@/components/shared/SignatureViewer'
+import { RecordHistory } from '@/components/shared/RecordHistory'
 import { VersionViewer } from '@/components/shared/VersionViewer'
 import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
 import { useTabDirty } from '@/components/workspace/WorkspaceProvider'
@@ -225,7 +227,7 @@ export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: C
           onReview={(decision) => void openFlow('review', open, decision)}
           onReopen={() => void openFlow('reopen', open)}
           onChanged={() => void refresh()}
-          onDelete={() => { void deleteWithUndo('reports', open, { label: titleOf(open), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }); setOpenId(null) }} />
+          onDelete={() => { void deleteRecord('reports', open, { label: titleOf(open), after: refresh }); setOpenId(null) }} />
       ) : (<>
         {writable && (
           catalog
@@ -247,7 +249,7 @@ export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: C
               {editable && mySubmit && <Button size="sm" variant={selfSealByKey(r.template) ? 'success' : 'warn'} onClick={() => void openFlow('submit', r)}>{selfSealByKey(r.template) ? 'Finalize' : 'Submit for review'}</Button>}
               {reviewStatusOf(r) === 'submitted' && canReviewReport(r, viewer, c.bureau) && <Button size="sm" variant="primary" onClick={() => void openFlow('review', r)}>Review</Button>}
               {editable && writable && <button onClick={() => void openEditor(r.template, r)} className="min-h-9 text-sm font-bold text-badge-200">Edit</button>}
-              {canDelete && (holdActive ? <span title="A legal hold preserves this case's reports" className="text-sm font-bold text-rose-300/50">Held</span> : <button onClick={() => { void deleteWithUndo('reports', r, { label: titleOf(r), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }) }} className="min-h-9 text-sm font-bold text-rose-300">Delete</button>)}
+              {canDelete && (holdActive ? <span title="A legal hold preserves this case's reports" className="text-sm font-bold text-rose-300/50">Held</span> : <button onClick={() => { void deleteRecord('reports', r, { label: titleOf(r), after: refresh }) }} className="min-h-9 text-sm font-bold text-rose-300">Delete</button>)}
             </div>
           })}
           {!reports.length && <p className="rounded-lg border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-400">No reports yet.</p>}
@@ -536,7 +538,18 @@ function ReportDetail({ r, c, viewer, writable, canEdit, canDelete, holdActive, 
       {showVersions && (
         <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
           <h4 className="mb-2 text-[13px] font-semibold text-white">Versions</h4>
-          {!versions ? <ListSkeleton count={3} /> : (
+          {/* A draft / returned report: field-level edit history
+              (record_versions, P8-04) with restore where the case is
+              writable — the server refuses a sealed report anyway. Sealed
+              reports keep the read-only snapshot viewer below. */}
+          {editable && (
+            <div className={versions?.length ? 'mb-4 border-b border-white/10 pb-4' : ''}>
+              <p className="mb-2 text-xs text-slate-400">Draft edits — every save, field by field.</p>
+              <RecordHistory kind="report" id={r.id} canRestore={writable ? undefined : false} onRestored={onChanged} fieldLabels={{ fields: 'Report fields' }} />
+            </div>
+          )}
+          {editable && versions?.length ? <p className="mb-2 text-xs text-slate-400">Sealed snapshots</p> : null}
+          {!versions ? (editable ? null : <ListSkeleton count={3} />) : editable && !versions.length ? null : (
             <VersionViewer
               versions={versions.map((ver) => ({ id: ver.id, number: ver.version_number, label: 'Sealed', at: ver.created_at, byName: parseSignatureInfo(ver.signature)?.officer ?? null }))}
               renderContent={(item) => {

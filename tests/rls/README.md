@@ -340,6 +340,57 @@ owns a case).
   is the Owner's alone (the fixture runner writes no job row). Owner legs
   `it.skipIf` without `RLS_TEST_PASSWORD_OWNER`.
 
+### The Trash, Phase 8 (`tests/rls/v190a`)
+
+Portal Improvements P8-02 (migration `20261102120000_trash_list`, applied
+live as `trash_list`): `public.trash_list(p_kind, p_limit)` — every
+soft-deletable kind, one row per record the caller could restore
+(`private.perm_dispatch('restore', kind, id)`: a detective their own case
+material and the links they created; command every deleted row of the cases
+they reach; the Owner everything), labelled through
+`private.permanent_delete_record_label`, tied to its case, ≤ 500 newest
+first — and `public.trash_count()`. CID fixtures only — lsb (the MCB
+detective who creates and LEADS both fixture cases and authors every row),
+bcb (the SCB detective — the outsider, creates nothing), lead (MCB Bureau
+Lead — command; the only fixture that may soft-delete a CASE), owner
+(optional — `permanently_deletable` and the preview), inactive (optional —
+zero rows). Nothing new is spliced into `rls_test_cleanup`: a soft-deleted
+row is the table's own row and the sweep of the fixture cases takes it
+either way (the freeze trigger is BEFORE INSERT OR UPDATE only; the sweep
+is a definer DELETE).
+
+- **v190a**: lsb soft-deletes two tasks and a note on their own case →
+  `trash_list()` for lsb carries them with `kind`, `label` (the title; the
+  note has no label column → the id), `case_id`, `case_number`,
+  `deleted_by` = lsb, `deleted_by_name`, `delete_batch`, `restorable` true,
+  `permanently_deletable` **false**, newest first; the lead reads the same
+  rows (not permanently deletable); bcb reads none of them; the inactive
+  fixture reads zero rows and counts 0; `trash_list('case_task')` /
+  `'  Case_Note '` filter to the kind, `p_limit` 1 → one row and 0 → still
+  one, `'bogus'` raises 'unknown record kind'; `trash_count()` equals the
+  list's length for lsb, bcb and the lead; `restore_record('case_task')`
+  removes the row, lowers the count by one, the row reads live again, a
+  second restore is refused and the row is in nobody's Trash; the lead
+  soft-deletes lsb's second case with a reason → the case in the lead's
+  Trash (`kind` case, `label` = the case number, the reason, `deleted_by` =
+  the lead) with its cascaded child task in the same `delete_batch`,
+  `trash_list('case')` filters to it, lsb's Trash carries the child (author)
+  but NOT the case (a detective cannot restore a case), lsb's restore of the
+  child → `{ok:false, code:'parent_deleted'}` 'restore the record this
+  belongs to first', bcb sees neither, the lead's restore of the case brings
+  the batch back and both rows leave the Trash; `permanent_delete_record_preview`
+  for lsb, the lead and bcb → 'permanent deletion is restricted to the
+  owner'; the Owner (`it.skipIf` without `RLS_TEST_PASSWORD_OWNER`) reads the
+  still-deleted task and note as `permanently_deletable` true and previews
+  the task `eligible` with `target.label` = its title, while the restored
+  (live) task previews ineligible — 'the record is not in the Trash';
+  `case_assignment_end` on a standard assignment lsb inserted on their own
+  case: lsb → P0403 'only a Bureau Lead or above can remove an officer from a
+  case', lsb's direct UPDATE of `removed_at` matches zero rows (or 42501),
+  the lead ends it → `{ok, id, case_id, officer_id}`, the stamps when the
+  row is still readable, 'already ended' on a repeat, `CASE_UNASSIGNED` for
+  the Owner.
+
 ### DOJ legal review (v1.13.0 — `tests/rls/legal.test.ts`; historical model)
 
 37 assertions covering the DOJ Legal Review System (see

@@ -17,7 +17,8 @@
  *  `?q=` seeding, attach-to-case (now a durable case_intel_links row). */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { deleteWithUndo, list, rpc, withRetry } from '@/lib/db'
+import { list, rpc, withRetry } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { fmtDate, timeAgo, todayISO } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useProfilesStore } from '@/lib/profiles'
@@ -41,7 +42,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { useToolNav } from '@/components/tools/useToolNav'
 import { PersonProfile } from './PersonProfile'
-import { PERSON_NULL_REFS, PersonModal, type PersonRow } from './PersonModal'
+import { PersonModal } from './PersonModal'
 import { boloState, classificationLabel, PERSON_REVIEW_DAYS } from './personIntel'
 import { BoloBadge, RegistryCard } from './RegistryCard'
 import { RegistryAttachModal } from './RegistryAttachModal'
@@ -329,31 +330,21 @@ export function PersonsView() {
   const toggleSelect = (id: string, on: boolean) =>
     setSelected((sel) => { const next = new Set(sel); if (on) next.add(id); else next.delete(id); return next })
 
-  // Deletes snapshot FULL rows first — the registry rows are projected, and
-  // deleteWithUndo re-inserts its snapshot on undo.
-  const fullRowsFor = async (ids: string[]): Promise<PersonRow[]> => {
-    if (!ids.length) return []
-    const full = await list('persons', { in: { id: ids } }).catch(() => [] as PersonRow[])
-    return ids
-      .map((id) => full.find((f) => f.id === id) ?? (rowMap.get(id) as PersonRow | undefined))
-      .filter((x): x is PersonRow => !!x)
-  }
-
   const deleteSelected = async () => {
     const ids = [...selected].filter((id) => rowMap.has(id))
     if (!ids.length) return
     const n = ids.length
     if (!(await uiConfirm(`Delete ${n} selected person${n > 1 ? 's' : ''}? This removes the registry records (not any linked officer accounts).`, { confirmText: `Delete ${n}` }))) return
     setSelected(new Set())
-    await deleteWithUndo('persons', await fullRowsFor(ids), {
-      label: `${n} person${n > 1 ? 's' : ''}`, noConfirm: true, after: () => void refresh(), setNullRefs: PERSON_NULL_REFS,
+    await deleteRecord('persons', ids.map((id) => ({ id })), {
+      label: `${n} person${n > 1 ? 's' : ''}`, noConfirm: true, after: () => void refresh(),
     })
   }
 
   const deleteOne = async (p: RegistryPerson) => {
     if (!(await uiConfirm(`Delete person "${p.name || 'record'}"? This removes the persons-registry record (not any linked officer account).`, { confirmText: 'Delete' }))) return
-    await deleteWithUndo('persons', await fullRowsFor([p.id]), {
-      label: `Person "${p.name || 'record'}"`, noConfirm: true, after: () => void refresh(), setNullRefs: PERSON_NULL_REFS,
+    await deleteRecord('persons', { id: p.id }, {
+      label: `Person "${p.name || 'record'}"`, noConfirm: true, after: () => void refresh(),
     })
   }
 

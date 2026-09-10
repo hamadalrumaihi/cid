@@ -1053,6 +1053,43 @@ payload update `42501` and a client read update stamping `read_at`, a
 non-lead's reassign answered `P0403` before any row state, the fixture
 runner refusing a real user.
 
+### Phase 8 — Mobile, Trash, history UI, docs (2026-09-09, applied)
+
+**P8-02 the Trash.** `20261102120000_trash_list.sql` (applied as `trash_list`):
+`public.trash_list(kind?, limit)` — SECURITY DEFINER over every soft-deletable
+kind (`private.soft_delete_table`), one dynamic UNION per table over
+`deleted_at is not null`, each row admitted by the caller's own restore
+authority `private.perm_dispatch('restore', kind, id)` (a detective: the
+registry rows and case material they may edit or delete; command: every
+deleted row of their cases; the Owner: everything), labelled through
+`private.permanent_delete_record_label`, tied to its case through
+`private.trash_case_expr`, ≤ 500 rows newest first, `permanently_deletable`
+= the Owner; `public.trash_count()`; the `('list','trash')` catalog row and
+the `trash` arm of `private.perm_dispatch`. Nothing else changed server-side
+in Phase 8 — restore (`restore_record`), history (`record_history` /
+`restore_version`) and permanent deletion (`permanent_delete_record_*`) were
+Phase 1. Verified at apply time in a rolled-back transaction: a detective's
+soft-deleted task and note listed for the detective (label, case number,
+deleter's name, not permanently deletable) and filtered by kind, an unknown
+kind refused, `trash_count` counting them, the rows invisible to a second
+detective without restore authority, the Owner seeing them as permanently
+deletable and previewing the task as eligible, restore removing the row, the
+detective's preview refused ('restricted to the owner'), the deleted case
+listed for its lead and a child's restore answering `parent_deleted`.
+
+**Security-review follow-up** (applied as `trash_list_review_fixes`, folded into
+the repo file): a case child is listed only while the caller can still read
+the case (`private.can_read_case` — restore authority admits a creator the
+case has since moved away from; the Trash does not) and a restricted media
+row only for the Owner; `trash_count` counts to 100; ending a standard case
+assignment is the definer `case_assignment_end` (Bureau Lead+, the former
+DELETE policy's authority, `removed_by` stamped server-side,
+`CASE_UNASSIGNED`) under a narrowed `case_assignments_upd` policy that no
+longer lets a client set `removed_at`; the `('unassign','case_assignment')`
+catalog row and dispatch arm. Client side, the permanent-delete dialogs now
+require the confirmation phrase to be typed (the earlier flow echoed the
+server's own string).
+
 | Version (live) | Name | Repo file |
 |---|---|---|
 | applied via MCP (`entity_normalization`, `entity_normalization_phone_fix`) | entity_normalization | `20261014120000_entity_normalization.sql` |
@@ -1074,6 +1111,7 @@ runner refusing a real user.
 | applied via MCP (`intel_triage`, `intel_triage_perm_raise`, `intel_review_fixes`) | intel_triage | `20261030120000_intel_triage.sql` |
 | applied via MCP (`intel_groups_convert`, `intel_groups_convert_policy_grant`, `intel_review_fixes`) | intel_groups_convert | `20261031120000_intel_groups_convert.sql` |
 | applied via MCP (`action_center`, `action_center_review_fixes`, `action_center_review_fixes_surv_alert`) | action_center | `20261101120000_action_center.sql` |
+| applied via MCP (`trash_list`, `trash_list_review_fixes`) | trash_list | `20261102120000_trash_list.sql` |
 | applied via MCP (`record_versions`) | record_versions | `20261011120000_record_versions.sql` |
 | applied via MCP (`case_access_grant_expiry`) | case_access_grant_expiry | `20261012120000_case_access_grant_expiry.sql` |
 | applied via MCP (`permanent_delete_record`, `permanent_delete_record_preview_fix`) | permanent_delete_record | `20261013120000_permanent_delete_record.sql` |

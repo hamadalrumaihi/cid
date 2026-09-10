@@ -33,6 +33,7 @@ import { WatchButton } from '@/components/cases/WatchButton'
 import { RestrictToSiuButton } from '@/components/siu/RestrictToSiu'
 import { EntityLegalPanel } from '@/components/justice/EntityLegalSection'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
+import { RecordHistory } from '@/components/shared/RecordHistory'
 import { LinkEditPopover, LinkStatusBadge } from '@/components/shared/LinkEditPopover'
 import { PinButton } from '@/components/shared/PinButton'
 import { RecordPeekButton } from '@/components/shared/RecordPeekButton'
@@ -563,6 +564,13 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
               <h3 className={PANEL_TITLE}>Surveillance history</h3>
               <div className="mt-3">
                 <ObservationHistory kind="vehicle" refId={id} />
+              </div>
+            </Card>
+            {/* Field-level versions (record_versions, P8-04). */}
+            <Card>
+              <h3 className={PANEL_TITLE}>Record history</h3>
+              <div className="mt-3">
+                <RecordHistory kind="vehicle" id={id} canRestore={canEdit ? undefined : false} onRestored={() => void refresh()} />
               </div>
             </Card>
           </div>

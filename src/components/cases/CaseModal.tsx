@@ -7,7 +7,7 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { DuplicateMatchNotice, duplicateMatches, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import { useToolNav } from '@/components/tools/useToolNav'
-import { insert, list, rpc, update, deleteWithUndo } from '@/lib/db'
+import { insert, list, remove, rpc, update } from '@/lib/db'
 import { findDuplicates } from '@/lib/entity'
 import { createCase } from '@/lib/services/cases'
 import type { Tables, TablesUpdate } from '@/lib/database.types'
@@ -17,6 +17,7 @@ import { useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { CASE_STATUSES } from '@/lib/signoff'
 import { toast } from '@/lib/toast'
+import { uiConfirm } from '@/components/ui/dialog'
 import { parseStringArray } from '@/lib/jsonShapes'
 import { CASE_PREFIX, PERMANENT_BUREAUS, bureauLabel } from '@/lib/roles'
 
@@ -351,6 +352,15 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
     if (res.error) toast(res.error.message, 'danger')
     else { toast('Template saved.', 'success'); onChanged() }
   }
+  // case_templates is not a soft-delete table: a real delete, no Trash, no
+  // Undo — the confirm says so. Existing cases keep everything they copied.
+  const deleteTemplate = async (row: CaseTemplateRow) => {
+    if (!(await uiConfirm(`Delete the “${row.name}” case template? Existing cases are unaffected — only the template is removed. This cannot be undone.`, { title: 'Delete template', confirmText: 'Delete template' }))) return
+    const res = await remove('case_templates', row.id)
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Template deleted.', 'success')
+    onChanged()
+  }
   const add = async () => {
     if (!newRow.name.trim()) { toast('Template name is required.', 'warn'); return }
     const res = await insert('case_templates', {
@@ -382,7 +392,7 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
             <input value={row.summary || ''} onChange={(e) => patchDraft(row.id, { summary: e.target.value })} placeholder="Prefill summary" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
             <input type="number" min={0} value={row.followup_days ?? ''} onChange={(e) => patchDraft(row.id, { followup_days: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0) })} placeholder="Follow-up days" title="Default review cadence in days" className="md:col-span-4 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
             <textarea value={taskDrafts[row.id] ?? tplTasks(row).join('\n')} onChange={(e) => setTaskDrafts((m) => ({ ...m, [row.id]: e.target.value }))} rows={3} placeholder={'Checklist tasks — one per line, auto-created with each new case\nCanvass witnesses\nPull CCTV'} className="md:col-span-4 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />
-            <div className="md:col-span-4 flex justify-end gap-2"><Button size="sm" variant="primary" onClick={() => void saveRow(row)}>Save</Button><button onClick={() => void deleteWithUndo('case_templates', row, { confirmTitle: 'Delete template', confirmMessage: `Delete the “${row.name}” case template? Existing cases are unaffected — only the template is removed. You can undo this for a few seconds.`, confirmText: 'Delete template', label: 'template', after: onChanged })} className="rounded-lg border border-rose-400/30 px-3 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/10">Delete</button></div>
+            <div className="md:col-span-4 flex justify-end gap-2"><Button size="sm" variant="primary" onClick={() => void saveRow(row)}>Save</Button><button onClick={() => void deleteTemplate(row)} className="rounded-lg border border-rose-400/30 px-3 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/10">Delete</button></div>
           </div>)}
         </div>
         <div className="mt-4 grid gap-2 rounded-lg border border-white/10 bg-white/5 p-3 md:grid-cols-[4rem_1fr_6rem_7rem]">

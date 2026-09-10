@@ -103,6 +103,8 @@ export function PermanentDelete({ targetId, targetName, renderPreview, onDeleted
   const [open, setOpen] = useState(false)
   const [preview, setPreview] = useState<DeletePreview | null>(null)
   const [reason, setReason] = useState('')
+  const [armed, setArmed] = useState<ArmedToken | null>(null)
+  const [typed, setTyped] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -120,24 +122,29 @@ export function PermanentDelete({ targetId, targetName, renderPreview, onDeleted
   // the ARMING as something the Owner performs: no second button, no five-minute
   // countdown to race, no name to retype. The preview above already says what
   // will happen, and the reason below is what the audit keeps.
-  const doDelete = async () => {
+  // Arm first (audit row + single-use token + the display name the server
+  // expects), then the Owner TYPES `DELETE <name>` and that text goes to the
+  // server verbatim — the client never echoes the server's phrase back (the
+  // Phase 8 security review found the earlier one-click flow made the
+  // "typed confirmation" a no-op).
+  const doArm = async () => {
     setError(null)
     setBusy(true)
     const armRes = await rpc('permanent_delete_arm', { p_target: targetId, p_reason: reason })
-    if (armRes.error) { setBusy(false); setError(armRes.error.message); return }
-    const token = armRes.data as unknown as ArmedToken
-    const res = await rpc('permanent_delete_execute', {
-      p_token: token.token,
-      // The server's own phrasing, built from the name it just handed back
-      // rather than from anything on screen — if the two ever disagree, the
-      // server's copy is the one that decides and the delete fails closed.
-      p_confirm: `DELETE ${token.display_name}`,
-    })
+    setBusy(false)
+    if (armRes.error) { setError(armRes.error.message); return }
+    setArmed(armRes.data as unknown as ArmedToken); setTyped('')
+  }
+  const doDelete = async () => {
+    if (!armed) return
+    setError(null)
+    setBusy(true)
+    const res = await rpc('permanent_delete_execute', { p_token: armed.token, p_confirm: typed.trim() })
     setBusy(false)
     if (res.error) { setError(res.error.message); return }
     const summary = res.data as unknown as { display_name: string; ledger_id: string; references: Json }
     toast(`${summary.display_name} was permanently deleted — ledger entry ${summary.ledger_id}.`, 'success')
-    setOpen(false); setPreview(null); setReason('')
+    setOpen(false); setPreview(null); setReason(''); setArmed(null); setTyped('')
     void useProfilesStore.getState().fetch()
     onDeleted?.()
   }
@@ -190,12 +197,27 @@ export function PermanentDelete({ targetId, targetName, renderPreview, onDeleted
         />
       </div>
 
+      {armed && (
+        <div>
+          <label htmlFor={`pd-confirm-${targetId}`} className={labelCls}>
+            Type <span className="font-mono">DELETE {armed.display_name}</span> to confirm (the token expires in five minutes)
+          </label>
+          <input id={`pd-confirm-${targetId}`} value={typed} onChange={(e) => setTyped(e.target.value)}
+            autoComplete="off" spellCheck={false} className={`${inputCls} font-mono`} placeholder={`DELETE ${armed.display_name}`} />
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="danger" disabled={!preview?.eligible || !reason.trim() || busy}
-          onAction={doDelete}>
-          {busy ? 'Deleting…' : `Permanently delete ${targetName}`}
-        </Button>
-        <Button variant="ghost" onClick={() => { setOpen(false); setError(null) }}>
+        {!armed ? (
+          <Button variant="danger" disabled={!preview?.eligible || !reason.trim() || busy} onAction={doArm}>
+            {busy ? 'Arming…' : 'Arm permanent deletion'}
+          </Button>
+        ) : (
+          <Button variant="danger" disabled={typed.trim() !== `DELETE ${armed.display_name}` || busy} onAction={doDelete}>
+            {busy ? 'Deleting…' : `Permanently delete ${targetName}`}
+          </Button>
+        )}
+        <Button variant="ghost" onClick={() => { setOpen(false); setError(null); setArmed(null); setTyped('') }}>
           Cancel
         </Button>
       </div>

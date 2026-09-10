@@ -29,7 +29,8 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { CardGridSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
-import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
+import { insert, list, rpc, update } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { caseLink } from '@/lib/caseLinks'
 import { CASE_MEDIA_CATEGORIES, caseMediaCategoryLabel, filterCaseMedia, legacyEvidenceRef } from '@/lib/caseMedia'
 import { fmConfigured } from '@/lib/fivemanage'
@@ -898,7 +899,7 @@ function MediaDetailModal({ m, c, canEdit, canDelete, holdActive, names, vehicle
             </span>
           ) : (
             <button
-              onClick={() => { void deleteWithUndo('media', m, { label: m.title, after: onDeleted }) }}
+              onClick={() => { void deleteRecord('media', m, { label: m.title, after: onDeleted }) }}
               className="rounded-lg border border-rose-400/30 px-3 py-2 text-sm font-bold text-rose-300 hover:bg-rose-500/10"
             >
               Delete

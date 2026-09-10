@@ -10,10 +10,12 @@ import { Fragment } from 'react'
 import { useAuth } from '@/lib/auth'
 import { NAV_CATEGORIES, SUBTAB_GROUPS, TAB_LABEL } from '@/lib/nav'
 import { useNav } from './useNav'
+import { useNavBadges } from './useNavBadges'
 
 export function Subtabs() {
   const { activeCategory, activeTab, navigate } = useNav()
   const { isOwner, isCommand } = useAuth()
+  const badges = useNavBadges()
   const def = NAV_CATEGORIES.find((c) => c.id === activeCategory)
   if (!def) return null // standalone leaves (feedback) hide the strip
 
@@ -45,6 +47,10 @@ export function Subtabs() {
         }`}
       >
         {TAB_LABEL[t] || t}
+        {/* Phase 8: deleted rows the viewer may restore (trash_count). */}
+        {t === 'trash' && badges.trash > 0 && (
+          <span className="ml-1 rounded bg-white/10 px-1.5 text-[10px] font-semibold tabular-nums text-slate-200" title="Records in the Trash you can restore">{badges.trash > 99 ? '99+' : badges.trash}</span>
+        )}
       </button>
     )
   }

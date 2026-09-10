@@ -45,7 +45,7 @@ bureau_lead → deputy_director → director.
 | `list`, `custodyForCase` | **throw** — wrap in try/catch |
 | `insert/update/updateWhere/updateNoSelect/remove/rpc` | **return `{error}`** — check it; empty-data update = blocked |
 | `withRetry` | reads only |
-| `deleteWithUndo` | confirm + 6s Undo; configure `children`/`setNullRefs` |
+| `deleteRecord(table, rows, opts)` | confirm (+ reason for the parent kinds) → `soft_delete` → the "deleted · In Trash" toast; Undo = `restore_record`, works from `/trash` later too |
 
 ## Main RPCs
 

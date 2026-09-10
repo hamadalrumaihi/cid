@@ -1,7 +1,7 @@
 -- ============================================================
 -- CID Portal — live schema snapshot (REFERENCE ONLY)
 -- ============================================================
--- Generated 2026-09-09 from the live Supabase project `cid`
+-- Generated 2026-09-10 from the live Supabase project `cid`
 -- via scripts/schema-dump.sql (Postgres catalog queries) and
 -- scripts/build-schema-snapshot.mjs. Do not edit by hand: re-run the
 -- dump + build after applying migrations (see supabase/README.md).
@@ -6859,6 +6859,30 @@ begin
   values (v_uid, 'CASE_ARCHIVED', 'cases', p_case,
           jsonb_build_object('case_number', c.case_number, 'note', nullif(btrim(coalesce(p_note, '')), '')));
   return c;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.case_assignment_end(p_assignment uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare a public.case_assignments; v_uid uuid := (select auth.uid());
+begin
+  select * into a from public.case_assignments where id = p_assignment;
+  if not found then raise exception 'assignment not found'; end if;
+  if not (private.can_delete_case_child(a.case_id) and private.case_writable(a.case_id)) then
+    perform private.perm_raise('unassign', 'case_assignment', p_assignment, 'not_command',
+      'only a Bureau Lead or above can remove an officer from a case');
+  end if;
+  if a.assignment_source <> 'standard' then raise exception 'only a standard assignment can be ended here'; end if;
+  if a.removed_at is not null then raise exception 'that assignment has already ended'; end if;
+  update public.case_assignments set removed_at = now(), removed_by = v_uid where id = a.id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'CASE_UNASSIGNED', 'case_assignments', a.id,
+          jsonb_build_object('case_id', a.case_id, 'officer_id', a.officer_id, 'role', a.role));
+  return jsonb_build_object('ok', true, 'id', a.id, 'case_id', a.case_id, 'officer_id', a.officer_id);
 end $function$
 ;
 
@@ -23037,6 +23061,64 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.trash_count()
+ RETURNS integer
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select count(*)::integer from public.trash_list(null, 100)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.trash_list(p_kind text DEFAULT NULL::text, p_limit integer DEFAULT 300)
+ RETURNS TABLE(kind text, id uuid, label text, case_id uuid, case_number text, deleted_at timestamp with time zone, deleted_by uuid, deleted_by_name text, delete_reason text, delete_batch uuid, restorable boolean, permanently_deletable boolean)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_kinds text[] := array['person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation',
+                          'tracker', 'gang_member', 'gang_turf', 'person_place', 'person_vehicle',
+                          'person_relationship', 'account_link', 'case', 'report', 'media', 'evidence',
+                          'case_task', 'case_message', 'case_intel_link', 'case_blocker', 'rico_case',
+                          'predicate_act', 'case_note', 'case_link'];
+  v_limit integer := greatest(1, least(coalesce(p_limit, 300), 500));
+  v_owner boolean := private.is_owner();
+  k text; t text; v_case text; v_extra text; v_sql text := '';
+begin
+  if not private.is_active() then return; end if;
+  if p_kind is not null then
+    k := lower(btrim(p_kind));
+    if private.soft_delete_table(k) is null then raise exception 'unknown record kind'; end if;
+    v_kinds := array[k];
+  end if;
+  foreach k in array v_kinds loop
+    t := private.soft_delete_table(k);
+    v_case := private.trash_case_expr(t);
+    v_extra := case
+      when t = 'cases' or v_case = 'null::uuid' then ''
+      else format(' and private.can_read_case(%s)', v_case) end
+      || case when t = 'media' then ' and (not x.restricted or private.is_owner())' else '' end;
+    v_sql := v_sql || case when v_sql = '' then '' else ' union all ' end || format(
+      '(select %L::text as kind, x.id, x.deleted_at, x.deleted_by, x.delete_reason, x.delete_batch, %s as case_id, %L::text as tbl
+          from public.%I x
+         where x.deleted_at is not null and private.perm_dispatch(''restore'', %L, x.id)%s
+         order by x.deleted_at desc limit %s)',
+      k, v_case, t, t, k, v_extra, v_limit);
+  end loop;
+  return query execute format(
+    'select u.kind, u.id, private.permanent_delete_record_label(u.tbl, u.id), u.case_id,
+            (select c.case_number from public.cases c where c.id = u.case_id),
+            u.deleted_at, u.deleted_by,
+            (select p.display_name from public.profiles p where p.id = u.deleted_by),
+            u.delete_reason, u.delete_batch, true, %L::boolean
+       from (%s) u
+      order by u.deleted_at desc
+      limit %s', v_owner, v_sql, v_limit);
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.update_legal_draft(p_request uuid, p_title text DEFAULT NULL::text, p_priority text DEFAULT NULL::text, p_form jsonb DEFAULT NULL::jsonb, p_narrative text DEFAULT NULL::text, p_person uuid DEFAULT NULL::uuid, p_recipient_type text DEFAULT NULL::text, p_recipient_name text DEFAULT NULL::text, p_classification text DEFAULT NULL::text)
  RETURNS legal_requests
  LANGUAGE plpgsql
@@ -23511,7 +23593,7 @@ AS $function$
       then 'dismissable'
     when split_part(p_key, ':', 1) in ('transfer', 'member_transfer', 'access', 'membership',
                                         'restricted', 'sib_access', 'mdt_export', 'field_access',
-                                        'tracker', 'justice', 'siu_conflict', 'surv_tgt',
+                                        'tracker', 'justice', 'siu_conflict', 'surv_tgt', 'surv_alert',
                                         'document_approval', 'document_suggestion', 'narcotic',
                                         'claim', 'legal', 'legal_queue', 'report', 'gang_dup')
       then 'decision'
@@ -28811,6 +28893,15 @@ AS $function$
     when p_kind = 'case_blocker' and p_action = 'reassign' then exists (
       select 1 from public.case_blockers b where b.id = p_id and b.deleted_at is null and b.status = 'open'
          and private.can_grant_case(b.case_id) and private.case_writable(b.case_id))
+    -- Phase 8 (P8-02): the Trash is a read every active member has; each row
+    -- is admitted by the 'restore' arm of the kind it belongs to.
+    when p_kind = 'trash' then case p_action
+      when 'list' then private.is_active()
+      else false end
+    when p_kind = 'case_assignment' and p_action = 'unassign' then exists (
+      select 1 from public.case_assignments a where a.id = p_id and a.removed_at is null
+         and a.assignment_source = 'standard'
+         and private.can_delete_case_child(a.case_id) and private.case_writable(a.case_id))
     when p_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'gang_member', 'gang_turf', 'person_place', 'person_vehicle', 'person_relationship', 'account_link', 'case', 'report', 'media', 'evidence', 'case_task', 'case_message', 'case_intel_link', 'case_blocker', 'rico_case', 'predicate_act', 'case_note', 'case_link') then (
       select case p_action
         when 'read' then st.p_exists and (st.p_deleted_at is null or private.is_owner())
@@ -30994,6 +31085,24 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.trash_case_expr(p_table text)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  select case p_table
+    when 'cases' then 'x.id'
+    when 'predicate_acts' then '(select r.case_id from public.rico_cases r where r.id = x.rico_case_id)'
+    when 'places' then 'x.case_id' when 'indicators' then 'x.case_id' when 'trackers' then 'x.case_id'
+    when 'gang_members' then 'x.case_id' when 'reports' then 'x.case_id' when 'media' then 'x.case_id'
+    when 'evidence' then 'x.case_id' when 'case_tasks' then 'x.case_id' when 'case_messages' then 'x.case_id'
+    when 'case_intel_links' then 'x.case_id' when 'case_blockers' then 'x.case_id' when 'rico_cases' then 'x.case_id'
+    when 'case_notes' then 'x.case_id' when 'case_links' then 'x.case_id'
+    else 'null::uuid' end
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.user_can_access_case(p_user uuid, p_case uuid)
  RETURNS boolean
  LANGUAGE sql
@@ -31639,8 +31748,8 @@ create policy case_assignments_sel on public.case_assignments
 
 create policy case_assignments_upd on public.case_assignments
   as permissive for update to authenticated
-  using ((private.case_writable(case_id) AND (assignment_source = 'standard'::text)))
-  with check ((private.case_writable(case_id) AND (assignment_source = 'standard'::text)));
+  using ((private.case_writable(case_id) AND (assignment_source = 'standard'::text) AND (removed_at IS NULL)))
+  with check ((private.case_writable(case_id) AND (assignment_source = 'standard'::text) AND (removed_at IS NULL)));
 
 create policy case_blockers_ins on public.case_blockers
   as permissive for insert to authenticated
@@ -34247,6 +34356,7 @@ create policy wl_sel on public.watchlist
 --   private.transfer_apply(p_id uuid, p_actor profiles, p_override boolean): default (PUBLIC)
 --   private.transfer_doj_set_membership(p_user uuid, p_role text, p_actor uuid, p_expires timestamp with time zone, p_bureau bureau): {postgres=X/postgres}
 --   private.transfer_notify(p_transfer transfer_requests, p_actor profiles, p_reason text): default (PUBLIC)
+--   private.trash_case_expr(p_table text): {postgres=X/postgres}
 --   private.user_can_access_case(p_user uuid, p_case uuid): {postgres=X/postgres}
 --   private.user_department(p_user uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.uuid_or_null(p text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -34286,6 +34396,7 @@ create policy wl_sel on public.watchlist
 --   public.case_access_decide(p_request uuid, p_approve boolean, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_access_renew(p_grant uuid, p_days integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_archive(p_case uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.case_assignment_end(p_assignment uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_audit_feed(p_case uuid, p_limit integer, p_before timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_charge_totals(p_case uuid): {=X/postgres,postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_charges_for(p_case uuid): {=X/postgres,postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -34624,6 +34735,8 @@ create policy wl_sel on public.watchlist
 --   public.transfer_doj_decide(p_transfer uuid, p_stage text, p_decision text, p_note text, p_retain_cid boolean, p_dual_expires_at timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.transfer_doj_request(p_user uuid, p_direction text, p_role text, p_reason text, p_bureau bureau): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.transfer_handover(p_transfer uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.trash_count(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.trash_list(p_kind text, p_limit integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.update_legal_draft(p_request uuid, p_title text, p_priority text, p_form jsonb, p_narrative text, p_person uuid, p_recipient_type text, p_recipient_name text, p_classification text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.warrant_set_status(p_report uuid, p_status text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.withdraw_legal_request(p_request uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
