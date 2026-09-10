@@ -8605,7 +8605,10 @@ begin
     perform private.perm_raise('create', 'ci', null, 'inactive', 'your account is not active');
   end if;
   v_full := private.has_full_ci_access();
-  if not (v_full or (p_primary_handler = v_uid and p_secondary_handler is null)) then
+  -- Self-recruitment is for a caller already inside the compartment (an active
+  -- handler). A member outside it is designated by CI command or asks for an
+  -- assignment — so ci_create never tells an outsider whether a person is a source.
+  if not (v_full or (p_primary_handler = v_uid and p_secondary_handler is null and private.ci_is_handler())) then
     perform private.perm_raise('create', 'ci', null, 'not_ci_command',
       'only CI command may designate a source for another handler');
   end if;
@@ -8636,6 +8639,8 @@ begin
     return jsonb_build_object('ok', false, 'code', 'bad_person', 'message', 'that person record is not available');
   end if;
   if exists (select 1 from public.confidential_informants c where c.person_id = p_person and c.deleted_at is null) then
+    perform private.ci_audit(c.id, 'CI_DESIGNATION_REFUSED', 'persons', p_person, jsonb_build_object('requester_id', v_uid))
+      from public.confidential_informants c where c.person_id = p_person and c.deleted_at is null;
     return jsonb_build_object('ok', false, 'code', 'unavailable', 'message', 'This person cannot be designated right now.');
   end if;
   -- the handlers: active members, fixtures only for a fixture caller
@@ -8688,7 +8693,7 @@ begin
   end loop;
   if jsonb_array_length(v_overrides) > 0 then
     for h, n in select (o ->> 'user_id')::uuid, (o ->> 'to')::int from jsonb_array_elements(v_overrides) o loop
-      perform private.ci_capacity_raise(h, n, 'Override: ' || v_override);
+      perform private.ci_capacity_raise(h, n, 'Override authorized by CI command');
       perform private.ci_audit(v_id, 'CI_CAPACITY_OVERRIDE', 'ci_handler_capacity', h,
         jsonb_build_object('user_id', h, 'to', n, 'reason', left(v_override, 500)));
     end loop;
@@ -8873,7 +8878,7 @@ begin
       if n + 1 > 30 then
         return jsonb_build_object('ok', false, 'code', 'capacity', 'message', format('%s is at the hard limit of 30 active sources.', v_name));
       end if;
-      perform private.ci_capacity_raise(p_user, n + 1, 'Override: ' || v_override);
+      perform private.ci_capacity_raise(p_user, n + 1, 'Override authorized by CI command');
       perform private.ci_audit(p_ci, 'CI_CAPACITY_OVERRIDE', 'ci_handler_capacity', p_user,
         jsonb_build_object('user_id', p_user, 'to', n + 1, 'reason', left(v_override, 500)));
     end if;
@@ -27311,7 +27316,9 @@ CREATE OR REPLACE FUNCTION private.ci_block_merge_delete()
 AS $function$
 begin
   if coalesce(current_setting('cid.version_source', true), '') = 'merge' then
-    raise exception 'both persons carry a live confidential-informant record — CI command must retire or delete one before they can be merged'
+    raise exception '%', case when private.has_full_ci_access()
+      then 'both persons carry a live confidential-informant record — CI command must retire or delete one before they can be merged'
+      else 'these records cannot be merged right now' end
       using errcode = 'P0403';
   end if;
   return old;
@@ -27613,18 +27620,19 @@ CREATE OR REPLACE FUNCTION private.ci_sanitized(p_ci uuid, p_text text)
  STABLE SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-  select not exists (
-    select 1 from (
+  with t as (select regexp_replace(lower(coalesce(p_text, '')), '[^a-z0-9]+', '', 'g') as txt),
+  src as (
       select c.ci_number as v from public.confidential_informants c where c.id = p_ci
-      union all select replace(c.ci_number, '-', ' ') from public.confidential_informants c where c.id = p_ci
       union all select c.alias from public.confidential_informants c where c.id = p_ci
       union all select p.name from public.confidential_informants c join public.persons p on p.id = c.person_id where c.id = p_ci
       union all select p.alias from public.confidential_informants c join public.persons p on p.id = c.person_id where c.id = p_ci
-      union all select pr.display_name from public.ci_handlers h join public.profiles pr on pr.id = h.user_id
-                 where h.ci_id = p_ci and h.ended_at is null
-    ) s
-    where length(btrim(coalesce(s.v, ''))) >= 2
-      and position(lower(btrim(s.v)) in lower(coalesce(p_text, ''))) > 0)
+      union all select pr.display_name from public.ci_handlers h join public.profiles pr on pr.id = h.user_id where h.ci_id = p_ci
+      union all select tok from public.confidential_informants c join public.persons p on p.id = c.person_id,
+                 regexp_split_to_table(coalesce(p.name, '') || ' ' || coalesce(p.alias, '') || ' ' || coalesce(c.alias, ''), '[^[:alnum:]]+') tok
+                 where c.id = p_ci and length(tok) >= 4
+  ),
+  norm as (select regexp_replace(lower(coalesce(v, '')), '[^a-z0-9]+', '', 'g') as v from src)
+  select not exists (select 1 from norm, t where length(norm.v) >= 2 and position(norm.v in t.txt) > 0)
 $function$
 ;
 
@@ -27716,7 +27724,7 @@ CREATE OR REPLACE FUNCTION private.ci_trash_label(p_table text, p_id uuid)
 AS $function$
   select case p_table
     when 'confidential_informants' then (select c.ci_number from public.confidential_informants c where c.id = p_id)
-    when 'ci_intelligence' then (select c.ci_number || ' · ' || left(i.summary, 60)
+    when 'ci_intelligence' then (select c.ci_number || ' · intelligence ' || to_char(i.received_at, 'YYYY-MM-DD')
                                    from public.ci_intelligence i join public.confidential_informants c on c.id = i.ci_id where i.id = p_id)
     when 'ci_contacts' then (select c.ci_number || ' · contact ' || to_char(k.occurred_at, 'YYYY-MM-DD')
                                from public.ci_contacts k join public.confidential_informants c on c.id = k.ci_id where k.id = p_id)
@@ -31251,7 +31259,7 @@ AS $function$
     -- ('record', 'ci_payment') p_id is the CI (or null: "may record at all").
     when p_kind = 'ci' and p_action in ('access', 'create', 'set_status', 'assign_handler', 'export', 'sweep') then case p_action
       when 'access'         then private.can_access_ci(p_id)
-      when 'create'         then private.is_active()
+      when 'create'         then private.has_full_ci_access() or private.ci_is_handler()
       when 'set_status'     then private.has_full_ci_access() and (p_id is null or private.can_access_ci(p_id))
       when 'assign_handler' then private.has_full_ci_access() and (p_id is null or private.can_access_ci(p_id))
       when 'export'         then case when p_id is null then private.has_full_ci_access() else private.can_access_ci(p_id) end

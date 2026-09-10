@@ -50,10 +50,8 @@ type Handler = Tables<'ci_handlers'>
 type Intel = Tables<'ci_intelligence'>
 type Contact = Tables<'ci_contacts'>
 type Payment = Tables<'ci_payments'>
-type Request = Tables<'ci_capacity_requests'>
 type Bureau = Database['public']['Enums']['bureau']
 type Refusal = { ok: false; code: string; message: string }
-type Ok = { ok: true } & Record<string, Json | undefined>
 
 const HOUR = 3_600_000
 const DAY = 24 * HOUR
@@ -201,10 +199,15 @@ function ciNotifyFullAccess(bureau: string | null, kind: string, payload: Record
 export function ciSanitized(ciId: string, text: string): boolean {
   const ci = ciOf(ciId)
   if (!ci) return true
-  const hay = text.toLowerCase()
+  // Mirrors private.ci_sanitized: both sides normalised to lower-case letters and digits; the person's / CI's name
+  // tokens of four letters or more count too; current AND former handlers.
+  const norm = (v: unknown) => str(v).toLowerCase().replace(/[^a-z0-9]+/g, '')
+  const hay = norm(text)
   const person = findRow('persons', ci.person_id)
-  const names = [ci.ci_number, ci.alias, person?.name, person?.alias, ...liveHandlers(ci.id).map((h) => nameOf(h.user_id))]
-  return !names.some((n) => { const s = str(n).trim().toLowerCase(); return s.length > 0 && hay.includes(s) })
+  const handlers = rows('ci_handlers').filter((h) => h.ci_id === ci.id).map((h) => nameOf(h.user_id))
+  const tokens = `${str(person?.name)} ${str(person?.alias)} ${str(ci.alias)}`.split(/[^A-Za-z0-9]+/).filter((t) => t.length >= 4)
+  const names = [ci.ci_number, ci.alias, person?.name, person?.alias, ...handlers, ...tokens]
+  return !names.some((n) => { const s = norm(n); return s.length >= 2 && hay.includes(s) })
 }
 /** private.perm_registry_visible for a link / person target in the mock: a live, unmerged row the caller can see. */
 function targetVisible(kind: string, id: unknown): boolean {
@@ -277,8 +280,10 @@ function capacityGate(handler: Profile, caller: Profile, full: boolean, override
   if (!reason) return refuse('capacity', CI_MESSAGES.capacityFull(handler.display_name, n, c))
   const limit = Math.min(n + 1, CI_MAX_CAPACITY)
   const existing = rows('ci_handler_capacity').find((r) => r.user_id === handler.id)
-  if (existing) Object.assign(existing, { limit_override: limit, reason, approved_by: caller.id, approved_at: now(), expires_at: null })
-  else seedRows('ci_handler_capacity', [ciHandlerCapacityRow({ user_id: handler.id, approved_by: caller.id, limit_override: limit, reason })])
+  // The row the handler can read carries a neutral marker; the real reason lives in the audit row below.
+  const stored = 'Override authorized by CI command'
+  if (existing) Object.assign(existing, { limit_override: limit, reason: stored, approved_by: caller.id, approved_at: now(), expires_at: null })
+  else seedRows('ci_handler_capacity', [ciHandlerCapacityRow({ user_id: handler.id, approved_by: caller.id, limit_override: limit, reason: stored })])
   // The audit row carries the CI it was raised for — written once the CI exists (ci_create) or right away (ci_handler_set).
   deferred.push((ciId) => ciAudit(ciId, 'CI_CAPACITY_OVERRIDE', 'ci_handler_capacity', handler.id, { handler_id: handler.id, from: c, to: limit, reason }))
   return null
@@ -421,7 +426,8 @@ export function ciCreate(args: Args): Fns['ci_create']['Returns'] {
   const full = hasFullCiAccessAs(me)
   const primaryId = str(args.p_primary_handler)
   const secondaryId = blank(args.p_secondary_handler)
-  if (!full && !(primaryId === me.id && secondaryId == null)) deny('only CI command can designate a source for another handler')
+  // Self-recruitment is for a caller already inside the compartment (an active handler) — an outsider never learns whether a person is a source.
+  if (!full && !(primaryId === me.id && secondaryId == null && ciIsHandlerAs(me))) deny('only CI command can designate a source for another handler')
   // The person: live, unmerged, visible, and not already a live CI — ONE wording for every failure and every caller.
   const person = findRow('persons', args.p_person)
   if (!person || !targetVisible('person', args.p_person)) return refuse('unavailable', CI_MESSAGES.unavailable)

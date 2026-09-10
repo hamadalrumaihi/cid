@@ -169,13 +169,20 @@ describe('the access model (§1) — canAccessCI = full || handler', () => {
 })
 
 describe('ci_create (§3)', () => {
-  it('self-recruitment is allowed with no secondary; designating another handler is command only (P0403); the person becomes unavailable with ONE wording', () => {
+  it('self-recruitment is for an existing handler with no secondary (an outsider is refused before anything is looked at); designating another handler is command only (P0403); the person becomes unavailable with ONE wording', () => {
     const c = cast()
     const p = person('Vince Source')
     asUser(c.me)
+    // Not yet a handler: ci_create raises the same P0403 for a live source, a random id and a real person — no oracle.
+    expectDeny(() => ciCreate({ p_person: p.id, p_bureau: 'major_crimes', p_primary_handler: c.me.id }))
+    expectDeny(() => ciCreate({ p_person: mockId(), p_bureau: 'major_crimes', p_primary_handler: c.me.id }))
+    expect(readRows('confidential_informants')).toEqual([])
+    // The lead designates the first source; from then on the handler self-recruits.
+    expect(designate(c)).toMatchObject({ ok: true, ci_number: 'CI-0001' })
+    asUser(c.me)
     const ok = ciCreate({ p_person: p.id, p_bureau: 'major_crimes', p_primary_handler: c.me.id }) as Out
-    expect(ok).toMatchObject({ ok: true, ci_number: 'CI-0001' })
-    expect(readRows('confidential_informants')[0].status).toBe('candidate')
+    expect(ok).toMatchObject({ ok: true, ci_number: 'CI-0002' })
+    expect(readRows('confidential_informants')[1].status).toBe('candidate')
     expectDeny(() => ciCreate({ p_person: person().id, p_bureau: 'major_crimes', p_primary_handler: c.other.id }))
     expectDeny(() => ciCreate({ p_person: person().id, p_bureau: 'major_crimes', p_primary_handler: c.me.id, p_secondary_handler: c.other.id }))
     // Taken, missing or hidden — the same answer for the handler and for command.
@@ -184,11 +191,11 @@ describe('ci_create (§3)', () => {
     asUser(c.lead)
     expect(ciCreate({ p_person: p.id, p_bureau: 'major_crimes', p_primary_handler: c.other.id })).toEqual({ ok: false, code: 'unavailable', message: CI_MESSAGES.unavailable })
     // Audit in ci_audit_events only — never audit_log.
-    expect(audits('CI_CREATED')).toHaveLength(1)
-    expect(audits('CI_PERSON_DESIGNATED')).toHaveLength(1)
-    expect(audits('CI_HANDLER_ASSIGNED')).toHaveLength(1)
+    expect(audits('CI_CREATED')).toHaveLength(2)
+    expect(audits('CI_PERSON_DESIGNATED')).toHaveLength(2)
+    expect(audits('CI_HANDLER_ASSIGNED')).toHaveLength(2)
     expect(readRows('audit_log')).toEqual([])
-    expect(readRows('ci_events').map((e) => e.kind)).toEqual(['created'])
+    expect(readRows('ci_events').map((e) => e.kind)).toEqual(['created', 'created'])
     asUser(c.inactive)
     expectDeny(() => ciCreate({ p_person: person().id, p_bureau: 'major_crimes', p_primary_handler: c.inactive.id }), /not active/)
   })

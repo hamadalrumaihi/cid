@@ -79,9 +79,11 @@ describe.skipIf(!enabled)('v1.91b — Confidential Informants: capacity 6, the r
     expect(r.error, `${fn} should raise`).not.toBeNull()
     expect(r.error!.code, `${fn}: ${r.error!.message}`).toBe('P0403')
   }
-  /** lsb self-recruits an ACTIVE CI for the next person. */
+  /** An ACTIVE CI for the next person with lsb as primary: the FIRST is designated by the lead (self-recruitment
+   *  is for a caller already inside the compartment — an outsider's ci_create raises P0403, v191a #3); from then on
+   *  lsb self-recruits. */
   const recruit = (c: C = lsb, extra: Json = {}) =>
-    jsonRpc(c, 'ci_create', { p_person: persons[cis.length], p_bureau: 'major_crimes', p_primary_handler: ids.lsb, p_status: 'active', p_alias: `${tag}-${cis.length + 1}`, ...extra })
+    jsonRpc(cis.length === 0 && c === lsb ? lead : c, 'ci_create', { p_person: persons[cis.length], p_bureau: 'major_crimes', p_primary_handler: ids.lsb, p_status: 'active', p_alias: `${tag}-${cis.length + 1}`, ...extra })
 
   beforeAll(async () => {
     lsb = mk(); bcb = mk(); lead = mk()
@@ -115,7 +117,7 @@ describe.skipIf(!enabled)('v1.91b — Confidential Informants: capacity 6, the r
 
   /* ============ #7 six is the default ============ */
 
-  it('#7 six self-recruited active CIs fill the default capacity: ci_context() says 6 / 6, the lead\'s ci_stats() agrees, a candidate does not count', async () => {
+  it('#7 six active CIs (the first designated by the lead, five self-recruited) fill the default capacity: ci_context() says 6 / 6, the lead\'s ci_stats() agrees, a candidate does not count', async () => {
     for (let i = 0; i < 6; i++) {
       const out = await recruit()
       expect(out.ok, `CI #${i + 1}: ${JSON.stringify(out)}`).toBe(true)

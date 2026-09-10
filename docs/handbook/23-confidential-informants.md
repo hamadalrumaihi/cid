@@ -113,8 +113,9 @@ the new count. An approved **assignment** request does the same with
 
 **Sanitize / release.** `ci_release` (full only) runs
 `private.ci_sanitized(ci, title || body)` — false when the text contains the
-CI number, the person's name or alias, the CI alias or a handler's display
-name — then inserts `case_intel_releases` (visible) + `ci_releases`
+CI number, the person's name or alias, the CI alias (whole, or any token of
+four letters or more) or a current or former handler's display name, both
+sides normalised to lower-case letters and digits first — then inserts `case_intel_releases` (visible) + `ci_releases`
 (restricted), audits `CI_INTEL_RELEASED` and notifies the case lead with
 `case_intel_released {case_id, release_id}` — a kind that names no CI. The
 original intelligence row is untouched. The client's `sanitizeCheck` is a

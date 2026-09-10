@@ -187,6 +187,11 @@ describe.skipIf(!enabled)('v1.91a — Confidential Informants: canAccessCI = ful
     expect(intel.error, intel.error?.message).toBeNull()
     expect(intel.data ?? []).toEqual([])
     expect(await list(bcb)).toEqual([])
+    // Self-recruitment is for a caller already inside the compartment: the normal detective's ci_create for CI A's
+    // person and for a random id raise the same P0403 — ci_create is not a "is this person a source?" oracle.
+    const live = await expectP0403(bcb, 'ci_create', { p_person: personA, p_bureau: 'street_crimes', p_primary_handler: ids.bcb })
+    const rand = await expectP0403(bcb, 'ci_create', { p_person: randomUUID(), p_bureau: 'street_crimes', p_primary_handler: ids.bcb })
+    expect(live).toBe(rand)
   })
 
   it('#4 immediate protection: the handler reads exactly the designated CI (list, row, context 1 / 6); the normal detective still nothing', async () => {

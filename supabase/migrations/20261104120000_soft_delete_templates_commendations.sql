@@ -8,7 +8,8 @@
 --
 -- APPLICATION NOTE: applied live to project jhxuflzmqspidkvjckox as migration
 -- `soft_delete_templates_commendations` (Supabase MCP), after
--- `confidential_informants`. Additive: four nullable columns + one index on
+-- `confidential_informants`; the perm_dispatch text below also carries the
+-- `('create','ci')` arm of `confidential_informants_review_fixes`. Additive: four nullable columns + one index on
 -- each table, two triggers, two policies re-created, CREATE OR REPLACE
 -- functions; private.soft_delete_table, private.perm_dispatch and
 -- public.trash_list re-emitted whole from the text 20261103120000 left them
@@ -226,7 +227,7 @@ returns boolean language sql stable security definer set search_path to '' as $$
     -- ('record', 'ci_payment') p_id is the CI (or null: "may record at all").
     when p_kind = 'ci' and p_action in ('access', 'create', 'set_status', 'assign_handler', 'export', 'sweep') then case p_action
       when 'access'         then private.can_access_ci(p_id)
-      when 'create'         then private.is_active()
+      when 'create'         then private.has_full_ci_access() or private.ci_is_handler()
       when 'set_status'     then private.has_full_ci_access() and (p_id is null or private.can_access_ci(p_id))
       when 'assign_handler' then private.has_full_ci_access() and (p_id is null or private.can_access_ci(p_id))
       when 'export'         then case when p_id is null then private.has_full_ci_access() else private.can_access_ci(p_id) end

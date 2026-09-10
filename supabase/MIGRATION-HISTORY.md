@@ -1153,6 +1153,26 @@ demoted Bureau Lead loses access at once; the sweep is Owner-only; soft
 delete requires a reason, cascades, labels the Trash row `ci:CI-0001` and
 restores cleanly. `search_all('CI-0')` returns no CI rows.
 
+**Security-review follow-up** (applied as `confidential_informants_review_fixes`,
+folded into both repo files): self-recruitment through `ci_create` is for a
+caller already inside the compartment (`private.ci_is_handler()`, or full
+access) — an outsider's call raises P0403 before the person is looked at, so
+the "unavailable" answer can no longer tell a normal detective whether a
+person is a source, and a refused designation of a live source is audited
+(`CI_DESIGNATION_REFUSED`); the `('create','ci')` dispatch arm matches;
+`private.ci_sanitized` normalises both sides to lower-case letters and digits
+(so `CI 0001`, `c.i.-0001`, `Sm.ith` are caught), also refuses every token of
+four letters or more from the person's name / alias and the CI alias, and
+counts former handlers too; the merge-blocking trigger answers a neutral
+"these records cannot be merged right now" to anyone without full CI access;
+a capacity override stores a neutral marker on the handler-readable
+`ci_handler_capacity` row (the reason itself lives in the
+`CI_CAPACITY_OVERRIDE` audit row); the Trash label of a deleted intelligence
+row is `CI-0001 · intelligence <date>` rather than its summary. Accepted as
+is: every definer RPC is executable by `authenticated` (the project's
+pattern — authority is checked inside), and `rls_test_ci_sweep` keeps the
+fixture-email gate the other `rls_test_*` runners use.
+
 **Soft delete for templates and commendations.**
 `20261104120000_soft_delete_templates_commendations.sql` (applied as
 `soft_delete_templates_commendations`): `deleted_at` / `deleted_by` /
@@ -1189,7 +1209,7 @@ retires the last two hard-delete paths in the portal (`docs/DESIGN-SYSTEM.md`
 | applied via MCP (`intel_groups_convert`, `intel_groups_convert_policy_grant`, `intel_review_fixes`) | intel_groups_convert | `20261031120000_intel_groups_convert.sql` |
 | applied via MCP (`action_center`, `action_center_review_fixes`, `action_center_review_fixes_surv_alert`) | action_center | `20261101120000_action_center.sql` |
 | applied via MCP (`trash_list`, `trash_list_review_fixes`) | trash_list | `20261102120000_trash_list.sql` |
-| applied via MCP (`confidential_informants`, `confidential_informants_rpcs`, `confidential_informants_plumbing`) | confidential_informants | `20261103120000_confidential_informants.sql` |
+| applied via MCP (`confidential_informants`, `confidential_informants_rpcs`, `confidential_informants_plumbing`, `confidential_informants_review_fixes`) | confidential_informants | `20261103120000_confidential_informants.sql` |
 | applied via MCP (`soft_delete_templates_commendations`) | soft_delete_templates_commendations | `20261104120000_soft_delete_templates_commendations.sql` |
 | applied via MCP (`record_versions`) | record_versions | `20261011120000_record_versions.sql` |
 | applied via MCP (`case_access_grant_expiry`) | case_access_grant_expiry | `20261012120000_case_access_grant_expiry.sql` |
