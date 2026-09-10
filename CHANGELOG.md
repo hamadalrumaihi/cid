@@ -6,6 +6,124 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [Unreleased]
+
+### Confidential Informant compartment
+
+A protected-source registry with its own access wall — **canAccessCI =
+full access (Owner, Bureau Lead, Deputy Director, Director, every active SIB
+member) or an active assigned handler** — where an unauthorized caller gets
+nothing (null / zero rows), never a lock, a count or a "restricted" hint.
+Migration `20261103120000_confidential_informants`; authority
+`docs/AUTHORIZATION.md` §21, flows `docs/WORKFLOWS.md` §15, handbook ch. 23.
+
+- **Tables** (RLS on, SELECT-only policies, every write a definer RPC):
+  `confidential_informants` (`CI-0001` numbers from `private.ci_number_seq`,
+  status candidate → active → dormant / suspended / compromised / retired /
+  terminated, motive, reliability, risk, contact cadence), `ci_handlers`
+  (primary / secondary, capacity 6 per handler with `ci_handler_capacity`
+  overrides), `ci_capacity_requests` (capacity / assignment requests with a
+  reviewer decision), `ci_intelligence` + `ci_intelligence_links`,
+  `ci_contacts`, `ci_assessments`, `ci_payments`, `ci_case_links`, the
+  restricted `ci_releases` link, the immutable `ci_audit_events` (CI events
+  never touch `audit_log` or the case timeline) and the ids-only realtime
+  shadow `ci_events`. `persons` gains no column — a CI relationship is only
+  discoverable through these tables.
+- **The one visible record**: `case_intel_releases` — sanitized intelligence a
+  full-access member releases to a case (`ci_release` refuses text that
+  names the CI number, name, alias or a handler); readable with the case,
+  carries no CI column, revocable.
+- **RPCs**: `ci_context`, `ci_list`, `ci_get`, `ci_stats`, `ci_create`
+  (capacity check with `Request additional capacity` for handlers and a
+  reasoned override for full access), `ci_update`, `ci_set_status`,
+  `ci_handler_set` / `ci_handler_remove`, `ci_capacity_request_submit` /
+  `_decide` / `_withdraw`, `ci_capacity_set`, `ci_contact_log` / `_update` /
+  `_delete`, `ci_assess`, `ci_intel_create` / `_update` /
+  `_set_corroboration` / `_links_set` / `_delete`, `ci_case_intel`,
+  `ci_case_counts`, `ci_case_link` / `_unlink`, `ci_release` /
+  `ci_release_revoke`, `ci_payment_record` / `_approve`, `ci_export`,
+  `ci_search`, `ci_person_status`, `ci_audit_list`, the hourly
+  `ci-contact-sweep` (`private.ci_sweep`, Owner `ci_sweep_run`). Soft delete
+  kinds `ci`, `ci_intelligence`, `ci_contact`, `ci_payment` join
+  `soft_delete_table`, `perm_dispatch` and `trash_list` (labels are CI
+  numbers, never names). `case_audit_feed` excludes every `ci_*` entity.
+- **Routes and nav**: `/informants` (Investigations) renders only for involved
+  members — handlers see `My Informants: n / 6`, their sources, contacts due
+  and follow-ups; full access sees the roster, stat strip, filters, saved
+  views and the Handler Capacity panel; `?ci=<id>` opens the profile,
+  `?requests=1` the requests panel. Cases gain a **CI Intelligence** tab that
+  exists only when the viewer has permitted intel on that case (never a
+  placeholder); the case Intel tab shows released intelligence; a person
+  dossier shows a discreet CI card only to those who may see it; the command
+  palette searches CIs only for involved members. Action Center kinds
+  `ci_contact_due`, `ci_capacity_request` (a decision), `ci_intel_followup`.
+- **Notification registry**: nine kinds — `ci_assigned`, `ci_handler_changed`,
+  `ci_handler_removed`, `ci_contact_overdue`, `ci_intel_added`,
+  `ci_compromised`, `ci_capacity_request`, `ci_request_decided` in the new
+  `informants` category with `destination: "portal"` (in-app only, never a
+  Discord DM), and `case_intel_released` (intel — names no CI). Payloads
+  carry ids only; `notification_resolve` labels a CI by its number when the
+  viewer may see it.
+- Tests: `tests/rls/v191a` / `v191b` / `v191c` (the 35 security cases), the
+  MSW `ci` handler, e2e `informants.spec.ts`, unit `ciModel.test.ts`.
+
+### Portal cleanup
+
+The twelve clutter items recorded in `docs/HANDOFF-PORTAL-IMPROVEMENTS.md` §7,
+delivered together with the compartment.
+
+- **One queue, one route.** `/inbox` is the **Action Center** (personal preset
+  applied by default; `?lane=activity` opens the activity lane); My Dashboard
+  moves to `/dashboard` and drops its embedded queue slice, command banner
+  and activity panel. `/action` and `/command` are legacy redirects
+  (`LEGACY_REDIRECT_TABS`, still prerendered for bookmarks) and the
+  `components/command/` folder is deleted; Trackers and Raid Comp live in the
+  Command Center's **Trackers & Raid Comp** section, `/analytics` is the one
+  analytics surface, and the Approval Queue becomes **Membership Review**
+  (`?s=membership`, `?s=approvals` still resolves).
+- **Navigation.** The `cases` category is **Investigations** (Cases,
+  Operations, Legal, Intelligence, Informants, Registries, RICO, Case Files);
+  Intelligence and Registries are workspace leaves with a default tool; the
+  Owner-only leaves (Owner Console, Audit, Developer Handbook, Report
+  Templates) sit under an **Owner** category rendered only for the Owner;
+  the command badge sum moves onto the Action Center.
+- **Bell.** The last eight notifications, per-row and mark-all read, and
+  **View All** into the Action Center's activity lane. The in-app
+  **Notification settings** mutes moved to Profile → Notifications.
+- **Case tabs.** Optional sections with no rows (Graph, Charges, RICO, Legal,
+  Surveillance, Extractions, Timeline) collapse into a **More…** chip; the
+  CI tab is present with a count or absent.
+- **Typed notification registry.** `notificationTitles.json` entries are
+  `{ title, category, destination?, mutable?, priority? }`; `notifText`
+  exports `NOTIF_REGISTRY`, `notifDestination`, `isMutableNotif`;
+  `notifications.ts` holds the one `NOTIF_CATEGORY_META` copy table and
+  **derives** `OPTIONAL_NOTIF_CATEGORIES` (the six `mutable` kinds) and
+  `DISCORD_CATEGORIES` (categories with a non-portal kind, excluding `other`)
+  from the registry — a portal-only category can never be offered for DMs.
+  The sync script validates the new fields; `discord-notify` skips
+  `destination: portal` before any lookup and derives its opt-in set from
+  `titles.json`.
+- **One ViewsMenu.** Cases, BOLO, Legal Requests and the Persons registry use
+  `components/shared/ViewsMenu` (presets + saved views + Save / Rename /
+  Update / Set default / Delete); the four bespoke controls are gone,
+  default-view auto-apply and URL state unchanged.
+- **One delete rule.** `docs/DESIGN-SYSTEM.md` "Deleting things": Soft Delete
+  → Trash → Restore / Permanent Delete for everything a member creates,
+  member deletion the named exception, hard deletes for machine rows only.
+  `case_templates` and `commendations` join `SOFT_DELETE_KIND`
+  (`20261104120000_soft_delete_templates_commendations`), use `deleteRecord`,
+  and appear in the Trash under a new **Administration** group.
+- **Owner Console.** The "Pending owner actions" and "Critical warnings"
+  panels are removed (the Action Center's Owner signals carry them); the
+  security-suite summary, recent administrative changes and every section
+  stay.
+- **Docs.** `CID-FUTURE-STATE-SPEC`, `CTO-REVIEW`, `RECORDS-REQUESTS-SPEC`,
+  `RECORDS-REQUESTS-DELTAS-REPORT`, `HARDENING`, `MDT-BRIDGE-CONTRACT`,
+  `PLAN-PORTAL-IMPROVEMENTS` and the `HANDBOOK` / `RUNBOOK` stubs move to
+  `docs/archive/` (every link repointed; `docs/archive/README.md` lists
+  them); this changelog's four historical `[Unreleased]` blocks are folded
+  under 1.18.0.
+
 ## [1.18.0] — 2026-09-09 — Portal Improvements (Phases 0–8)
 
 The ten-phase Portal Improvements plan (`docs/PLAN-PORTAL-IMPROVEMENTS.md`)
@@ -19,6 +137,10 @@ records what was verified at apply time. Authority per phase:
 [AUTHORIZATION.md §6–§20](docs/AUTHORIZATION.md); flows:
 [WORKFLOWS.md](docs/WORKFLOWS.md); the handoff record:
 [HANDOFF-PORTAL-IMPROVEMENTS.md](docs/HANDOFF-PORTAL-IMPROVEMENTS.md).
+
+The four `[Unreleased]` blocks that follow the phase sections (Records &
+Requests, the superseded DOJ redesign, Usability Phases 1–2) shipped between
+1.17.1 and this release and are kept here as subsections, content unchanged.
 
 ### Phase 0 — hygiene (earlier PRs)
 - Duplicate-timestamp migration pairs renamed (`…120001_`), a
@@ -154,9 +276,9 @@ records what was verified at apply time. Authority per phase:
   `trash.spec.ts` and `mobile-case.spec.ts`; unit `trash.test.ts`,
   `deleteRecord.test.ts`, `recordHistory.test.ts`, `reportNarrative.test.ts`.
 
-## [Unreleased] — Records & Requests domain + 10-phase roadmap
+### Records & Requests domain + 10-phase roadmap (shipped unreleased between 1.17.1 and 1.18.0)
 
-### FiveM integration preparation — 2026-08-26
+#### FiveM integration preparation — 2026-08-26
 
 Groundwork for a future in-city (FiveM) CID lane. **Nothing integration-side
 is live**: no consumer is deployed, no external caller is registered, no new
@@ -209,7 +331,7 @@ Map: [ARCHITECTURE.md §12](docs/ARCHITECTURE.md) /
   ARCHITECTURE §12, Handbook Ch. 21, AUTHORIZATION §4 postures,
   OPERATIONS §9.
 
-### Smart entity search & linking — 2026-08-25
+#### Smart entity search & linking — 2026-08-25
 
 One coordinated pass over every "pick a record" surface: search-first,
 bounded, linked-by-id. No RLS or workflow semantics changed — every
@@ -283,7 +405,7 @@ text stays possible where a form always allowed it (now clearly marked).
   collection, the toast classifier; an MSW behavior suite for the
   upgraded picker (`tests/msw/record-search-picker-behavior`).
 
-### Master dashboard pass — 2026-08-25
+#### Master dashboard pass — 2026-08-25
 
 One coordinated dashboard restructure across every workspace. No RLS or
 workflow semantics changed — each dashboard renders what the viewer's own
@@ -356,7 +478,7 @@ policies already allow, and hiding an entry remains cosmetic.
   fixes; responsive foundations — header/bottom-nav tokens, sticky action
   bars, scroll strips, 44 px touch targets, DataTable narrow fallback.
 
-### Portal-wide UX pass — 2026-08-25
+#### Portal-wide UX pass — 2026-08-25
 
 One coordinated usability pass across the whole portal. No permissions or
 RLS semantics changed anywhere in it — every new surface renders what the
@@ -450,7 +572,7 @@ mapped in `supabase/MIGRATION-HISTORY.md`)
   `create_notification` 1-hour identical-unread dedupe; `search_all`
   bolo/task arms.
 
-### Investigative Tools workspace
+#### Investigative Tools workspace
 
 **Fourteen intelligence tabs, one nav item.** The Intelligence category's
 tabs (Persons, BOLO Board, Gangs, Places, Vehicles, Accounts, Indicators,
@@ -474,7 +596,7 @@ params intact, so bookmarks, notifications and cross-links keep working.
 Model in `src/lib/toolsModel.ts` (data only); workspace, lazy tool
 registry and shim in `src/components/tools/`.
 
-### Bureau restructure — Major Crimes / Street Crimes / SIB
+#### Bureau restructure — Major Crimes / Street Crimes / SIB
 
 **Three bureaus replace the geographic model.** The database migration is live
 (`20260825120000_bureau_restructure.sql` +
@@ -507,7 +629,7 @@ with SIU→SIB terminology throughout (substance preserved), and the docs
 (`USER-GUIDE`, `AUTHORIZATION`, handbook, `supabase/README`) follow the new
 model.
 
-### User Guide rewrite + CID/SIU visual redesign
+#### User Guide rewrite + CID/SIU visual redesign
 
 **The User Guide describes the portal that exists.** `docs/USER-GUIDE.md` is
 rewritten as an operational manual (workspaces → first five minutes → navigation
@@ -562,7 +684,7 @@ prosecutor's bureau-awareness lane works. One production gap is documented
 rather than papered over: `review_legal_request_as_ag` remains EXECUTE-revoked,
 so an SIU request approved by X-1 has no reachable Attorney General action yet.
 
-### Portal edits — layout and permissions
+#### Portal edits — layout and permissions
 
 **The legal-request form is one centred column.** The wizard root was full width
 while only *some* children carried `max-w-3xl` and none were centred, so the
@@ -646,7 +768,7 @@ UPDATE that matches a row and is silently reverted by a trigger still reports on
 row affected. Reading the value back showed nothing had changed. Row counts prove
 a match, not a mutation.
 
-### Three buttons that did nothing
+#### Three buttons that did nothing
 
 `Button` renders `type={type ?? 'button'}` — a deliberate default, since most
 buttons in this app are not submits. The consequence is that a `<Button>` inside
@@ -667,7 +789,7 @@ build if a `<Button>` inside a form with `onSubmit` declares neither
 `type="submit"` nor its own handler. It was verified against the real defect
 before being wired in — a check that cannot fail is not a check.
 
-### Restrict to SIU, on the record you are looking at
+#### Restrict to SIU, on the record you are looking at
 
 Two defects in how S2 shipped, both about reach rather than enforcement.
 
@@ -696,7 +818,7 @@ narrow capability, so the action can appear on a record without opening a single
 SIU screen. It never fails open: absent, the client reads false and shows
 nothing.
 
-### Two ways to restrict, and a compartment that reaches the whole graph
+#### Two ways to restrict, and a compartment that reaches the whole graph
 
 S1 hid four registry tables. That closes the front door and leaves the windows
 open: `gang_members` still said *somebody is in this organisation* with the
@@ -783,7 +905,7 @@ row disappears but a visible person still carries the uuid, so what leaks is
 places. RLS cannot null a column conditionally; closing it properly needs a
 masking view over both tables.
 
-### SIU compartmentation — the registry stops being one shared list
+#### SIU compartmentation — the registry stops being one shared list
 
 `persons`, `vehicles`, `gangs` and `places` were each `using
 (private.is_active())`: every active investigator saw every row. An SIU agent
@@ -867,7 +989,7 @@ reveal / restrict / take-in actions that each demand a written reason and state,
 in a sentence, exactly who will be able to see the record afterwards — including
 that restricting "removes access, not knowledge".
 
-### Ask the library — retrieval, not generation
+#### Ask the library — retrieval, not generation
 
 The portal has **no AI infrastructure**: no server-side model, no embeddings, no
 vector store. The one thing calling itself an assistant is an Owner-only
@@ -909,7 +1031,7 @@ agrees because they are the same path — the table, the search RPC and the
 assistant all resolve through the owning document's own RLS, so there is no
 route that reaches further than the reader could by hand.
 
-### The Penal Code becomes browsable
+#### The Penal Code becomes browsable
 
 359 statutes in one flat searchable list: fine if you already knew the code you
 wanted, close to useless for *what covers this*. Offenses are now **grouped by
@@ -951,7 +1073,7 @@ mean inventing legal requirements and setting them beside real statutory text
 with nothing on screen to tell the two apart. The card says what the code says,
 and the gap is stated on the page rather than filled in.
 
-### Documents stop being isolated
+#### Documents stop being isolated
 
 `document_relations` has held **zero rows** since document governance shipped,
 and the reason turned out to be embarrassing rather than complicated: the table,
@@ -991,7 +1113,7 @@ linked a route and the lookup found it; a detective who cannot edit that
 document was **refused** the insert, matched **zero rows** on delete, and could
 still read the relation — which is exactly the intended shape.
 
-### Search that lands on the paragraph
+#### Search that lands on the paragraph
 
 Ask the library "what evidence is required for a search warrant" and it returned
 *Criminal Investigation Division (CID) Standard Operating Procedure* — 39,479
@@ -1041,7 +1163,7 @@ it indexes exactly the documents that viewer could open by hand.
 published document already uses. `check:schema` compares columns only, so it
 never noticed — the same blind spot could have hidden a policy change.
 
-### Accounts could not be permanently deleted, and Intel Tips is gone
+#### Accounts could not be permanently deleted, and Intel Tips is gone
 
 **The bug.** Freezing the reporting officer on an intelligence record was right —
 a report is the account of who reported what, and reattributing it after the fact
@@ -1083,7 +1205,7 @@ the RLS pins that tested them — their successors on `field_submissions` are
 stronger, and the source wall in particular has no SELECT test left to write
 because `field_submission_sources` admits no role at all.
 
-### Finding a record, and noticing when the same name keeps coming up
+#### Finding a record, and noticing when the same name keeps coming up
 
 **Search reaches the whole record, not the summary field.** Everything a
 reviewer might search by is spread across seven tables — the people, vehicles,
@@ -1128,7 +1250,7 @@ Two strengths of signal, kept apart because they mean different things:
 Both sides are RLS-filtered, so the count is of records *you* can open — the
 signal never hints at a report in a jurisdiction you cannot see.
 
-### What follows from a record that matters
+#### What follows from a record that matters
 
 D2 gave a record the status **Being acted on**. It did not say what acting on it
 looks like. Three things follow from a report worth acting on, and all three
@@ -1173,7 +1295,7 @@ their own report, so without that rule they would learn that CID opened a case
 off the back of it. What happens to a report after it is filed is not the
 submitter's to see, the same rule the SIU flags and the reviewer notes follow.
 
-### Confidential sources, and the protection arriving with the option
+#### Confidential sources, and the protection arriving with the option
 
 D1 **refused** `confidential` as a source type rather than ship the option
 without the protection, on the grounds that offering it first is how a source's
@@ -1203,7 +1325,7 @@ a caller holding the id of a deleted record could still archive it, grade it, an
 would now have been able to link it to a case. It is brought into line with the
 SELECT policy that already said exactly this.
 
-### One lifecycle, and the difference between archiving and deleting
+#### One lifecycle, and the difference between archiving and deleting
 
 The statuses an intelligence record could hold were still describing the system
 that got removed last week. Three of them — `intel_added`, `linked_existing`,
@@ -1262,7 +1384,7 @@ None of this is a second copy of the account-deletion system. Removing a person
 from the portal and removing one intelligence record are separate concerns with
 separate authority, and they stay that way.
 
-### Intelligence is one thing
+#### Intelligence is one thing
 
 The portal had grown two systems for the same job. **Intel Tips** came first — a
 detective writes down what they were told, grades it, triages it. **Field
@@ -1312,7 +1434,7 @@ the option before the protection is how a source's name ends up in a summary
 field half the bureau can read. The insert path refuses it until that lands.
 
 
-### A roster, not a queue — and submitters out of the approval line
+#### A roster, not a queue — and submitters out of the approval line
 
 Field Intelligence submitters were still turning up in the CID approval queue,
 with a green **Approve** button next to them. The cause was one line: the
@@ -1347,7 +1469,7 @@ rows remain, and rows belonging to somebody who has since created their own
 access are marked superseded rather than left for somebody to rubber-stamp. The
 rows themselves stay — that is history.
 
-### Permanent deletion where the removal decision is made
+#### Permanent deletion where the removal decision is made
 
 The Owner-only deletion protocol was complete and correct and lived at
 `/owner?s=deletion` — a different part of the app from the place anybody
@@ -1366,7 +1488,7 @@ modal and misleading the moment a genuinely permanent one appeared beside it.
 It now reads **Remove from portal**, which is what it does.
 
 
-### Permanent deletion stops being hand-maintained (and starts working again)
+#### Permanent deletion stops being hand-maintained (and starts working again)
 
 Phase B classified every foreign key pointing at `profiles` by hand — a ~90-entry
 reference map and a matching ~40-statement repoint block, both correct on the
@@ -1409,7 +1531,7 @@ outright — the guard now allows exactly that one move, with every snapshot
 column still frozen. Verified: the account and its auth row delete cleanly, the
 report survives pointing at the tombstone, and the identity on it is unchanged.
 
-### Field Intelligence is an access class, not a bureau
+#### Field Intelligence is an access class, not a bureau
 
 `profiles.division` defaulted to **JTF** and `profiles.role` to **detective**.
 Nothing was granted by that — `active = false` gates every investigative table —
@@ -1424,7 +1546,7 @@ never the subject of a recorded role decision — were cleared. Every account wi
 a decision behind it keeps what it says, including removed members, whose last
 bureau and rank are history.
 
-### Asking to send CID information is not asking for a job
+#### Asking to send CID information is not asking for a job
 
 The access request queue is gone from onboarding. `field_access_self_serve()`
 creates the standing on the spot: choose Submit Intelligence, enter agency,
@@ -1453,7 +1575,7 @@ are a record, a pending one can still be answered through the same
 administratively. It just no longer stands between a patrol officer and the
 ability to tell CID something.
 
-### SIU reads the network, and nothing gets promoted on its own
+#### SIU reads the network, and nothing gets promoted on its own
 
 Claim verdicts answer whether what an officer reported happened. The SIU
 question is what it says about a **structure** — who leads, who supplies, who
@@ -1487,7 +1609,7 @@ the same wrong conclusion.
 Like the follow-up candidates, the whole assessment is `private.siu_is_agent()`
 and nothing else.
 
-### SIU without a second intake queue
+#### SIU without a second intake queue
 
 SIU is a specialist detachment inside CID, so it works the same reports out of
 the same table. A patrol officer is never asked whether what they saw is a
@@ -1527,7 +1649,7 @@ Organized crime, Narcotics, Firearms, Corruption, Fugitives. Gang/MC enterprise
 and organized crime share a queue, because an MC **is** an organized-crime
 enterprise and splitting them hides half the picture.
 
-### Four child tables that never reached the parent
+#### Four child tables that never reached the parent
 
 Found while probing the sensitive path, and older than SIU.
 `field_submission_messages`, `field_submission_reviews`, `field_claim_verdicts`
@@ -1544,7 +1666,7 @@ detective reads 0 messages and 0 reviewer notes on a restricted report and 0
 messages on a Blaine report, while the BCB detective reads that Blaine thread
 and the submitting officer keeps their own.
 
-### A claim that actually holds
+#### A claim that actually holds
 
 `field_submission_claim()` took the row lock and then wrote `assigned_to`
 unconditionally. Two detectives could not corrupt the row — the lock saw to
@@ -1577,7 +1699,7 @@ them. `claim`, `release`, `assign`, `decide` and `ask` now all check
 `private.field_jurisdiction_visible()` inside the function, which is where it
 matters for a caller who already has the id.
 
-### Queues instead of a single list
+#### Queues instead of a single list
 
 The review screen was one list with a "show only open" toggle. It is now the
 queues a reviewer actually thinks in — All, Unclaimed, Mine, Assigned, Needs
@@ -1589,7 +1711,7 @@ is the point. Each card now says what the report contains ("2 people · 1 vehicl
 call rather than six child-table reads per row — SECURITY INVOKER, so it counts
 exactly what the caller could have counted themselves.
 
-### A patrol officer can now ask for the door
+#### A patrol officer can now ask for the door
 
 Field Intelligence shipped with one way in: command had to appoint an officer
 out of nowhere, which meant command had to already know the officer wanted in.
@@ -1620,7 +1742,7 @@ somewhere else to work is a queue that quietly stops being worked. Every active
 investigator can read it (they are the ones who recognise a name); only command
 sees the decide buttons, and the RPC refuses everybody else regardless.
 
-### Reports are routed by where they happened, not by a guess
+#### Reports are routed by where they happened, not by a guess
 
 `field_submissions.route` — a CID / SIU / "unsure" picker — is **dropped**,
 along with `field_submission_route()`. It asked the submitter the wrong
@@ -1641,7 +1763,7 @@ City" alone does not tell a detective whether the report reached them because
 it is theirs.
 
 
-### Submissions become intelligence
+#### Submissions become intelligence
 
 Sixth and last phase. Until now a verified claim was verified and then sat
 there. This connects it to the investigative database.
@@ -1707,7 +1829,7 @@ submissions — worth a look, not corroboration."* Three officers can repeat one
 rumour, and presenting frequency as corroboration is how that becomes a fact
 nobody checked.
 
-### Claim-level verification: deciding about the parts, not the whole
+#### Claim-level verification: deciding about the parts, not the whole
 
 Fifth phase. A field report is several separate assertions, and confirming one
 says nothing about the others:
@@ -1769,7 +1891,7 @@ for anyone who already holds the id. Re-probed with the id captured out of band:
 the reviewer sees **0 rows** through RLS *and* the RPC refuses on the guard.
 Two layers, both real.
 
-### Field Intelligence Review, and the ticket queue goes dormant
+#### Field Intelligence Review, and the ticket queue goes dormant
 
 Fourth phase. Patrol could file structured, evidence-backed reports; now CID and
 SIU can work them — and the thing this replaces is switched off.
@@ -1832,7 +1954,7 @@ Verified: CID reads the 1 existing ticket and is refused both insert and update.
 `TicketQueue.tsx` and its constants are gone; the agency→bureau mapping they held
 now lives where it is actually used, in `fieldOfficers.ts`.
 
-### Evidence, and the project's first Supabase Storage bucket
+#### Evidence, and the project's first Supabase Storage bucket
 
 Third phase of the Field Intelligence portal. Patrol can now back a report up
 with screenshots, clips and documents.
@@ -1902,7 +2024,7 @@ Knip caught `evidenceUrl` unused, which was a real gap rather than dead code —
 an officer could attach a file and had no way to open it and check they picked
 the right screenshot. It is now an **Open** action that mints a signed URL.
 
-### Patrol can now send intelligence to CID
+#### Patrol can now send intelligence to CID
 
 Second phase of the Field Intelligence portal. P1 established who an external
 officer is and proved they can reach nothing; this gives them something to do.
@@ -1976,7 +2098,7 @@ One refusal message was wrong and got fixed: a draft moving to `intel_added` was
 told *"a submitted report cannot be edited"*, which is a true refusal and a false
 explanation. It now says a draft can only be saved or submitted.
 
-### Field officers — patrol can sign in without becoming CID
+#### Field officers — patrol can sign in without becoming CID
 
 First phase of the Field Intelligence Submission Portal: the identity and the
 access boundary, shipped on their own because the boundary is the part that can
@@ -2053,7 +2175,7 @@ The landing page says plainly that submissions are not open yet rather than
 offering a button that does nothing — dead controls teach people the portal is
 broken. The submission model is the next phase.
 
-### The 2026 penal code becomes the code in force
+#### The 2026 penal code becomes the code in force
 
 The whole penal overhaul was built for this switch. The 2026 code has been
 imported and unpublished since `20260904130000`; the portal has served the
@@ -2104,7 +2226,7 @@ Reversible in the product, not just in SQL: `penal_rollback_to()` on the legacy
 version restores it and records that the code was *reverted* rather than
 advanced.
 
-### The RICO predicate picker stops offering RICO charges as predicate acts
+#### The RICO predicate picker stops offering RICO charges as predicate acts
 
 The legacy code designates 18 offenses as RICO predicate acts. **The 2026 code
 designates none** — its only RICO rule says the RICO charges are modifiers a
@@ -2137,7 +2259,7 @@ Also removed the `(6)01, (6)02` example from the narcotics charge-codes hint.
 Code *format* is a property of the published code, not of that form, and the
 example became wrong the day a version numbered its statutes differently.
 
-### The anon revoke is made permanent, and TRUNCATE stops being granted
+#### The anon revoke is made permanent, and TRUNCATE stops being granted
 
 `20260807150000_anon_revoke_hygiene` revoked every privilege on `public` from
 `anon`, and the schema snapshot has recorded the result as an invariant ever
@@ -2178,7 +2300,7 @@ The snapshot's grant section is rewritten from live state rather than patched:
 the false invariant, 55 `authenticated` grant lines, 67 `anon` lines, and the
 two tables that are not standard (`notifications`, `profiles`).
 
-### `case_charge_transition_ok()` gets its search_path pinned
+#### `case_charge_transition_ok()` gets its search_path pinned
 
 Supabase's advisor flagged `function_search_path_mutable` on one function, and
 it was mine: `20260905130000` gave `set search_path to ''` to
@@ -2192,7 +2314,7 @@ because a function with a mutable search_path is one edit away from mattering,
 and an advisor with a known exception in it stops being read. Same signature,
 same 9 edges, verified unchanged.
 
-### The two codeless charges can be given their numbers
+#### The two codeless charges can be given their numbers
 
 The 2026 code has been imported and unpublishable-as-complete since it landed:
 2 of its 197 charges arrived with an unresolved spreadsheet formula instead of
@@ -2227,7 +2349,7 @@ reason is refused; 402 is refused by the unique constraint; and assigning two
 free numbers drops `needs_code` to **0** — which is what makes the 2026 code
 publishable as a complete code. The real assignment is left to a person.
 
-### Charges on a case become the records they always should have been
+#### Charges on a case become the records they always should have been
 
 `case_charges` shipped with the data layer and nothing rendered it. The Charges
 tab still read and wrote `cases.charges`, the jsonb array — so the status lane,
@@ -2257,7 +2379,7 @@ catalog load. It also states each charge's status, because a disclosed document
 listing a withdrawn charge as if it were live misstates the case against
 somebody.
 
-### The legacy jsonb path is removed, not just bypassed
+#### The legacy jsonb path is removed, not just bypassed
 
 `parseCharges`, `CaseCharge`, `PenalTotals` and `penalTotals` are gone with the
 column's last reader. `cases.charges` itself is untouched and keeps its history;
@@ -2277,7 +2399,7 @@ currently in force schedules nothing — `penal.ts` never carried schedule
 numbers, and only the 2026 import does (401/402/403 → Schedules 1/2/3). The
 capture appears when that version is published, and not before.
 
-### The penal code can finally be published by a person
+#### The penal code can finally be published by a person
 
 The publish, rollback, archive and restore RPCs have existed since the data
 layer landed and **nothing had ever called them**. That was not a cosmetic gap:
@@ -2317,7 +2439,7 @@ charges with 36 rules and 3 schedules instead of 162 with none; the owner rolls
 back and it returns to 162. Live state is unchanged — legacy remains in force
 and 2026 remains a draft, which is still a decision for a person to make.
 
-### The penal code stops being compiled into the app
+#### The penal code stops being compiled into the app
 
 `src/lib/penal.ts` *was* the penal code: a 162-entry array converted from the
 vanilla `penal.js`. That array is gone. The statutes now come from
@@ -2348,7 +2470,7 @@ book, ChargesTab withholds the sentence, fine and predicate figures behind a
 dash, and `gatherCasePacket()` awaits the catalog outright — a packet is filed
 and disclosed, so it must never go out with bare codes and no penalties.
 
-### The code that was already in force is recorded as in force
+#### The code that was already in force is recorded as in force
 
 The database said no version was published while the application served 162
 statutes to everyone. Those cannot both be true. The legacy code was imported as
@@ -2368,7 +2490,7 @@ of an enacted code, which is the one thing the status column exists to show.
 The 2026 code stays a draft. Publishing it changes the law in force and is a
 decision for an administrator, not a side effect of a deployment.
 
-### The RICO predicate picker nearly lost 18 of its 24 entries
+#### The RICO predicate picker nearly lost 18 of its 24 entries
 
 `penal_current_charges()` returned `is_rico` only. The old array carried a
 single `rico` flag covering 24 charges, and three surfaces read it: the
@@ -2381,7 +2503,7 @@ Murder, Kidnapping, Robbery, Arson and Bribery as predicates on every RICO case.
 The UI would have looked fine. Both columns are now returned and the client flag
 is their union, which is what those three surfaces have always meant.
 
-### A charge on a case becomes a record, with a snapshot and a status
+#### A charge on a case becomes a record, with a snapshot and a status
 
 `cases.charges` was a jsonb array of `{code, count}`. Five things were wrong
 with it, and none were cosmetic. No identity, so nothing could reference "this
@@ -2417,7 +2539,7 @@ and nothing correlates them. So authority for a *move* lives in a trigger while
 RLS decides who may touch the row at all. Both must pass. RLS is not weakened;
 it is doing the part it can express.
 
-### A charge could be filed and convicted by anyone with no justice role
+#### A charge could be filed and convicted by anyone with no justice role
 
 Found in the migration above, before it shipped, by asserting row counts instead
 of the absence of an error. `private.justice_role()` is NULL for every CID user,
@@ -2432,7 +2554,7 @@ justice role at all opened it, which is the one case a justice-role test
 naturally forgets to try. Both sites now force two-valued logic at the boundary
 rather than patching call sites, so a future caller cannot reintroduce it.
 
-### The legacy penal code is recorded as the superseded version it is
+#### The legacy penal code is recorded as the superseded version it is
 
 The 29 charges already on 6 cases all carry old codes — `(1)09`, `(4)22`,
 `(10)01` — that do not exist in the 2026 import. They were charged under a
@@ -2467,7 +2589,7 @@ against an act that person may not have performed. Each row says so in its note.
 `cases.charges` is **not** modified: the portal still reads it, and the selectors
 move in a later step.
 
-### The Penal Code becomes data, shared by every unit
+#### The Penal Code becomes data, shared by every unit
 
 It was a hard-coded TypeScript array — 162 charges compiled into the bundle,
 with charges landing on a case as `cases.charges` jsonb: a code string and a
@@ -2527,7 +2649,7 @@ against the source after loading, not before: 195 coded with no duplicates, 2
 held back for codes, 8 judge-set, 33 in Title 7, plus the 3 schedules, the
 200-month limit and 36 rules.
 
-### An unpublished Penal Code draft was readable by the whole force
+#### An unpublished Penal Code draft was readable by the whole force
 
 Found by probing the import, not by reading the migration that caused it. The
 data layer gated `penal_charges` on version status and, by omission, gated
@@ -2554,7 +2676,7 @@ published the version, the gate opens, 195 charges reach the selector and the
 two codeless drafts stay out. A gate that never opens would be a different bug
 wearing the same green tick.
 
-### A stalled legal request now says who can move it
+#### A stalled legal request now says who can move it
 
 "This request is awaiting Bureau Lead review" was true and useless. It never
 said *which* Bureau Lead, and it was silent on the commonest way a CID request
@@ -2578,7 +2700,7 @@ in the client from the reviewer's *current* role and division would retroactivel
 turn every past LSB approval into a "fallback" the day that Bureau Lead
 transfers to BCB.
 
-### SIU actions live on the person's own record
+#### SIU actions live on the person's own record
 
 An agent reads a profile, decides the person matters, and — before this — had
 to leave, find the SIU tab, open a form and search the registry for the record
@@ -2603,7 +2725,7 @@ The registered-source warning is stated in a sentence rather than a chip,
 because targeting somebody else's source is the mistake §19 deconfliction
 exists to prevent and a chip is too easy to skim past.
 
-### SIU legal requests take the SIU lane, and stop telling CID about it
+#### SIU legal requests take the SIU lane, and stop telling CID about it
 
 The legal pipeline was built for CID and had no SIU branch at its two front
 stages. Submitting an SIU warrant notified every CID `deputy_director` and
@@ -2656,7 +2778,7 @@ request now says who holds it and where it goes next — including that the
 prosecutor queue is *not* the next stop, which a reader who knows the CID
 pipeline would otherwise reasonably assume.
 
-### Targets and Intelligence can finally be created
+#### Targets and Intelligence can finally be created
 
 Both tabs could read, grade, review and clear — every verb except the one that
 puts something there in the first place. `siu_targets` had no create RPC and no
@@ -2702,7 +2824,7 @@ since the audit log has a wider readership than the note.
 The registry picker built for the watchlist is now shared by target designation
 rather than duplicated, so neither screen can drift back towards a free-text box.
 
-### The SIU watchlist points at CID's records instead of copying them
+#### The SIU watchlist points at CID's records instead of copying them
 
 `siu_watchlist` was built with an untyped `entity_id` carrying no foreign key
 and a `label` holding a copy of the subject's name. That is a second, worse
@@ -2741,7 +2863,7 @@ the registry and counts all four live statuses, and the same widening was
 applied to the `watch_active` / `watch_expiring_14d` figures on the command
 dashboard and the oversight report.
 
-### A person dossier, assembled from the registries
+#### A person dossier, assembled from the registries
 
 `siu_person_dossier()` is what the reference was for: one subject gathered live
 across persons, gangs and memberships, registered and observed vehicles,
@@ -2768,7 +2890,7 @@ Each tab's primary action is now on the tab: **+ Add to watchlist**, a review
 that records what was decided, and an empty state that says what to do next
 rather than only that there is nothing there.
 
-### The Director of CID can ask X-1 to see one investigation
+#### The Director of CID can ask X-1 to see one investigation
 
 He is the unit's nominal boss and hands-off: no standing, no caseload, no
 appointment authority. When he needs sight of a specific investigation he
@@ -2796,7 +2918,7 @@ The request card lives on his own My Desk, because with no standing he cannot
 reach the SIU workspace at all. X-1's decision queue sits in the SIU Intake
 section.
 
-### CID Director no longer holds SIU authority — reversing the SOP chain change
+#### CID Director no longer holds SIU authority — reversing the SOP chain change
 
 Migration `20260823120000` read the unit's SOP as seating the **Director of
 CID** in the SIU chain and gave every active `role = 'director'` profile
@@ -2826,7 +2948,7 @@ Seven unit tests encoded the old model and failed as soon as the branch went —
 they did exactly their job. All seven now pin the new chain, including a
 dedicated "leaves the Director of CID entirely outside the chain" case.
 
-### DELETE was the one write the CID↔SIU wall never covered — closed
+#### DELETE was the one write the CID↔SIU wall never covered — closed
 
 Found while giving the SIU workspace CID's full navigation. **Pre-existing**,
 and it affected every SIU member.
@@ -2856,7 +2978,7 @@ each. A null case id now returns false instead of falling through to true.
 and joined it here. `tests/rls/v170.test.ts` pins the whole thing, with a CID
 Bureau Lead as the control so a future fix that costs CID a delete fails loudly.
 
-### RICO now reads on the SIU read superset
+#### RICO now reads on the SIU read superset
 
 `rico_cases_sel` and `predicate_acts_sel` were on `can_access_case()` — the
 write wall — while every other case child moved to `can_read_case()` back in
@@ -2864,7 +2986,7 @@ Phase 1. RICO was missed, so an SIU agent could read a CID case's reports,
 evidence, media and tasks but see zero of its RICO records. SELECT only; every
 write stays on the wall. `case_messages` remains the one deliberate exclusion.
 
-### SIU navigation reaches all of CID
+#### SIU navigation reaches all of CID
 
 Following on from the Cases entry: the SIU workspace now carries CID's entire
 navigation, tab for tab — Command, Cases (with operations, legal, RICO),
@@ -2875,7 +2997,7 @@ reads and writes them exactly as CID does; case surfaces are read-only under
 the SIU read superset; owner- and command-only screens self-gate exactly as
 they do for a CID detective without the rank.
 
-### SIU can reach CID cases without switching department
+#### SIU can reach CID cases without switching department
 
 SIU's broad read of CID has existed in RLS since Phase 1 —
 `private.siu_oversight_read()` feeds `can_read_case`, and an SIU agent could
@@ -2918,7 +3040,7 @@ forced to `case_authority = 'cid'` by the guard trigger and its creator then
 loses access to it. The UI withholds the control; changing the function touches
 CID's own create path and is a separate decision.
 
-### SIU intelligence quality, watchlist, deconfliction and supporting access (§19, §20, §21, §23, §25, §30, §35, §36, §53)
+#### SIU intelligence quality, watchlist, deconfliction and supporting access (§19, §20, §21, §23, §25, §30, §35, §36, §53)
 
 **§20/§21 — grading asks two questions.** The unit already graded SOURCES; it
 never graded the INFORMATION. Those are different questions, and collapsing
@@ -2988,7 +3110,7 @@ and both dashboards. Advisors: zero ERROR-level findings. Migrations
 `20260831120000`, `20260831130000`, `20260831140000`; suite
 `tests/rls/v169.test.ts`.
 
-### SIU intake, case lifecycle and conflict of interest (§14, §15, §17, §32, §33)
+#### SIU intake, case lifecycle and conflict of interest (§14, §15, §17, §32, §33)
 
 The front of the SIU workflow: how work **enters** the unit, how it is graded
 while SIU decides whether it is real, and how it is disposed of. Until now an
@@ -3060,7 +3182,7 @@ queue visibility, receipt shape, inquiry invisibility, promotion, the recusal
 veto at command rank, self-resolve refusal, and closure validation. Migrations
 `20260830120000`, `20260830130000`, `20260830140000`; suite `tests/rls/v168.test.ts`.
 
-### SIU release gate OPENED — and a fixture privilege escalation closed first
+#### SIU release gate OPENED — and a fixture privilege escalation closed first
 
 The build-phase gate (`siu_settings.enabled_for_non_owner`) is now **open**. SIU
 is live for appointed personnel and the SOP oversight chain.
@@ -3099,7 +3221,7 @@ Also recorded in `docs/TEST-ENVIRONMENT.md`: `rls-test-owner` carries
 pre-existing and load-bearing for the owner-path suites, so it is reported
 rather than changed.
 
-### Roadmap reconciliation + post-SIU advisor sweep
+#### Roadmap reconciliation + post-SIU advisor sweep
 
 `docs/CID-FUTURE-STATE-SPEC.md` still described Phase 10 as "in progress on the
 current branch (not yet merged)" — it merged as **PR #209**. The header also
@@ -3131,7 +3253,7 @@ was the single FK across the whole SIU surface without a covering index, now
 added. The 199 `unused_index` notices are expected while the release gate is
 shut and the SIU tables hold no rows.
 
-### RLS cleanup confined to the fixture namespace — F1–F5 closed
+#### RLS cleanup confined to the fixture namespace — F1–F5 closed
 
 `rls_test_cleanup()` is `SECURITY DEFINER` and bypasses RLS; five of its
 branches keyed on *authorship* rather than on test-created cases, so each could
@@ -3176,7 +3298,7 @@ own case + report + target + operation are all still swept with `leaked: []`.
 
 **`RLS_TEST_PASSWORD_*` can now be enabled.**
 
-### Test isolation policy, and a safety review of the RLS suites
+#### Test isolation policy, and a safety review of the RLS suites
 
 No test database was created, and none was needed. Shipping SIU to production
 never obliged anyone to build or rebuild one — a claim that had been repeated in
@@ -3208,7 +3330,7 @@ record — including one that writes to production `cases`/`gangs` rows. They ar
 catalogued as F1–F5 in `docs/TEST-ENVIRONMENT.md`; the secrets should not be
 enabled until they are tightened.
 
-### Fix — rls_test_cleanup did not sweep ten SIU tables
+#### Fix — rls_test_cleanup did not sweep ten SIU tables
 
 Found by that review. The cleanup RPC covered the three SIU Phase 1 tables while
 ten more had shipped since. All cascade from `cases`, so a row on a
@@ -3220,7 +3342,7 @@ left live, division-visible rows behind. Every new branch keys on fixture
 authorship, never on a case id alone, so the blast radius stays inside the
 fixture namespace by construction.
 
-### SIU §14 — Assume SIU Control of a CID case
+#### SIU §14 — Assume SIU Control of a CID case
 
 SIU can take over a live CID investigation. The requirement was preservation,
 and the implementation is one column flip: `cases.case_authority` `cid` → `siu`.
@@ -3244,7 +3366,7 @@ Verified live: the detective loses the case, its report and its search hit at
 once; the case number, bureau, lead and report author are unchanged; returning
 control gives everything back.
 
-### SIU §15 — Releasing intelligence to CID
+#### SIU §15 — Releasing intelligence to CID
 
 Four routes — the whole Division, one case's members, one named investigator,
 and "Release Intelligence" — all auditable and revocable.
@@ -3262,7 +3384,7 @@ and no case number. Release requires field standing, so oversight cannot decide
 what SIU tells CID; acknowledgement re-checks the audience rule so it can never
 be used as an existence oracle.
 
-### SIU Phase 3 — tradecraft
+#### SIU Phase 3 — tradecraft
 
 Six new domains: confidential sources, undercover deployments, financial
 intelligence, communications intelligence, integrity reviews and a restricted
@@ -3295,7 +3417,7 @@ sources; the Director reads the standard investigation and none of the six
 tables; a plain detective reads nothing at all; and every export scope withheld
 the codename, the legend and the intercept content while keeping toll metadata.
 
-### SIU chain of command — the unit's SOP is authoritative
+#### SIU chain of command — the unit's SOP is authoritative
 
 The architecture amendment put SIU under the Attorney General with CID command
 holding no SIU authority; the unit's own SOP puts it under the **Director of
@@ -3330,7 +3452,7 @@ transaction): the Director reads the standard investigation, gets nothing at
 restricted or compartmented, holds appointment authority, and is refused by
 `siu_create_case` and `siu_assign_agent`.
 
-### Fix — CID command could blind-delete SIU records
+#### Fix — CID command could blind-delete SIU records
 
 Found while verifying the change above, not by the build. `DELETE` never
 required a read: seven case-child delete policies gated on
@@ -3348,7 +3470,7 @@ the delete it should always have had — X-1 and a lead agent can clean up their
 own investigation without needing a senior CID rank. Live-verified before and
 after: 1 row deleted before the fix, 0 after, with CID deletion unchanged.
 
-### SIU Phase 2 — targets, operations, and the SIU-only layer on CID cases
+#### SIU Phase 2 — targets, operations, and the SIU-only layer on CID cases
 
 Migration `20260822120000_siu_phase2` adds the three investigative objects the
 SIU workspace was missing, in each case **extending** an existing system rather
@@ -3387,7 +3509,7 @@ than cloning it.
 - Tests: `src/lib/siu.test.ts` → 38 cases; `tests/rls/v166.test.ts` gains the
   SIU-only-layer invisibility guard and the target/operation isolation guards.
 
-### SIU becomes a separate department
+#### SIU becomes a separate department
 
 Migration `20260821120000_siu_department` amends Phase 1: SIU is no longer a
 separate *authority* inside the CID shell but a separate **department** on the
@@ -3420,7 +3542,7 @@ same platform — one portal, two investigative departments.
   switch matrix, owning-department vocabulary, the senior tier);
   `tests/rls/v166.test.ts` gains the department + SIU-SOP separation guards.
 
-### Special Investigation Unit (SIU) — Phase 1
+#### Special Investigation Unit (SIU) — Phase 1
 
 Migration `20260820120000_siu_phase1` adds SIU to the portal as a **separate
 investigative authority** that reuses every existing CID system rather than
@@ -3487,7 +3609,7 @@ duplicating it.
   Docs: [AUTHORIZATION.md §4f](docs/AUTHORIZATION.md), handbook ch. 9,
   REVIEW-MAP, TESTING.
 
-### Bureau prosecutor queues, review routing, stages, and evidence designation
+#### Bureau prosecutor queues, review routing, stages, and evidence designation
 
 Migration `20260818120000_bureau_queues_stages` refines the minimal-DOJ
 workflow and the case workspace:
@@ -3548,7 +3670,7 @@ workflow and the case workspace:
   as a timeline card in the case Record area that refreshes when the stage
   moves.
 
-### Minimal DOJ, member transfers, and the investigative-workspace redesign
+#### Minimal DOJ, member transfers, and the investigative-workspace redesign
 
 The legal pipeline regains a prosecutorial + judicial stage in minimal form
 (migrations `20260816120000_minimal_doj_revival` +
@@ -3591,7 +3713,7 @@ minimal DOJ workspace (queue, my requests, judicial queue, returned,
 archive, AG administration) with recusal notices surfacing server refusals
 verbatim. No tab, action, or deep link was removed.
 
-### JTF legal routing
+#### JTF legal routing
 
 Legal requests on JTF cases no longer dead-end at draft creation. Root
 cause: `cases.bureau = 'JTF'` is an *operational* assignment, but the
@@ -3616,7 +3738,7 @@ with a recorded reason) — all through `resolve_case_originating_bureau`;
 the bureau columns stay frozen against direct writes. Migration
 `20260815120000_jtf_legal_routing`.
 
-### Surveillance & Intelligence domain
+#### Surveillance & Intelligence domain
 
 The portal-side surveillance pipeline (SOP Title 7): **surveillance
 targets** with a server-authoritative authorization lifecycle (draft →
@@ -3641,7 +3763,7 @@ documented as missing. Migration `20260812120000_surveillance_domain`
 (additive; validated on a scratch cluster with a 14-scenario functional
 smoke). Discord and the FiveM sensor side are untouched.
 
-### Joint / JTF Operations — operation-scoped joint cases
+#### Joint / JTF Operations — operation-scoped joint cases
 
 Operations now come in two kinds: **normal** (bureau-owned coordination —
 new operations are stamped with the creator's bureau; legacy rows keep
@@ -3672,7 +3794,7 @@ header/board show operation-derived JOINT badges with the "why" and
 resolved events. Pure client mirrors + pins in `src/lib/opsJoint.ts`;
 live security matrix in `tests/rls/v138.test.ts`.
 
-### CID SOP refreshed to the current OdysseyRP document
+#### CID SOP refreshed to the current OdysseyRP document
 
 The SOPs & Library "Criminal Investigation Division (CID) Standard Operating
 Procedure" now carries the current OdysseyRP CID SOP verbatim (authoritative
@@ -3701,7 +3823,7 @@ records (justice memberships, signatures, decisions, court packets) are
 > 2026-06 build waves* and have nothing to do with this roadmap — see the
 > disambiguation note above the first of them.
 
-### Records & Requests foundation (D1–D7) — PR #193
+#### Records & Requests foundation (D1–D7) — PR #193
 
 The discovery-driven records/requests delta that seeds the roadmap: legal
 hold (D7), warrant execution + seized-items inventory (D3), Lead+-gated MDT
@@ -3712,7 +3834,7 @@ restricted-content view-audit + break-glass (D6).
   `20260807210000_mdt_exports`, `20260807220000_accounts_registry`,
   `20260807230000_search_include_accounts`, `20260807240000_restricted_access`.
 
-### The 10-phase roadmap
+#### The 10-phase roadmap
 
 Each phase → PR number(s) → backing migration(s). Phases 7 and 8 are UI-only
 (no migration).
@@ -3748,7 +3870,7 @@ Each phase → PR number(s) → backing migration(s). Phases 7 and 8 are UI-only
   predicates; this reconciliation of `CHANGELOG.md`, `supabase/README.md`, and
   `supabase/MIGRATION-HISTORY.md`).
 
-## [Unreleased] — DOJ / Justice Portal operational redesign — SUPERSEDED
+### DOJ / Justice Portal operational redesign — SUPERSEDED (shipped unreleased between 1.17.1 and 1.18.0)
 
 > **SUPERSEDED** by the Records & Requests roadmap above. The active
 > DOJ/AG/ADA/Judge/prosecutor workflow this redesign polished was RETIRED in
@@ -3778,9 +3900,9 @@ full verification record:
   only during `cid_supervisor_review`; sealed audiences unchanged. New live
   RLS suites v136/v137.
 
-## [Unreleased] — Usability roadmap, Phase 2
+### Usability roadmap, Phase 2 (shipped unreleased between 1.17.1 and 1.18.0)
 
-### Added — Action Center
+#### Added — Action Center
 - A new **Action Center** tab (in the Command group, beside My Desk): one
   prioritized queue of everything awaiting a decision or action from the
   signed-in member — sign-offs to decide, cases returned to them, overdue and
@@ -3790,20 +3912,20 @@ full verification record:
   It's the actionable slice of My Desk (which links to it), sharing the same
   data sources.
 
-### Added — case activity recap
+#### Added — case activity recap
 - The case Overview shows a **"Since your last visit"** banner summarising what
   changed (evidence / reports / tasks added, legal updates) since the viewer
   last opened this case — a per-case marker re-stamped on leave. Purely
   informational; it never suppresses a notification.
 
-### Added — case handover
+#### Added — case handover
 - The current lead (or command) can **hand a case to another officer** from the
   case header: pick the new lead + an optional note. Both the outgoing and
   incoming lead are notified (a new case-access-gated `case_handover` type on
   the guarded `create_notification` path), so a lead change is never silent.
   Migration `20260721030000` adds the type to the whitelist.
 
-### Added — smarter case creation from templates
+#### Added — smarter case creation from templates
 - Case templates gain an optional **default follow-up interval**
   (`case_templates.followup_days`): applying a template to a new case sets
   `follow_up_at` to today + N days, so the Guided-next-action banner and the
@@ -3811,7 +3933,7 @@ full verification record:
   follow-up an editor set). The New-case template picker previews it, and the
   template manager edits it. Additive column; no policy change.
 
-### Security — re-hardened `create_notification` (the client notification path)
+#### Security — re-hardened `create_notification` (the client notification path)
 - The live function had drifted to an un-guarded form: any active member could
   insert a notification of **any** type with arbitrary free text to any other
   member — i.e. spoof a "sign-off approved" / "legal decision" / "membership
@@ -3826,11 +3948,11 @@ full verification record:
   keeps the server-stamped actor, and clamps free-text fields. Migration
   `20260721010000`; 5 new live RLS tests (155/155).
 
-## [Unreleased] — Usability roadmap, Phase 1
+### Usability roadmap, Phase 1 (shipped unreleased between 1.17.1 and 1.18.0)
 
 Theme: the portal tells members what changed, what matters, and what to do next.
 
-### Added — shared case-state evaluator (the foundation)
+#### Added — shared case-state evaluator (the foundation)
 - Pure, unit-tested rules engine `src/lib/caseWorkflow.ts` (`assessCase`): given
   a case + its tasks, reports, legal requests and evidence/support counts, it
   derives the workflow stage, an ordered list of actor-specific next actions,
@@ -3838,32 +3960,32 @@ Theme: the portal tells members what changed, what matters, and what to do next.
   the pre-close checklist and My Desk hints, so they can't drift. The
   sign-off/legal RPCs stay the authority for who may act. 20 unit tests.
 
-### Added — Guided next action
+#### Added — Guided next action
 - The case **Overview** leads with a "Next action" banner: stage badge + the
   highest-severity recommendation (with follow-ups), each deep-linking into the
   relevant case tab.
 
-### Added — Case legal panel
+#### Added — Case legal panel
 - The case Overview shows the case's warrants/subpoenas (active + a collapsed
   resolved list) via the shared `LegalRequestRow`, deep-linking into `/legal`
   — the case ↔ legal connection that was missing.
 
-### Added — Pre-close checklist
+#### Added — Pre-close checklist
 - Closing a case runs the evaluator and enumerates unresolved work (open
   sign-off / tasks / legal / drafts) in the confirm, with a "Close anyway"
   override.
 
-### Changed — My Desk is the home
+#### Changed — My Desk is the home
 - My Desk (the personal inbox) is now the default landing page and leads the
   Command nav group; a command-only "Command administration" banner surfaces
   the live pending-approval count (excluding members moved to DOJ/Judiciary,
   consistent with the roster fix).
 
-### Added — expanded global search
+#### Added — expanded global search
 - `search_all` now also finds reports (by body values, never JSON keys),
   evidence, and operations; report/evidence hits open the owning case's tab.
 
-### Added — better notifications
+#### Added — better notifications
 - Bell rows are no longer dead ends: a destination route map opens the case,
   legal request, Justice Portal, Command Center, announcement or owner surface
   as appropriate. Assigning a case task now notifies the assignee.

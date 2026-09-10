@@ -58,7 +58,12 @@ function canReassign(it: ActionItem, viewer: InlineViewer): boolean {
 
 /** Which canonical inline writes a row offers. Sign-offs, transfers,
  *  membership, legal, trackers, SIB and the intel lanes are navigation-only —
- *  their writes live behind server-authoritative flows on the owning pages. */
+ *  their writes live behind server-authoritative flows on the owning pages.
+ *  So are the CI kinds (§6.4): a contact is logged and a follow-up closed on
+ *  the source's profile (`ciHref`), and a capacity / assignment request is
+ *  decided in the requests panel (`/informants?requests=1`) — the row's
+ *  "Review" label is the item's actionLabel and its Open link lands there.
+ *  Nothing about a source is ever written from the queue. */
 export function inlineActionsFor(item: ActionItem, viewer: InlineViewer): InlineAction[] {
   const out: InlineAction[] = []
   switch (item.sourceType) {
@@ -107,6 +112,12 @@ export function inlineActionsFor(item: ActionItem, viewer: InlineViewer): Inline
       break
     case 'legal_comment':
       if (item.canAct) out.push({ kind: 'dismiss_legal_comment', label: 'Mark read', tone: 'neutral' })
+      break
+    case 'ci_contact_due':
+    case 'ci_intel_followup':
+    case 'ci_capacity_request':
+      // Navigation-only by design (see above) — and `ci_request:` keys are
+      // decisions the server refuses to dismiss.
       break
     default:
       break

@@ -10,7 +10,7 @@ separately-reviewed pass; see [Dormancy](#dormancy-statement).
 
 Companion documents:
 
-- [docs/MDT-BRIDGE-CONTRACT.md](../MDT-BRIDGE-CONTRACT.md) — the **patrol
+- [docs/archive/MDT-BRIDGE-CONTRACT.md](../archive/MDT-BRIDGE-CONTRACT.md) — the **patrol
   lane** (unchanged by anything here).
 - `integration-package/` — the standalone package a city developer receives
   *without* this repository; it restates the public half of this contract.
@@ -26,7 +26,7 @@ lanes with deliberately different trust models:
    (surveillance observations, quarantine-not-discard, unverified by
    default). Bookkeeping: `mdt_bridge_ack(...)`. All three are
    service_role-only and fully specified in
-   [MDT-BRIDGE-CONTRACT.md](../MDT-BRIDGE-CONTRACT.md). **This lane does not
+   [MDT-BRIDGE-CONTRACT.md](../archive/MDT-BRIDGE-CONTRACT.md). **This lane does not
    change and never widens.** Sensitive CID/SIB data never crosses it — that
    is a structural property of the feed's column list, not a policy request.
 

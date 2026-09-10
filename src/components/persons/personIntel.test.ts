@@ -31,7 +31,10 @@ const TODAY = '2026-07-15'
 
 describe('vocabularies and label maps', () => {
   it('mirrors the DB CHECK vocabularies exactly', () => {
-    expect(PERSON_CLASSIFICATIONS).toEqual(['person_of_interest', 'suspect', 'witness', 'victim', 'informant', 'associate', 'other'])
+    // `informant` is deliberately absent from the offered list (CI §6.4) —
+    // the CHECK still admits it for the one legacy row.
+    expect(PERSON_CLASSIFICATIONS).toEqual(['person_of_interest', 'suspect', 'witness', 'victim', 'associate', 'other'])
+    expect(PERSON_CLASSIFICATIONS).not.toContain('informant')
     expect(PERSON_LIFECYCLES).toEqual(['active', 'inactive', 'historical', 'cleared', 'archived', 'merged'])
     expect(PERSON_PRIORITIES).toEqual(['low', 'medium', 'high', 'critical'])
     expect(RELATIONSHIP_TYPES).toHaveLength(11)
@@ -56,6 +59,9 @@ describe('vocabularies and label maps', () => {
   })
   it('label helpers humanize unknown legacy values and blank out null', () => {
     expect(classificationLabel('some_legacy_value')).toBe('Some Legacy Value')
+    // The retired public label still renders for the legacy row.
+    expect(classificationLabel('informant')).toBe('Informant')
+    expect(CLASSIFICATION_LABELS).not.toHaveProperty('informant')
     expect(relationshipLabel(null)).toBe('')
     expect(classificationLabel('suspect')).toBe('Suspect')
   })

@@ -177,6 +177,35 @@ bar, assistant) < `z-modal` (50, modals and the palette) < `z-toast` (60) <
 `z-dialog` (70, confirm dialogs) < `z-banner` (80, connectivity banner).
 Nothing else; no `z-[…]` arbitrary values.
 
+## Deleting things
+
+One rule for everything a member can create — a case, a report, a note, a
+registry record, a link row, a case template, a commendation: **Soft Delete →
+Trash → Restore / Permanent Delete.**
+
+- **Soft delete** is the only delete a surface offers. Call `deleteRecord`
+  (`src/lib/deleteRecord.ts`) with a `SOFT_DELETE_KIND` table; it confirms,
+  asks for a reason where the server requires one, runs the `soft_delete`
+  RPC and shows the one "Deleted — Undo · In Trash" toast. Never call
+  `remove()` on a table a member fills, never snapshot-and-reinsert, never
+  write a second confirm dialog.
+- **Trash** (`/trash`, `trash_list`) lists exactly the rows the caller may
+  restore; **Restore** is `restore_record` (a child comes back only under a
+  live parent). Copy says "Move … to the Trash", never "cannot be undone".
+- **Permanent delete** is the Owner's armed protocol only (preview → arm with
+  a fresh sign-in and a reason → typed `DELETE <label>` → execute), from the
+  Trash. No other surface destroys a row.
+- **The one named exception** is member/account deletion: `admin_remove_member`
+  soft-removes, and permanent member erasure is the Owner protocol on
+  `/owner` with the deletion ledger — it is not a Trash row.
+- **Hard deletes are for machine rows only**: `client_errors`, deletion
+  tokens, realtime shadow rows and other rows no member authored. Those
+  surfaces say what they do ("Clear errors") and offer no Undo.
+
+A new table a member can write to gets the four lifecycle columns, a
+`soft_delete_table` arm, a `perm_dispatch` arm and a `trash_list` kind before
+its first delete button — see `docs/AUTHORIZATION.md` §12 and §20.
+
 ## Review
 
 Run the `ui-review` project skill (`.claude/skills/ui-review/`) against

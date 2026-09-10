@@ -70,12 +70,17 @@ describe('inlineActionsFor', () => {
     expect(inlineActionsFor(item({ sourceType: 'narcotic_suggestion' }), { isCommand: false, canEdit: false })).toEqual([])
   })
 
-  it('is link-only for sign-offs, transfers, membership, legal, trackers, SIB, intel and report review', () => {
+  it('is link-only for sign-offs, transfers, membership, legal, trackers, SIB, intel, report review and the CI kinds', () => {
     for (const t of ['signoff', 'transfer', 'membership_request', 'legal_request', 'tracker_cosign', 'sib_conflict',
       'sib_watch_review', 'claim_verdict', 'intel_reply', 'intel_restore', 'intel_validate', 'report_review',
-      'justice_application', 'unassigned_intel'] as const) {
+      'justice_application', 'unassigned_intel', 'ci_contact_due', 'ci_intel_followup', 'ci_capacity_request'] as const) {
       expect(inlineActionsFor(item({ sourceType: t }), command), t).toEqual([])
     }
+    // A CI request row is a decision: its Open link IS the "Review" action
+    // (the panel decides) — no write, and no dismiss, ever comes from the queue.
+    const review = item({ sourceType: 'ci_capacity_request', dedupeKey: 'ci_request:r1', actionLabel: 'Review', deepLink: '/informants?requests=1' })
+    expect(inlineActionsFor(review, command)).toEqual([])
+    expect(inlineActionsFor(review, member)).toEqual([])
   })
 
   it('never offers an action when the model says canAct = false', () => {

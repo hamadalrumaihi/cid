@@ -391,6 +391,105 @@ is a definer DELETE).
   row is still readable, 'already ended' on a repeat, `CASE_UNASSIGNED` for
   the Owner.
 
+### Confidential Informants (`tests/rls/v191a` … `v191c`)
+
+The CI compartment (migration `20261103120000_confidential_informants`,
+applied live as `confidential_informants`): one rule everywhere —
+**canAccessCI = hasFullCIAccess(user) || isAssignedHandler(user, ci)** — and
+a caller who is not authorized gets NOTHING (null, zero rows), never a
+placeholder, a lock, a count or a "no permission" text. Fourteen RPC-only
+tables (SELECT policies only, no client write grant), every write a definer
+RPC, audit in `ci_audit_events` (never `audit_log`), realtime through the
+ids-only `ci_events` shadow, notifications `destination: 'portal'`. CID
+fixtures only — **lsb** (the MCB detective — handler A, the one who
+self-recruits), **bcb** (the SCB detective — the NORMAL detective; handler B
+in one leg of v191a), **lead** (the MCB Bureau Lead — full access, the
+reviewer), **director** (optional, `RLS_TEST_PASSWORD_DIRECTOR` — the second
+full-access role), **owner** (optional — `audit_log` reads), **inactive**
+(optional — deny-by-default). Authority refusals raise SQLSTATE `P0403`
+(`private.perm_raise`) — asserted as `error.code === 'P0403'` (the wording
+only where the contract fixes it); validation refusals are jsonb `{ok:false,
+code, message}` and are asserted with the contract's exact strings; the
+Owner-only sweep runner answers `{ok:false, code:'denied'}`. Persons and JTF
+cases (readable by bcb — the "case ≠ CI" precondition) are inserted by lsb
+with `[rls-test] v191x <tag>` titles; the CIs are designated by the lead (or
+self-recruited by lsb). `rls_test_cleanup` is spliced (before the reports
+anchor, ahead of the persons purge — `confidential_informants.person_id` is
+`on delete restrict`) to sweep `ci_events`, `ci_releases`,
+`case_intel_releases`, `ci_audit_events`, `ci_capacity_requests`,
+`ci_handler_capacity` and every fixture-created CI (cascading handlers /
+intelligence / contacts / links). The 35 security cases of the request map as
+follows.
+
+- **v191a** (cases 1–6, 13–21, 30–32, 35 — the access model): #1 bcb's
+  `ci_context()` is exactly `{full_access:false, is_handler:false}`; #2 zero
+  rows on all fourteen tables; #3 `ci_get` / `ci_person_status` /
+  `ci_case_intel` null / empty; #4 immediate protection — the lead designates
+  CI A with lsb primary and lsb reads exactly it (list, row, `1 / 6`), bcb
+  still nothing; #5 the person stays a plain person (bcb reads the persons
+  row, no CI column, no CI number in it); #6 the lead and the director read
+  the CI, its handlers and `ci_stats()`, null for the handler; #13 bcb reads
+  the JTF case and `ci_case_intel(case)` is still empty; #14 the handler's
+  intelligence is in the case for lsb and the lead (`ci_number`, handler,
+  corroboration, `release_count`); #15 `ci_case_counts([case])` empty for
+  bcb, n > 0 for lsb / the lead; #16 handler B — bcb reads exactly CI B, lsb
+  exactly CI A, the lead both, `ci_assigned` ids only; #17 INSERT into every
+  table → 42501 for lsb and bcb, the handler's UPDATE / DELETE match nothing;
+  #21 `ci_set_status` → P0403 for lsb and bcb, the lead needs a reason; #20
+  retired → `active_count` 0 with `is_handler` true, `CI_STATUS_CHANGED
+  {from, to}` in `ci_audit_list` for lsb, nothing for bcb; #18/#19 demotion
+  through `rls_test_reset_member` — the lead (made secondary handler first)
+  as detective keeps exactly CI A, `ci_get(CI B)` null, `ci_stats()` null,
+  `ci_set_status` P0403, restored to `bureau_lead` in a `finally`; #30 a
+  direct-id `ci_get` is null for the real CI and a random id alike,
+  `ci_search` empty for bcb; #32 an unauthorized write and an unknown id
+  raise the SAME P0403 wording, the handler's `ci_update` works while a
+  bureau change is P0403; #31 `ci_audit_events` readable through the CI by
+  its handler, immutable, invisible to bcb, and `audit_log` carries no CI
+  entity / `CI_%` action (Owner); #35 the inactive fixture — the same
+  `{false,false}`, zero rows everywhere.
+- **v191b** (cases 7–12 — capacity): #7 six self-recruited active CIs →
+  `ci_context()` `{active_count: 6, capacity: 6}`, the lead's `ci_stats()`
+  roster agrees, a `candidate` does not count; #8 the seventh → `{ok:false,
+  code:'capacity', message:'You are at capacity (6 / 6). Request additional
+  capacity or an assignment.'}` for lsb, `'<name> is at capacity (6 / 6).
+  Confirm the override with a reason.'` for the lead without a reason,
+  nothing created; #9 `ci_capacity_request_submit('capacity', 8)` — bcb
+  P0403 (not a handler), ≤ capacity and > 30 refused, one pending per kind,
+  `current_count` 6, readable by lsb and the lead not bcb, `ci_capacity_request`
+  to the lead with ids only, `CI_CAPACITY_REQUESTED` (`ci_id` null) readable
+  by the requester; #10 decide is P0403 for lsb / bcb, a denial needs a note,
+  approval → `ci_handler_capacity` (8, `request_id`), `CI_CAPACITY_CHANGED`,
+  `ci_request_decided`, `capacity` 8; #11 CIs #7 and #8 → `active_count` 8,
+  #9 refused with `(8 / 8)`; #12 the lead's `p_override_reason` at 8 / 8 →
+  ok, `CI_CAPACITY_OVERRIDE` with the reason in `ci_audit_list(ci)` for the
+  handler (nothing for bcb), limit 9; `ci_capacity_set` P0403 for lsb, null
+  → back to 6; a direct INSERT into the override table 42501.
+- **v191c** (cases 22–29, 33, 34 — the leak surfaces): #22 `search_all('CI-')`
+  and `search_all(<ci number>)` name no CI for anyone (no CI kind); #23
+  `search_all(<person name>)` still finds the PERSON for bcb and no hit
+  carries the CI number / id / "informant" (the alias finds nothing); #24
+  `entity_suggest('person')` finds the person and reveals no CI; #25
+  `entity_crossref('person', id)` has no CI edge; #26 `case_audit_feed(case)`
+  carries no `confidential_informants` / `ci_%` entity or `CI_%` action; #27
+  bcb has no `ci_*` / `case_intel_released` notification, every `ci_*`
+  payload is ids only, and the registry (`notificationTitles.json`) marks
+  every `ci_*` kind `informants` + `destination: 'portal'` (the Discord edge
+  function never DMs them) while `case_intel_released` has no portal
+  destination; #28 `ci_events` zero rows for bcb, ids-only rows (`id, ci_id,
+  user_id, kind, at`) for lsb, INSERT 42501; #29 `ci_export(ci)` for the
+  handler (audited `CI_EXPORTED`), null for bcb, the roster only for full
+  access; #33 `ci_release` P0403 for lsb / bcb, a body naming the CI number /
+  the person / the alias → `{ok:false, code:'unsanitized', message:'The text
+  names the source — remove the CI number, name, alias or handler.'}`, the
+  clean release readable by bcb through the case as `case_intel_releases`
+  (title, body, handling — no CI column) while `ci_releases` is zero rows for
+  bcb and the link row for lsb, the intelligence untouched, `release_count`
+  1, `CI_INTEL_RELEASED` in the compartment, revoke P0403 for lsb and the
+  revoked row gone for bcb / kept for the lead; #34 `ci_case_counts([case,
+  empty case, random])` → `[]` for bcb, exactly `[{case, n}]` for lsb and
+  the lead.
+
 ### DOJ legal review (v1.13.0 — `tests/rls/legal.test.ts`; historical model)
 
 37 assertions covering the DOJ Legal Review System (see
@@ -470,7 +569,7 @@ RLS_TEST_PASSWORD_BCB=…
 RLS_TEST_PASSWORD_INACTIVE=…
 RLS_TEST_PASSWORD_OWNER=…   # optional — enables the owner-positive block
 RLS_TEST_PASSWORD_LEAD=…    # optional — enables the Command Center scoping block
-RLS_TEST_PASSWORD_DIRECTOR=…
+RLS_TEST_PASSWORD_DIRECTOR=…   # also enables the second full-access leg of v191a
 RLS_TEST_PASSWORD_TARGET=…
 RLS_TEST_PASSWORD_APPLICANT=… # optional — enables the approval-success block
 RLS_TEST_PASSWORD_JUDGE=…     # optional — DOJ legs (judge); not provisioned, issue #299

@@ -45,7 +45,7 @@ import {
   ENV_VARS, FB_PRIORITIES, FB_PRIORITY_TINT, FB_STATUSES, FB_STATUS_TINT, FB_TYPES,
   MANUAL_ACTIONS, RECOVERY_NOTES, fbLabel,
 } from './ownerData'
-import { ADMIN_AUDIT_ACTIONS, adminActionLabel, ledgerReferenceCount, ownerQueue } from './ownerQueue'
+import { ADMIN_AUDIT_ACTIONS, adminActionLabel, ledgerReferenceCount } from './ownerQueue'
 import { SecurityTestingSection } from './SecurityTestingSection'
 import { PermanentDeletionSection } from './PermanentDeletionSection'
 
@@ -54,7 +54,7 @@ type MetaRow = Tables<'feedback_meta'>
 interface FbItem { fb: FeedbackRow; meta: MetaRow | null }
 
 const SECTIONS: { id: string; label: string; sub: string }[] = [
-  { id: 'home', label: 'Owner Dashboard', sub: 'Warnings, the pending queue & recent administrative changes' },
+  { id: 'home', label: 'Owner Dashboard', sub: 'Security suite health & recent administrative changes' },
   { id: 'manage', label: 'Portal Management', sub: 'SIB release gate, reference data, feature status & the runbook' },
   { id: 'access', label: 'Roles & Access', sub: 'Membership oversight, justice grants & test-fixture flagging' },
   { id: 'feedback', label: 'Feedback & Bugs', sub: 'The owner inbox — triage, catalog, resolve' },
@@ -229,64 +229,43 @@ function Panel({ title, sub, children }: { title: string; sub?: string; children
 
 interface DashState {
   /** null on any field = that fetch failed / not authorized — shown honestly. */
-  errCount: number | null
-  errRows: Tables<'client_errors'>[]
   sec: SecurityOverview | null
-  openFeedback: number | null
   admin: Tables<'audit_log'>[] | null
   at: number
 }
 
+/** The Owner Dashboard. What needs the Owner NOW (client errors, suite
+ *  failures, fixture drift, open feedback) is the Action Center's Owner
+ *  signals — this page keeps the security-suite summary and the recent
+ *  administrative changes, and links out to the sections that act. */
 function DashboardSection({ onGo }: { onGo: (s: string) => void }) {
   const router = useRouter()
   const [d, setD] = useState<DashState | null>(null)
   const [loading, setLoading] = useState(true)
-  const errV = useTableVersion('client_errors')
 
   const refresh = useCallback(async () => {
     setLoading(true)
     // Each signal fails independently to null — an unreadable signal renders
     // as unknown, never as a false all-clear. All reads are bounded.
-    const [errCount, errRows, secRaw, fbs, metas, admin] = await Promise.all([
-      countRows('client_errors').catch(() => null),
-      list('client_errors', { order: 'created_at', ascending: false, limit: 5 }).catch(() => []),
+    const [secRaw, admin] = await Promise.all([
       rpc('owner_security_overview', {} as never).then((r) => (r.error ? null : r.data)).catch(() => null),
-      list('feedback', { select: 'id' }).catch(() => null),
-      list('feedback_meta', { select: 'feedback_id,status' }).catch(() => null),
       list('audit_log', {
         in: { action: [...ADMIN_AUDIT_ACTIONS] }, order: 'created_at', ascending: false, limit: 10,
       }).catch(() => null),
     ])
-    let openFeedback: number | null = null
-    if (fbs !== null && metas !== null) {
-      const closed = new Set(['resolved', 'archived', 'rejected', 'duplicate'])
-      const statusById = new Map(metas.map((m) => [m.feedback_id, m.status]))
-      openFeedback = fbs.filter((f) => !closed.has(statusById.get(f.id) ?? 'new')).length
-    }
-    setD({
-      errCount, errRows,
-      sec: secRaw === null ? null : parseSecurityOverview(secRaw),
-      openFeedback, admin, at: Date.now(),
-    })
+    setD({ sec: secRaw === null ? null : parseSecurityOverview(secRaw), admin, at: Date.now() })
     setLoading(false)
   }, [])
 
   useEffect(() => {
     const t = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(t)
-  }, [refresh, errV])
+  }, [refresh])
 
-  // Latest run per suite → failing assertions right now; fixture drift count.
+  // Latest run per suite; fixture drift count.
   const latestBySuite = new Map<string, SecurityOverview['runs'][number]>()
   for (const r of d?.sec?.runs ?? []) if (!latestBySuite.has(r.suite)) latestBySuite.set(r.suite, r)
-  const securityFailures = d?.sec ? [...latestBySuite.values()].reduce((n, r) => n + r.failed, 0) : null
   const fixtureIssues = d?.sec ? d.sec.fixtures.filter((f) => !f.present || f.issues.length > 0).length : null
-  const queue = ownerQueue({
-    clientErrors: d?.errCount ?? null,
-    securityFailures,
-    fixtureIssues,
-    openFeedback: d?.openFeedback ?? null,
-  })
 
   return (
     <div className="space-y-4">
@@ -296,8 +275,10 @@ function DashboardSection({ onGo }: { onGo: (s: string) => void }) {
         </p>
         <h1 className="text-xl font-semibold text-white">Owner Console</h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-400">
-          The owner-only control center: what needs you now, the portal&rsquo;s global controls,
-          role &amp; access oversight, and the safety surfaces. Learning and reference live in the{' '}
+          The owner-only control center: the portal&rsquo;s global controls, role &amp; access
+          oversight, and the safety surfaces. What needs you now is in the{' '}
+          <button onClick={() => router.push('/inbox')} className="text-blue-300 underline decoration-blue-300/40 hover:text-blue-200">Action Center</button>;
+          learning and reference live in the{' '}
           <button onClick={() => router.push('/devdocs')} className="text-blue-300 underline decoration-blue-300/40 hover:text-blue-200">Developer Handbook</button> —
           this console is for deciding and doing.
         </p>
@@ -308,40 +289,6 @@ function DashboardSection({ onGo }: { onGo: (s: string) => void }) {
           <Button size="sm" disabled={loading} onClick={() => void refresh()}>{loading ? 'Checking…' : '↻ Re-check'}</Button>
         </div>
       </Card>
-
-      <DashPanel
-        title="Pending owner actions"
-        count={queue.length}
-        hint="Derived from the real signals only: client errors, RLS-suite failures, fixture drift and open feedback."
-      >
-        {queue.length === 0 ? (
-          <p className="px-2.5 py-2 text-sm text-emerald-300">✓ Nothing pending — every checked signal is clear.</p>
-        ) : queue.map((i) => (
-          <DashRow
-            key={i.id} title={i.label} why={i.why} onClick={() => onGo(i.section)}
-            badge={<Badge tone={i.id === 'open_feedback' ? 'accent' : 'danger'}>{i.count}</Badge>}
-          />
-        ))}
-      </DashPanel>
-
-      <DashPanel
-        title="Critical warnings"
-        count={d?.errCount ?? undefined}
-        hint="Uncaught client exceptions (latest 5) — the full panel with stacks lives in Security & Audit."
-        action={{ label: 'All →', onClick: () => onGo('security') }}
-        empty={!loading && (d?.errCount ?? 0) === 0}
-      >
-        {d?.errRows.map((r) => (
-          <DashRow
-            key={r.id}
-            title={r.message.slice(0, 100)}
-            why={`${r.route || 'unknown route'} · ${officerName(r.reporter_id) || 'unknown reporter'}`}
-            meta={timeAgo(r.created_at)}
-            overdue
-            onClick={() => onGo('security')}
-          />
-        ))}
-      </DashPanel>
 
       <DashPanel
         title="Security suite"
@@ -402,7 +349,7 @@ function DashboardSection({ onGo }: { onGo: (s: string) => void }) {
           not KPI cards, per the consolidation spec. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-white/5 bg-ink-900/40 px-3 py-1.5 text-xs">
         <span className="font-bold uppercase tracking-wider text-slate-400">Command queues</span>
-        <button onClick={() => router.push('/command-center?s=approvals')} className="rounded px-1.5 py-2 font-semibold text-blue-300 transition hover:text-white">Approvals →</button>
+        <button onClick={() => router.push('/command-center?s=membership')} className="rounded px-1.5 py-2 font-semibold text-blue-300 transition hover:text-white">Membership review →</button>
         <button onClick={() => router.push('/command-center?s=promotions')} className="rounded px-1.5 py-2 font-semibold text-blue-300 transition hover:text-white">Promotions &amp; transfers →</button>
         <button onClick={() => router.push('/cases?archived=1')} className="rounded px-1.5 py-2 font-semibold text-blue-300 transition hover:text-white">Archived cases →</button>
       </div>
@@ -624,7 +571,7 @@ function AccessSection() {
           <LinkCard
             title={`${a?.pendingCid ?? '—'} pending applications`}
             sub="Membership requests awaiting review (Command Center → Approvals)."
-            onClick={() => router.push('/command-center?s=approvals')}
+            onClick={() => router.push('/command-center?s=membership')}
           />
           <LinkCard
             title={`${a?.legacyTransfers ?? '—'} legacy open transfers`}
@@ -960,7 +907,7 @@ function SystemSection() {
           <SafetyLine ok={isConfigured} text="Supabase env vars present" bad="Missing NEXT_PUBLIC_SUPABASE_* — the app cannot function" />
           <SafetyLine ok={fmConfigured()} text="FiveManage configured (optional)" bad="Uploads disabled — Attachments/Media fall back to paste-a-URL" warnOnly />
           <SafetyLine ok={h?.db?.ok ?? true} text="Database reachable" bad="Profile count query failed — check Supabase status/logs" />
-          <li className="text-slate-400">Owner-dashboard items that live OUTSIDE this repo: Supabase OTP expiry + leaked-password protection + backups (see docs/HARDENING.md), GitHub branch protection (see the handbook&rsquo;s workflow chapter).</li>
+          <li className="text-slate-400">Owner-dashboard items that live OUTSIDE this repo: Supabase OTP expiry + leaked-password protection + backups (see docs/archive/HARDENING.md), GitHub branch protection (see the handbook&rsquo;s workflow chapter).</li>
         </ul>
       </Panel>
 

@@ -14,16 +14,14 @@ import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { priorityTint } from '@/lib/tint'
-import { toast } from '@/lib/toast'
 import { useNow } from '@/lib/useNow'
-import { useSavedViews, type SavedViewsApi } from '@/lib/savedViews'
+import { useSavedViews } from '@/lib/savedViews'
 import { AlertIcon } from '@/components/shell/icons'
-import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Badge } from '@/components/ui/Badge'
-import { Button } from '@/components/ui/Button'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { ViewsMenu } from '@/components/shared/ViewsMenu'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { humanize } from '@/components/gangs/gangIntel'
 import { IntelProfile, type IntelTarget } from '@/components/persons/IntelProfile'
@@ -150,12 +148,19 @@ export function BoloView() {
               />
             )}
             {state === 'in' && persons.length > 0 && (
-              <BoloSavedViews
+              <ViewsMenu<BoloViewConfig>
+                label="BOLO view"
+                emptyLabel="All BOLOs"
                 sv={savedViews}
-                active={activeSaved}
-                currentQuery={query}
-                onApply={(name, cfg) => { setActiveSaved(name); setQuery(cfg.q ?? '') }}
-                onActive={setActiveSaved}
+                activeView={activeSaved || null}
+                currentConfig={{ q: query }}
+                onSelect={(sel) => {
+                  if (!sel?.view) { setActiveSaved(''); return }
+                  const v = savedViews.views.find((x) => x.name === sel.view)
+                  setActiveSaved(sel.view)
+                  if (v) setQuery(v.config.q ?? '')
+                }}
+                savePrompt="Name this board filter."
               />
             )}
           </>
@@ -205,59 +210,6 @@ export function BoloView() {
       {editor && <PersonModal record={editor} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); void refresh() }} />}
       {manage && <ManageBoloModal person={manage} onClose={() => setManage(null)} onSaved={() => { setManage(null); void refresh() }} />}
     </section>
-  )
-}
-
-/** Compact saved-filter control for the board header — same lib/savedViews
- *  pattern as the other registries, over the board's single filter string. */
-function BoloSavedViews({ sv, active, currentQuery, onApply, onActive }: {
-  sv: SavedViewsApi<BoloViewConfig>
-  active: string
-  currentQuery: string
-  onApply: (name: string, cfg: BoloViewConfig) => void
-  onActive: (name: string) => void
-}) {
-  const isDefault = sv.defaultView?.name === active
-  const menu: ActionItem[] = [
-    { label: 'Rename…', onClick: () => { void sv.renameViaPrompt(active).then((n) => { if (n) onActive(n) }) } },
-    {
-      label: isDefault ? 'Clear default' : 'Set as default',
-      onClick: () => {
-        void sv.setDefault(isDefault ? null : active).then((ok) => {
-          if (ok) toast(isDefault ? 'Default filter cleared.' : `"${active}" now applies when you open the board.`, 'success')
-        })
-      },
-    },
-    {
-      label: `Delete "${active}"`, danger: true, separatorBefore: true,
-      onClick: () => { void sv.remove(active).then((ok) => { if (ok) { onActive(''); toast('View deleted.', 'success') } }) },
-    },
-  ]
-  return (
-    <div className="flex items-center gap-1.5">
-      <select
-        aria-label="Saved BOLO filters"
-        value={sv.views.some((v) => v.name === active) ? active : ''}
-        onChange={(e) => {
-          const v = sv.views.find((x) => x.name === e.target.value)
-          if (v) onApply(v.name, v.config)
-          else onActive('')
-        }}
-        className="min-h-[40px] max-w-[10rem] rounded-lg border border-white/10 bg-ink-900 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-badge-500"
-      >
-        <option value="">Saved filters</option>
-        {sv.views.map((v) => <option key={v.name} value={v.name}>{v.name}{v.isDefault ? ' · default' : ''}</option>)}
-      </select>
-      <Button
-        size="sm"
-        className="min-h-[40px]"
-        title="Save the current board filter as a named view"
-        onClick={() => { void sv.saveViaPrompt({ q: currentQuery }, 'Name this board filter.').then((n) => { if (n) onActive(n) }) }}
-      >
-        Save
-      </Button>
-      {active && <ActionMenu label={`Actions for filter "${active}"`} buttonClassName="min-h-[40px]" items={menu} />}
-    </div>
   )
 }
 

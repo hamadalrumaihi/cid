@@ -2,7 +2,7 @@
  *  the six seeded roles it signs in and asserts the RLS-visible navigation
  *  contract — the UI gates must match what the database allows:
  *   - Command Center leaf: Bureau Lead / Deputy / Director / Owner only.
- *   - Owner Console leaf: Owner only.
+ *   - Owner category (Owner Console leaf): Owner only.
  *  Plus a signed-out check that the gate is shown. Self-skips without the test
  *  project credentials, so CI and forks stay green.
  *
@@ -18,7 +18,7 @@ test.describe('role-gated navigation', () => {
   test.skip(!enabled, 'TEST_SUPABASE_URL / TEST_PW_* not set — see docs/TEST-ENVIRONMENT.md')
 
   test('signed-out visitors land on the sign-in gate', async ({ page }) => {
-    await page.goto('/command')
+    await page.goto('/inbox')
     await expect(page.getByText('Continue with Google')).toBeVisible()
   })
 
@@ -26,12 +26,13 @@ test.describe('role-gated navigation', () => {
     test(`${account.key} (${account.role}${account.is_owner ? ' · owner' : ''}) sees the right nav`, async ({ page }) => {
       const ctx = await signIn(page, account)
       try {
-        await page.goto('/command')
+        await page.goto('/inbox')
         // Shell loaded once the persistent brand heading is present.
         await expect(page.getByRole('heading', { name: /CID Portal/i })).toBeVisible({ timeout: 20_000 })
 
         const commandLeaf = page.getByRole('button', { name: /Command Center/i })
-        const ownerLeaf = page.getByRole('button', { name: /Owner Console/i })
+        // The Owner category button (sidebar) — the Owner Console is its first leaf.
+        const ownerLeaf = page.getByRole('button', { name: /^Owner$/i })
 
         if (canCommand(account)) await expect(commandLeaf).toBeVisible()
         else await expect(commandLeaf).toHaveCount(0)

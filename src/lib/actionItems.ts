@@ -25,7 +25,7 @@ import { clusterDuplicates } from './gangDuplicates'
  */
 import { canDecideTransfer, canReviewCase } from '@/components/command-center/lib/approvals'
 import { caseLink } from './caseLinks'
-import type { Tables } from './database.types'
+import type { Database, Tables } from './database.types'
 import { deadlineInfo } from './deadlines'
 import { activeDeadline, dispositionFor, humanize, type LegalViewer } from './legalWorkflow'
 import { notifDetail, notifHref, notifSub, notifTitle } from './notifText'
@@ -71,6 +71,12 @@ export type ActionSourceType =
   | 'sib_conflict' | 'sib_watch_review' | 'owner_signal' | 'justice_application'
   | 'surveillance_alert' | 'legal_comment' | 'report_review'
   | 'intel_reply' | 'intel_restore' | 'intel_validate'
+  /** Confidential-informant compartment (CI contract §6.4) — emitted ONLY
+   *  when the loader resolved CI involvement (ActionSources.ciStanding).
+   *  Contacts due and intelligence follow-ups are a handler's work items;
+   *  capacity / assignment requests are reviewer DECISIONS (the server's
+   *  action_key_class refuses to dismiss a `ci_request:` key). */
+  | 'ci_contact_due' | 'ci_capacity_request' | 'ci_intel_followup'
   | 'other'
 
 /** Human label per source type — the Action Center's type filter chips (agent
@@ -121,6 +127,9 @@ export const SOURCE_TYPE_LABEL: Record<ActionSourceType, string> = {
   intel_reply: 'Intel replies',
   intel_restore: 'Rejected intel',
   intel_validate: 'Intel validation',
+  ci_contact_due: 'CI contact due',
+  ci_capacity_request: 'CI requests',
+  ci_intel_followup: 'CI follow-ups',
   other: 'Notifications',
 }
 
@@ -335,6 +344,22 @@ export type AcLegalComment = Pick<Tables<'legal_request_comments'>,
 export type AcReport = Pick<Tables<'reports'>,
   'id' | 'case_id' | 'template' | 'kind' | 'seq' | 'author_id' | 'review_status' | 'finalized' | 'submitted_at' | 'created_at' | 'updated_at'>
 
+/** Confidential informants (CI contract §6.4) — the `ci_list` RPC's row,
+ *  projected. The loader calls ci_list ONLY for an involved viewer (full CI
+ *  access or an active handler); for everyone else no request is made and
+ *  the builder emits nothing, so "not involved" and "nothing due" are the
+ *  same picture. `person_name` is deliberately NOT projected: the queue
+ *  names a source by its CI number only. */
+export type AcCi = Pick<Database['public']['Functions']['ci_list']['Returns'][number],
+  'id' | 'ci_number' | 'alias' | 'status' | 'bureau' | 'last_contact_at' | 'next_contact_at'
+  | 'primary_handler_id' | 'secondary_handler_id' | 'linked_cases' | 'open_followups'>
+/** Pending capacity / assignment requests (ci_capacity_requests — RLS: the
+ *  requester's own rows + every row for full access). Reason text is never
+ *  projected; the item says a request exists and links to the panel. */
+export type AcCiRequest = Pick<Tables<'ci_capacity_requests'>,
+  'id' | 'kind' | 'requester_id' | 'bureau' | 'current_count' | 'requested_capacity' | 'status'
+  | 'case_id' | 'created_at' | 'updated_at'>
+
 /** Live escalation-ledger rows (action_escalations, resolved_at IS NULL) —
  *  RLS-scoped to cases the viewer can access. Merged onto items by kind. */
 export interface AcEscalation {
@@ -507,6 +532,18 @@ export interface ActionSources {
   survAlerts?: AcSurvAlert[]
   legalComments?: AcLegalComment[]
   reports?: AcReport[]
+  /** Confidential informants (§6.4). `ciStanding` is the loader's
+   *  `ci_context` mirror — null means NOT involved: the branch emits nothing
+   *  AND the loader fetched none of the CI sources (an uninvolved viewer
+   *  never issues a CI request and never sees a count, lock or hint). */
+  ciStanding?: { fullAccess: boolean; isHandler: boolean } | null
+  /** `ci_list({ contact: 'overdue' })` — sources whose next contact is past
+   *  (or silent for 30 days). */
+  ciDue?: AcCi[]
+  /** `ci_list({ followups: true })` — sources with open intelligence follow-ups. */
+  ciFollowups?: AcCi[]
+  /** Pending `ci_capacity_requests` rows the RLS returned. */
+  ciRequests?: AcCiRequest[]
   /** Live escalation ledger rows — see AcEscalation (P7-03). */
   escalations?: AcEscalation[]
   /** Per-viewer state by dedupe key (action_item_state) — merged onto
@@ -613,13 +650,29 @@ export function describeDraftKey(key: string): DraftDescription {
     return { title: 'Person record draft', summary: 'Unfinished person record', caseId: null, deepLink: '/persons' }
   }
   if (head === 'gang') return { title: 'Gang record draft', summary: 'Unfinished gang record', caseId: null, deepLink: '/gangs' }
-  return { title: `${humanize(head || 'saved')} draft`, summary: 'Saved work in progress', caseId: null, deepLink: '/inbox' }
+  return { title: `${humanize(head || 'saved')} draft`, summary: 'Saved work in progress', caseId: null, deepLink: '/dashboard' }
 }
 
 /* ---- pure date helpers ----------------------------------------------------- */
 
 const DAY_MS = 86_400_000
 const H48 = 48 * 3_600_000
+
+/** The CI deep links (`ciHref` / the requests panel in lib/ci) re-stated
+ *  here so the pure builder never imports the Supabase-backed CI module;
+ *  the path shape is pinned by the unit test. */
+const ciDeepLink = (id: string, section?: string): string => `/informants?ci=${id}${section ? `&s=${section}` : ''}`
+const CI_REQUESTS_HREF = '/informants?requests=1'
+
+/** Where a CI notification lands: request kinds open the requests panel,
+ *  every other `ci_*` kind the source's profile (payloads carry ids only),
+ *  and a case release the case's Intel tab. Null for non-CI kinds. */
+function ciNotifHref(type: string, p: Record<string, unknown>): string | null {
+  if (type === 'case_intel_released') return typeof p.case_id === 'string' ? caseLink(p.case_id, 'intel') : null
+  if (!type.startsWith('ci_')) return null
+  if (type === 'ci_capacity_request' || type === 'ci_request_decided') return CI_REQUESTS_HREF
+  return typeof p.ci_id === 'string' ? ciDeepLink(p.ci_id) : '/informants'
+}
 
 /** Timestamp in ms; date-only values count as end of day (deadlines.ts idiom). */
 function tsMs(iso: string | null | undefined): number | null {
@@ -680,6 +733,10 @@ function semanticKey(n: AcNotif): string | null {
   // Suggestion fan-out is covered by the structural document_suggestion item
   // (when one is owed); otherwise it stays an informational notification.
   if (n.type === 'document_suggestion' && p.suggestion_id) return `document_suggestion:${p.suggestion_id}`
+  // CI fan-out (§6.4): the sweep's overdue-contact ping is covered by the
+  // structural contact item, a request ping by the decision item.
+  if (n.type === 'ci_contact_overdue' && typeof p.ci_id === 'string') return `ci:${p.ci_id}:contact`
+  if (n.type === 'ci_capacity_request' && p.request_id) return `ci_request:${p.request_id}`
   return null
 }
 
@@ -920,7 +977,7 @@ export function buildActionItems(s: ActionSources): ActionQueue {
       reason: 'New members are waiting on a command decision',
       status: 'needs_action',
       ownerId: s.me, responsibleRole: s.role,
-      deepLink: '/command-center?s=approvals',
+      deepLink: '/command-center?s=membership',
       isCommandItem: true, isWaitingOnCurrentUser: true,
       nudge: NUDGE.membership,
       sourceMetadata: { count: pending },
@@ -1905,7 +1962,7 @@ export function buildActionItems(s: ActionSources): ActionQueue {
         status: j.status === 'correction_requested' ? 'waiting' : 'informational',
         createdAt: j.submitted_at ?? j.created_at, updatedAt: j.updated_at, waitingSince: j.submitted_at ?? j.created_at,
         ownerId: s.me, responsibleRole: s.role,
-        deepLink: '/command-center?s=approvals',
+        deepLink: '/command-center?s=membership',
         isCommandItem: true,
         sourceMetadata: { applicant_id: j.applicant_id, status: j.status },
         dedupeKey: `justice:${j.id}`,
@@ -1989,6 +2046,86 @@ export function buildActionItems(s: ActionSources): ActionQueue {
     }
   }
 
+  /* 9z · confidential informants (§6.4) — ONLY when the loader resolved CI
+   *      involvement; every row came from ci_list / ci_capacity_requests under
+   *      the caller's own RLS. Titles name a source by CI number, never by
+   *      the person. A handler's own sources are personal work; for full
+   *      access the same rows are oversight (command) items. */
+  if (s.ciStanding) {
+    const full = s.ciStanding.fullAccess
+    const handles = (ci: AcCi) => ci.primary_handler_id === s.me || ci.secondary_handler_id === s.me
+    for (const ci of s.ciDue ?? []) {
+      if (ci.status !== 'active') continue
+      const mine = handles(ci)
+      if (!mine && !full) continue
+      const dl = deadlineInfo(ci.next_contact_at, 'due', { now: s.nowMs, urgentHours: 48 })
+      const status: ActionStatus = dl?.overdue ? 'overdue' : dl?.urgent ? 'due_soon' : 'needs_action'
+      add({
+        id: `ci:${ci.id}:contact`, sourceType: 'ci_contact_due', sourceId: ci.id,
+        title: `${ci.ci_number} · contact due`,
+        summary: ci.alias ? `Source "${ci.alias}"` : 'Confidential source',
+        reason: dl
+          ? `${mine ? 'Your source' : 'Source'} · contact ${dl.text.charAt(0).toLowerCase()}${dl.text.slice(1)}`
+          : `${mine ? 'Your source' : 'Source'} has been silent for 30 days — check in`,
+        status, dueAt: ci.next_contact_at,
+        createdAt: ci.last_contact_at ?? nowIso, updatedAt: ci.last_contact_at ?? nowIso,
+        waitingSince: ci.next_contact_at ?? ci.last_contact_at,
+        ownerId: s.me, responsibleRole: mine ? null : s.role, bureau: ci.bureau,
+        deepLink: ciDeepLink(ci.id, 'contacts'),
+        actionLabel: 'Log contact',
+        isCommandItem: !mine, isPersonalItem: mine, isWaitingOnCurrentUser: mine,
+        sourceMetadata: { ci_id: ci.id, ci_number: ci.ci_number, primary_handler_id: ci.primary_handler_id },
+        dedupeKey: `ci:${ci.id}:contact`,
+      })
+    }
+    for (const ci of s.ciFollowups ?? []) {
+      if (!(ci.open_followups > 0)) continue
+      const mine = handles(ci)
+      if (!mine && !full) continue
+      const n = ci.open_followups
+      add({
+        id: `ci_intel:${ci.id}:followup`, sourceType: 'ci_intel_followup', sourceId: ci.id,
+        title: `${ci.ci_number} · ${n} intelligence follow-up${n === 1 ? '' : 's'}`,
+        summary: ci.alias ? `Source "${ci.alias}"` : 'Confidential source',
+        reason: mine ? 'Intelligence from your source is flagged for follow-up' : 'Intelligence from this source is flagged for follow-up',
+        status: 'needs_action',
+        createdAt: ci.last_contact_at ?? nowIso, updatedAt: ci.last_contact_at ?? nowIso,
+        ownerId: s.me, responsibleRole: mine ? null : s.role, bureau: ci.bureau,
+        deepLink: ciDeepLink(ci.id, 'intelligence'),
+        actionLabel: 'Open intelligence',
+        isCommandItem: !mine, isPersonalItem: mine, isWaitingOnCurrentUser: mine,
+        sourceMetadata: { ci_id: ci.id, ci_number: ci.ci_number, open_followups: n },
+        dedupeKey: `ci_intel:${ci.id}:followup`,
+      })
+    }
+    // Requests are DECISIONS for reviewers (full access); a requester's own
+    // pending row is `waiting` — never a decision on their own request.
+    for (const r of s.ciRequests ?? []) {
+      if (r.status !== 'pending') continue
+      const mine = r.requester_id === s.me
+      if (!mine && !full) continue
+      const kindLabel = r.kind === 'capacity' ? 'capacity request' : 'assignment request'
+      const { caseNumber } = caseCtx(r.case_id)
+      add({
+        id: `ci_request:${r.id}`, sourceType: 'ci_capacity_request', sourceId: r.id,
+        title: mine ? `Your CI ${kindLabel}` : `CI ${kindLabel} — ${s.profileName(r.requester_id) || 'a handler'}`,
+        summary: r.kind === 'capacity' && r.requested_capacity != null
+          ? `${r.current_count} active → ${r.requested_capacity} requested`
+          : `${r.current_count} active source${r.current_count === 1 ? '' : 's'}`,
+        reason: mine ? 'Awaiting a reviewer decision' : 'Awaiting your decision — approve, deny or return it',
+        status: mine ? 'waiting' : 'needs_action',
+        createdAt: r.created_at, updatedAt: r.updated_at, waitingSince: r.created_at,
+        ownerId: s.me, responsibleRole: mine ? null : s.role,
+        caseId: r.case_id, caseNumber, bureau: r.bureau,
+        deepLink: CI_REQUESTS_HREF,
+        actionLabel: mine ? null : 'Review',
+        isCommandItem: !mine, isPersonalItem: mine, isWaitingOnCurrentUser: !mine,
+        sourceMetadata: { request_id: r.id, kind: r.kind, requester_id: r.requester_id },
+        dedupeKey: `ci_request:${r.id}`,
+      })
+    }
+  }
+
   /* 10 · notifications — suppressed when a structural item covers the same
    *      fact (the matched item collects the ids so the UI can mark them
    *      read); otherwise emitted as mention/handover/other. */
@@ -2021,7 +2158,8 @@ export function buildActionItems(s: ActionSources): ActionQueue {
       status: 'informational',
       createdAt: n.created_at, updatedAt: n.created_at,
       caseId: p.case_id ?? null, caseNumber: p.case_number ?? null,
-      deepLink: notifHref(n, { command: s.isCommand }) ?? '/inbox',
+      // CI kinds (§6.4) deep-link the source / the requests panel by id.
+      deepLink: ciNotifHref(n.type, p) ?? notifHref(n, { command: s.isCommand }) ?? '/inbox',
       actionLabel: 'Mark read', canAct: true,
       isPersonalItem: true,
       sourceMetadata: { notificationIds: [n.id] },

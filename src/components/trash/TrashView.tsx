@@ -77,7 +77,7 @@ export function TrashView() {
   }, [state, refresh])
 
   const counts = useMemo(() => {
-    const c: Record<TrashGroupId, number> = { cases: 0, material: 0, registry: 0, links: 0 }
+    const c: Record<TrashGroupId, number> = { cases: 0, admin: 0, material: 0, registry: 0, links: 0 }
     for (const r of rows ?? []) c[trashGroupOf(r.kind)]++
     return c
   }, [rows])

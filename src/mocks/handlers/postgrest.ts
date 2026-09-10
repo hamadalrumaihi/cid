@@ -25,6 +25,7 @@ import {
   type MockRow, type MockTableName,
 } from '../store'
 import { visibleActionRows } from './action'
+import { visibleCiRows } from './ci'
 import { visibleCaseNotes } from './caseWorkspace'
 import {
   IntelRpcError, afterFieldMessageInsert, afterFieldSubmissionChange, fieldSubmissionPatch, messageInsertGuard,
@@ -47,7 +48,7 @@ import { ensureReportTemplates, pinReportTemplateVersion, reportUpdateGuard, vis
  *  read unfiltered. */
 function readable(table: MockTableName, rows: MockRow[]): MockRow[] {
   if (table === 'case_notes') return visibleCaseNotes(rows)
-  return visibleActionRows(table, visibleIntelRows(table, visibleReportRows(table, visibleLegalRows(table, rows))))
+  return visibleCiRows(table, visibleActionRows(table, visibleIntelRows(table, visibleReportRows(table, visibleLegalRows(table, rows)))))
 }
 
 /** Tables whose rows the migrations SEED: an empty mock store answers like

@@ -105,11 +105,25 @@ export function RowBadges({ item, now, lane }: { item: ActionItem; now: number; 
   )
 }
 
+/** Kinds whose `actionLabel` is a NAVIGATION action, not an RPC: the label
+ *  renders as a link button to the item's deep link (a CI request is decided
+ *  in the Informants requests panel — the row never calls a CI RPC). */
+const NAV_ACTION_TYPES: ReadonlySet<ActionItem['sourceType']> = new Set(['ci_capacity_request'])
+
 /** Inline action buttons + the state menu (or Unsnooze / Undismiss in a
  *  hidden lane) + the Open link. `stack` lays them out for the card. */
 export function RowActions({ item, actions, lane, onOpen, onAction, onState, stack }: Pick<RowProps, 'item' | 'actions' | 'lane' | 'onOpen' | 'onAction' | 'onState'> & { stack?: boolean }) {
   return (
     <div className={`flex items-center gap-1.5 ${stack ? 'flex-wrap' : 'flex-shrink-0 flex-wrap'}`}>
+      {!lane && item.actionLabel && NAV_ACTION_TYPES.has(item.sourceType) && (
+        <Link
+          href={item.deepLink}
+          onClick={() => onOpen(item)}
+          className={`inline-flex min-h-[40px] items-center rounded-lg border border-white/10 bg-white/5 px-2.5 text-xs font-semibold transition hover:bg-white/10 lg:min-h-0 ${TONE_CLASS.primary}`}
+        >
+          {item.actionLabel}
+        </Link>
+      )}
       {!lane && actions.map((a) => (
         <Button
           key={a.kind}

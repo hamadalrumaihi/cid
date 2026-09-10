@@ -38,7 +38,7 @@ doors → guard triggers are the locks on specific columns.**
    drop or verify inert ([Ch. 19](19-improvements.md)).
 6. Dashboard-only settings (OTP expiry 30 min, leaked-password
    protection, backups) are the owner's checklist — status in
-   `docs/HARDENING.md`.
+   `docs/archive/HARDENING.md`.
 
 ## Rules for contributors
 

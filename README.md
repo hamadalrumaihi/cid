@@ -148,7 +148,7 @@ src/
 ├── components/   # one folder per screen + shell/ (chrome) + ui/ (primitives)
 └── lib/          # shared logic: data layer, auth, realtime, exports, domain
 supabase/         # backend: schema migrations, RLS, RPCs, edge functions
-docs/             # developer handbook, user guide, hardening status
+docs/             # developer handbook, user guide, operations; docs/archive/ is history
 public/           # static assets
 ```
 
@@ -158,10 +158,11 @@ every file, and a recommended learning order. End users get the in-app guide
 (Reference → User Guide, canonical copy in
 [`docs/USER-GUIDE.md`](docs/USER-GUIDE.md)).
 A point-in-time engineering review (July 2026) lives in
-[`docs/CTO-REVIEW.md`](docs/CTO-REVIEW.md); deferred work is tracked in
+[`docs/archive/CTO-REVIEW.md`](docs/archive/CTO-REVIEW.md); deferred work is tracked in
 [`docs/DEFERRED.md`](docs/DEFERRED.md).
 Operational procedures (monitoring, backups, disaster recovery) are in
-[`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+[`docs/OPERATIONS.md`](docs/OPERATIONS.md); shipping changes in
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ## Backend
 

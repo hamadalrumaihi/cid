@@ -11,7 +11,7 @@
  *   2. Queue tiles — one bounded count per decision queue, each clicking
  *      through to the section or route that owns it.
  *   3. Bureau workload — per-bureau open/clearance/avg-close scorecards +
- *      active-load bars (moved up from the member-facing Division Overview).
+ *      active-load bars, linking out to /analytics (the one analytics surface).
  *   4. Recent assignment activity — the latest role_events rows (SELECT is
  *      command/owner-scoped; audit_log is owner-only and is NOT read here). */
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -189,13 +189,13 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
     {
       label: 'Pending membership', value: pm.awaitingCount,
       hint: pm.requestsLoaded ? `${pm.submitted.length} requests · ${pm.signIns.filter((s) => s.actionable).length} sign-ins` : 'sign-ins awaiting activation',
-      onClick: () => onGo('approvals'),
+      onClick: () => onGo('membership'),
     },
-    { label: 'Sign-offs awaiting you', value: awaitingMe, hint: 'at your decision stage', onClick: () => onGo('approvals') },
+    { label: 'Sign-offs awaiting you', value: awaitingMe, hint: 'at your decision stage', onClick: () => router.push('/inbox?f=signoff&s=command') },
     { label: 'Legacy transfers', value: decidableTransfers, hint: 'open rows you can settle', onClick: () => onGo('promotions') },
     { label: 'Unassigned cases', value: unassignedCases, hint: 'open, no lead detective', onClick: goCasesUnassigned },
-    { label: 'Unassigned intel', value: data.intelUnassigned ?? '—', hint: 'field submissions unclaimed', onClick: () => router.push('/field-review') },
-    { label: 'Expiring BOLOs', value: data.boloExpiring ?? '—', hint: 'window closes within 7 days', onClick: () => router.push('/tools?tool=bolo') },
+    { label: 'Unassigned intel', value: data.intelUnassigned ?? '—', hint: 'field submissions unclaimed', onClick: () => router.push('/intelligence') },
+    { label: 'Expiring BOLOs', value: data.boloExpiring ?? '—', hint: 'window closes within 7 days', onClick: () => router.push('/workspace?tool=bolo') },
     { label: 'On LOA', value: onLoa, hint: 'active but on leave', onClick: () => onGo('duty') },
     { label: 'Overdue tasks', value: overdueTasks, hint: 'across visible cases', onClick: () => onGo('cases') },
   ]
@@ -220,7 +220,7 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
         limit={10}
         hint="Command decisions from your Action Center queue — sign-offs, transfers, access, membership, legal and surveillance."
         emptyText="No command decisions are waiting on you."
-        href="/action?preset=command"
+        href="/inbox?preset=command"
         hrefLabel="All command decisions →"
       />
 
@@ -230,9 +230,20 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
       </div>
 
       <div>
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2 flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Bureau workload</h3>
-          <span className="text-[11px] text-slate-400">{myBureau ? 'your bureau first' : 'all bureaus'}</span>
+          <span className="flex items-center gap-3 text-[11px] text-slate-400">
+            {myBureau ? 'your bureau first' : 'all bureaus'}
+            {/* /analytics is the one analytics surface — this summary never
+                grows charts of its own. */}
+            <button
+              type="button"
+              onClick={() => router.push('/analytics')}
+              className="rounded text-xs font-bold text-badge-200 transition hover:text-white"
+            >
+              Full analytics →
+            </button>
+          </span>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {workloadKeys.map((k, i) => {

@@ -32,7 +32,7 @@ test.describe('DOJ legal review — functional E2E', () => {
     const live = await grant(LIVE.justice)
     try {
       await inject(page, live)
-      await page.goto('/command')
+      await page.goto('/inbox')
       await expect(page.getByLabel(/Requested Department/)).toBeVisible({ timeout: 20_000 })
       await expect(page.getByLabel(/Requested CID Role/)).toBeVisible()
       await expect(page.getByText(/does not grant access/)).toBeVisible()

@@ -24,6 +24,7 @@ import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/Notice'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
+import { CaseReleasedIntel } from '../sections/CaseReleasedIntel'
 import { recordHref, writeRefusal } from '../sections/sectionShared'
 import { type CaseRow, type IntelRow } from './shared'
 
@@ -114,6 +115,9 @@ export function IntelTab({ c, canEdit }: { c: CaseRow; canEdit: boolean }) {
           )}
         </div>
       ))}
+      {/* Sanitized confidential intelligence released to this case (CI §6.4)
+          — renders nothing at all when there is none. */}
+      <CaseReleasedIntel caseId={c.id} />
     </div>
   )
 }

@@ -27,7 +27,13 @@ export type PersonRowLike = Pick<
 
 // ── Controlled vocabularies (mirror the CHECK constraints in
 //    20260729010000_person_intelligence.sql) ─────────────────────────────────
-export const PERSON_CLASSIFICATIONS = ['person_of_interest', 'suspect', 'witness', 'victim', 'informant', 'associate', 'other'] as const
+/** `informant` was removed from the PUBLIC classification list (CI contract
+ *  §6.4): a source relationship is a compartmented fact that lives only in the
+ *  confidential_informants tables, never as a label on the person record. The
+ *  DB CHECK still admits the value for the one legacy row, and
+ *  `classificationLabel('informant')` keeps rendering it (humanized) rather
+ *  than blanking it. */
+export const PERSON_CLASSIFICATIONS = ['person_of_interest', 'suspect', 'witness', 'victim', 'associate', 'other'] as const
 export const PERSON_LIFECYCLES = ['active', 'inactive', 'historical', 'cleared', 'archived', 'merged'] as const
 /** Also the bolo_risk vocabulary — the two CHECKs share it. */
 export const PERSON_PRIORITIES = ['low', 'medium', 'high', 'critical'] as const

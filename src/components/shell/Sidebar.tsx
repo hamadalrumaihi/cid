@@ -1,21 +1,23 @@
 'use client'
 
-/** Sidebar — port of the vanilla #sidebar (index.html:65-132): brand head,
- *  restricted banner, capability-gated Dashboards leaves (useCapabilities),
- *  5 category buttons + standalone Feedback/Concern leaves, appearance/
- *  collapse controls, officer card. Collapse uses the same
- *  body.nav-collapsed class contract as the legacy styles.css. */
+/** Sidebar — brand head, permissions notice, capability-gated Dashboards
+ *  leaves (useCapabilities), the nav categories (the Owner category only for
+ *  the portal owner; the `informants` leaf only for accounts the CI
+ *  compartment involves) + standalone Feedback/Concern leaves, appearance/
+ *  collapse controls, officer card. Collapse uses the body.nav-collapsed class
+ *  contract from globals.css. */
 import { useSyncExternalStore } from 'react'
 import { DASH_LABEL, DASH_TAB, type SwitchableId } from '@/lib/nav'
 import { useAuth } from '@/lib/auth'
+import { ciInvolved, useCiContext } from '@/lib/ci'
 import { useCapabilities } from '@/lib/permissions'
 import { useSiu } from '@/lib/permissions'
-import { NAV_CATEGORIES, SIU_NAV_CATEGORIES, SIU_TAB_LABEL, TAB_LABEL } from '@/lib/nav'
+import { NAV_CATEGORIES, OWNER_ONLY_CATEGORIES, SIU_NAV_CATEGORIES, SIU_TAB_LABEL, TAB_LABEL } from '@/lib/nav'
 import { bureauShort, roleLabel } from '@/lib/roles'
 import { DEPARTMENT_LABEL, siuCallsign, siuRoleLabel, siuStandingLabel } from '@/lib/siu'
 import { safeUrl } from '@/lib/safeUrl'
 import { Store } from '@/lib/store'
-import { CategoryIcon, ChevronIcon, CloseIcon, EyeIcon, ScaleIcon, SettingsIcon, ShieldIcon, SlidersIcon, SwapIcon } from './icons'
+import { CategoryIcon, ChevronIcon, CloseIcon, EyeIcon, ScaleIcon, ShieldIcon, SlidersIcon, SwapIcon } from './icons'
 import { PermissionsNotice } from './PermissionsNotice'
 import { useNav } from './useNav'
 import { useNavBadges } from './useNavBadges'
@@ -27,9 +29,8 @@ function OfficerCard() {
   const { profile, session } = useAuth()
   const siu = useSiu()
   const { navigate } = useNav()
-  // Vanilla vocabulary (collab.js renderOfficerCard): 'Badge <n> · <bureau
-  // short code>' with amber On-LOA / emerald On-duty status dot. Clicking
-  // opens the My Profile editor (collab.js wires #officer-card the same way).
+  // 'Badge <n> · <bureau short code>' with an amber On-LOA / emerald On-duty
+  // status dot. Clicking opens the My Profile editor.
   const name = profile?.display_name || session?.user?.email || 'Not signed in'
   const initials =
     (profile?.display_name || '?').split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || '?'
@@ -88,14 +89,14 @@ const subscribeCollapse = (cb: () => void) => {
 }
 const readCollapsed = () => document.body.classList.contains('nav-collapsed')
 
-/** The capability-gated dashboard leaves (the old standalone Command Center +
- *  Owner leaves, absorbed and extended). Order matches the capability model's
- *  display order; entries render only when useCapabilities grants them. */
+/** The capability-gated dashboard leaves. Order matches the capability
+ *  model's display order; entries render only when useCapabilities grants
+ *  them. The Owner Console is no longer a leaf here — it leads the Owner-only
+ *  nav category below. */
 const DASH_LEAVES: { id: SwitchableId; icon: React.ComponentType<{ className?: string }>; title: string }[] = [
-  { id: 'command', icon: ShieldIcon, title: 'Command Center — personnel, approvals, promotions & chain of command' },
+  { id: 'command', icon: ShieldIcon, title: 'Command Center — personnel, membership review, promotions & chain of command' },
   { id: 'sib', icon: EyeIcon, title: 'Special Investigations Bureau workspace' },
   { id: 'doj', icon: ScaleIcon, title: 'Legal Review — warrants & subpoenas awaiting DOJ review' },
-  { id: 'owner', icon: SettingsIcon, title: 'Owner Console — project intelligence & engineering operations' },
 ]
 
 /** One nav-item recipe for every row in the rail — the ~200-char class string
@@ -113,7 +114,12 @@ const groupLabelCls = 'sidebar-hide px-3 pb-1 pt-3 text-[11px] font-medium text-
 export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; onCloseDrawer: () => void }) {
   const caps = useCapabilities()
   const siu = useSiu()
+  const { isOwner } = useAuth()
+  const ci = useCiContext()
   const inSiu = siu.inSiu
+  // Cosmetic gates over the category lists — the views and RLS self-gate.
+  const showCategory = (id: string) => !OWNER_ONLY_CATEGORIES.has(id) || isOwner
+  const showLeaf = (t: string) => t !== 'informants' || ciInvolved(ci.ctx)
   const { activeCategory, activeTab, navigate, navigateCategory } = useNav()
   const badges = useNavBadges()
   const collapsed = useSyncExternalStore(subscribeCollapse, readCollapsed, () => false)
@@ -165,11 +171,10 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
 
       <nav className="mt-2 flex-1 space-y-1 overflow-y-auto px-3 pb-4" role="navigation">
         {/* Dashboards — capability-gated leaf links (useCapabilities), one per
-            dashboard the account holds beyond the shared category nav. This
-            absorbs the former standalone Command Center + Owner leaves and
-            adds SIB / Legal Review for the accounts that hold them. Hiding is
-            cosmetic; each view self-gates and RLS is the real rule. Gated on
-            caps.ready so nothing flashes in and out during boot. */}
+            dashboard the account holds beyond the shared category nav:
+            Command Center, SIB, Legal Review. Hiding is cosmetic; each view
+            self-gates and RLS is the real rule. Gated on caps.ready so nothing
+            flashes in and out during boot. */}
         {!inSiu && caps.ready && caps.dashboards.some((d) => DASH_LEAVES.some((l) => l.id === d)) && (
           <div className="pb-1">
             <p className={groupLabelCls}>Dashboards</p>
@@ -196,10 +201,10 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
             leaf inside the CID sidebar. The shared registry routes are reused
             deliberately (one master dataset, RLS-scoped per viewer); only the
             grouping, labels and context differ. */}
-        {inSiu && SIU_NAV_CATEGORIES.map((cat) => (
+        {inSiu && SIU_NAV_CATEGORIES.filter((cat) => showCategory(cat.id)).map((cat) => (
           <div key={cat.id} className="pb-1">
             <p className={groupLabelCls}>{cat.label}</p>
-            {cat.tabs.map((t) => (
+            {cat.tabs.filter(showLeaf).map((t) => (
               <button
                 key={t}
                 data-label={SIU_TAB_LABEL[t] ?? TAB_LABEL[t] ?? t}
@@ -211,7 +216,7 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
             ))}
           </div>
         ))}
-        {!inSiu && NAV_CATEGORIES.map((c) => {
+        {!inSiu && NAV_CATEGORIES.filter((c) => showCategory(c.id)).map((c) => {
           const on = c.id === activeCategory
           return (
             <button
@@ -224,8 +229,8 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
               <span className="nav-icon flex-shrink-0 text-slate-400 group-hover:text-slate-200"><CategoryIcon cat={c.id} /></span>
               <span className="nav-label">
                 {c.label}
-                {/* Vanilla puts all three badges on the Command button
-                    (#pending/#ann/#signoff-nav-badge). */}
+                {/* The three Action Center counts sit on the Command button
+                    (the Action Center leads that category). */}
                 {c.id === 'command' && badges.pending > 0 && (
                   <span role="status" aria-label={`${badges.pending} member${badges.pending === 1 ? '' : 's'} awaiting approval`} className="ml-1 rounded bg-amber-500/15 px-1.5 text-[10px] font-semibold tabular-nums text-amber-300" title="Members awaiting approval">{badges.pending}</span>
                 )}
@@ -260,8 +265,6 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
           <span className="nav-icon flex-shrink-0 text-slate-400 group-hover:text-slate-200"><CategoryIcon cat="concern" /></span>
           <span className="nav-label">Report a Concern</span>
         </button>}
-        {/* Command Center / SIB / Legal Review / Owner Console leaves moved
-            into the capability-gated Dashboards block above. */}
         {/* Deliberate department switch — rendered ONLY for accounts that
             legitimately hold BOTH contexts (Portal Owner, Attorney General
             oversight). A normal CID member is never offered this, and the

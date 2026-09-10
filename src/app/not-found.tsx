@@ -1,7 +1,7 @@
 import Link from 'next/link'
 
 /** Custom 404 — replaces Next's default with a portal-styled screen. Unknown
- *  tab slugs already redirect to /command; this catches everything else. */
+ *  tab slugs already redirect to /inbox; this catches everything else. */
 export default function NotFound() {
   return (
     <main className="grid min-h-screen place-items-center bg-ink-950 p-6">
@@ -12,7 +12,7 @@ export default function NotFound() {
           This page doesn&rsquo;t exist — or it was reassigned. Nothing was logged against your badge.
         </p>
         <Link
-          href="/command"
+          href="/inbox"
           className="mt-6 inline-block rounded-lg bg-badge-500 px-4 py-2 text-sm font-bold text-white transition hover:brightness-110"
         >
           ← Back to the Dashboard

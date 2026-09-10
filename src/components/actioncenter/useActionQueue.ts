@@ -21,7 +21,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { create } from 'zustand'
 import {
   buildActionItems,
-  type AcBoloPerson, type AcCaseGrant, type AcClientError, type AcDoc, type AcDraft, type AcEscalation,
+  type AcBoloPerson, type AcCaseGrant, type AcCi, type AcCiRequest, type AcClientError, type AcDoc, type AcDraft, type AcEscalation,
   type AcFieldAccessRequest, type AcFieldSubmission, type AcGangMember, type AcGrant, type AcHold,
   type AcJusticeApplication, type AcLegalComment, type AcMdtExport, type AcMemberTransfer,
   type AcMySubmission, type AcNarcoticSuggestion, type AcObservation, type AcRejectedSubmission,
@@ -34,6 +34,7 @@ import {
   ackState, canApproveDoc, docTitle, reviewState,
   type MyAckVersions, type ShelfDoc,
 } from '@/components/sops/docModel'
+import { ciInvolved, fetchCiList, getCiContext, useCiContext } from '@/lib/ci'
 import { list, rpc, type DbError } from '@/lib/db'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
@@ -177,6 +178,9 @@ const LEGAL_COMMENT_COLS = 'id,legal_request_id,author_id,created_at,deleted_at'
 const REPORT_COLS = 'id,case_id,template,kind,seq,author_id,review_status,finalized,submitted_at,created_at,updated_at'
 const STATE_COLS = 'dedupe_key,seen_at,snoozed_until,dismissed_at'
 const ESCALATION_COLS = 'kind,source_id,case_id,escalated_at'
+/** CI capacity / assignment requests (§6.4) — mirrors AcCiRequest exactly;
+ *  the reason text is never selected. Read ONLY for an involved viewer. */
+const CI_REQUEST_COLS = 'id,kind,requester_id,bureau,current_count,requested_capacity,status,case_id,created_at,updated_at'
 
 /* ── DOJ revival surface (minimal_doj_revival + doj_transfers) ─────────────── */
 
@@ -297,6 +301,12 @@ const useActionQueueStore = create<QueueStore>((set, get) => ({
       const dayAgo = new Date(nowMs - 86_400_000).toISOString()
       const hourAgo = new Date(nowMs - 3_600_000).toISOString()
       const weekAgo = new Date(nowMs - 7 * 86_400_000).toISOString()
+      // CI compartment (§6.4): the ONE gate for every CI read below. The
+      // context store is NO_CI until the first consumer resolved it (and for
+      // every error), so an uninvolved viewer never issues a CI request —
+      // not even one that would return zero rows.
+      const ciCtx = getCiContext()
+      const ciOn = ciInvolved(ciCtx)
       const [
         cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests,
         docRows, docAcks, suggestionRows, holds, restrictedGrants, survObservations, survTargetRows, caseGrants,
@@ -305,6 +315,7 @@ const useActionQueueStore = create<QueueStore>((set, get) => ({
         restrictedExports, mdtExports, fieldAccessRequests, mySubRows, rejectedSubmissions, narcoticSuggestions,
         gangMembers, trackers, sibConflicts, sibWatchlist, clientErrors, justiceApplications, survAlerts,
         legalComments, reports,
+        ciDue, ciFollowups, ciRequests,
       ] = await Promise.all([
         // Bounded: newest-first so the AWAITING/returned/follow-up branches
         // and the caseById context map keep the live working set — an
@@ -479,6 +490,20 @@ const useActionQueueStore = create<QueueStore>((set, get) => ({
           ? list('reports', { select: REPORT_COLS, eq: { review_status: 'submitted' }, order: 'submitted_at', ascending: false, limit: 100 })
               .then((r) => r as unknown as AcReport[]).catch(() => [] as AcReport[])
           : Promise.resolve([] as AcReport[]),
+        // CI sources — bounded, RLS-scoped (ci_list returns only the caller's
+        // accessible sources; ci_capacity_requests only the requester's own
+        // rows + everything for full access) and fetched ONLY when involved.
+        // All fail-open to empty: a refusal and "nothing due" look the same.
+        ciOn
+          ? fetchCiList({ contact: 'overdue' }, 100).then((r) => r as AcCi[]).catch(() => [] as AcCi[])
+          : Promise.resolve([] as AcCi[]),
+        ciOn
+          ? fetchCiList({ followups: true }, 100).then((r) => r as AcCi[]).catch(() => [] as AcCi[])
+          : Promise.resolve([] as AcCi[]),
+        ciOn
+          ? list('ci_capacity_requests', { select: CI_REQUEST_COLS, eq: { status: 'pending' }, order: 'created_at', ascending: false, limit: 50 })
+              .then((r) => r as unknown as AcCiRequest[]).catch(() => [] as AcCiRequest[])
+          : Promise.resolve([] as AcCiRequest[]),
       ])
       // A failed state read keeps whatever hides were known (L4) — never a
       // silent un-snooze of everything on a blip.
@@ -606,6 +631,9 @@ const useActionQueueStore = create<QueueStore>((set, get) => ({
         restrictedExports, mdtExports, fieldAccessRequests, mySubmissions, rejectedSubmissions,
         narcoticSuggestions, gangMembers, gangNames, trackers, sibConflicts, sibWatchlist,
         clientErrors, justiceApplications, survAlerts, legalComments, reports,
+        // CI (§6.4) — null standing = the branch emits nothing.
+        ciStanding: ciOn ? { fullAccess: ciCtx.full_access, isHandler: ciCtx.is_handler } : null,
+        ciDue, ciFollowups, ciRequests,
         escalations,
         states,
       }
@@ -659,6 +687,12 @@ export function useActionQueue(): ActionQueue {
   const auth = useAuth()
   const siu = useSiu()
   const permissions = usePermissions()
+  // CI involvement rides in the load key so the queue refetches once the
+  // context store settles (or the viewer's standing changes) — the loader
+  // itself re-reads `getCiContext()` at fetch time.
+  const { ctx: ciCtx } = useCiContext()
+  const ciFull = ciInvolved(ciCtx) && ciCtx.full_access
+  const ciHandler = ciInvolved(ciCtx) && ciCtx.is_handler
   const { profile, state, isCommand, isOwner, justiceRole, canEdit } = auth
   const built = useActionQueueStore((s) => s.built)
   const states = useActionQueueStore((s) => s.states)
@@ -707,6 +741,9 @@ export function useActionQueue(): ActionQueue {
   const vSurvAlerts = useTableVersion('surveillance_alerts')
   const vLegalComments = useTableVersion('legal_request_comments')
   const vReports = useTableVersion('reports')
+  // The CI compartment's published shadow table (ids only) — moves only for
+  // an involved viewer (RLS), so an uninvolved one never refetches for it.
+  const vCiEvents = useTableVersion('ci_events')
 
   // SIB gates — the same capability signals the SIB workspace itself reads
   // (useSiu). While the SIU context is still resolving these are false, so
@@ -719,9 +756,9 @@ export function useActionQueue(): ActionQueue {
     vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs,
     vDocuments, vSuggestions, vHolds, vJusticeMemberships, vMemberTransfers, vGrants, vSurvObs, vSurvTgt,
     vDrafts, vPersons, vFieldSubs, vState, vEscalations, vGangMembers, vTrackers, vNarcotics, vClientErrors,
-    vSurvAlerts, vLegalComments, vReports,
+    vSurvAlerts, vLegalComments, vReports, vCiEvents,
   ].join('.')
-  const ctxKey = `${profile?.id ?? ''}|${profile?.role ?? ''}|${isCommand}|${isOwner}|${canEdit}|${justiceRole ?? ''}|${sibAgent}|${sibCommand}|${siu.isCommand}|${dojRole ?? ''}`
+  const ctxKey = `${profile?.id ?? ''}|${profile?.role ?? ''}|${isCommand}|${isOwner}|${canEdit}|${justiceRole ?? ''}|${sibAgent}|${sibCommand}|${siu.isCommand}|${dojRole ?? ''}|${ciFull}|${ciHandler}`
   const loadKey = `${ctxKey}#${versionKey}`
 
   const run = useCallback((force: boolean) => {

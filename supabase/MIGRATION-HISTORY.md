@@ -384,7 +384,7 @@ Post-run `private.city2_verify()`: `clean=true`, 0 rows remaining,
 
 ## Portal Improvements — Phase 0 hygiene (2026-09-05)
 
-Plan: `docs/PLAN-PORTAL-IMPROVEMENTS.md`. Repo-only hygiene first: the
+Plan: `docs/archive/PLAN-PORTAL-IMPROVEMENTS.md`. Repo-only hygiene first: the
 duplicate-timestamp pairs (`20260825120000_siu_phase3.sql`,
 `20260921120000_permanent_delete_refresh.sql`) were renamed to `…120001_`
 (SQL unchanged; live history unaffected because live versions are
@@ -1090,6 +1090,83 @@ catalog row and dispatch arm. Client side, the permanent-delete dialogs now
 require the confirmation phrase to be typed (the earlier flow echoed the
 server's own string).
 
+## Confidential Informants compartment and portal cleanup (2026-09-10, applied)
+
+Contract: the CI request of 2026-09-10 (fifty sections) — informants and
+informant-derived intelligence as a server-enforced compartment, not hidden
+UI. Both migrations were applied live and verified in rolled-back
+transactions before the repo files were committed.
+
+**Confidential Informants.** `20261103120000_confidential_informants.sql`,
+applied in three consecutive parts (`confidential_informants`,
+`confidential_informants_rpcs`, `confidential_informants_plumbing`; the repo
+file is the three concatenated in application order). One sequence
+(`ci_number_seq` → `CI-0001` identifiers) and fourteen tables
+(`confidential_informants`, `ci_handlers`, `ci_handler_capacity`,
+`ci_capacity_requests`, `ci_intelligence`, `ci_intelligence_links`,
+`ci_contacts`, `ci_assessments`, `ci_payments`, `ci_case_links`,
+`case_intel_releases`, `ci_releases`, `ci_audit_events`, `ci_events`), every one with a SELECT-only
+policy gated by `private.can_access_ci(ci_id)` (or `private.has_full_ci_access()`
+for the roster-wide tables) and no client INSERT/UPDATE/DELETE grant at all —
+every write is one of the 35 `public.ci_*` SECURITY DEFINER RPCs (create,
+update, status, handler set/handoff/remove, contact log, reliability
+assessment, intel + corroboration + case link, sanitized release, capacity /
+assignment / access requests and their decisions, payments, export, stats,
+counts). Helpers: `private.has_full_ci_access(p_user)` (active, not removed,
+Owner or Bureau Lead / Deputy Director / Director, or any active SIB member),
+`private.can_access_ci(p_ci, p_user)` (full access or an active handler row),
+`private.ci_is_handler`, `private.ci_capacity` (6 by default, individual
+overrides in `ci_handler_capacity`), `private.ci_active_count`,
+`private.ci_sanitized` (refuses text naming the CI number, name, alias or a
+handler), `private.ci_audit` (→ `ci_audit_events`, never `audit_log`) and
+`private.ci_event` (→ the realtime shadow `ci_events`, which carries no CI
+detail). `case_intel_releases` is the only CI-derived table a case member can
+read: it carries no CI column; the back-link lives in the restricted
+`ci_releases`. Plumbing re-emitted whole with `ci` arms:
+`private.soft_delete_table`, `private.trash_case_expr`, `public.trash_list`,
+`public.soft_delete` (a CI requires a reason and cascades to its children),
+`public.restore_record`, `private.permanent_delete_record_label`
+(`ci:CI-0001`), `private.perm_dispatch` (the CI arms before the registry
+arm), `public.case_audit_feed` (excludes `ci\_%` entities),
+`public.notification_resolve`, `private.action_key_class` (`ci_request:` is a
+decision), `private.action_notify` (dedupe key adds intel / release /
+request / ci ids); nine `informants` notification kinds, portal-only (the
+Discord relay skips the category). Scheduled sweep `ci-contact-sweep`
+(`40 * * * *`, overdue-contact reminders to handlers) with the Owner-only
+`public.ci_sweep_run` and `public.rls_test_ci_sweep`; `rls_test_cleanup`
+spliced to clear the CI tables. `permission_catalog` rows 600–690.
+
+Verified at apply time (rolled back): an uninvolved detective receives
+`{full_access:false,is_handler:false}`, zero rows from every CI table and
+null from `ci_get` / `ci_person_status` / `ci_stats`; `ci_create` numbers
+`CI-0001` and refuses a duplicate person (`unavailable`); a handler sees only
+their own CI while a Director sees the roster and stats; the seventh CI at
+capacity 6 is refused with `(6 / 6)`, a capacity request notifies the seven
+reviewers, a detective's decision raises P0403 and a Director's approval
+lifts the cap to 8 so `CI-0007` is created; `ci_handler_set` requires a
+reason and a handoff revokes the former handler instantly; the CI case tab
+count is 2 for the handler and 0 for a case member outside the compartment;
+an unsanitized release is refused and a clean one is visible to the case
+member through `case_intel_releases` with `ci_releases` still empty; a
+direct INSERT fails 42501; retiring frees capacity; export is audited; a
+demoted Bureau Lead loses access at once; the sweep is Owner-only; soft
+delete requires a reason, cascades, labels the Trash row `ci:CI-0001` and
+restores cleanly. `search_all('CI-0')` returns no CI rows.
+
+**Soft delete for templates and commendations.**
+`20261104120000_soft_delete_templates_commendations.sql` (applied as
+`soft_delete_templates_commendations`): `deleted_at` / `deleted_by` /
+`deleted_reason` / `restored_at` and the `deleted_at` index on
+`case_templates` and `commendations`, their version triggers, the
+`case_templates_sel` / `comm_sel` policies re-created as
+`deleted_at is null or private.is_owner()`, and `private.soft_delete_table`,
+`private.perm_dispatch` and `public.trash_list` re-emitted with the
+`case_template` / `commendation` arms (every existing arm byte-identical).
+Catalog rows 700 / 710. Verified: the creator and command can delete, only
+the Owner sees deleted rows, the Trash labels them and restore works. This
+retires the last two hard-delete paths in the portal (`docs/DESIGN-SYSTEM.md`
+"Deleting things").
+
 | Version (live) | Name | Repo file |
 |---|---|---|
 | applied via MCP (`entity_normalization`, `entity_normalization_phone_fix`) | entity_normalization | `20261014120000_entity_normalization.sql` |
@@ -1112,6 +1189,8 @@ server's own string).
 | applied via MCP (`intel_groups_convert`, `intel_groups_convert_policy_grant`, `intel_review_fixes`) | intel_groups_convert | `20261031120000_intel_groups_convert.sql` |
 | applied via MCP (`action_center`, `action_center_review_fixes`, `action_center_review_fixes_surv_alert`) | action_center | `20261101120000_action_center.sql` |
 | applied via MCP (`trash_list`, `trash_list_review_fixes`) | trash_list | `20261102120000_trash_list.sql` |
+| applied via MCP (`confidential_informants`, `confidential_informants_rpcs`, `confidential_informants_plumbing`) | confidential_informants | `20261103120000_confidential_informants.sql` |
+| applied via MCP (`soft_delete_templates_commendations`) | soft_delete_templates_commendations | `20261104120000_soft_delete_templates_commendations.sql` |
 | applied via MCP (`record_versions`) | record_versions | `20261011120000_record_versions.sql` |
 | applied via MCP (`case_access_grant_expiry`) | case_access_grant_expiry | `20261012120000_case_access_grant_expiry.sql` |
 | applied via MCP (`permanent_delete_record`, `permanent_delete_record_preview_fix`) | permanent_delete_record | `20261013120000_permanent_delete_record.sql` |

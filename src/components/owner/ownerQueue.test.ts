@@ -1,40 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  ADMIN_AUDIT_ACTIONS, adminActionLabel, ledgerReferenceCount, ownerQueue,
-} from './ownerQueue'
-
-const NONE = { clientErrors: 0, securityFailures: 0, fixtureIssues: 0, openFeedback: 0 }
-
-describe('ownerQueue', () => {
-  it('returns nothing when every signal is zero', () => {
-    expect(ownerQueue(NONE)).toEqual([])
-  })
-
-  it('null means unknown, never pending', () => {
-    expect(ownerQueue({
-      clientErrors: null, securityFailures: null, fixtureIssues: null, openFeedback: null,
-    })).toEqual([])
-  })
-
-  it('emits one row per non-zero signal, carrying the count', () => {
-    const q = ownerQueue({ clientErrors: 3, securityFailures: 1, fixtureIssues: 2, openFeedback: 7 })
-    expect(q.map((i) => i.id)).toEqual([
-      'client_errors', 'security_failures', 'fixture_issues', 'open_feedback',
-    ])
-    expect(q.map((i) => i.count)).toEqual([3, 1, 2, 7])
-  })
-
-  it('routes health signals to Security & Audit and feedback to the inbox', () => {
-    const q = ownerQueue({ ...NONE, clientErrors: 1, openFeedback: 1 })
-    expect(q.find((i) => i.id === 'client_errors')?.section).toBe('security')
-    expect(q.find((i) => i.id === 'open_feedback')?.section).toBe('feedback')
-  })
-
-  it('every row states why it is in front of the owner', () => {
-    const q = ownerQueue({ clientErrors: 1, securityFailures: 1, fixtureIssues: 1, openFeedback: 1 })
-    for (const i of q) expect(i.why.length).toBeGreaterThan(10)
-  })
-})
+import { ADMIN_AUDIT_ACTIONS, adminActionLabel, ledgerReferenceCount } from './ownerQueue'
 
 describe('ADMIN_AUDIT_ACTIONS', () => {
   it('is a curated named-action set — never the generic row-trigger ops', () => {

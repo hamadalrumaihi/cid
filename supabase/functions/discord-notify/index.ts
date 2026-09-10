@@ -6,7 +6,8 @@
 //
 // Titles + Discord categories come from ./titles.json — a byte-identical copy of
 // src/lib/notificationTitles.json (scripts/sync-notification-titles.mjs; the
-// `check:notif-titles` gate fails when they drift). The recipient's opt-in
+// `check:notif-titles` gate fails when they drift). A kind whose entry says
+// `destination: 'portal'` is skipped before anything else. The recipient's opt-in
 // (user_prefs key 'notif_discord', {categories: string[]}) is read with the
 // service role: a missing row means every category; a type whose category is
 // not in the list is skipped; an unmapped type is 'other' and always sent —
@@ -24,10 +25,15 @@ const cors = {
 const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { ...cors, 'content-type': 'application/json' } });
 
-type TitleEntry = { title: string; category: string };
+type TitleEntry = { title: string; category: string; destination?: 'portal'; mutable?: true; priority?: string };
 const TITLES = titles as Record<string, TitleEntry>;
-/** The opt-in categories the profile UI offers; anything else is 'other'. */
-const OPT_IN_CATEGORIES = new Set(['assignments', 'decisions', 'legal', 'mentions', 'escalations', 'intel', 'reports', 'announcements', 'security']);
+/** The opt-in categories the profile UI offers — derived from titles.json
+ *  exactly as lib/notifications DISCORD_CATEGORIES is: every category with at
+ *  least one kind that is not portal-only, excluding 'other'. Anything else
+ *  is 'other' (always sent). */
+const OPT_IN_CATEGORIES = new Set(
+  Object.values(TITLES).filter((e) => e.destination !== 'portal').map((e) => e.category).filter((c) => c !== 'other'),
+);
 
 const clean = (v: unknown) => String(v || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 300);
 /** The ONLY types whose free-text `reason` may leave the portal in a DM.
@@ -47,6 +53,9 @@ Deno.serve(async (req) => {
     if (!user_id || !type) return json({ error: 'missing user_id/type' }, 400);
     const entry = TITLES[type];
     if (!entry?.title) return json({ error: 'unsupported notification type' }, 400);
+    // Portal-only kinds (the CI compartment) never leave the portal: no
+    // auth, profile, notification or preference lookup happens for them.
+    if (entry.destination === 'portal') return json({ skipped: 'portal-only' });
     const jwt = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
     if (!jwt) return json({ error: 'missing authorization' }, 401);
     const token = Deno.env.get('DISCORD_BOT_TOKEN');

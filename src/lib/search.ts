@@ -3,6 +3,7 @@
  *  caller). Port of the vanilla deep search + Cmd-K palette data sources
  *  (app.js supaSearch/paletteSources). Charges are static reference data and
  *  are matched client-side against the penal catalog, exactly like vanilla. */
+import { CI_STATUS_LABEL, ciSearch } from './ci'
 import { rpc } from './db'
 import { searchSubmissions } from './fieldReview'
 import { REVIEW_STATUS_LABEL } from './legalWorkflow'
@@ -49,9 +50,12 @@ export const SEARCH_KINDS: Record<string, { title: string; tab: string; tag: str
   tip:       { title: 'Intelligence', tab: 'field-review', tag: 'intel' },
   member:    { title: 'Members',    tab: 'personnel',  tag: 'member' },
   charge:    { title: 'Charges',    tab: 'penal',      tag: 'charge' },
+  /** Confidential informants (CI §6.4) — produced ONLY by `ciHits` for an
+   *  involved viewer; `search_all` never emits this kind. */
+  ci:        { title: 'Informants', tab: 'informants', tag: 'CI' },
 }
 
-export const SEARCH_SECTION_ORDER = ['case', 'report', 'task', 'evidence', 'operation', 'legal', 'person', 'bolo', 'gang', 'place', 'vehicle', 'account', 'narcotic', 'bench', 'document', 'tip', 'member', 'charge'] as const
+export const SEARCH_SECTION_ORDER = ['case', 'report', 'task', 'evidence', 'operation', 'legal', 'person', 'bolo', 'gang', 'place', 'vehicle', 'account', 'narcotic', 'bench', 'document', 'tip', 'member', 'charge', 'ci'] as const
 
 /** Charges matched client-side from the cached penal catalog. The catalog is
  *  the PUBLISHED penal code, fetched once by `ensurePenalCode()`; before it
@@ -140,19 +144,38 @@ export function legalHitSublabel(sublabel: string | null): string | null {
   return label ? `${head} · ${label}` : sublabel
 }
 
+/** Confidential-informant matches → palette hits (CI §6.4). Label = CI number
+ *  (+ alias), sublabel = status; the person's name is returned by the RPC but
+ *  deliberately NOT rendered — the palette names a source by its number. */
+export function ciHitsFromRows(rows: ReadonlyArray<{ id: string; ci_number: string; alias: string | null; status: string }>, max = 6): SearchHit[] {
+  return rows.slice(0, max).map((r) => ({
+    kind: 'ci',
+    id: r.id,
+    label: r.alias ? `${r.ci_number} · ${r.alias}` : r.ci_number,
+    sublabel: (CI_STATUS_LABEL as Record<string, string>)[r.status] ?? r.status,
+    term: null,
+    rank: 0.6,
+  }))
+}
+
 /** One round-trip cross-entity search (plus the intel-submission RPC in
  *  parallel — its failure degrades to "no tips" and never kills the search).
  *  Returns hits sorted by rank within their kind (the RPC caps at 8 per kind
  *  / 60 total). Throws on search_all error so the palette can show a real
- *  failure state instead of "no matches". */
-export async function runSearch(q: string): Promise<SearchHit[]> {
+ *  failure state instead of "no matches".
+ *
+ *  `opts.ci` (the palette passes `ciInvolved(ctx)`) adds `ci_search` for a
+ *  viewer inside the CI compartment; for everyone else that RPC is never
+ *  called — not even to receive zero rows. */
+export async function runSearch(q: string, opts: { ci?: boolean } = {}): Promise<SearchHit[]> {
   const query = q.trim()
   if (!query) return []
-  const [res, tips] = await Promise.all([
+  const [res, tips, cis] = await Promise.all([
     rpc('search_all', { q: query }),
     // SECURITY DEFINER but readability-guarded per row; min 2 chars enforced
     // inside searchSubmissions. Tolerate failure — tips are additive.
     searchSubmissions(query).catch(() => new Map<string, string[]>()),
+    opts.ci ? ciSearch(query).catch(() => []) : Promise.resolve([]),
   ])
   if (res.error) throw new Error(res.error.message)
   const rows = (res.data ?? []) as SearchHit[]
@@ -164,6 +187,7 @@ export async function runSearch(q: string): Promise<SearchHit[]> {
     .concat(chargeHits(query))
     .concat(memberHits(query))
     .concat(tipHitsFromMatches(tips))
+    .concat(ciHitsFromRows(cis))
 }
 
 /** Recent-search memory — same Store key + shape as vanilla (deduped,

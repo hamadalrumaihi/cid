@@ -3,7 +3,7 @@
 > Items intentionally **not** done yet, each with the trigger that should bring it
 > back. Keep in sync with the improvement roadmap in the Developer Handbook
 > ([Ch. 19](handbook/19-improvements.md)) and with the Portal Improvements plan
-> ([`PLAN-PORTAL-IMPROVEMENTS.md`](PLAN-PORTAL-IMPROVEMENTS.md), §19
+> ([`archive/PLAN-PORTAL-IMPROVEMENTS.md`](archive/PLAN-PORTAL-IMPROVEMENTS.md), §19
 > "Explicitly out of scope").
 
 ---
@@ -52,7 +52,7 @@
 
 ## 5. Items parked by the Portal Improvements plan
 
-Phases 0–8 of [`PLAN-PORTAL-IMPROVEMENTS.md`](PLAN-PORTAL-IMPROVEMENTS.md) are
+Phases 0–8 of [`archive/PLAN-PORTAL-IMPROVEMENTS.md`](archive/PLAN-PORTAL-IMPROVEMENTS.md) are
 delivered (release 1.18.0; the record is
 [`HANDOFF-PORTAL-IMPROVEMENTS.md`](HANDOFF-PORTAL-IMPROVEMENTS.md)). What the
 plan explicitly left out (§19) and what the phases left open:

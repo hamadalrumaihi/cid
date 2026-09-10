@@ -5,6 +5,7 @@ import {
   type AcFieldSubmission, type AcLegal, type AcNotif,
   type AcObservation, type AcSiuAccessRequest, type AcSiuDisclosure, type AcSiuReferral,
   type AcSuggestion, type AcSurvTarget, type AcTask, type AcTransfer,
+  type AcCi, type AcCiRequest,
   type ActionSources,
 } from './actionItems'
 
@@ -263,7 +264,7 @@ describe('member approvals (membership summary)', () => {
     const item = byKey(q, 'membership:pending')
     expect(item).toMatchObject({
       sourceType: 'membership_request', status: 'needs_action', isCommandItem: true,
-      title: '3 member approvals awaiting review', deepLink: '/command-center?s=approvals',
+      title: '3 member approvals awaiting review', deepLink: '/command-center?s=membership',
     })
     expect(item?.urgencyScore).toBe(STATUS_BASE.needs_action + NUDGE.membership)
   })
@@ -1207,7 +1208,7 @@ describe('Phase 7 — new queue kinds (#374)', () => {
   it('justice applications — one item per open request for command/owner (awareness)', () => {
     const j: AcJusticeApplication = { id: 'j1', applicant_id: 'u1', display_name: 'A. Vance', requested_agency: 'doj', requested_justice_role: 'judge', status: 'pending', submitted_at: NOW_ISO, created_at: NOW_ISO, updated_at: NOW_ISO }
     const s = src({ ...cmd, justiceApplications: [j, { ...j, id: 'j2', status: 'approved' }, { ...j, id: 'j3', status: 'correction_requested' }] })
-    expect(findKey(s, 'justice:j1')).toMatchObject({ sourceType: 'justice_application', isCommandItem: true, status: 'informational', deepLink: '/command-center?s=approvals' })
+    expect(findKey(s, 'justice:j1')).toMatchObject({ sourceType: 'justice_application', isCommandItem: true, status: 'informational', deepLink: '/command-center?s=membership' })
     expect(findKey(s, 'justice:j2')).toBeUndefined()
     expect(findKey(s, 'justice:j3')).toMatchObject({ status: 'waiting' })
     expect(findKey(src({ justiceApplications: [j] }), 'justice:j1')).toBeUndefined()
@@ -1241,4 +1242,95 @@ describe('Phase 7 — new queue kinds (#374)', () => {
     expect(findKey(src({ role: 'bureau_lead', division: 'street_crimes', isCommand: true, canEdit: true, cases: [mkCase()], reports: [r] }), 'report:r1')).toBeUndefined()
     expect(findKey(src({ role: 'bureau_lead', isCommand: true, canEdit: true, cases: [mkCase()], reports: [{ ...r, review_status: 'draft' }] }), 'report:r1')).toBeUndefined()
   })
+  /* ── Confidential informants (CI contract §6.4) ─────────────────────────── */
+  const mkCi = (over: Partial<AcCi> = {}): AcCi => ({
+    id: 'ci-1', ci_number: 'CI-0041', alias: 'Kestrel', status: 'active', bureau: 'major_crimes',
+    last_contact_at: iso(-10 * 86_400_000), next_contact_at: iso(-2 * 86_400_000),
+    primary_handler_id: ME, secondary_handler_id: null, linked_cases: 1, open_followups: 0, ...over,
+  })
+  const mkCiReq = (over: Partial<AcCiRequest> = {}): AcCiRequest => ({
+    id: 'req-1', kind: 'capacity', requester_id: 'off-2', bureau: 'major_crimes', current_count: 6,
+    requested_capacity: 8, status: 'pending', case_id: null, created_at: NOW_ISO, updated_at: NOW_ISO, ...over,
+  })
+  const handler = { ciStanding: { fullAccess: false, isHandler: true } }
+  const fullCi = { ciStanding: { fullAccess: true, isHandler: false } }
+
+  it('CI — nothing at all without ciStanding, even when rows are (wrongly) supplied', () => {
+    const s = src({ ciDue: [mkCi()], ciFollowups: [mkCi({ open_followups: 2 })], ciRequests: [mkCiReq({ requester_id: ME })] })
+    expect(buildActionItems(s).items.filter((it) => it.sourceType.startsWith('ci_'))).toEqual([])
+  })
+
+  it('CI contact due — my source is personal work, overdue by next_contact_at, deep-linking the profile by id only', () => {
+    const it = findKey(src({ ...handler, ciDue: [mkCi()] }), 'ci:ci-1:contact')!
+    expect(it).toMatchObject({
+      sourceType: 'ci_contact_due', status: 'overdue', isPersonalItem: true, isCommandItem: false,
+      actionLabel: 'Log contact', deepLink: '/informants?ci=ci-1&s=contacts', bureau: 'major_crimes',
+    })
+    expect(it.title).toBe('CI-0041 · contact due')
+    expect(it.reason).toBe('Your source · contact overdue by 2d')
+    // The item never carries the person's name — CI number only.
+    expect(JSON.stringify(it)).not.toContain('person_name')
+    // Within 48h → due_soon; no next_contact_at (the sweep's silent-30d case) → needs_action.
+    expect(findKey(src({ ...handler, ciDue: [mkCi({ next_contact_at: iso(12 * HOUR) })] }), 'ci:ci-1:contact')).toMatchObject({ status: 'due_soon' })
+    const silent = findKey(src({ ...handler, ciDue: [mkCi({ next_contact_at: null })] }), 'ci:ci-1:contact')!
+    expect(silent.status).toBe('needs_action')
+    expect(silent.reason).toContain('silent for 30 days')
+    // Non-active sources never nag; a handler never sees another handler's source.
+    expect(findKey(src({ ...handler, ciDue: [mkCi({ status: 'dormant' })] }), 'ci:ci-1:contact')).toBeUndefined()
+    expect(findKey(src({ ...handler, ciDue: [mkCi({ primary_handler_id: 'off-2' })] }), 'ci:ci-1:contact')).toBeUndefined()
+    // Full access sees every overdue source as an oversight (command) item.
+    expect(findKey(src({ ...fullCi, role: 'director', ciDue: [mkCi({ primary_handler_id: 'off-2' })] }), 'ci:ci-1:contact'))
+      .toMatchObject({ isCommandItem: true, isPersonalItem: false, responsibleRole: 'director' })
+  })
+
+  it('CI follow-ups — one item per source with open follow-ups, linking the intelligence section', () => {
+    const it = findKey(src({ ...handler, ciFollowups: [mkCi({ open_followups: 2 })] }), 'ci_intel:ci-1:followup')!
+    expect(it).toMatchObject({ sourceType: 'ci_intel_followup', status: 'needs_action', isPersonalItem: true, deepLink: '/informants?ci=ci-1&s=intelligence' })
+    expect(it.title).toBe('CI-0041 · 2 intelligence follow-ups')
+    expect(findKey(src({ ...handler, ciFollowups: [mkCi({ open_followups: 1 })] }), 'ci_intel:ci-1:followup')!.title).toBe('CI-0041 · 1 intelligence follow-up')
+    expect(findKey(src({ ...handler, ciFollowups: [mkCi({ open_followups: 0 })] }), 'ci_intel:ci-1:followup')).toBeUndefined()
+  })
+
+  it('CI requests — a reviewer decision for full access, waiting for the requester, never shown to a plain handler', () => {
+    const decide = findKey(src({ ...fullCi, role: 'bureau_lead', isCommand: true, ciRequests: [mkCiReq()] }), 'ci_request:req-1')!
+    expect(decide).toMatchObject({
+      sourceType: 'ci_capacity_request', status: 'needs_action', isCommandItem: true, isWaitingOnCurrentUser: true,
+      actionLabel: 'Review', deepLink: '/informants?requests=1', bureau: 'major_crimes',
+    })
+    expect(decide.title).toBe('CI capacity request — Det. Ortiz')
+    expect(decide.summary).toBe('6 active → 8 requested')
+    const mine = findKey(src({ ...handler, ciRequests: [mkCiReq({ requester_id: ME, kind: 'assignment', requested_capacity: null })] }), 'ci_request:req-1')!
+    expect(mine).toMatchObject({ status: 'waiting', isPersonalItem: true, isCommandItem: false, actionLabel: null })
+    expect(mine.title).toBe('Your CI assignment request')
+    expect(mine.summary).toBe('6 active sources')
+    expect(findKey(src({ ...handler, ciRequests: [mkCiReq()] }), 'ci_request:req-1')).toBeUndefined()
+    expect(findKey(src({ ...fullCi, ciRequests: [mkCiReq({ status: 'approved' })] }), 'ci_request:req-1')).toBeUndefined()
+  })
+
+  it('CI notifications — deep-link by id, and the sweep / request pings fold into the structural items', () => {
+    const s = src({
+      ...handler,
+      ciDue: [mkCi()],
+      notifications: [
+        mkNotif({ id: 'n1', type: 'ci_contact_overdue', payload: { ci_id: 'ci-1' } }),
+        mkNotif({ id: 'n2', type: 'ci_assigned', payload: { ci_id: 'ci-7' } }),
+        mkNotif({ id: 'n3', type: 'ci_request_decided', payload: { request_id: 'req-9' } }),
+        mkNotif({ id: 'n4', type: 'case_intel_released', payload: { case_id: 'c-1', release_id: 'rel-1' } }),
+        mkNotif({ id: 'n5', type: 'ci_intel_added', payload: {} }),
+      ],
+    })
+    const q = buildActionItems(s)
+    expect(q.suppressedCount).toBe(1)
+    expect(findKey(s, 'ci:ci-1:contact')!.sourceMetadata.notificationIds).toEqual(['n1'])
+    expect(findKey(s, 'notif:n1')).toBeUndefined()
+    expect(findKey(s, 'notif:n2')).toMatchObject({ sourceType: 'other', deepLink: '/informants?ci=ci-7' })
+    expect(findKey(s, 'notif:n3')).toMatchObject({ deepLink: '/informants?requests=1' })
+    expect(findKey(s, 'notif:n4')).toMatchObject({ deepLink: '/cases?case=c-1&tab=intel' })
+    expect(findKey(s, 'notif:n5')).toMatchObject({ deepLink: '/informants' })
+    // A request ping folds into the decision item for a reviewer.
+    const r = src({ ...fullCi, ciRequests: [mkCiReq()], notifications: [mkNotif({ id: 'n6', type: 'ci_capacity_request', payload: { request_id: 'req-1' } })] })
+    expect(buildActionItems(r).suppressedCount).toBe(1)
+    expect(findKey(r, 'ci_request:req-1')!.sourceMetadata.notificationIds).toEqual(['n6'])
+  })
+
 })

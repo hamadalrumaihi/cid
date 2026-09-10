@@ -21,7 +21,9 @@ import { createPortal } from 'react-dom'
 import { useAuth } from '@/lib/auth'
 import { useCapabilities } from '@/lib/permissions'
 import { caseLink } from '@/lib/caseLinks'
-import { PAGE_META, TAB_LABEL } from '@/lib/nav'
+import { ciHref, ciInvolved, useCiContext } from '@/lib/ci'
+import { PAGE_META, TAB_LABEL, TOOL_META } from '@/lib/nav'
+import { TOOL_TABS } from '@/lib/toolsModel'
 import { useProfilesStore } from '@/lib/profiles'
 import { pushRecent } from '@/lib/recents'
 import { recentSearches, rememberSearch, runSearch, SEARCH_KINDS, SEARCH_SECTION_ORDER, type SearchHit } from '@/lib/search'
@@ -74,6 +76,10 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
   const { profile, canEdit, isCommand, isOwner, signOut, setMyLoa } = useAuth()
   const caps = useCapabilities()
   const siu = useSiu()
+  // CI compartment (§6.4): the Informants section and the "Go to Informants"
+  // command exist only for an involved viewer — nobody else triggers
+  // `ci_search` or sees the route offered.
+  const ciOn = ciInvolved(useCiContext().ctx)
   const create = useCreate()
   const [query, setQuery] = useState(initialQuery)
   const [hits, setHits] = useState<SearchHit[]>([])
@@ -131,12 +137,12 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
     }
     const t = setTimeout(() => {
       setState('loading')
-      runSearch(q)
+      runSearch(q, { ci: ciOn })
         .then((rows) => { if (seq.current === mine) { setHits(rows); setState('ready'); setSel(0) } })
         .catch(() => { if (seq.current === mine) { setHits([]); setState('error') } })
     }, 200)
     return () => clearTimeout(t)
-  }, [open, query])
+  }, [open, query, ciOn])
 
   const onLoa = !!profile?.loa
   const siuCanAccess = siu.canAccess
@@ -201,6 +207,7 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
       'command-center': isCommand || isOwner,
       'report-templates': isCommand || isOwner,
       siu: siuCanAccess,
+      informants: ciOn,
     }
     for (const [tab, meta] of Object.entries(PAGE_META)) {
       if (tab in gates && !gates[tab]) continue
@@ -211,8 +218,20 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
         run: () => go(`/${tab}`),
       })
     }
+    // The registries and boards live inside the workspace (their old leaf
+    // routes are redirects, not PAGE_META entries) — keep "Go to Persons /
+    // BOLO Board / …" as commands that open the workspace on that tool.
+    for (const tool of TOOL_TABS) {
+      const meta = TOOL_META[tool]
+      out.push({
+        id: `go:tool:${tool}`, icon: <ChevronIcon dir="right" />,
+        label: `Go to ${meta.title}`,
+        keywords: `go open ${tool} ${TAB_LABEL[tool] ?? ''} ${meta.title}`.toLowerCase(),
+        run: () => go(`/workspace?tool=${tool}`),
+      })
+    }
     return out
-  }, [canEdit, isCommand, isOwner, siuCanAccess, siuIsAgent, capsReady, dashboards, onLoa, onClose, openHref, create, setMyLoa, signOut])
+  }, [canEdit, isCommand, isOwner, siuCanAccess, siuIsAgent, ciOn, capsReady, dashboards, onLoa, onClose, openHref, create, setMyLoa, signOut])
 
   const matchedActions = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -258,6 +277,9 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
     else if (hit.kind === 'narcotic') openRecord('narcotics', hit.id, hit.label)
     // Operations have a real record deep link (?op= opens the detail).
     else if (hit.kind === 'operation') { pushRecent('operation', hit.id); openHref(`/operations?op=${enc(hit.id)}`) }
+    // A confidential source opens its profile directly — never pushed to
+    // recents (CI visits leave no trail outside the compartment).
+    else if (hit.kind === 'ci') openHref(ciHref(hit.id))
     // Accounts have no per-record deep link yet — land on the registry.
     else if (hit.kind === 'account') openHref('/accounts')
     // No ?q= support on the roster / review queue yet — land on the view.

@@ -63,7 +63,7 @@ canEdit/canDelete gates, `deleteRecord` → `soft_delete`). Shared RLS: any acti
 reads/writes, command deletes. The `IntelProfile` slide-over
 (persons/gangs) rolls up everything linked to a subject and exports
 dossiers. All of these open as tabs inside the **Investigative Tools**
-workspace (`/tools`, `src/components/tools/`); the old per-tool routes
+workspace (`/workspace?tool=…`, `src/components/tools/`); the old `/tools` and per-tool routes
 redirect there with their params intact ([Ch. 5](05-pages.md)).
 
 **Entity search & linking (2026-08-25)**: every link/attach flow runs the
@@ -123,7 +123,7 @@ palette is a full-screen sheet.
 
 ## 4.5 Command tools
 
-Division Overview (`/command` — the member-facing division picture: a
+Division Overview (a Command Center section since the 2026-09-10 cleanup; `/command` redirects there — the member-facing division picture: a
 case-vitals KPI strip whose tiles navigate to the owning list, crime
 analytics, the dual-co-sign GPS trackers — self-co-sign blocked in UI
 *and* by trigger — and the raid-compensation calculator; the
@@ -208,7 +208,7 @@ guide, court packet/dossier exports, audit-log CSV export
 - **Intel triage** — rejected status, reviewer-private notes vs officer
   messages, the validation mark, intel groups, extended claim links,
   convert-to-record, the SIB cross-link.
-- **Action Center** (`/action`) — every queue kind with per-viewer state
+- **Action Center** (`/inbox`; `/action` redirects) — every queue kind with per-viewer state
   (seen / snooze / dismiss), escalation rules and ledger, reassignment, saved
   views and presets, one queue store shared with My Dashboard and the
   Command Center, minimal notification payloads hydrated through

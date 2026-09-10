@@ -1,5 +1,5 @@
 /** Pins for the Phase 8 Trash mock handlers (scratch p8_contract.md §1 / §3):
- *  the 27-kind vocabulary taken from db.ts's SOFT_DELETE_KIND; the caller's
+ *  the 29-kind vocabulary taken from db.ts's SOFT_DELETE_KIND; the caller's
  *  Trash = the soft-deleted rows they could restore (a detective: their own
  *  case material; the Bureau Lead of the case bureau: every deleted row of
  *  the bureau's cases; the outsider: nothing; the Owner: everything); the
@@ -56,10 +56,10 @@ function trashedCaseMaterial(c: Cast, deletedAt = mockTimestamp(-10)) {
 describe('trash — vocabulary and helpers', () => {
   beforeEach(() => resetMockStore())
 
-  it('the kind → table map is the inverse of db.ts SOFT_DELETE_KIND (27 kinds, never a second vocabulary)', () => {
+  it('the kind → table map is the inverse of db.ts SOFT_DELETE_KIND (29 kinds, never a second vocabulary)', () => {
     const inverse = Object.fromEntries(Object.entries(SOFT_DELETE_KIND).map(([table, kind]) => [kind, table]))
     expect(TRASH_TABLE_OF_KIND).toEqual(inverse)
-    expect(TRASH_KINDS).toHaveLength(27)
+    expect(TRASH_KINDS).toHaveLength(29)
     expect(isTrashKind('case_note')).toBe(true)
     expect(isTrashKind('legal')).toBe(false)
   })

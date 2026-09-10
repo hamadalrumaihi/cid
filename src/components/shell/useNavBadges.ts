@@ -1,22 +1,23 @@
 'use client'
 
-/** Nav badge counts — the three vanilla nav badges on the Command category
- *  button (index.html #pending/#ann/#signoff-nav-badge):
- *   · pending  — members awaiting approval (command/owner only)
- *   · ann      — audience-visible announcements newer than the `annSeen` Store
- *                stamp (AnnounceView writes it on entry)
- *   · signoff  — My Desk needs-attention count (sign-off reviews + returned
- *                cases), vanilla inboxActionCount
+/** Nav badge counts for the shell (Sidebar, Subtabs, BottomNav):
+ *   · pending       — members awaiting approval (command/owner only)
+ *   · announcements — audience-visible announcements newer than the `annSeen`
+ *                     Store stamp (AnnounceView writes it on entry)
+ *   · signoff       — sign-off reviews + returned cases awaiting the viewer
+ *   · inbox         — the sum of the three: the Action Center's chip
+ *   · trash         — deleted rows the viewer may restore (trash_count)
  *
  *  Phase 7 (P7-06, AC7): `pending` and `signoff` come from the ONE Action
- *  Center queue (useActionQueue().counts) — this hook no longer runs its own
- *  case / mention / justice fetches, so the badge, the dashboard slices and
- *  the queue can never disagree. Announcements keep their own slim store:
- *  they are not queue items. Phase 8 adds `trash` — `trash_count()` via
+ *  Center queue (useActionQueue().counts) — this hook runs no case / mention /
+ *  justice fetches of its own, so the badge, the dashboard slices and the
+ *  queue can never disagree. Announcements keep their own slim store: they
+ *  are not queue items. Phase 8 added `trash` — `trash_count()` via
  *  lib/trash's store (fetched on mount; `bumpTrash()` after a delete /
- *  restore) — shown on the Trash leaf, only when > 0. The store is module-level (lib/watchlist /
- *  lib/profiles pattern) because the hook mounts TWICE (Sidebar + BottomNav);
- *  the version key makes one realtime bump one fetch however many mount. */
+ *  restore) — shown on the Trash leaf, only when > 0. The store is
+ *  module-level (lib/watchlist / lib/profiles pattern) because the hook mounts
+ *  several times (Sidebar + Subtabs + BottomNav); the version key makes one
+ *  realtime bump one fetch however many mount. */
 import { useEffect, useMemo } from 'react'
 import { create } from 'zustand'
 import { list } from '@/lib/db'
@@ -49,8 +50,9 @@ export interface NavBadges {
   pending: number
   announcements: number
   signoff: number
-  /** Sum for the collapsed/mobile Command chip. */
-  command: number
+  /** Sum for the Action Center (inbox) chip — the Command category button on
+   *  the collapsed rail / BottomNav and the Action Center sub-tab. */
+  inbox: number
   /** Deleted rows the viewer may restore (trash_count). */
   trash: number
 }
@@ -81,13 +83,13 @@ export function useNavBadges(): NavBadges {
   }, [state, trashFetched])
 
   return useMemo<NavBadges>(() => {
-    if (state !== 'in' || !profile) return { pending: 0, announcements: 0, signoff: 0, command: 0, trash: 0 }
+    if (state !== 'in' || !profile) return { pending: 0, announcements: 0, signoff: 0, inbox: 0, trash: 0 }
     // The queue's membership item exists only for command / owner sessions
     // (the model gates it); rank-and-file keep a 0 badge.
     const pending = (isCommand || isOwner) ? counts.membership : 0
     const seen = Store.get<string>('annSeen', '')
     const announcements = visibleAnnouncements(anns, profile.division, new Set<string>(), true).filter((a) => a.created_at > seen).length
     const signoff = counts.signoff
-    return { pending, announcements, signoff, command: pending + announcements + signoff, trash }
+    return { pending, announcements, signoff, inbox: pending + announcements + signoff, trash }
   }, [state, profile, isCommand, isOwner, counts.membership, counts.signoff, anns, trash])
 }

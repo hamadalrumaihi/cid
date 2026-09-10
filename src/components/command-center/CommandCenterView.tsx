@@ -4,12 +4,14 @@
  *  to command roles (Bureau Lead / Deputy Director / Director) and the owner;
  *  the visible gate is UX only — every action still flows through the existing
  *  SECURITY DEFINER RPCs and RLS (`private.is_command()` / `is_owner()`),
- *  which are the real wall. Consolidates member administration, the approval
- *  queues, promotions/transfers, the chain of command, duty status and the
- *  permissions overview, and surfaces the division dashboard, analytics and
- *  announcement tools that also live on their own member-facing tabs.
+ *  which are the real wall. Consolidates member administration, membership
+ *  review, promotions/transfers, the chain of command, duty status, the
+ *  permissions overview, the operational tools that used to sit on the
+ *  Division Overview (trackers, raid comp) and the announcements composer.
+ *  Every other command DECISION lives in the Action Center's command preset;
+ *  the Overview's "Awaiting you" slice points there.
  *
- *  Section pattern mirrors the Owner Portal (SECTIONS + `?s=` deep-links). */
+ *  Section pattern mirrors the Owner Console (SECTIONS + `?s=` deep-links). */
 import { useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
@@ -23,12 +25,13 @@ import { CasesAssignments } from './sections/CasesAssignments'
 import { IntelOversight } from './sections/IntelOversight'
 import { ChainOfCommand } from './sections/ChainOfCommand'
 import { PersonnelAdmin } from './sections/PersonnelAdmin'
-import { ApprovalQueue } from './sections/ApprovalQueue'
+import { MembershipReview } from './sections/MembershipReview'
 import { PromotionsTransfers } from './sections/PromotionsTransfers'
 import { DutyStatus } from './sections/DutyStatus'
 import { PermissionsOverview } from './sections/PermissionsOverview'
 import { CommandComms } from './sections/CommandComms'
 import { FieldOfficers } from './sections/FieldOfficers'
+import { CommandOps } from './sections/Ops'
 
 export const CC_SECTIONS = [
   { id: 'overview', label: 'Overview', sub: 'Decision queues, bureau workload and what awaits you' },
@@ -36,21 +39,26 @@ export const CC_SECTIONS = [
   { id: 'intel', label: 'Intelligence Oversight', sub: 'Field intel queues, MDT export approvals and registry hygiene' },
   { id: 'chain', label: 'Chain of Command', sub: 'Roles, bureaus and the sign-off chain' },
   { id: 'personnel', label: 'Personnel & Admin', sub: 'Approve, manage, promote, transfer, remove' },
-  { id: 'approvals', label: 'Approval Queue', sub: 'Pending member approvals + sign-offs awaiting you' },
+  { id: 'membership', label: 'Membership Review', sub: 'Membership requests, pending sign-ins and re-reviews' },
   { id: 'promotions', label: 'Promotions & Transfers', sub: 'Rank + bureau changes, with history' },
   { id: 'duty', label: 'Duty Status', sub: 'Who is active or on LOA, by bureau' },
   { id: 'permissions', label: 'Permissions', sub: 'Who can do what — the access matrix' },
   { id: 'field', label: 'Field Intelligence Officers', sub: 'Appoint SAHP, BCSO and LSPD accounts — portal access only, never CID' },
-  { id: 'comms', label: 'Announcements & Analytics', sub: 'Post division notices; division analytics' },
+  { id: 'ops', label: 'Trackers & Raid Comp', sub: 'GPS tracker authorizations and the raid compensation calculator' },
+  { id: 'comms', label: 'Announcements', sub: 'Post division notices' },
 ] as const
 type SectionId = (typeof CC_SECTIONS)[number]['id']
+
+/** Retired section ids still found in bookmarks and notification links. */
+const SECTION_ALIAS: Record<string, SectionId> = { approvals: 'membership' }
 
 export function CommandCenterView() {
   const { state, isCommand, isOwner } = useAuth()
   const { commandScope } = useCapabilities()
   const sp = useSearchParams()
   const router = useRouter()
-  const raw = sp.get('s') as SectionId | null
+  const rawParam = sp.get('s')
+  const raw = (rawParam && SECTION_ALIAS[rawParam]) ?? (rawParam as SectionId | null)
   // Derive the section from the URL — deep-links and back/forward just work.
   const section: SectionId = raw && CC_SECTIONS.some((s) => s.id === raw) ? raw : 'overview'
 
@@ -113,11 +121,12 @@ export function CommandCenterView() {
           {section === 'intel' && <IntelOversight onGo={(id) => go(id as SectionId)} />}
           {section === 'chain' && <ChainOfCommand />}
           {section === 'personnel' && <PersonnelAdmin />}
-          {section === 'approvals' && <ApprovalQueue />}
+          {section === 'membership' && <MembershipReview />}
           {section === 'promotions' && <PromotionsTransfers />}
           {section === 'duty' && <DutyStatus />}
           {section === 'permissions' && <PermissionsOverview />}
           {section === 'field' && <FieldOfficers />}
+          {section === 'ops' && <CommandOps />}
           {section === 'comms' && <CommandComms />}
         </section>
       </div>

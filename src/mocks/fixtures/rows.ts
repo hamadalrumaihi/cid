@@ -828,3 +828,238 @@ export function actionEscalationRow(
     ...overrides,
   }
 }
+
+/* ── Confidential Informants (the CI compartment, 20261103120000) ────────── */
+
+export function confidentialInformantRow(
+  overrides: Partial<Tables<'confidential_informants'>> & Pick<Tables<'confidential_informants'>, 'person_id'>,
+): Tables<'confidential_informants'> {
+  return {
+    alias: null,
+    bureau: 'major_crimes',
+    ci_number: 'CI-0001',
+    created_at: mockTimestamp(),
+    created_by: null,
+    delete_batch: null,
+    delete_reason: null,
+    deleted_at: null,
+    deleted_by: null,
+    id: mockId(),
+    last_contact_at: null,
+    motive_explanation: null,
+    motive_primary: null,
+    motive_secondary: [],
+    next_contact_at: null,
+    recruited_at: null,
+    recruited_by: null,
+    recruitment_notes: null,
+    reliability: 'unknown',
+    risk: 'medium',
+    status: 'candidate',
+    status_changed_at: mockTimestamp(),
+    status_reason: null,
+    supervising_lead_id: null,
+    updated_at: mockTimestamp(),
+    ...overrides,
+  }
+}
+
+export function ciHandlerRow(
+  overrides: Partial<Tables<'ci_handlers'>> & Pick<Tables<'ci_handlers'>, 'ci_id' | 'user_id'>,
+): Tables<'ci_handlers'> {
+  return {
+    assigned_at: mockTimestamp(),
+    assigned_by: null,
+    counts_toward_capacity: true,
+    end_reason: null,
+    ended_at: null,
+    ended_by: null,
+    id: mockId(),
+    reason: null,
+    role: 'primary',
+    ...overrides,
+  }
+}
+
+export function ciHandlerCapacityRow(
+  overrides: Partial<Tables<'ci_handler_capacity'>> & Pick<Tables<'ci_handler_capacity'>, 'user_id' | 'approved_by'>,
+): Tables<'ci_handler_capacity'> {
+  return {
+    approved_at: mockTimestamp(),
+    expires_at: null,
+    limit_override: 8,
+    reason: 'Mock capacity override',
+    request_id: null,
+    ...overrides,
+  }
+}
+
+export function ciCapacityRequestRow(
+  overrides: Partial<Tables<'ci_capacity_requests'>> & Pick<Tables<'ci_capacity_requests'>, 'requester_id'>,
+): Tables<'ci_capacity_requests'> {
+  return {
+    bureau: 'major_crimes',
+    case_id: null,
+    comments: null,
+    created_at: mockTimestamp(),
+    created_ci_id: null,
+    current_count: 6,
+    decided_at: null,
+    decided_by: null,
+    decision_note: null,
+    estimated_risk: null,
+    expected_usefulness: null,
+    id: mockId(),
+    kind: 'capacity',
+    operational_need: null,
+    proposed_motive: null,
+    proposed_person_id: null,
+    reason: 'Mock capacity request',
+    requested_capacity: 8,
+    status: 'pending',
+    updated_at: mockTimestamp(),
+    ...overrides,
+  }
+}
+
+export function ciIntelligenceRow(
+  overrides: Partial<Tables<'ci_intelligence'>> & Pick<Tables<'ci_intelligence'>, 'ci_id' | 'handler_id'>,
+): Tables<'ci_intelligence'> {
+  return {
+    body: null,
+    case_id: null,
+    corroboration: 'unverified',
+    corroboration_note: null,
+    created_at: mockTimestamp(),
+    created_by: null,
+    delete_batch: null,
+    delete_reason: null,
+    deleted_at: null,
+    deleted_by: null,
+    follow_up_done_at: null,
+    follow_up_required: false,
+    handler_notes: null,
+    id: mockId(),
+    received_at: mockTimestamp(),
+    reliability: 'unknown',
+    sensitivity: 'sensitive',
+    summary: 'Mock source intelligence',
+    updated_at: mockTimestamp(),
+    ...overrides,
+  }
+}
+
+export function ciIntelligenceLinkRow(
+  overrides: Partial<Tables<'ci_intelligence_links'>> & Pick<Tables<'ci_intelligence_links'>, 'intel_id' | 'target_id'>,
+): Tables<'ci_intelligence_links'> {
+  return { created_at: mockTimestamp(), id: mockId(), kind: 'person', note: null, ...overrides }
+}
+
+export function ciContactRow(
+  overrides: Partial<Tables<'ci_contacts'>> & Pick<Tables<'ci_contacts'>, 'ci_id' | 'handler_id'>,
+): Tables<'ci_contacts'> {
+  return {
+    case_id: null,
+    created_at: mockTimestamp(),
+    created_by: null,
+    delete_batch: null,
+    delete_reason: null,
+    deleted_at: null,
+    deleted_by: null,
+    follow_up_required: false,
+    id: mockId(),
+    location: null,
+    method: 'in_person',
+    next_contact_at: null,
+    occurred_at: mockTimestamp(),
+    restricted_notes: null,
+    summary: 'Mock contact',
+    updated_at: mockTimestamp(),
+    ...overrides,
+  }
+}
+
+export function ciAssessmentRow(
+  overrides: Partial<Tables<'ci_assessments'>> & Pick<Tables<'ci_assessments'>, 'ci_id'>,
+): Tables<'ci_assessments'> {
+  return {
+    access: null,
+    assessed_at: mockTimestamp(),
+    assessed_by: null,
+    compromise_likelihood: null,
+    credibility: null,
+    id: mockId(),
+    note: null,
+    reliability: null,
+    risk: null,
+    usefulness: null,
+    ...overrides,
+  }
+}
+
+export function ciPaymentRow(
+  overrides: Partial<Tables<'ci_payments'>> & Pick<Tables<'ci_payments'>, 'ci_id' | 'handler_id'>,
+): Tables<'ci_payments'> {
+  return {
+    amount: 0,
+    approved_at: null,
+    approved_by: null,
+    case_id: null,
+    created_at: mockTimestamp(),
+    created_by: null,
+    delete_batch: null,
+    delete_reason: null,
+    deleted_at: null,
+    deleted_by: null,
+    id: mockId(),
+    intel_id: null,
+    notes: null,
+    paid_at: mockTimestamp().slice(0, 10),
+    reason: 'Mock payment',
+    ...overrides,
+  }
+}
+
+export function ciCaseLinkRow(
+  overrides: Partial<Tables<'ci_case_links'>> & Pick<Tables<'ci_case_links'>, 'ci_id' | 'case_id'>,
+): Tables<'ci_case_links'> {
+  return {
+    id: mockId(), linked_at: mockTimestamp(), linked_by: null, note: null, unlink_reason: null, unlinked_at: null, unlinked_by: null,
+    ...overrides,
+  }
+}
+
+export function caseIntelReleaseRow(
+  overrides: Partial<Tables<'case_intel_releases'>> & Pick<Tables<'case_intel_releases'>, 'case_id'>,
+): Tables<'case_intel_releases'> {
+  return {
+    body: 'Sanitized intelligence body.',
+    handling: 'law_enforcement_sensitive',
+    id: mockId(),
+    released_at: mockTimestamp(),
+    released_by: null,
+    revoke_reason: null,
+    revoked_at: null,
+    revoked_by: null,
+    title: 'Sanitized intelligence',
+    ...overrides,
+  }
+}
+
+export function ciReleaseRow(
+  overrides: Partial<Tables<'ci_releases'>> & Pick<Tables<'ci_releases'>, 'ci_id' | 'intel_id' | 'case_release_id'>,
+): Tables<'ci_releases'> {
+  return { id: mockId(), released_at: mockTimestamp(), released_by: null, ...overrides }
+}
+
+export function ciAuditEventRow(
+  overrides: Partial<Tables<'ci_audit_events'>> & Pick<Tables<'ci_audit_events'>, 'id' | 'action'>,
+): Tables<'ci_audit_events'> {
+  return { actor_id: null, ci_id: null, created_at: mockTimestamp(), detail: null, entity: 'confidential_informants', entity_id: null, ...overrides }
+}
+
+export function ciEventRow(
+  overrides: Partial<Tables<'ci_events'>> & Pick<Tables<'ci_events'>, 'id' | 'kind'>,
+): Tables<'ci_events'> {
+  return { at: mockTimestamp(), ci_id: null, user_id: null, ...overrides }
+}

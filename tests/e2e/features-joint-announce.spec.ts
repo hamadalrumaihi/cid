@@ -254,7 +254,7 @@ test.describe('v1.11 features — announcements, joint cases, approvals (live fi
     const dir = await grant(LIVE.director)
     try {
       await inject(page, dir)
-      await page.goto('/command-center?s=approvals')
+      await page.goto('/command-center?s=membership')
       await expect(page.getByRole('heading', { name: /Pending membership requests/ })).toBeVisible({ timeout: 30_000 })
       // The live queue may hold real pending requests — assert the section
       // contract (empty state OR request rows), never specific rows.
@@ -292,7 +292,7 @@ test.describe('v1.11 features — announcements, joint cases, approvals (live fi
       // membership request form. Command fan-out is suppressed server-side
       // for rls-test applicants, so submitting pings no real officers.
       await inject(page, app)
-      await page.goto('/command')
+      await page.goto('/inbox')
       await expect(page.getByText(`Signed in as ${LIVE.applicant.email}`, { exact: false })).toBeVisible({ timeout: 30_000 })
       await expect(page.getByRole('button', { name: /Command Center/ })).toHaveCount(0)
       // Adaptive Gate (DOJ build): the application probe finishes on either the
@@ -316,7 +316,7 @@ test.describe('v1.11 features — announcements, joint cases, approvals (live fi
       // Director (second context): the request card is in the approval queue.
       dirPage = await (await browser.newContext()).newPage()
       await inject(dirPage, dir)
-      await dirPage.goto('/command-center?s=approvals')
+      await dirPage.goto('/command-center?s=membership')
       await expect(dirPage.getByRole('heading', { name: /Pending membership requests/ })).toBeVisible({ timeout: 30_000 })
       const name = dirPage.getByText(LIVE.applicant.name, { exact: true })
       await expect(name.first()).toBeVisible({ timeout: 20_000 })

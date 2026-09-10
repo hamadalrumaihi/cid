@@ -10,7 +10,7 @@ const run = enabled && !!pwOf(LIVE.lsb)
 
 /** Phones (375/390/430), tablet (768), and the desktop tiers (1024/1280/1920). */
 const WIDTHS = [375, 390, 430, 768, 1024, 1280, 1920]
-const ROUTES = ['/inbox', '/cases', '/action', '/legal', '/tools', '/announce']
+const ROUTES = ['/inbox', '/dashboard', '/cases', '/legal', '/tools', '/announce']
 
 let lsb: Live
 

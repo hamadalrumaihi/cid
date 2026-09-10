@@ -50,15 +50,26 @@ describe('intel notifications', () => {
 
 /* ── Phase 7 (P7-07): ONE title map, the escalation ladder's deep links. ─── */
 import titles from './notificationTitles.json'
-import { NOTIF_CATEGORY } from './notifText'
+import { NOTIF_CATEGORY, NOTIF_REGISTRY, type NotifEntry } from './notifText'
 
 describe('notification titles (P7-07)', () => {
   it('NOTIF_LABEL is exactly the JSON title map (the edge function ships a copy)', () => {
-    const json = titles as Record<string, { title: string; category: string }>
+    const json = titles as Record<string, NotifEntry>
+    expect(NOTIF_REGISTRY).toBe(json)
     expect(Object.keys(NOTIF_LABEL).sort()).toEqual(Object.keys(json).sort())
     for (const [k, v] of Object.entries(json)) {
       expect(NOTIF_LABEL[k]).toBe(v.title)
       expect(NOTIF_CATEGORY[k]).toBe(v.category)
+    }
+  })
+
+  it('every entry has the typed shape and nothing beyond it', () => {
+    const KEYS = new Set(['title', 'category', 'destination', 'mutable', 'priority'])
+    for (const [k, v] of Object.entries(NOTIF_REGISTRY)) {
+      for (const key of Object.keys(v)) expect(KEYS.has(key), `${k}.${key}`).toBe(true)
+      if (v.destination !== undefined) expect(v.destination).toBe('portal')
+      if (v.mutable !== undefined) expect(v.mutable).toBe(true)
+      if (v.priority !== undefined) expect(['high', 'normal', 'low']).toContain(v.priority)
     }
   })
 
@@ -89,8 +100,24 @@ describe('notification titles (P7-07)', () => {
       .toBe('/cases?case=c-1&tab=tasks&task=t-9')
     expect(notifHref(row('action_escalated', { kind: 'access_request', source_id: 'ar-1', case_id: 'c-1' })))
       .toBe('/cases?case=c-1')
-    // No case in the payload → the queue's escalated filter, never a dead row.
-    expect(notifHref(row('action_escalated', { kind: 'signoff', source_id: 'x' }))).toBe('/action?f=escalated')
+    // No case in the payload → the Action Center's escalated filter (`/inbox`
+    // since the portal cleanup), never a dead row.
+    expect(notifHref(row('action_escalated', { kind: 'signoff', source_id: 'x' }))).toBe('/inbox?f=escalated')
+  })
+
+  it('routes the Informants kinds into the compartment and never onto a case', () => {
+    for (const k of ['ci_assigned', 'ci_handler_changed', 'ci_handler_removed', 'ci_contact_overdue', 'ci_intel_added', 'ci_compromised']) {
+      expect(notifHref(row(k, { ci_id: 'ci-1', intel_id: 'i-1' })), k).toBe('/informants?ci=ci-1')
+      // A stray case_id must not win over the compartment.
+      expect(notifHref(row(k, { ci_id: 'ci-1', case_id: 'c-1' })), k).toBe('/informants?ci=ci-1')
+      // No id → no destination (a mark-read-only row), never a generic surface.
+      expect(notifHref(row(k, {})), k).toBeNull()
+    }
+    expect(notifHref(row('ci_capacity_request', { request_id: 'r-1' }))).toBe('/informants?requests=1')
+    expect(notifHref(row('ci_request_decided', { request_id: 'r-1' }))).toBe('/informants?requests=1')
+    expect(notifHref(row('ci_assigned', { ci_id: 'a b' }))).toBe('/informants?ci=a%20b')
+    // Released intelligence names no CI and lands on the case's Intel tab.
+    expect(notifHref(row('case_intel_released', { case_id: 'c-1', release_id: 'rel-1' }))).toBe('/cases?case=c-1&tab=intel')
   })
 
   it('blocker_assigned lands on the Brief tab (CaseBlockersPanel lives in OverviewTab)', () => {

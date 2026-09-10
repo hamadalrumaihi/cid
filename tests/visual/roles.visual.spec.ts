@@ -18,7 +18,7 @@ const canCommand = (a: TestAccount) => a.is_owner || COMMAND_ROLES.includes(a.ro
 /** Screens each account should be able to see, by capability. */
 function screensFor(a: TestAccount): { path: string; name: string }[] {
   const s = [
-    { path: '/command', name: 'dashboard' },
+    { path: '/dashboard', name: 'dashboard' },
     { path: '/personnel', name: 'personnel' },
   ]
   if (canCommand(a)) s.push({ path: '/command-center', name: 'command-center' })

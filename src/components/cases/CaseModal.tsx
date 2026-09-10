@@ -7,7 +7,8 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { DuplicateMatchNotice, duplicateMatches, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import { useToolNav } from '@/components/tools/useToolNav'
-import { insert, list, remove, rpc, update } from '@/lib/db'
+import { insert, list, rpc, update } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { findDuplicates } from '@/lib/entity'
 import { createCase } from '@/lib/services/cases'
 import type { Tables, TablesUpdate } from '@/lib/database.types'
@@ -17,7 +18,6 @@ import { useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { CASE_STATUSES } from '@/lib/signoff'
 import { toast } from '@/lib/toast'
-import { uiConfirm } from '@/components/ui/dialog'
 import { parseStringArray } from '@/lib/jsonShapes'
 import { CASE_PREFIX, PERMANENT_BUREAUS, bureauLabel } from '@/lib/roles'
 
@@ -352,15 +352,16 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
     if (res.error) toast(res.error.message, 'danger')
     else { toast('Template saved.', 'success'); onChanged() }
   }
-  // case_templates is not a soft-delete table: a real delete, no Trash, no
-  // Undo — the confirm says so. Existing cases keep everything they copied.
-  const deleteTemplate = async (row: CaseTemplateRow) => {
-    if (!(await uiConfirm(`Delete the “${row.name}” case template? Existing cases are unaffected — only the template is removed. This cannot be undone.`, { title: 'Delete template', confirmText: 'Delete template' }))) return
-    const res = await remove('case_templates', row.id)
-    if (res.error) { toast(res.error.message, 'danger'); return }
-    toast('Template deleted.', 'success')
-    onChanged()
-  }
+  // Soft delete like every other member-created record: the template goes to
+  // the Trash (Undo on the toast, restore from /trash). Existing cases keep
+  // everything they copied from it.
+  const deleteTemplate = (row: CaseTemplateRow) => deleteRecord('case_templates', row, {
+    label: `template “${row.name}”`,
+    confirmTitle: 'Delete template',
+    confirmMessage: `Move the “${row.name}” case template to the Trash? Existing cases are unaffected — only the template is removed, and it can be restored from the Trash.`,
+    confirmText: 'Delete template',
+    after: onChanged,
+  })
   const add = async () => {
     if (!newRow.name.trim()) { toast('Template name is required.', 'warn'); return }
     const res = await insert('case_templates', {

@@ -1,41 +1,24 @@
 'use client'
 
-/** Notification bell + panel. Unread badge counted server-side (countRows —
- *  accurate, never capped by the 50-row list), rows grouped into collapsible
- *  clusters by (case_id ∥ request_id ∥ type) with per-type titles from
- *  lib/notifText (never raw payload JSON). Click a row to mark it read (and
- *  jump to its deep link when one exists), mark a whole cluster read, or
- *  mark ALL read in one conditional update. A small settings panel mutes the
- *  clearly-optional streams (lib/notifications OPTIONAL_NOTIF_CATEGORIES) —
- *  muted rows are hidden and uncounted, never deleted; mandatory types are
- *  always visible. RLS scopes rows to the signed-in user; realtime bumps the
- *  `notifications` table version so new arrivals appear without a reload.
- *  Phase 7 (P7-07): the visible page is hydrated through notification_resolve
- *  — a subject the viewer can no longer read renders "An item you no longer
- *  have access to" with its deep link suppressed (no dead ends, no leaks). */
+/** Notification bell — the lightweight peek. Unread badge counted server-side
+ *  (countRows — accurate, never capped by the list), the panel shows the last
+ *  8 notifications with per-type titles from lib/notifText (never raw payload
+ *  JSON): click a row to mark it read (and jump to its deep link when one
+ *  exists), mark one row read in place, mark ALL read in one conditional
+ *  update, or **View All** — the Activity lane of the Action Center
+ *  (`/inbox?lane=activity`), where the full history lives. Muted optional
+ *  streams (the Profile's notification settings, lib/notifications) stay
+ *  hidden and uncounted here, never deleted. RLS scopes rows to the signed-in
+ *  user; realtime bumps the `notifications` table version so new arrivals
+ *  appear without a reload. Phase 7 (P7-07): the visible rows are hydrated
+ *  through notification_resolve — a subject the viewer can no longer read
+ *  renders "An item you no longer have access to" with its deep link
+ *  suppressed (no dead ends, no leaks). */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { list } from '@/lib/db'
-import {
-  OPTIONAL_NOTIF_CATEGORIES, loadMutedTypes, markAllRead, markRead, resolveNotifications,
-  saveMutedTypes, unreadCount, type NotifCategory, type NotifSubject,
-} from '@/lib/notifications'
+import { loadMutedTypes, markAllRead, markRead, resolveNotifications, unreadCount, type NotifSubject } from '@/lib/notifications'
 import { useAuth } from '@/lib/auth'
 import { notifDetail, notifHref, notifSub, notifTitle, type NotificationRow } from '@/lib/notifText'
-import { parseNotifPayload } from '@/lib/schemas'
-
-/** Human label for the row's call-to-action, by destination. */
-function ctaLabel(href: string): string {
-  if (href.startsWith('/cases')) return 'View case'
-  if (href.startsWith('/legal')) return 'View legal request'
-  if (href.startsWith('/command-center')) return 'Open Command Center'
-  if (href.startsWith('/command')) return 'Open Division Overview'
-  if (href.startsWith('/announce')) return 'View announcement'
-  if (href.startsWith('/owner')) return 'Open Owner Console'
-  if (href.startsWith('/profile')) return 'View your profile'
-  if (href.startsWith('/guide')) return 'Open the field guide'
-  if (href.startsWith('/tools?tool=field-review')) return 'Open the record'
-  return 'Open'
-}
 import { useTableVersion } from '@/lib/realtime'
 import { timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
@@ -44,18 +27,24 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { useToolNav } from '@/components/tools/useToolNav'
 import { BellIcon } from './icons'
 
-/** Cluster key: notifications about the same case or request collapse into
- *  one group; the rest group by type (e.g. a run of announcements). */
-function groupKeyOf(n: NotificationRow): string {
-  const p = parseNotifPayload(n.payload)
-  return (p.case_id && `case:${p.case_id}`) || (p.request_id && `req:${p.request_id}`) || `type:${n.type}`
-}
+/** Rows the panel shows — the bell is a peek, the Action Center is the list. */
+const PEEK_LIMIT = 8
+export const VIEW_ALL_HREF = '/inbox?lane=activity'
 
-interface NotifGroup {
-  key: string
-  /** Newest first (source order). */
-  rows: NotificationRow[]
-  unreadIds: string[]
+/** Human label for the row's call-to-action, by destination. */
+function ctaLabel(href: string): string {
+  if (href.startsWith('/cases')) return 'View case'
+  if (href.startsWith('/legal')) return 'View legal request'
+  if (href.startsWith('/command-center')) return 'Open Command Center'
+  if (href.startsWith('/inbox')) return 'Open Action Center'
+  if (href.startsWith('/dashboard')) return 'Open My Dashboard'
+  if (href.startsWith('/announce')) return 'View announcement'
+  if (href.startsWith('/owner')) return 'Open Owner Console'
+  if (href.startsWith('/profile')) return 'View your profile'
+  if (href.startsWith('/guide')) return 'Open the field guide'
+  if (href.startsWith('/informants')) return 'Open source record'
+  if (href.startsWith('/tools?tool=field-review')) return 'Open the record'
+  return 'Open'
 }
 
 export function NotificationsBell() {
@@ -66,28 +55,27 @@ export function NotificationsBell() {
   const [notifs, setNotifs] = useState<NotificationRow[]>([])
   const [unreadTotal, setUnreadTotal] = useState(0)
   const [muted, setMuted] = useState<string[]>([])
-  /** Subject hydration for the visible page (notification_resolve). */
+  /** Subject hydration for the visible rows (notification_resolve). */
   const [subjects, setSubjects] = useState<Map<string, NotifSubject>>(new Map())
   const [open, setOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const version = useTableVersion('notifications')
 
   const refresh = useCallback(async () => {
     if (state !== 'in') return
     try {
+      // Over-fetch a little so muted rows (filtered below) rarely empty the peek.
       const [rows, mutedTypes] = await Promise.all([
-        list('notifications', { order: 'created_at', ascending: false, limit: 50 }),
+        list('notifications', { order: 'created_at', ascending: false, limit: PEEK_LIMIT * 3 }),
         loadMutedTypes(),
       ])
-      setNotifs(rows)
       setMuted(mutedTypes)
-      // Accurate server-side count (excluding muted types) — the 50-row list
-      // is a display window, never the badge's truth.
+      setNotifs(rows)
+      // Accurate server-side count (excluding muted types) — the peek is a
+      // display window, never the badge's truth.
       setUnreadTotal(await unreadCount(mutedTypes))
-      // Hydrate the page's subjects (fail-open: an error resolves nothing and
+      // Hydrate the visible subjects (fail-open: an error resolves nothing and
       // the rows keep their links).
-      setSubjects(await resolveNotifications(rows.map((r) => r.id)))
+      setSubjects(await resolveNotifications(rows.slice(0, PEEK_LIMIT).map((r) => r.id)))
     } catch { /* keep the last known list — the bell is non-critical */ }
   }, [state])
 
@@ -97,32 +85,18 @@ export function NotificationsBell() {
     return () => window.clearTimeout(t)
   }, [refresh, version])
 
-  // Muted streams are hidden (not deleted) — unmuting brings them back.
+  // Muted streams are hidden (not deleted) — unmuting in Profile brings them back.
   const visible = useMemo(() => {
     const m = new Set(muted)
-    return notifs.filter((n) => !m.has(n.type))
+    return notifs.filter((n) => !m.has(n.type)).slice(0, PEEK_LIMIT)
   }, [notifs, muted])
-
-  const groups = useMemo<NotifGroup[]>(() => {
-    const map = new Map<string, NotificationRow[]>()
-    for (const n of visible) {
-      const key = groupKeyOf(n)
-      const arr = map.get(key)
-      if (arr) arr.push(n)
-      else map.set(key, [n])
-    }
-    // Insertion order = first (newest) row per key — already newest-first.
-    return [...map.entries()].map(([key, rows]) => ({
-      key, rows, unreadIds: rows.filter((r) => !r.read).map((r) => r.id),
-    }))
-  }, [visible])
 
   const markOne = async (n: NotificationRow) => {
     if (n.read) return
     setNotifs((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)))
     setUnreadTotal((c) => Math.max(0, c - 1))
     const err = await markRead([n.id])
-    if (err) void refresh() // roll back to server truth
+    if (err) { toast(err.message, 'danger'); void refresh() } // roll back to server truth
   }
 
   /** Deep link, or null when the subject is no longer readable (P7-07). */
@@ -132,21 +106,13 @@ export function NotificationsBell() {
     return notifHref(n, { command: isCommand })
   }
 
-  const onRow = async (n: NotificationRow) => {
+  const onRow = (n: NotificationRow) => {
     void markOne(n)
     const href = hrefOf(n)
     if (href) {
       setOpen(false)
       openHref(href)
     }
-  }
-
-  const markGroup = async (g: NotifGroup) => {
-    const ids = new Set(g.unreadIds)
-    setNotifs((prev) => prev.map((x) => (ids.has(x.id) ? { ...x, read: true } : x)))
-    setUnreadTotal((c) => Math.max(0, c - ids.size))
-    const err = await markRead([...ids])
-    if (err) { toast(err.message, 'danger'); void refresh() }
   }
 
   const markAll = async () => {
@@ -159,41 +125,12 @@ export function NotificationsBell() {
     else toast('Marked read', 'info')
   }
 
-  const toggleCategory = async (c: NotifCategory) => {
-    const isMuted = c.types.every((t) => muted.includes(t))
-    const next = isMuted
-      ? muted.filter((t) => !c.types.includes(t))
-      : [...new Set([...muted, ...c.types])]
-    setMuted(next)
-    const err = await saveMutedTypes(next)
-    if (err) { toast(err.message, 'danger'); setMuted(muted); return }
-    try { setUnreadTotal(await unreadCount(next)) } catch { /* badge catches up on the next bump */ }
+  const viewAll = () => {
+    setOpen(false)
+    openHref(VIEW_ALL_HREF)
   }
 
   if (state !== 'in') return null
-
-  const renderRow = (n: NotificationRow, inCluster = false) => {
-    const subj = subjects.get(n.id)
-    const gone = !!subj && !subj.visible
-    const detail = gone ? null : notifDetail(n)
-    const sub = gone ? 'An item you no longer have access to' : notifSub(n)
-    const href = hrefOf(n)
-    return (
-      <button
-        key={n.id}
-        onClick={() => void onRow(n)}
-        className={`block w-full p-3 text-left transition hover:border-blue-500/40 ${inCluster ? 'border-t border-white/5 first:border-t-0' : 'rounded-lg border'} ${n.read ? 'border-white/5 bg-ink-900' : `${inCluster ? '' : 'border-blue-500/20'} bg-blue-500/5`}`}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-semibold text-white">{notifTitle(n)}</span>
-          <span className="flex-shrink-0 text-[11px] text-slate-400">{timeAgo(n.created_at)}</span>
-        </div>
-        {detail && <p className="mt-0.5 font-mono text-[11px] text-blue-300">{detail}</p>}
-        {sub && <p className="mt-1 text-xs text-slate-400">{sub}</p>}
-        {href && <p className="mt-1 text-[11px] font-semibold text-blue-300">{ctaLabel(href)} →</p>}
-      </button>
-    )
-  }
 
   return (
     <>
@@ -212,91 +149,58 @@ export function NotificationsBell() {
       <Modal open={open} onClose={() => setOpen(false)}>
         <div className="p-5">
           <ModalHeader title="Notifications" onClose={() => setOpen(false)} />
-          {unreadTotal > 0 && (
-            <Button size="sm" className="mb-3" onClick={() => void markAll()}>
-              Mark all read
-            </Button>
-          )}
-          <div className="max-h-[55vh] space-y-2 overflow-y-auto">
-            {groups.length ? groups.map((g) => {
-              if (g.rows.length === 1) return renderRow(g.rows[0])
-              const newest = g.rows[0]
-              const isOpen = !!expanded[g.key]
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="primary" onClick={viewAll}>View All</Button>
+            {unreadTotal > 0 && (
+              <Button size="sm" onClick={() => void markAll()}>Mark all read</Button>
+            )}
+            <span className="ml-auto text-xs text-slate-400">
+              {unreadTotal > 0 ? `${unreadTotal} unread` : 'All read'} · latest {visible.length}
+            </span>
+          </div>
+          <ul className="max-h-[55vh] space-y-2 overflow-y-auto">
+            {visible.length ? visible.map((n) => {
+              const subj = subjects.get(n.id)
+              const gone = !!subj && !subj.visible
+              const detail = gone ? null : notifDetail(n)
+              const sub = gone ? 'An item you no longer have access to' : notifSub(n)
+              const href = hrefOf(n)
               return (
-                <div key={g.key} className={`overflow-hidden rounded-lg border ${g.unreadIds.length ? 'border-blue-500/20' : 'border-white/5'} bg-ink-900`}>
+                <li
+                  key={n.id}
+                  className={`flex items-stretch gap-1 rounded-lg border ${n.read ? 'border-white/5 bg-ink-900' : 'border-blue-500/20 bg-blue-500/5'}`}
+                >
                   <button
-                    onClick={() => setExpanded((e) => ({ ...e, [g.key]: !isOpen }))}
-                    aria-expanded={isOpen}
-                    className="block w-full p-3 text-left transition hover:bg-white/5"
+                    onClick={() => onRow(n)}
+                    className="block min-w-0 flex-1 rounded-lg p-3 text-left transition hover:bg-white/5"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="min-w-0 truncate text-sm font-semibold text-white">{notifTitle(newest)}</span>
-                      <span className="flex flex-shrink-0 items-center gap-2">
-                        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${g.unreadIds.length ? 'bg-blue-500/15 text-blue-200' : 'bg-white/5 text-slate-300'}`}>
-                          {g.rows.length}
-                        </span>
-                        <span className="text-[11px] text-slate-400">{timeAgo(newest.created_at)}</span>
-                        <span aria-hidden className="text-[11px] text-slate-400">{isOpen ? '▾' : '▸'}</span>
-                      </span>
+                      <span className="text-sm font-semibold text-white">{notifTitle(n)}</span>
+                      <span className="flex-shrink-0 text-[11px] text-slate-400">{timeAgo(n.created_at)}</span>
                     </div>
-                    <p className="mt-0.5 text-xs text-slate-400">
-                      {notifDetail(newest) || notifSub(newest) || `${g.rows.length} related notifications`}
-                      {g.unreadIds.length > 0 && ` · ${g.unreadIds.length} unread`}
-                    </p>
+                    {detail && <p className="mt-0.5 font-mono text-[11px] text-blue-300">{detail}</p>}
+                    {sub && <p className="mt-1 text-xs text-slate-400">{sub}</p>}
+                    {href && <p className="mt-1 text-[11px] font-semibold text-blue-300">{ctaLabel(href)} →</p>}
                   </button>
-                  {isOpen && (
-                    <div className="border-t border-white/10">
-                      {g.unreadIds.length > 0 && (
-                        <div className="flex justify-end px-3 py-1.5">
-                          <button
-                            onClick={() => void markGroup(g)}
-                            className="rounded px-2 py-1 text-[11px] font-semibold text-slate-300 transition hover:bg-white/5 hover:text-white"
-                          >
-                            Mark group read
-                          </button>
-                        </div>
-                      )}
-                      {g.rows.map((n) => renderRow(n, true))}
-                    </div>
+                  {!n.read && (
+                    <button
+                      onClick={() => void markOne(n)}
+                      aria-label={`Mark "${notifTitle(n)}" read`}
+                      title="Mark read"
+                      className="grid w-10 flex-shrink-0 place-items-center rounded-r-lg text-slate-400 transition hover:bg-white/5 hover:text-white"
+                    >
+                      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 12l5 5L20 7" />
+                      </svg>
+                    </button>
                   )}
-                </div>
+                </li>
               )
-            }) : <p className="text-sm text-slate-400">No notifications.</p>}
-          </div>
-          <div className="mt-3 border-t border-white/10 pt-3">
-            <button
-              onClick={() => setSettingsOpen((v) => !v)}
-              aria-expanded={settingsOpen}
-              className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5 hover:text-white"
-            >
-              <span aria-hidden>{settingsOpen ? '▾' : '▸'}</span> Notification settings
-            </button>
-            {settingsOpen && (
-              <div className="mt-1 space-y-0.5">
-                <p className="px-2 text-xs text-slate-400">
-                  Optional streams only — assignments, mentions, sign-offs, legal and security notices are always delivered.
-                </p>
-                {OPTIONAL_NOTIF_CATEGORIES.map((c) => {
-                  const isMuted = c.types.every((t) => muted.includes(t))
-                  return (
-                    <label key={c.key} className="flex min-h-[40px] cursor-pointer items-center justify-between gap-3 rounded-lg px-2 py-1 transition hover:bg-white/5">
-                      <span className="min-w-0">
-                        <span className="block text-sm text-slate-200">{c.label}</span>
-                        <span className="block text-xs text-slate-400">{c.hint}</span>
-                      </span>
-                      <input
-                        type="checkbox"
-                        checked={!isMuted}
-                        onChange={() => void toggleCategory(c)}
-                        aria-label={`Receive ${c.label} notifications`}
-                        className="h-4 w-4 flex-shrink-0 accent-amber-400"
-                      />
-                    </label>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+            }) : <li className="text-sm text-slate-400">No notifications.</li>}
+          </ul>
+          <p className="mt-3 border-t border-white/10 pt-3 text-xs text-slate-400">
+            The full history — and every item that needs your action — is in the Action Center. Optional streams are muted from your Profile.
+          </p>
         </div>
       </Modal>
     </>

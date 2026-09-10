@@ -19,9 +19,19 @@ current application, and nothing should link to them as live guidance.
 | `DOJ-REDESIGN-REPORT.md` | Completion/verification report for that redesign (PR #178) — durable facts folded into `docs/DOJ-INTEGRATION.md`. |
 | `leafos-ditch-witch-sales-screenshots.md` | One-off media-import evidence manifest (LeafOS screenshot series). |
 | `superpowers/` | Working plans/specs from the June 2026 case-files build. |
+| `HANDBOOK.md` | The single-file developer handbook's redirect stub — the handbook is `docs/handbook/`. |
+| `RUNBOOK.md` | The operations runbook's redirect stub — split into `docs/DEPLOYMENT.md` and `docs/OPERATIONS.md`. |
+| `HARDENING.md` | The 2026-07 security-hardening checklist and its completion status; the live rules are `docs/SECURITY-REVIEW.md`, `docs/RLS.md` and handbook ch. 18. |
+| `CTO-REVIEW.md` | Point-in-time engineering review (July 2026) — the findings shipped or moved to `docs/DEFERRED.md`. |
+| `CID-FUTURE-STATE-SPEC.md` | The pre-plan future-state specification — superseded by the Portal Improvements plan. |
+| `RECORDS-REQUESTS-SPEC.md` | Decision log + gap analysis for the Records & Requests domain (delivered PR #193 → #209). |
+| `RECORDS-REQUESTS-DELTAS-REPORT.md` | Delivery report for the Records & Requests deltas (Phases 1–10). |
+| `MDT-BRIDGE-CONTRACT.md` | The dormant patrol-lane (MDT) bridge contract — no consumer is deployed; `docs/integration/CID-INTEGRATION-API.md` is the integration lane that stays documented. |
+| `PLAN-PORTAL-IMPROVEMENTS.md` | The ten-phase Portal Improvements plan — delivered as release 1.18.0; status lives in `docs/HANDOFF-PORTAL-IMPROVEMENTS.md`. |
 
 Current documentation lives one level up: `docs/handbook/` (developer
-handbook), `docs/USER-GUIDE.md` (member guide), `docs/HARDENING.md`
-(security checklist status), `docs/DEFERRED.md` (parked work with
+handbook), `docs/USER-GUIDE.md` (member guide), `docs/SECURITY-REVIEW.md`
+(the reviewer's security checklist), `docs/OPERATIONS.md` / `docs/DEPLOYMENT.md`
+(running and shipping the live project), `docs/DEFERRED.md` (parked work with
 triggers), and the Owner Portal's in-app improvement roadmap
 (`src/components/owner/ownerData.ts`).

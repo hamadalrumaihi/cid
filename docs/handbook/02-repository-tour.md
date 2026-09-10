@@ -52,9 +52,9 @@ One folder per screen (`cases/`, `gangs/`, `heatmap/`, …). Each is
 self-contained: fetches its own data, owns its modals. Only the `[tab]`
 router imports them — except the 14 intelligence tool views, which are
 imported (code-split) by `tools/toolRegistry.tsx` instead: `tools/` is the
-Investigative Tools workspace (`/tools`) that hosts them as keep-alive
-tabs, and the legacy tool routes redirect into it (`ToolTabRedirect`).
-`cases/` and `command/` are the
+Investigative Tools workspace (`/workspace?tool=…`) that hosts them as
+keep-alive tabs, and the legacy `/tools` and per-tool routes redirect into it
+(`LEGACY_REDIRECT_TABS`). `cases/` and `command-center/` are the
 big ones. Details: [Ch. 4](04-features.md).
 
 ### `src/lib/` — the shared foundation ⭐
@@ -77,7 +77,7 @@ functions — discord-announce, discord-notify, sops-sync), and backend READMEs.
 ### `docs/` — documentation
 This handbook (`handbook/`), `USER-GUIDE.md` (canonical text of the in-app
 guide — the in-app copy `src/components/guide/guideContent.ts` is
-**generated from it**), `HARDENING.md` (security checklist status),
+**generated from it**), `archive/HARDENING.md` (the historical security checklist),
 `DEFERRED.md` (parked work with triggers). Historical build-era notes and
 dated reports (HANDOFF, ROADMAP, REACT-PARITY, BACKLOG, RELEASE-READINESS,
 the audit reports…) are parked in `archive/` — see `archive/README.md`.

@@ -23,7 +23,7 @@ export default function ErrorScreen({ error, reset }: { error: Error & { digest?
             Try again
           </Button>
           <Button
-            onClick={() => window.location.assign('/command') /* hard reload — picks up a new deployment if that's what crashed us */}
+            onClick={() => window.location.assign('/inbox') /* hard reload — picks up a new deployment if that's what crashed us */}
           >
             Reload the portal
           </Button>

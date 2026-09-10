@@ -24,15 +24,13 @@ import { useAuth } from '@/lib/auth'
 import { useMyJusticeRole } from '@/lib/permissions'
 import { useSiu } from '@/lib/permissions'
 import { timeAgo } from '@/lib/format'
-import { useSavedViews, type SavedViewsApi } from '@/lib/savedViews'
-import { toast } from '@/lib/toast'
+import { useSavedViews } from '@/lib/savedViews'
 import { SUBPOENA_TYPES, WARRANT_TYPES, isEditableDraft, type LegalRequest } from '@/lib/justice'
 import {
   OP_GROUP_LABEL, activeDeadline, dispositionFor,
   type LegalDisposition, type OpGroup,
 } from '@/lib/legalWorkflow'
 import { useNow } from '@/lib/useNow'
-import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { ScaleIcon } from '@/components/shell/icons'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -41,6 +39,7 @@ import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { EmptyState } from '@/components/ui/Notice'
 import { PageHeader, SectionHeader } from '@/components/ui/PageHeader'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
+import { ViewsMenu } from '@/components/shared/ViewsMenu'
 import { LegalRequestDetail } from '@/components/justice/LegalRequestDetail'
 import { LegalRequestCard } from '@/components/justice/LegalRequestCard'
 import { CardQueueSection, useLegalRequests } from '@/components/justice/legalShared'
@@ -430,12 +429,19 @@ function LegalViewInner() {
               {filtersActive && (
                 <Button size="sm" variant="ghost" onClick={clearFilters}>Clear filters</Button>
               )}
-              <LegalSavedViews
+              <ViewsMenu<LegalViewConfig>
+                label="Request view"
+                emptyLabel="All requests"
                 sv={savedViews}
-                active={activeSaved}
+                activeView={activeSaved || null}
                 currentConfig={filters}
-                onApply={applySavedView}
-                onActive={setActiveSaved}
+                onSelect={(sel) => {
+                  if (!sel?.view) { setActiveSaved(''); return }
+                  const v = savedViews.views.find((x) => x.name === sel.view)
+                  if (v) applySavedView(v.name, v.config)
+                  else setActiveSaved(sel.view)
+                }}
+                savePrompt="Name this request view."
               />
             </div>
             {activeGroups.length === 0 ? (
@@ -459,60 +465,6 @@ function LegalViewInner() {
           </>
         )}
       </div>
-    </div>
-  )
-}
-
-/** Compact saved-views control for the Requests filter row: apply select,
- *  Save, and an overflow menu (rename / set-default / delete) for the applied
- *  view. Same lib/savedViews pattern as the cases and persons registries. */
-function LegalSavedViews({ sv, active, currentConfig, onApply, onActive }: {
-  sv: SavedViewsApi<LegalViewConfig>
-  active: string
-  currentConfig: LegalFilterState
-  onApply: (name: string, cfg: LegalViewConfig) => void
-  onActive: (name: string) => void
-}) {
-  const isDefault = sv.defaultView?.name === active
-  const menu: ActionItem[] = [
-    { label: 'Rename…', onClick: () => { void sv.renameViaPrompt(active).then((n) => { if (n) onActive(n) }) } },
-    {
-      label: isDefault ? 'Clear default' : 'Set as default',
-      onClick: () => {
-        void sv.setDefault(isDefault ? null : active).then((ok) => {
-          if (ok) toast(isDefault ? 'Default view cleared.' : `"${active}" now applies when you open Legal Requests.`, 'success')
-        })
-      },
-    },
-    {
-      label: `Delete "${active}"`, danger: true, separatorBefore: true,
-      onClick: () => { void sv.remove(active).then((ok) => { if (ok) { onActive(''); toast('View deleted.', 'success') } }) },
-    },
-  ]
-  return (
-    <div className="flex items-center gap-1.5">
-      <select
-        aria-label="Saved request views"
-        value={sv.views.some((v) => v.name === active) ? active : ''}
-        onChange={(e) => {
-          const v = sv.views.find((x) => x.name === e.target.value)
-          if (v) onApply(v.name, v.config)
-          else onActive('')
-        }}
-        className="min-h-[40px] max-w-[11rem] rounded-lg border border-white/10 bg-ink-900 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-badge-500"
-      >
-        <option value="">Saved views</option>
-        {sv.views.map((v) => <option key={v.name} value={v.name}>{v.name}{v.isDefault ? ' · default' : ''}</option>)}
-      </select>
-      <Button
-        size="sm"
-        className="min-h-[40px]"
-        title="Save the current search, type and status filters as a named view"
-        onClick={() => { void sv.saveViaPrompt(currentConfig, 'Name this request view.').then((n) => { if (n) onActive(n) }) }}
-      >
-        Save view
-      </Button>
-      {active && <ActionMenu label={`Actions for view "${active}"`} buttonClassName="min-h-[40px]" items={menu} />}
     </div>
   )
 }

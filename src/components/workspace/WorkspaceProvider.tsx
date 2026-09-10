@@ -18,7 +18,7 @@
  *     aggregate (registerDirty sources + useTabDirty) → beforeunload only
  *     while a tab is dirty / a draft flush is pending. */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { normalizeCaseTab } from '@/lib/caseLinks'
 import { list } from '@/lib/db'
@@ -35,8 +35,9 @@ type Reducer = (s: State) => State
 
 interface CapRequest { caseId: string; section?: string | null; title?: string }
 
-export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
+export function WorkspaceProvider({ children, defaultTool }: { children: React.ReactNode; defaultTool?: ToolId }) {
   const router = useRouter()
+  const pathname = usePathname()
   const sp = useSearchParams()
   const { state: authState, session, profile } = useAuth()
   const uid = session?.user?.id ?? profile?.id ?? null
@@ -300,6 +301,21 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         .catch(retryLater)
     }
   }, [restored, authState, ws.tabs, removeTabs, setTabTitle])
+
+  /* ── Default tool (the /intelligence and /registries leaves) ──────────── */
+
+  // Once restored, a leaf that names a default tool opens (or focuses) it
+  // unless the URL already carries an intent. Keyed on the pathname so the
+  // same mounted provider re-applies it when the user navigates from
+  // /workspace back to the leaf; the mirror effect below then rewrites the
+  // address to /workspace?tool=… exactly as it does for /tools.
+  useEffect(() => {
+    if (!restored || !defaultTool) return
+    const current = new URLSearchParams(window.location.search)
+    if (current.get('case') || current.get('tool')) return
+    const t = window.setTimeout(() => openTool(defaultTool), 0)
+    return () => window.clearTimeout(t)
+  }, [restored, defaultTool, pathname, openTool])
 
   /* ── URL sync (query string → tabs; active tab → query string) ────────── */
 

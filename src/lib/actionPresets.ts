@@ -25,7 +25,18 @@ export type ActionStatusKey = (typeof ACTION_STATUS_KEYS)[number]
  *  think about the work — not one chip per sourceType (46 of them). The
  *  test pins that every key of `SOURCE_TYPE_LABEL` lands in exactly one
  *  group, so a new builder kind cannot silently fall outside "All". */
-export const ACTION_TYPE_FILTERS: readonly { key: string; label: string; types: readonly ActionSourceType[] }[] = [
+export interface ActionTypeFilter {
+  key: string
+  label: string
+  types: readonly ActionSourceType[]
+  /** Optional standing gate — a chip whose kinds a viewer can never produce
+   *  is not OFFERED (the Informants chip must not advertise the compartment
+   *  to an uninvolved member). Absent = always offered. Pure client filter
+   *  state either way: choosing a chip never widens anything. */
+  available?: (v: PresetViewer) => boolean
+}
+
+export const ACTION_TYPE_FILTERS: readonly ActionTypeFilter[] = [
   { key: 'task', label: 'Tasks', types: ['task'] },
   { key: 'signoff', label: 'Sign-offs', types: ['signoff', 'returned_case'] },
   // Transfers covers both bureau transfer_requests and DOJ member_transfers
@@ -49,8 +60,18 @@ export const ACTION_TYPE_FILTERS: readonly { key: string; label: string; types: 
   { key: 'registry', label: 'Registry', types: ['narcotic_suggestion', 'gang_duplicate', 'tracker_cosign'] },
   { key: 'sib', label: 'SIB', types: ['sib_access_request', 'sib_referral', 'sib_disclosure', 'sib_conflict', 'sib_watch_review'] },
   { key: 'owner', label: 'Owner signals', types: ['owner_signal'] },
+  // Confidential informants (§6.4) — offered only to an involved viewer
+  // (full CI access or an active handler); the builder emits these kinds
+  // for nobody else, so the chip would otherwise be an empty advertisement.
+  { key: 'ci', label: 'Informants', types: ['ci_contact_due', 'ci_capacity_request', 'ci_intel_followup'], available: (v) => v.ci === true },
   { key: 'mention', label: 'Mentions', types: ['mention', 'handover', 'other'] },
 ]
+
+/** The chips to render for this viewer (ACTION_TYPE_FILTERS minus the gated
+ *  ones the viewer cannot use). The `?f=` lookup still resolves every key so
+ *  a stale URL simply filters to nothing rather than erroring. */
+export const availableTypeFilters = (v: PresetViewer): ActionTypeFilter[] =>
+  ACTION_TYPE_FILTERS.filter((g) => !g.available || g.available(v))
 
 /** Opaque to lib/savedViews; interpreted only by the Action Center. Every
  *  field optional so an older saved row still applies. */
@@ -107,6 +128,10 @@ export interface PresetViewer {
   justiceRole: string | null
   /** useSiu() standing. */
   sib: { canAccess: boolean; isAgent: boolean; isCommand: boolean }
+  /** `ciInvolved(useCiContext().ctx)` — full CI access or an active handler.
+   *  Optional (defaults to not involved) so existing callers compile; gates
+   *  only the Informants chip. */
+  ci?: boolean
 }
 
 export interface ActionPreset {

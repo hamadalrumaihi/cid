@@ -13,7 +13,7 @@ propose/approve RPCs.
 > machine-to-machine feed (plus its ack path and the surveillance ingest).
 > The separate, also-dormant **CID lane** — authenticated per-officer
 > investigative operations from an in-city CID app — is specified in
-> [docs/integration/CID-INTEGRATION-API.md](integration/CID-INTEGRATION-API.md).
+> [docs/integration/CID-INTEGRATION-API.md](../integration/CID-INTEGRATION-API.md).
 > The two lanes never mix: sensitive CID/SIB data never crosses the patrol
 > lane, and nothing in the CID lane widens this feed.
 

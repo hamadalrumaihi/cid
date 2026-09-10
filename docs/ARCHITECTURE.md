@@ -298,7 +298,7 @@ publishable key is never involved in service-role writes.
 The portal is prepared for — but not connected to — the city (a GTA V FiveM
 server). **Nothing in this section is live**; it documents the current
 dormant surface and the future shape it was built for. Contracts:
-[MDT-BRIDGE-CONTRACT.md](MDT-BRIDGE-CONTRACT.md) (patrol lane) and
+[archive/MDT-BRIDGE-CONTRACT.md](archive/MDT-BRIDGE-CONTRACT.md) (patrol lane) and
 [integration/CID-INTEGRATION-API.md](integration/CID-INTEGRATION-API.md)
 (CID lane); developer handoff:
 [`integration-package/`](../integration-package/README.md); handbook depth:
@@ -498,6 +498,51 @@ from the Owner console; storage objects are
 enumerated for the client to remove. Detail: [AUTHORIZATION §8–§12 and
 §20](AUTHORIZATION.md), [WORKFLOWS §13–§14](WORKFLOWS.md).
 
+## 16a. The Confidential Informant compartment
+
+A **compartment inside CID** (`20261103120000_confidential_informants`),
+governed by one predicate — `private.can_access_ci(ci) =
+has_full_ci_access() or ci_is_active_handler(ci)` — and one discipline: a
+caller who is not authorized gets **nothing** (null, zero rows, no tab, no
+nav item), never a placeholder or a lock. Fourteen tables carry SELECT
+policies only; every write is a definer RPC (`ci_*`, thirty-five of them plus
+the fixture runner); audit goes to the compartment's own immutable
+`ci_audit_events` and **never** to `audit_log` (which `case_audit_feed`
+surfaces to every case reader); realtime is the ids-only shadow table
+**`ci_events`** (`id, ci_id, user_id, kind, at`, in the publication, read
+behind `can_access_ci`) — `useTableVersion('ci_events')` refetches the
+roster, the profile and `ci_context`; notifications are the nine registry
+kinds with `destination: 'portal'` (never a Discord DM). `persons` gets no
+column; the person stays an ordinary person everywhere. Detail:
+[AUTHORIZATION §21](AUTHORIZATION.md), [WORKFLOWS §15](WORKFLOWS.md).
+
+**Routes and surfaces.** `/informants` (`PAGE_META.informants`, label
+*Informants*, Investigations category) renders `InformantsView`
+(`src/components/informants/**`, Client A) behind `useCiContext()` —
+`src/lib/ci.ts`'s module-level store, ONE `rpc('ci_context')` per session,
+refetched on `ci_events` bumps and auth change, any error → `NO_CI`. Not
+involved → the ordinary "Nothing here." surface (the `/siu` idiom — no
+mention of informants); the nav leaf renders only when `ciInvolved(ctx)`
+(Sidebar / Subtabs / BottomNav). A handler sees *My Informants: n / 6*
+(`capacityLabel`), the cards and only the rows `ci_list` returned; full access
+sees the stat strip (`ci_stats`), the roster, the Handler Capacity panel and
+the request queue. `?ci=<id>` opens `CiProfile` (a null `ci_get` → the same
+"Nothing here."); `?requests=1` the requests panel. Visits are never pushed
+to recents or pins. **The case `ci` tab rule:** `CaseDetail` adds the *CI
+Intelligence* tab (Investigation group, after Intel) with `count =
+useCiCaseCount(caseId)` — fetched through `ci_case_counts` only when
+`ciInvolved`, constant 0 otherwise with no request — and the tab exists
+**only when the count is > 0**: a tab with a 0 / null count is not in
+`tabDefs` at all (no lock, no placeholder, never in the More… overflow; the
+mobile route excludes it). What every case reader sees instead is
+`CaseReleasedIntel` on the Intel tab — `case_intel_releases` rows (the
+sanitized release, no CI column), rendering nothing when empty. The person
+dossier's `PersonCiPanel` renders nothing on a null `ci_person_status`; the
+command palette adds `ci_search` hits only for an involved caller; the Action
+Center gains *CI contact due* / *CI requests* / *CI follow-ups* fetched only
+when involved. Tests: `tests/rls/v191a–c`, `src/mocks/handlers/ci.ts`,
+`tests/e2e/informants.spec.ts`.
+
 ## 17. Scheduler (pg_cron jobs)
 
 `20261004130000_scheduler_pg_cron` declares the scheduler in the repo:
@@ -506,11 +551,13 @@ enumerated for the client to remove. Detail: [AUTHORIZATION §8–§12 and
 The jobs — `sops-sync` (15 min, Drive → SOPs through pg_net),
 `audit-chain-verify` (daily), `record-versions-prune` (daily),
 `access-grant-expiry-sweep` (hourly), `siu-reconcile-scan` (15 min),
-`legal-sweep` (hourly) and `action-escalation-sweep` (hourly) — each wrap a
+`legal-sweep` (hourly), `action-escalation-sweep` (hourly) and
+`ci-contact-sweep` (hourly, :40 — overdue and silent sources) — each wrap a
 `private.*` sweep, notify through the same test-actor-suppressing notifiers
 the RPCs use, and are idempotent so a manual re-run after a cron gap is
 safe. The Owner-only manual runners (`legal_sweep_run()`,
-`action_escalation_run()`) and the fixture-scoped `rls_test_escalation_run`
+`action_escalation_run()`, `ci_sweep_run()`) and the fixture-scoped
+`rls_test_escalation_run` / `rls_test_ci_sweep`
 let a gap be closed and the suites test the ladder without touching a
 production rule. The table of schedules, what each does and how to re-run
 it lives in [OPERATIONS.md §6 "Scheduled jobs"](OPERATIONS.md).
@@ -519,12 +566,13 @@ it lives in [OPERATIONS.md §6 "Scheduled jobs"](OPERATIONS.md).
 
 | Topic | Reference |
 | --- | --- |
-| The dormant city bridges and their contracts | [Handbook Ch. 21](handbook/21-integration.md), [MDT-BRIDGE-CONTRACT.md](MDT-BRIDGE-CONTRACT.md), [integration/CID-INTEGRATION-API.md](integration/CID-INTEGRATION-API.md) |
+| The dormant city bridges and their contracts | [Handbook Ch. 21](handbook/21-integration.md), [archive/MDT-BRIDGE-CONTRACT.md](archive/MDT-BRIDGE-CONTRACT.md), [integration/CID-INTEGRATION-API.md](integration/CID-INTEGRATION-API.md) |
 | The nine architecture blocks, risks, common mistakes | [Handbook Ch. 3](handbook/03-architecture.md) |
 | Every feature's end-to-end data flow | [Handbook Ch. 4](handbook/04-features.md) |
 | Every RPC and its caller checks | [Handbook Ch. 7](handbook/07-api.md), [`supabase/README.md`](../supabase/README.md) |
 | Tables, policies, triggers | [Handbook Ch. 8](handbook/08-database.md) |
-| Security model and residual risks | [Handbook Ch. 18](handbook/18-security.md), [HARDENING.md](HARDENING.md) |
+| Security model and residual risks | [Handbook Ch. 18](handbook/18-security.md), [archive/HARDENING.md](archive/HARDENING.md) |
 | Deploying and operating all of this | [DEPLOYMENT.md](DEPLOYMENT.md), [OPERATIONS.md](OPERATIONS.md) |
-| Who may do what, phase by phase (permission module, soft delete, versions, Trash, Action Center) | [AUTHORIZATION.md §6–§20](AUTHORIZATION.md), [RLS.md](RLS.md) |
+| Who may do what, phase by phase (permission module, soft delete, versions, Trash, Action Center, the CI compartment) | [AUTHORIZATION.md §6–§21](AUTHORIZATION.md), [RLS.md](RLS.md) |
+| Confidential informants — the compartment, capacity, sanitized release, what a case member sees | [AUTHORIZATION.md §21](AUTHORIZATION.md), [WORKFLOWS.md §15](WORKFLOWS.md), [USER-GUIDE.md §K](USER-GUIDE.md), [Handbook Ch. 23](handbook/23-confidential-informants.md) |
 | The Trash, history and the phone-first case route as a user sees them | [USER-GUIDE.md](USER-GUIDE.md), [WORKFLOWS.md §13–§14](WORKFLOWS.md), [Handbook Ch. 22](handbook/22-versions-trash.md) |

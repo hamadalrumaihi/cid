@@ -8,7 +8,7 @@ Everything that connects (or is prepared to connect) the portal to the city
 but nothing is live: no consumer is deployed, no external caller is
 registered, and the portal behaves exactly as if none of it existed. This
 chapter is the map; the contracts themselves live in
-[`docs/MDT-BRIDGE-CONTRACT.md`](../MDT-BRIDGE-CONTRACT.md) and
+[`docs/archive/MDT-BRIDGE-CONTRACT.md`](../archive/MDT-BRIDGE-CONTRACT.md) and
 [`docs/integration/CID-INTEGRATION-API.md`](../integration/CID-INTEGRATION-API.md)
 — read those, don't duplicate them.
 
@@ -36,7 +36,7 @@ never widens the patrol feed's allowlist.
 to `service_role` **only** — revoked from `authenticated`/`anon`, so they
 are unreachable from the browser and the app runtime; the RLS suite asserts
 this. No sync service is deployed. Full field semantics, expiry rules and
-consumer expectations: [MDT-BRIDGE-CONTRACT.md](../MDT-BRIDGE-CONTRACT.md).
+consumer expectations: [MDT-BRIDGE-CONTRACT.md](../archive/MDT-BRIDGE-CONTRACT.md).
 
 ## 21.3 The integration data layer (six tables, `20261002120000`)
 

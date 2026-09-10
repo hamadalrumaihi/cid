@@ -2,11 +2,11 @@
 
 /** Tool directory — the workspace's home surface. Information-dense grid of
  *  the 14 tools grouped per TOOL_GROUPS, each card: icon, name, one-line
- *  description (PAGE_META sub), a live RLS-scoped count where one is useful,
+ *  description (TOOL_META sub), a live RLS-scoped count where one is useful,
  *  and an "Open" pill when the tool already has a tab (click focuses it).
  *  BOLO carries the board's rose urgency accent. Compact by design — no
  *  oversized cards, no gradients. */
-import { PAGE_META, TAB_LABEL } from '@/lib/nav'
+import { TAB_LABEL, TOOL_META } from '@/lib/nav'
 import { TOOL_GROUPS, type ToolId } from '@/lib/toolsModel'
 import { Badge } from '@/components/ui/Badge'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -25,8 +25,8 @@ export function ToolDirectory({ openKeys, onOpen }: ToolDirectoryProps) {
     <section className="view-in space-y-6">
       <PageHeader
         eyebrow="Intelligence"
-        title={PAGE_META.tools.title}
-        subtitle={PAGE_META.tools.sub}
+        title={TOOL_META.tools.title}
+        subtitle={TOOL_META.tools.sub}
       />
       {TOOL_GROUPS.map((group) => (
         <div key={group.id}>
@@ -77,7 +77,7 @@ export function ToolDirectory({ openKeys, onOpen }: ToolDirectoryProps) {
                         </Badge>
                       )}
                     </span>
-                    <span className="mt-0.5 block truncate text-xs text-slate-400">{PAGE_META[tool]?.sub}</span>
+                    <span className="mt-0.5 block truncate text-xs text-slate-400">{TOOL_META[tool]?.sub}</span>
                   </span>
                 </button>
               )

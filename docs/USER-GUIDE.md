@@ -113,7 +113,7 @@ SIB is a **separate workspace and authority**, not a CID category. An SIB accoun
 
 ### The Action Center
 
-Everything waiting on you — a task, a blocker, a sign-off to decide, an access request, a legal request, a report to review, a mention, a draft — lands in **Action Center** (Command section, `/action`) as one list, most urgent first. The same list feeds the **Needs your attention** panel on My Dashboard, the Command Center's decision panels and the little counts on the sidebar, so you never see two different versions of "what's waiting".
+Everything waiting on you — a task, a blocker, a sign-off to decide, an access request, a legal request, a report to review, a mention, a draft — lands in **Action Center** (Command section, `/inbox`) as one list, most urgent first. The same list feeds the **Needs your attention** panel on My Dashboard, the Command Center's decision panels and the little counts on the sidebar, so you never see two different versions of "what's waiting".
 
 **Every row tells you why it's there and what to do.** Where the portal has a safe one-click action, it's right on the row — complete a task, resolve a blocker, approve or deny an access request, mark a notification read, discard a draft, approve an MDT export or a field-access request, acknowledge a surveillance alert. Anything that needs a proper form — a sign-off decision, a transfer, a legal ruling — opens the screen that owns it.
 
@@ -424,7 +424,54 @@ Open a case on a phone and you land on a **phone-first screen** — the case num
 
 ---
 
-## K. Troubleshooting
+## K. Informants
+
+Some investigations rest on a person who talks to you in confidence. The portal keeps those people in a **compartment**: what you see of it depends on whether you *handle* a source or belong to *CI command* — and if you are neither, the compartment does not exist for you. There is no locked screen, no greyed tab, no "you don't have access" — nothing. That absence is deliberate: a hint that *something is there* would already tell a colleague that a person is a source.
+
+### Who sees what
+
+- **A handler** (the detective assigned to a source) sees **Informants** in the sidebar under Investigations and, inside it, *their own* sources — never another handler's.
+- **CI command** — the Owner, Bureau Leads, Deputy Directors, Directors and active SIB members — sees the whole roster and runs the programme.
+- **Everyone else**, including every member of a case a source is feeding, sees no Informants entry, nothing at the address, no tab on the case, no card on the person, and gets no notification about a source. Being on the case does not open the compartment.
+
+The person a source is remains an ordinary person in the registry — search finds them, their dossier opens, nothing on them says "informant". Never write that a person is a source in a note, a report or a case message; the compartment is the only place for it.
+
+### The handler view
+
+Open **Informants**. The strip on top reads **My Informants: 2 / 6** — your active sources against your capacity — with cards for Active Sources, Contacts Due, Follow-Ups, Open Intelligence and Related Cases, and a table of your sources (number, alias, status, reliability, risk, last and next contact). Each source opens a profile with sections: overview, handlers, contacts, intelligence, assessments, payments, cases and audit.
+
+**Adding a source.** *Add CI* walks you through it: pick or create the person in the registry; the motive (primary, any secondary, a short explanation); yourself as handler; a live capacity check; the bureau; recruitment notes; the starting status (a *candidate* does not count against your capacity until it is *active*). A person who cannot be designated — already a source, merged, or outside your view — answers *"This person cannot be designated right now."* and nothing more. On success the source gets a number, `CI-0041`, and the profile opens.
+
+### Capacity
+
+You may run **six active sources**. At 6 / 6 the *Add CI* action becomes **Request Assignment**, and an attempt to activate a seventh answers *"You are at capacity (6 / 6). Request additional capacity or an assignment."* Two requests exist, both under **Requests** on the Informants screen:
+
+- **Request Additional Capacity** — the new ceiling you need (up to 30), why, the operational need, an optional case. A reviewer approves (they may set a different number or an expiry), denies or returns it with a note; you are told either way, and an approval raises your strip at once.
+- **Request Assignment** — propose a person you believe should be a source (motive, estimated risk, expected usefulness, bureau, case). On approval the source is created with you as primary handler.
+
+You may withdraw a pending request. One pending request of each kind at a time.
+
+### Contact log
+
+Log every contact from the source's profile or the handler strip: when, how (in person, phone, message, other), where, what was said in a line, whether it needs follow-up, the next contact date, an optional case, and restricted notes only the compartment reads. The source's *last contact* and *next contact* follow your entry. When a next contact is overdue the portal tells you (**Source contact overdue**, in the bell and as **CI contact due** in your Action Center); a source silent for thirty days also alerts your supervising lead.
+
+### Intelligence
+
+Record what the source told you: a summary, the detail, when you received it, the case it belongs to (only cases you can read), the source's reliability at the time, the sensitivity, whether it needs follow-up, your handler notes, and mentions — persons, vehicles, gangs, places, narcotics — picked from the registries you can see. Filing on a case links the source to that case and tells the source's other handler.
+
+Two marks live on every entry and they are not the same thing. **Reliability** is about the *source* — how good this person has been. **Corroboration** is about the *statement* — what the investigation has since confirmed: *unverified*, *partially corroborated*, *corroborated*, *contradicted*, *unable to verify*. Anyone with access to the source can set corroboration with a note as the investigation moves.
+
+### What a case member sees
+
+Inside a case, the **CI Intelligence** tab exists only for the source's handlers and CI command — for everyone else the case simply has no such tab. When the investigation needs the information without the source, **CI command** releases it: a fresh title and body written so that nothing points at the person — the server refuses a text that carries the CI number, the person's name or alias, the source alias or a handler's name (*"The text names the source — remove the CI number, name, alias or handler."*). The clean release appears for every member of the case under **Confidential intelligence** on the case's Intel tab — title, body, handling (official use / law-enforcement sensitive / court disclosable) — with no source, no handler and no way back. The case lead is told. Command may revoke a release later; it then disappears from the case.
+
+### For CI command
+
+The Informants screen is the roster: the stat strip (active, dormant, high risk, compromised, contacts overdue, handlers at capacity, pending requests), filters (handler, bureau, status, motive, reliability, risk, last contact, case), saved views, the **Handler Capacity** panel (`Tom Wood — 6 / 6`, drill in, set a ceiling with a reason) and the request queue (approve / deny / return with a note). On a source: change the **status** (a reason is always required; *compromised* alerts the handlers, the supervising lead and command), **reassign or add a handler** (the old handler's access ends that instant; assigning to someone already at capacity shows a warning — *Assign with authorization* with a reason records the override and raises their ceiling), remove a secondary (a primary stays until replaced), **release** intelligence, approve payments, export. Every action is recorded in the source's own audit trail, visible in the profile's Audit section — never in the case's activity feed.
+
+---
+
+## L. Troubleshooting
 
 | Symptom | What it means — and the fix |
 |---|---|
@@ -432,6 +479,7 @@ Open a case on a phone and you land on a **phone-first screen** — the case num
 | You chose **Submit Intelligence** but see no CID screens | Correct — intelligence-only access is submission-only. If you need investigative access, a Command member must approve a CID membership. |
 | A case a colleague mentions isn't there | It belongs to another bureau, or access is scoped away from you. Ask the case lead or your Bureau Lead — access is enforced server-side. |
 | A record you saw before is gone | Access can lawfully end (joint-case expiry, restriction). If you believe it's an error, ask your lead — do not assume deletion. |
+| A colleague mentions a source and you see no Informants screen, tab or card | You are neither the source's handler nor CI command — the compartment does not exist for you, and that is the correct answer. Work from the sanitized release on the case's Intel tab; if the investigation needs more, ask your Bureau Lead. |
 | An SIB record or investigation is "not found" | You are outside its classification or compartment. If your work genuinely needs it, ask SIB command through your chain. |
 | A CID case is read-only in the SIB workspace | Only oversight standing reads CID without writing. Active SIB agents edit CID cases — if you can't, your membership may be suspended or ended. |
 | **Save failed / Delete failed** toast | The server refused the write — the message says why. Nothing was silently lost. |
