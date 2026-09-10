@@ -59,7 +59,7 @@ refetches → UI updates (including other users' browsers).
 Persons, gangs (ranks/members/turf), vehicles, places, narcotics,
 ballistics, media vault, records, BOLO board — all one uniform pattern
 (fetch + version counter, `?q=` seeded filter, card grid, modal CRUD,
-canEdit/canDelete gates, `deleteWithUndo`). Shared RLS: any active member
+canEdit/canDelete gates, `deleteRecord` → `soft_delete`). Shared RLS: any active member
 reads/writes, command deletes. The `IntelProfile` slide-over
 (persons/gangs) rolls up everything linked to a subject and exports
 dossiers. All of these open as tabs inside the **Investigative Tools**
@@ -165,7 +165,7 @@ needs-attention panel over the Action Center's top items, plus my-cases,
 bounded recent activity; every self-fetch a slim limited projection,
 with a capability-gated dashboard switcher chip row from
 `useCapabilities()`), the Action Center
-(`useActionItems` slim fetches → the pure `buildActionItems` model;
+(`useActionQueue` — one shared queue store of slim fetches → the pure `buildActionItems` model;
 wave-3 lanes add Unassigned intel, Expiring BOLOs and Drafts — the drafts
 lane describes `user_drafts` KEYS, never payloads), watchlist (follow +
 "updated" chips via localStorage seen-stamps), pins & recents (the My
@@ -186,3 +186,38 @@ Penal code (static data + calculators), SOPs & library (version snapshot
 BEFORE every overwrite; command-write-only folders), the visual user
 guide, court packet/dossier exports, audit-log CSV export
 (formula-injection-guarded).
+
+## 4.8 Portal Improvements (Phases 1–8, release 1.18.0)
+
+- **Permission module** — `permission_catalog` → `my_permissions()` /
+  `can_record()` on the server, `usePermissions()` + the mirrors in
+  `src/lib/permissions/` on the client ([Ch. 9](09-auth.md)).
+- **Unified workspace** (`/workspace`) — cases, records and tools in one
+  keep-alive tab strip; authored `case_notes`, related-case links, the
+  activity feed (`case_audit_feed`); archived cases read-only at RLS
+  (`private.case_writable`).
+- **Entity layer** — normalized keys, `entity_suggest` / `entity_duplicates`
+  / `entity_crossref`, the reversible merge ledger, observations and update
+  suggestions, the SIB reconcile queue.
+- **Legal workflow** — judge-only route, charges, threaded comments,
+  revision checklists, partial approval, amend / observers, the hourly
+  `legal-sweep`.
+- **Report builder** — DB templates with admin, the review flow
+  (submit → return / approve → sealed), entities, export receipts, task
+  waivers for the closure gate.
+- **Intel triage** — rejected status, reviewer-private notes vs officer
+  messages, the validation mark, intel groups, extended claim links,
+  convert-to-record, the SIB cross-link.
+- **Action Center** (`/action`) — every queue kind with per-viewer state
+  (seen / snooze / dismiss), escalation rules and ledger, reassignment, saved
+  views and presets, one queue store shared with My Dashboard and the
+  Command Center, minimal notification payloads hydrated through
+  `notification_resolve`.
+- **Versions, Trash, permanent deletion, the scheduler** —
+  [Ch. 22](22-versions-trash.md): soft delete on 27 kinds with the
+  "<Label> deleted · In Trash" Undo toast, `/trash` (`trash_list` — the
+  rows the caller could restore), `RecordHistory` (compare / restore with a
+  reason), the Owner's armed `permanent_delete_record_*`, seven pg_cron jobs.
+- **Phone-first case route** (`/m/cases/[id]`) — cards, a bottom section
+  switcher, quick actions that make the desktop's writes, narrative-only
+  report editing; the workspace redirects a narrow viewport there.

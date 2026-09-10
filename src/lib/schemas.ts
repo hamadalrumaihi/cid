@@ -62,6 +62,12 @@ export const notifPayloadSchema = z.object({
   // the id and number, never the summary, the reason or a claim.
   submission_id: z.string().optional(),
   submission_no: z.string().optional(),
+  // Phase 7 (P7-03/04): the escalation ladder names the escalated source
+  // ({kind, source_id}); task / blocker reassignment carries the row id.
+  kind: z.string().optional(),
+  source_id: z.string().optional(),
+  task_id: z.string().optional(),
+  blocker_id: z.string().optional(),
 }).loose()
 export type NotifPayload = z.infer<typeof notifPayloadSchema>
 

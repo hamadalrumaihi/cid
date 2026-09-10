@@ -206,6 +206,7 @@ export function caseNoteMention(args: Args): MentionResult {
     created_at: new Date().toISOString(),
     id: mockId(),
     payload: { case_id: str(note.case_id), note_id: str(note.id), author_id: me },
+    read_at: null,
     read: false,
     type: 'note_mention',
     user_id: p.id,

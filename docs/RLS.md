@@ -47,6 +47,26 @@ All are `SECURITY DEFINER` with `set search_path to ''` and key on `auth.uid()` 
 | `is_legal_participant / owner_flag / can_view_legal_request / can_edit_legal_draft` | legal-request access authority ([`20260714030000_legal_core.sql`](../supabase/migrations/20260714030000_legal_core.sql)) |
 | `can_review_as_cid/_ada/_da/_ag/_judge`, `can_manage_legal_assignment`, `can_fulfil_legal` | per-stage legal workflow gates. **(Retired 2026-07-22 — see [DOJ-INTEGRATION.md](DOJ-INTEGRATION.md) Phase-1 banner: approval is now Bureau Lead+ via `can_review_as_cid` + `review_legal_request_as_cid`; the `_ada`/`_da`/`_ag`/`_judge` gates and justice helpers above back only history-only, EXECUTE-revoked RPCs, and `justice_memberships` are deactivated.)** |
 | `audit()` / `touch()` / `touch_cases()` / `stamp_author_identity()` | trigger workers: audit rows, honest `updated_at`, unforgeable authorship |
+| `is_live(deleted_at)` | the soft-delete liveness test prepended to every soft-deletable table's `SELECT` / `UPDATE` policy as `(private.is_live(deleted_at) or private.is_owner())` — a deleted row exists only for the Owner (who reads it for the Trash) and for the definer RPCs ([`20261007120000`](../supabase/migrations/20261007120000_soft_delete_core.sql)) |
+| `case_writable(cid)` | case access **and** the case neither archived nor soft-deleted — the write conjunct on 36 case-child policies since P3-05 (an archived case is read-only at RLS, not only in the UI) ([`20261023120000`](../supabase/migrations/20261023120000_archived_read_only.sql)) |
+| `user_can_access_case(u, cid)` | `can_access_case` for **another** user — the same walls (bureau, lead / creator, command, live grant, joint assignment, SIU recusal / compartment / restriction) evaluated for `u` instead of `auth.uid()`; used by the reassign RPCs ("that member cannot see this case") and to filter every escalation recipient ([`20261101120000`](../supabase/migrations/20261101120000_action_center.sql)) |
+| `perm_dispatch(action, kind, id)` / `perm_registry_visible/_edit/_delete` | the permission module's per-row router: one arm per kind (legal, case actions, action items, the Trash, the 27 soft-deletable kinds) delegating to the predicates above; `can_record()` is its public face ([`20261005120000`](../supabase/migrations/20261005120000_permission_module.sql) →) |
+
+**Three rules the newer helpers share.** *Liveness is a conjunct, not a
+filter*: `is_live(deleted_at)` is prepended to the former predicate verbatim
+(`cases` on `deleted_at` alone, so an archived case stays readable), and the
+`DELETE` privilege is revoked rather than policed — a client DELETE is `42501`
+everywhere. *Writability is case-scoped*: `case_writable(case_id)` replaced
+`can_access_case(case_id)` in every case-child write policy, so the archived
+and the deleted state are enforced once, in SQL, for tasks, notes, reports,
+media and the rest. *Standings are enumerated by name*: the SIU
+classification walls (`private.siu_standing()` → `siu_case_read` /
+`siu_unit_read`) never say "any standing" — every write, appoint, release and
+export predicate lists the standings it admits, which is why the Director's
+`director_oversight` standing (P1-04) could be added as read-only without
+touching a single write predicate: nothing admitted it, so nothing had to
+refuse it. Any new standing must be added to each predicate that should
+accept it, and to no other.
 
 ## 2. Profile visibility and the freeze triggers
 

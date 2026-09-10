@@ -6,6 +6,154 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.18.0] — 2026-09-09 — Portal Improvements (Phases 0–8)
+
+The ten-phase Portal Improvements plan (`docs/PLAN-PORTAL-IMPROVEMENTS.md`)
+delivered as one release: a central permission module, a tamper-evident
+audit chain, soft delete with a Trash and field-level version history, the
+entity layer, the unified workspace, the judge-only legal workflow, the
+database-driven report builder, intel triage, the Action Center with a
+scheduler, and the phone-first case route. Every migration is applied to the
+live project; `supabase/MIGRATION-HISTORY.md` "Portal Improvements — Phase N"
+records what was verified at apply time. Authority per phase:
+[AUTHORIZATION.md §6–§20](docs/AUTHORIZATION.md); flows:
+[WORKFLOWS.md](docs/WORKFLOWS.md); the handoff record:
+[HANDOFF-PORTAL-IMPROVEMENTS.md](docs/HANDOFF-PORTAL-IMPROVEMENTS.md).
+
+### Phase 0 — hygiene (earlier PRs)
+- Duplicate-timestamp migration pairs renamed (`…120001_`), a
+  jurisdiction-replay migration (`20261004120000`) so a clean filename-order
+  replay ends on the live definitions, and the **scheduler declared in the
+  repo** (`20261004130000_scheduler_pg_cron`): `pg_cron` + `pg_net` (pg_net
+  had been missing since the 2026-09-01 restore), the `scheduled_job_runs`
+  ledger with `private.job_begin/job_end`, `sops-sync` re-declared with its
+  secret read from `app_secrets` at run time.
+
+### Phase 1 — foundations (#321)
+- **Central permission module** (`20261005120000`): `permission_catalog`
+  (rendered into `src/lib/permissionsMatrix.ts` by `npm run gen:permissions`),
+  `my_permissions()`, `can_record(action, kind, id)` over `private.perm_dispatch`,
+  the denial ledger (`perm_deny` / `perm_raise` P0403 / `perm_denied_ack`);
+  the client module `src/lib/permissions/` (`usePermissions`, mirrors, an
+  ESLint rule against predicates imported from `roles.ts` / `siu.ts`).
+- **Audit ledger integrity** (`20261006120000`): `audit_log.prev_hash` /
+  `row_hash`, rewrite and truncate blocked, the daily `audit-chain-verify`
+  job, `audit_chain_status()`.
+- **Soft delete** for 15 registries (`20261007…`) and 10 case tables
+  (`20261008…`): lifecycle columns, client DELETE revoked, `soft_delete` /
+  `restore_record` (cascade under one `delete_batch`; a child comes back
+  only under a live parent), `private.perm_registry_delete/_edit/_visible`,
+  `private.case_writable` prepared; `documents_versions` made immutable.
+- **Director oversight standing** (`20261010120000`): a read-only SIB standing
+  for the Director of CID (standard investigations only; no notes / targets).
+- **Field-level version history** (`20261011120000`): `record_versions`
+  (five-minute same-actor coalescing), `record_history`, `restore_version`
+  (edit authority + reason; a new version with `source='restore'`), the daily
+  `record-versions-prune`.
+- **Case access grants expire** (`20261012120000`): 30-day default, 90-day
+  cap, `case_access_renew`, the hourly `access-grant-expiry-sweep`.
+- **Permanent deletion generalised** (`20261013120000`): `deleted_record_ledger`,
+  `permanent_delete_record_preview/_arm/_execute` for every soft-deletable
+  kind (Owner, fresh session, reason, token, typed `DELETE <label>`);
+  `case_permanent_delete` becomes a wrapper.
+
+### Phase 2 — entity layer (#331)
+- Normalized keys (`norm_phone`, generated `phone_normalized` /
+  `value_normalized`, trgm indexes — `20261014120000`); `entity_suggest` /
+  `entity_duplicates` (SECURITY INVOKER — `20261015120000`); the **SIB
+  reconcile** queue and 15-minute scan with `siu_hidden_flag` (`20261016120000`);
+  the **merge ledger** `entity_merges` with `entity_merge` / `_preview` /
+  `_unmerge` and the legacy merges as wrappers (`20261017120000`);
+  observations and update suggestions (`20261018120000`); vehicle intel links
+  and `entity_crossref` (`20261019120000`); born-hidden records and test
+  hygiene (`20261020120000`). Client: `RecordSearchPicker`, `DuplicateMatches`,
+  the merge preview, cross-reference panels.
+
+### Phase 3 — unified workspace (#340)
+- `case_notes` (authored, versioned, soft-deletable; `cases.notes` frozen and
+  backfilled; `case_note_mention` — `20261021120000`); `case_links` and the
+  `case_audit_feed` activity feed (`20261022120000`); **archived cases
+  read-only at RLS** — 36 policies over `private.case_writable`
+  (`20261023120000`). Client: `/workspace` — cases, records and tools side by
+  side in one keep-alive tab strip (ids-only persistence, titles re-resolved
+  through RLS), `CaseSectionSwitcher`, entity sections, `DeletedCaseNotice`,
+  `MissingCaseState`, `AccessRequestPanel`.
+
+### Phase 4 — legal workflow (#353)
+- Tables (`20261024120000`): charges, threaded comments with immutable
+  versions, revision checklists, per-target decisions, expiry defaults,
+  reminders, the export log. **Judge-only route** (`20261025120000`): CID / SIB
+  approval → `submitted_to_judge` with judge fan-out, the AG for sealed and
+  SIB requests, `partially_approved`, the prosecutor lane retired. RPCs
+  (`20261026120000`): `legal_set_charges`, `legal_comment*`,
+  `legal_revision_resolve`, `legal_add_evidence_and_exhibit`, `legal_amend`,
+  `legal_set_observer`, `legal_record_export` with `perm_dispatch` legal arms.
+  Sweeps (`20261027120000`): the hourly `legal-sweep` (nudge, escalate,
+  unissued, expiring, expiry → MDT `expired`), `legal_sweep_run()` for the
+  Owner. Security review folded in (`legal_review_fixes`).
+
+### Phase 5 — report builder (#361)
+- `report_templates` / `report_template_versions` (the FormSchema as jsonb,
+  draft → published → superseded, all 14 forms seeded; Director / DD / Owner
+  publish, Bureau Lead proposes — `20261028120000`); the review flow
+  (`20261029120000`): `report_submit` / `report_review` / `report_finalize`
+  (self-seal templates) / `report_reopen` with a reason, `report_entities` and
+  `report_exports` (10-character receipts), `case_task_waive/_unwaive`, the
+  closure gate; four notification kinds. Client: `FormEditor`, `RichEditor`
+  (dynamic Tiptap markdown), the template admin, entity mentions, PDF / DOCX /
+  Markdown exports. Security review folded in (`report_review_fixes`).
+
+### Phase 6 — intel triage (#371)
+- `rejected` status, reviewer-private comments vs officer messages,
+  the explicit validation mark, the minimal `intel_*` notifications and the
+  `field_submission_events` realtime shadow (`20261030120000`); intel groups,
+  extended claim links (narcotic / account / indicator), `field_submission_convert`
+  with the duplicate answer, `siu_referred_submissions`, the `field_submission`
+  `perm_dispatch` arm (`20261031120000`). Authority refusals raise through
+  `private.perm_raise` (P0403); `src/lib/db.ts` acknowledges them once through
+  `perm_denied_ack`. Security review folded in (`intel_review_fixes`).
+
+### Phase 7 — Action Center and scheduler (#372)
+- `20261101120000_action_center`: per-viewer `action_item_state`
+  (`action_item_set_state` / `_many`; dismiss only for informational keys,
+  snooze ≤ 48 h, a decision snooze audited), `notifications.read_at` +
+  `notifications_mark_read`, `notification_resolve` (SECURITY INVOKER —
+  "An item you no longer have access to"), `action_reassign_task` /
+  `_blocker`, `action_escalation_rules` + the `action_escalations` ledger and
+  the hourly `action-escalation-sweep` (`action_escalation_run()` for the
+  Owner). Client: `/action` — every queue kind, saved views and role presets,
+  the bulk bar, the reassign dialog, one queue store shared with My Dashboard
+  and the Command Center, Discord DM opt-in per category, mobile cards.
+  Security review folded in (`action_center_review_fixes`).
+
+### Phase 8 — mobile, Trash, history UI, docs (#372)
+- **The Trash** (`20261102120000_trash_list`): `trash_list(kind?, limit)` —
+  every soft-deletable kind, one row per record the caller could restore
+  (`perm_dispatch('restore')`: a detective their own case material, command
+  their cases, the Owner everything), labelled, tied to its case, ≤ 500
+  newest first; `trash_count()` for the Sidebar badge; the `('list','trash')`
+  catalog row. Client: `/trash` (`TrashView` — groups, chips, search,
+  Restore, the Owner's Permanently delete), **"Deleted — Undo · In Trash"**
+  (`src/lib/deleteRecord.ts` replaces `deleteWithUndo`; Undo is
+  `restore_record`, so it works after the toast is gone), the `trash` badge.
+- **Permanent-delete dialog from the Trash** (`RecordPermanentDelete`) over
+  the generalised protocol; the Owner console links "Records in the Trash".
+- **Record history UI** (`RecordHistory`): every version's field changes,
+  Compare any two, Restore this version with a reason — on person / vehicle /
+  gang dossiers, the case Overview, notes, report drafts, legal drafts, intel.
+- **Phone-first case route** `/m/cases/[id]` (`MobileCaseView`): header,
+  bottom section switcher, cards instead of tables, quick actions (task add /
+  done, note, entity link), "Open on desktop"; the workspace redirects a
+  narrow viewport there; **mobile narrative editing** for a report's own
+  draft (`MobileNarrativeEditor` — autosave, offline draft, submit from the
+  desktop).
+- **Documentation release**: this section, ARCHITECTURE / AUTHORIZATION §20 /
+  RLS / WORKFLOWS §13–§14 / USER-GUIDE / handbook ch. 22 / REVIEW-MAP /
+  DESIGN-SYSTEM / TESTING / OPERATIONS §5 (the restore drill as a runbook).
+- Tests: `tests/rls/v190a` (the Trash), the MSW `trash` handler, e2e
+  `trash.spec.ts` and `mobile-case.spec.ts`; unit `trash.test.ts`,
+  `deleteRecord.test.ts`, `recordHistory.test.ts`, `reportNarrative.test.ts`.
+
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
 ### FiveM integration preparation — 2026-08-26

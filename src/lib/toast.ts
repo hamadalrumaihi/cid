@@ -13,7 +13,12 @@ export interface ToastItem {
   type: ToastType
   /** Present on undo-able toasts: clicking Undo runs it, then dismisses. */
   onUndo?: () => void
+  /** Optional in-app link rendered after the message (e.g. "Open Trash" on a
+   *  delete toast, the restored record on a Trash restore). */
+  link?: ToastLink
 }
+
+export interface ToastLink { label: string; href: string }
 
 /** Map raw Postgres/PostgREST error text to human copy so DB internals never
  *  surface in a toast (vanilla core.js humanizeError, audit M6). Unknown
@@ -52,11 +57,14 @@ export const useToastStore = create<ToastState>((set) => ({
 const TOAST_MS = 3400 // vanilla core.js:463
 const UNDO_MS = 6000  // vanilla core.js:468
 
-export function toast(message: unknown, type: ToastType = 'info'): void {
-  useToastStore.getState().push({ message: humanizeError(message), type }, TOAST_MS)
+export function toast(message: unknown, type: ToastType = 'info', opts: { link?: ToastLink } = {}): void {
+  useToastStore.getState().push({ message: humanizeError(message), type, link: opts.link }, TOAST_MS)
 }
 
-/** Undo-able toast: shows an "Undo" button for `ms` (default 6s). */
-export function undoToast(message: string, onUndo: () => void, ms: number = UNDO_MS): void {
-  useToastStore.getState().push({ message, type: 'warn', onUndo }, ms)
+/** Undo-able toast: shows an "Undo" button for `ms` (default 6s). The
+ *  optional link (Phase 8: "Open Trash") outlives the Undo button's window
+ *  in meaning — a soft-deleted row is restorable from the Trash after the
+ *  toast is gone. */
+export function undoToast(message: string, onUndo: () => void, ms: number = UNDO_MS, opts: { link?: ToastLink } = {}): void {
+  useToastStore.getState().push({ message, type: 'warn', onUndo, link: opts.link }, ms)
 }

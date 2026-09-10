@@ -2,7 +2,7 @@
  *  (private.version_row, 20261011120000): same actor, plain edits, inside
  *  five minutes of the previous version's LAST save. */
 import { describe, expect, it } from 'vitest'
-import { COALESCE_WINDOW_MS, historyRows, versionChanges, wouldCoalesce } from './recordHistory'
+import { COALESCE_WINDOW_MS, VERSION_KINDS, compareVersions, historyRows, isVersionKind, versionChanges, wouldCoalesce } from './recordHistory'
 
 const t0 = '2026-09-06T04:00:00.000Z'
 const at = (ms: number) => new Date(Date.parse(t0) + ms).toISOString()
@@ -47,5 +47,43 @@ describe('versionChanges / historyRows', () => {
     ])
     expect(rows.map((r) => r.version_no)).toEqual([2, 1])
     expect(rows.map((r) => r.burst)).toEqual([true, false])
+  })
+})
+
+describe('VERSION_KINDS / isVersionKind — the twelve versioned kinds', () => {
+  it('lists exactly the server\'s version_table kinds', () => {
+    expect([...VERSION_KINDS].sort()).toEqual([
+      'account', 'case', 'case_note', 'evidence', 'field_submission', 'gang', 'legal', 'narcotic', 'person', 'place', 'report', 'vehicle',
+    ])
+  })
+  it('answers for a kind string', () => {
+    expect(isVersionKind('case_note')).toBe(true)
+    expect(isVersionKind('case_task')).toBe(false)
+    expect(isVersionKind('')).toBe(false)
+  })
+})
+
+describe('compareVersions — two resulting states, side by side', () => {
+  const v1 = { new: { name: 'A', alias: null, tags: ['x'], notes: 'one' } }
+  const v3 = { new: { name: 'B', alias: null, tags: ['x', 'y'], notes: 'one' } }
+  it('lists only the fields that differ, alphabetically, reading a → b', () => {
+    expect(compareVersions(v1, v3)).toEqual([
+      { field: 'name', from: 'A', to: 'B' },
+      { field: 'tags', from: ['x'], to: ['x', 'y'] },
+    ])
+    expect(compareVersions(v3, v1)).toEqual([
+      { field: 'name', from: 'B', to: 'A' },
+      { field: 'tags', from: ['x', 'y'], to: ['x'] },
+    ])
+  })
+  it('a field present on one side only reads against null', () => {
+    expect(compareVersions({ new: { a: 1 } }, { new: { b: 2 } })).toEqual([
+      { field: 'a', from: 1, to: null },
+      { field: 'b', from: null, to: 2 },
+    ])
+  })
+  it('identical states compare to nothing (jsonb deep equality, not identity)', () => {
+    expect(compareVersions({ new: { j: { k: [1, 2] } } }, { new: { j: { k: [1, 2] } } })).toEqual([])
+    expect(compareVersions(v1, v1)).toEqual([])
   })
 })

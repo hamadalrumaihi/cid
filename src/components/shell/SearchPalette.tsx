@@ -28,7 +28,7 @@ import { recentSearches, rememberSearch, runSearch, SEARCH_KINDS, SEARCH_SECTION
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { useSiu } from '@/lib/permissions'
-import { DASH_LABEL, DASH_TAB } from '@/components/dash/DashSwitcherView'
+import { DASH_LABEL, DASH_TAB } from '@/lib/nav'
 import { useCreate, type CreateKind } from '@/components/shell/CreateHost'
 import { CalendarIcon, CaseIcon, ChevronIcon, ClockIcon, KindIcon, PlusIcon, RadioIcon, ScaleIcon, XMarkIcon } from '@/components/shell/icons'
 import { useToolNav } from '@/components/tools/useToolNav'

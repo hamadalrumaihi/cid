@@ -15,7 +15,8 @@ import { Button } from '@/components/ui/Button'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
-import { deleteWithUndo, insert, update } from '@/lib/db'
+import { insert, update } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { fmtDate } from '@/lib/format'
 import { reportTitle } from '@/lib/forms'
 import { useAuth } from '@/lib/auth'
@@ -154,7 +155,7 @@ export function CaseBlockersPanel({ caseId, blockers, tasks, reports, canEdit, n
                 {(isCommand || b.created_by === profile?.id) && (
                   <button
                     aria-label={`Delete blocker ${b.title}`}
-                    onClick={() => void deleteWithUndo('case_blockers', b, { label: 'blocker', confirmTitle: 'Delete blocker', confirmMessage: `Delete "${b.title}"? Resolving keeps it in the history — delete only if it was recorded in error.`, after: onChanged })}
+                    onClick={() => void deleteRecord('case_blockers', b, { label: 'blocker', confirmTitle: 'Delete blocker', confirmMessage: `Delete "${b.title}"? Resolving keeps it in the history — delete only if it was recorded in error.`, after: onChanged })}
                     className="grid h-10 w-10 place-items-center rounded-lg text-rose-300 hover:bg-rose-500/10 hover:text-rose-200 sm:h-8 sm:w-8"
                   >
                     ×

@@ -87,6 +87,22 @@ The whole app is one dynamic route:
   in `tools/toolRegistry.tsx` rather than imported by the `[tab]` page;
   permissions and RLS are untouched — this layer is navigation only.
 
+- **Portal Improvements routes** (Phases 3, 7, 8 — all `PAGE_META`
+  leaves except the last): `/workspace` — the unified workspace (§14);
+  `/action` — the Action Center (`ActionCenterView`, one queue store shared
+  with My Dashboard and the Command Center — [AUTHORIZATION §19](AUTHORIZATION.md));
+  `/trash` — the Trash (`TrashView`, Oversight category next to `/audit`;
+  §16); and **`/m/cases/[id]`** — the one route outside the `[tab]` pattern:
+  a Next dynamic segment (`src/app/(app)/m/cases/[id]/page.tsx`, a client
+  component reading `useParams()`) rendering `MobileCaseView` with the shell
+  chrome reduced to a top bar (case number, "Open on desktop"). The
+  workspace `router.replace`s a narrow viewport (`useNarrow`) to
+  `/m/cases/<id>?s=<section>` unless the tab's
+  `sessionStorage['cid:desktop-on-mobile']` flag is set, and `/cases?case=`
+  on a phone lands there too (`src/components/mobile/mobileCaseRoute.ts`).
+  The route embeds no data and needs no `force-dynamic`; RLS answers the
+  case after mount exactly as the desktop tab does.
+
 There are **no custom API routes** — no `route.ts` files exist under
 `src/app`. The app's "API" is Supabase's auto-generated REST layer plus
 database RPCs; see [Handbook Ch. 7](handbook/07-api.md).
@@ -214,8 +230,9 @@ More depth: [Handbook Ch. 9](handbook/09-auth.md).
   database.** The contract: `list()` throws; mutations return `{ error }`;
   `updateWhere` returning zero rows with no error means the predicate
   matched nothing (RLS-blocked or lost race) — treat as failure; `withRetry`
-  is reads-only; `deleteWithUndo` snapshots cascade children before
-  deleting (the app's 6-second Undo).
+  is reads-only; `remove()` on a soft-deletable table routes to the
+  `soft_delete` RPC, and `src/lib/deleteRecord.ts` is the one delete helper
+  ("<Label> deleted · In Trash" — Undo is `restore_record`; §16).
 - **State lives in small zustand stores co-located with their domain** —
   realtime version counters (`lib/realtime.ts`), toasts (`lib/toast.ts`),
   the roster cache (`lib/profiles.ts`), watchlist, operations, the dialog
@@ -401,7 +418,104 @@ Gated by `profiles.is_owner` in the UI and `private.is_owner()` in RLS:
 - **Owner-only RPCs** — e.g. the v1.15 warrant import
   (`import_legal_warrant` / `import_rollback_by_key`).
 
-## 14. Where to go deeper
+## 14. Unified workspace
+
+Since Phase 3 (P3-02) cases, records and tools open **side by side in one
+tab strip** at `/workspace` ([`src/components/workspace/`](../src/components/workspace)):
+`WorkspaceProvider` owns the open tabs (persisted per user as **ids only**,
+titles re-resolved through the RLS-scoped client on restore — a row the
+viewer can no longer read closes its tab silently), `WorkspaceView` renders
+the active tab, and a case tab is `CaseDetail` in embedded mode with
+`CaseSectionSwitcher` over the `CASE_TABS` registry. The stable addresses
+stay `caseLink()` / `/cases?case=X&tab=Y` and `/tools?tool=…&record=…`, which
+redirect into the workspace so notifications, bookmarks and deep links keep
+resolving. The P3-07 states — a missing case (`MissingCaseState`), a
+soft-deleted one (`DeletedCaseNotice`) and one the viewer cannot read
+(`AccessRequestPanel`, never a title or number) — are rendered from what the
+RLS-scoped read returns, never from a client guess. Archived cases are
+read-only **at RLS** (`private.case_writable`, P3-05); the UI mirrors it.
+Detail: [WORKFLOWS §3](WORKFLOWS.md), [AUTHORIZATION §15](AUTHORIZATION.md).
+
+## 15. Permission module (server + client)
+
+One question, one answer, asked in two places. **Server**
+(`20261005120000_permission_module`): `permission_catalog` is the seeded
+table of every `(action, kind)` the portal knows, with the rule in prose and
+the RLS suite that pins it; `public.my_permissions()` answers the viewer's
+access class, role, bureau, standings, expiries and flags in one round trip;
+`public.can_record(action, kind, id)` answers a per-row question through
+`private.perm_dispatch`, which routes to the same `private.*` predicates the
+policies use (a case, a registry row, a legal request, a report, a field
+submission, an action item, the Trash). A refusal is recorded either by
+returning `{ok:false, code}` after `private.perm_deny` or by raising through
+`private.perm_raise` (SQLSTATE `P0403`), which `src/lib/db.ts` acknowledges
+once through `perm_denied_ack`. **Client** (`src/lib/permissions/`, P1-08):
+`usePermissions()` is server-first over `my_permissions()` (`NO_ACCESS` until
+it resolves), `can(action, kind)` reads the generated matrix
+(`src/lib/permissionsMatrix.ts`, `npm run gen:permissions`), `canRecord()`
+asks the server, and the pure mirrors in `mirrors.ts` / `sibMirrors.ts` only
+hide buttons — `parity.test.ts` pins them against the matrix; an ESLint rule
+refuses a predicate imported from `roles.ts` / `siu.ts`. Detail:
+[AUTHORIZATION §6 and §13](AUTHORIZATION.md).
+
+## 16. Versions, Trash and permanent deletion
+
+Nothing a browser session does destroys a row. **Soft delete** (Phase 1):
+every soft-deletable table (27 kinds — 15 registries, 10 case tables, case
+notes and case links) carries `deleted_at / deleted_by / delete_reason /
+delete_batch`; the client `DELETE` privilege is revoked and a non-definer
+trigger freezes the lifecycle columns, so the only paths are
+`public.soft_delete(kind, id, reason)` (cascading to the record's exclusive
+children under one batch) and `public.restore_record` (a child comes back
+only under a live parent — `parent_deleted`). `src/lib/db.ts` filters those
+tables to live rows and routes `remove()` through the RPC;
+`src/lib/deleteRecord.ts` is the one delete helper (the toast "<Label>
+deleted · In Trash" with **Undo** and an "Open Trash" link; Undo is
+`restore_record`, so it still works after the toast is gone; only case
+templates, commendations and case assignments keep a plain confirmed
+remove / unassignment).
+**The Trash** (Phase 8, `20261102120000`): `public.trash_list(kind?, limit)`
+walks every kind and returns the rows the caller could restore
+(`perm_dispatch('restore')` — a detective their own case material, command
+the deleted rows of their cases, the Owner everything), labelled and tied to
+their case — a case child only while the caller can still read the case,
+restricted media for the Owner alone — ≤ 500 newest first; `trash_count()`
+(counted to 100) feeds the Sidebar badge;
+`/trash` renders it (`TrashView`, refreshed on focus / after an action / every
+60 s — the underlying tables are too many for `useTableVersion`).
+**Versions** (P1-05): `record_versions` rows are written by a definer trigger
+on every covered UPDATE (five-minute same-actor coalescing) and read under
+the parent's own SELECT policy; `record_history` lists them and
+`restore_version` writes a version's fields back as a **new** version with a
+reason (`RecordHistory` — field changes, Compare, Restore this version;
+`VersionViewer` stays for SOP document versions; a draft legal request
+offers Compare only). **Permanent deletion**
+(P1-07 / P8-03) is the Owner's armed protocol alone — preview → arm (fresh
+session, reason, token) → execute (typed `DELETE <label>`) — over
+`permanent_delete_record_*`, run inline from a Trash row
+(`RecordPermanentDelete`, the Owner's "Permanently delete…") and linked
+from the Owner console; storage objects are
+enumerated for the client to remove. Detail: [AUTHORIZATION §8–§12 and
+§20](AUTHORIZATION.md), [WORKFLOWS §13–§14](WORKFLOWS.md).
+
+## 17. Scheduler (pg_cron jobs)
+
+`20261004130000_scheduler_pg_cron` declares the scheduler in the repo:
+`pg_cron` + `pg_net`, the `scheduled_job_runs` ledger (Owner-readable) and
+`private.job_begin(name)` / `job_end(run, status, detail)` around every job.
+The jobs — `sops-sync` (15 min, Drive → SOPs through pg_net),
+`audit-chain-verify` (daily), `record-versions-prune` (daily),
+`access-grant-expiry-sweep` (hourly), `siu-reconcile-scan` (15 min),
+`legal-sweep` (hourly) and `action-escalation-sweep` (hourly) — each wrap a
+`private.*` sweep, notify through the same test-actor-suppressing notifiers
+the RPCs use, and are idempotent so a manual re-run after a cron gap is
+safe. The Owner-only manual runners (`legal_sweep_run()`,
+`action_escalation_run()`) and the fixture-scoped `rls_test_escalation_run`
+let a gap be closed and the suites test the ladder without touching a
+production rule. The table of schedules, what each does and how to re-run
+it lives in [OPERATIONS.md §6 "Scheduled jobs"](OPERATIONS.md).
+
+## 18. Where to go deeper
 
 | Topic | Reference |
 | --- | --- |
@@ -412,3 +526,5 @@ Gated by `profiles.is_owner` in the UI and `private.is_owner()` in RLS:
 | Tables, policies, triggers | [Handbook Ch. 8](handbook/08-database.md) |
 | Security model and residual risks | [Handbook Ch. 18](handbook/18-security.md), [HARDENING.md](HARDENING.md) |
 | Deploying and operating all of this | [DEPLOYMENT.md](DEPLOYMENT.md), [OPERATIONS.md](OPERATIONS.md) |
+| Who may do what, phase by phase (permission module, soft delete, versions, Trash, Action Center) | [AUTHORIZATION.md §6–§20](AUTHORIZATION.md), [RLS.md](RLS.md) |
+| The Trash, history and the phone-first case route as a user sees them | [USER-GUIDE.md](USER-GUIDE.md), [WORKFLOWS.md §13–§14](WORKFLOWS.md), [Handbook Ch. 22](handbook/22-versions-trash.md) |

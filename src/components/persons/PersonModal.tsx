@@ -14,7 +14,8 @@
  *  Mounted fresh per open. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Json, Tables, TablesInsert } from '@/lib/database.types'
-import { deleteWithUndo, insert, list, update } from '@/lib/db'
+import { insert, list, update } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { findDuplicates } from '@/lib/entity'
 import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
 import { useAuth } from '@/lib/auth'
@@ -59,12 +60,6 @@ export const parseProperties = (j: Json | null): PersonProperty[] =>
     ? j.map((x) => (x && typeof x === 'object' ? (x as unknown as Partial<PersonProperty>) : {}))
         .map((x) => ({ address: x.address || '', type: x.type || 'Residence', notes: x.notes || '' }))
     : []
-
-/** Cascade-null references restored by undo (vanilla persons.js:86). */
-export const PERSON_NULL_REFS = [
-  { table: 'gang_members' as const, column: 'person_id' },
-  { table: 'vehicles' as const, column: 'owner_id' },
-]
 
 const splitLines = (s: string): string[] => s.split('\n').map((x) => x.trim()).filter(Boolean)
 
@@ -355,11 +350,9 @@ export function PersonModal({ record, prefillName, onCreated, onClose, onSaved }
     if (!record) return
     if (!(await uiConfirm(`Delete person "${record.name}"?`, { confirmText: 'Delete' }))) return
     onClose()
-    // Snapshot the FULL row for the undo re-insert — `record` may be a
-    // projected registry row, and undoing from it would drop columns.
-    const full = await list('persons', { in: { id: [record.id] } }).catch(() => [] as PersonRow[])
-    await deleteWithUndo('persons', full[0] ?? (record as PersonRow), {
-      label: `Person "${record.name}"`, noConfirm: true, after: onSaved, setNullRefs: PERSON_NULL_REFS,
+    // A soft delete keeps the row: nothing to snapshot, Undo is a restore.
+    await deleteRecord('persons', { id: record.id }, {
+      label: `Person "${record.name}"`, noConfirm: true, after: onSaved,
     })
   }
 

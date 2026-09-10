@@ -55,7 +55,7 @@ policy delegates to the same helper.
 (protected folders command-write-only).
 
 **Read by** their screens + every picker/graph/packet. **Written by** any
-active member's browser. **Deleted by** command via `deleteWithUndo`.
+active member's browser. **Deleted by** command via `deleteRecord` → `soft_delete` (restorable from the Trash — [Ch. 22](22-versions-trash.md)).
 
 ### Own-row (keyed to `auth.uid()`)
 `notifications` (insert ONLY via RPC — actor can't be forged; since
@@ -220,3 +220,41 @@ and the schema snapshot is the complete table list:
   (`case_create`, `case_set_status`, `case_set_lead`, `case_access_decide`,
   `case_timeline`, `report_create`) that both the portal and the future city
   lane call. See [Ch. 7](07-api.md).
+- **Portal Improvements, Phases 0–8** (`20261004…` → `20261102…`; each
+  verified at apply time in `supabase/MIGRATION-HISTORY.md`) — the
+  **scheduler** (`pg_cron` + `pg_net`, `scheduled_job_runs`,
+  `private.job_begin/job_end`; seven jobs — [Ch. 22.5](22-versions-trash.md));
+  the **permission module** (`permission_catalog`, `my_permissions()`,
+  `can_record()`, `private.perm_dispatch`, the denial ledger — `perm_deny` /
+  `perm_raise` P0403 / `perm_denied_ack`); the **audit chain**
+  (`audit_log.prev_hash / row_hash`, rewrite blocked, `audit_chain_status()`);
+  **soft delete** on 27 tables (`deleted_at / deleted_by / delete_reason /
+  delete_batch`, `DELETE` revoked, `private.block_direct_soft_delete`,
+  `soft_delete` / `restore_record`, `private.soft_delete_table/_state`,
+  `perm_registry_visible/_edit/_delete`) and the **Trash** (`trash_list` /
+  `trash_count` — [Ch. 22.2](22-versions-trash.md)); **`record_versions`**
+  (definer trigger `private.version_row`, INVOKER policy
+  `private.version_visible`, `record_history` / `restore_version`, the prune);
+  **case access grant expiry** (`expires_at` ≤ 90 d, `case_access_renew`,
+  the hourly sweep); the **generalised permanent deletion**
+  (`deleted_record_ledger`, `deletion_tokens.target_kind`,
+  `permanent_delete_record_preview/_arm/_execute`); the **entity layer**
+  (`phone_normalized` / `value_normalized`, `entity_merges`,
+  `entity_field_observations`, `entity_update_suggestions`,
+  `siu_reconcile_queue`, `siu_hidden_flag`, `merged_into`); the **workspace**
+  (`case_notes` — authored, versioned, soft-deletable; `case_links`;
+  `private.case_writable` on 36 case-child policies); the **legal tables**
+  (`legal_request_charges / _comments / _comment_versions / _revision_items /
+  _target_decisions / _reminders`, `legal_expiry_defaults`, `legal_export_log`,
+  `stage_entered_at / nudged_at / escalated_at`); the **report builder**
+  (`report_templates`, `report_template_versions`, `reports.template_version_id`
+  + review columns, `report_entities`, `report_exports`, `case_tasks` waive
+  columns); **intel triage** (`rejected_* / validated_*`,
+  `field_submission_events` shadow, `intel_groups / _members / _cases`,
+  `field_claim_links` widened, `source_submission_id` on six registries,
+  `private.block_direct_intel_review_columns`); the **Action Center**
+  (`action_item_state` — PK user + key, RPC-only; `action_escalation_rules`;
+  `action_escalations`; `notifications.read_at` + the `read` column grant;
+  `user_prefs.notif_discord`). Realtime additions: `case_notes`, `case_links`,
+  `legal_request_comments`, `field_submission_events`, `action_item_state`,
+  `action_escalations` (identifiers only — never a table with text).

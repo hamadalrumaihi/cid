@@ -65,6 +65,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { EmptyState, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { RelatedGuidance } from '@/components/sops/RelatedGuidance'
+import { RecordHistory } from '@/components/shared/RecordHistory'
 import { SectionTabs } from '@/components/ui/SectionTabs'
 import { uiPrompt } from '@/components/ui/dialog'
 
@@ -924,6 +925,17 @@ function SubmissionDetail({ submission, counts, onBack, onChanged }: {
             ))}
           </ul>
         )}
+      </Card>
+
+      {/* Field-level versions of the record itself (record_versions, P8-04):
+          the officer's edits before and after submission. Restore is the
+          officer's own live row only — can_record decides; asked on mount. */}
+      <Card>
+        <h4 className="text-[13px] font-semibold text-white">Record history</h4>
+        <p className="mt-1 text-xs text-slate-500">Every save to this record, field by field — who changed what, and when.</p>
+        <div className="mt-2">
+          <RecordHistory kind="field_submission" id={id} onRestored={() => { void load(); onChanged() }} />
+        </div>
       </Card>
 
       <Card>

@@ -7,7 +7,8 @@
  *  JSON.stringify), and the whole area is deep-linkable via ?gang= / ?section=. */
 import { useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { deleteWithUndo, list, withRetry } from '@/lib/db'
+import { list, withRetry } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { useRegistry } from '@/lib/useRegistry'
@@ -22,7 +23,7 @@ import { useToolNav } from '@/components/tools/useToolNav'
 import { GangCard, GangDetail, type GangCardStats } from './gangCards'
 import { GangModal } from './gangModals'
 import { GANG_CLASSIFICATIONS, GANG_STATUSES, humanize, isGangStale, normalizeName, rankTier } from './gangIntel'
-import { GANG_DELETE_CHILDREN, GANG_NULL_REFS, PAGE, type CaseOption, type GangPlaceRow, type GangRow, type IntelLinkRow, type MemberRow, type PlaceRow, type TurfRow } from './gangShared'
+import { PAGE, type CaseOption, type GangPlaceRow, type GangRow, type IntelLinkRow, type MemberRow, type PlaceRow, type TurfRow } from './gangShared'
 
 interface CaseLite { id: string; case_number: string; title: string | null; status: string | null }
 
@@ -173,12 +174,12 @@ export function GangsView() {
     const n = rows.length
     if (!(await uiConfirm(`Delete ${n} selected gang${n > 1 ? 's' : ''}? This also removes roster, ranks, turf, and place links.`, { confirmText: `Delete ${n}` }))) return
     setSelected(new Set())
-    await deleteWithUndo('gangs', rows, { label: `${n} gang${n > 1 ? 's' : ''}`, noConfirm: true, after: () => void refresh(), children: GANG_DELETE_CHILDREN, setNullRefs: GANG_NULL_REFS })
+    await deleteRecord('gangs', rows, { label: `${n} gang${n > 1 ? 's' : ''}`, noConfirm: true, after: () => void refresh() })
   }
   const deleteOne = async (g: GangRow) => {
     if (!(await uiConfirm(`Delete gang "${g.name}"? This removes its members, ranks, turf, and place links.`, { confirmText: 'Delete' }))) return
     closeDetail()
-    await deleteWithUndo('gangs', g, { label: `Gang "${g.name}"`, noConfirm: true, after: () => void refresh(), children: GANG_DELETE_CHILDREN, setNullRefs: GANG_NULL_REFS })
+    await deleteRecord('gangs', g, { label: `Gang "${g.name}"`, noConfirm: true, after: () => void refresh() })
   }
 
   const resetFilters = () => { setThreat('any'); setStatus('any'); setClassification('any'); setHasTurf(false); setOpenCases(false); setStaleOnly(false); setNoLeader(false); setNoSummary(false) }

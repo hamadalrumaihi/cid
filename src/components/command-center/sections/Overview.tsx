@@ -4,9 +4,10 @@
  *  capability-adaptive via `useCapabilities().commandScope` (a Bureau Lead's
  *  case-derived numbers are scoped to their own bureau client-side; RLS
  *  remains the authority on every read):
- *   1. "Awaiting you" — the command-relevant slice of the Action Center queue
- *      (useActionItems → isCommandItem), so decisions surface here without a
- *      second derivation of the rules.
+ *   1. "Awaiting you" — the command-relevant slice of the ONE Action Center
+ *      queue (ActionSlice over useActionQueue → isCommandItem), so decisions
+ *      surface here without a second derivation of the rules or a second
+ *      fetch (Phase 7 AC7).
  *   2. Queue tiles — one bounded count per decision queue, each clicking
  *      through to the section or route that owns it.
  *   3. Bureau workload — per-bureau open/clearance/avg-close scorecards +
@@ -31,8 +32,8 @@ import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { DashPanel } from '@/components/dash/DashPanel'
 import { DashRow } from '@/components/dash/DashRow'
 import { persistCaseFilters } from '@/components/cases/caseUtils'
-import { useActionItems } from '@/components/actioncenter/useActionItems'
-import { bureauScore, fmtAvgDays } from '@/components/command/commandUtils'
+import { ActionSlice } from '@/components/actioncenter/ActionSlice'
+import { bureauScore, fmtAvgDays } from '../lib/commandUtils'
 import { canDecideTransfer, canReviewCase } from '../lib/approvals'
 import { pendingMembership, type JusticeRequestLite } from '../lib/membershipPending'
 
@@ -98,8 +99,6 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
   const fieldIds = useFieldStanding((s) => s.ids)
   const fieldLoaded = useFieldStanding((s) => s.loaded)
   const fetchFieldStanding = useFieldStanding((s) => s.fetch)
-  const { items: actionItems } = useActionItems()
-
   const [data, setData] = useState<Counts>(EMPTY)
   const [requests, setRequests] = useState<RequestRow[] | null>(null)
   const [justiceReqs, setJusticeReqs] = useState<JusticeRequestLite[] | null>(null)
@@ -163,9 +162,6 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
     [data.cases, myBureau],
   )
 
-  /* ── awaiting you (Action Center command slice) ────────────────────────── */
-  const commandItems = useMemo(() => actionItems.filter((it) => it.isCommandItem), [actionItems])
-
   /* ── queue tiles ───────────────────────────────────────────────────────── */
   const roster = profiles.filter((p) => !p.removed_at)
   const pm = pendingMembership(profiles, requests, justiceByUser, justiceReqs, fieldLoaded ? fieldIds : null)
@@ -218,24 +214,15 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
 
   return (
     <div className="space-y-5">
-      <DashPanel
+      <ActionSlice
         title="Awaiting you"
-        count={commandItems.length}
+        filter={(it) => it.isCommandItem}
+        limit={10}
         hint="Command decisions from your Action Center queue — sign-offs, transfers, access, membership, legal and surveillance."
-        action={{ label: 'All command decisions →', href: '/action?s=command' }}
-        empty={commandItems.length === 0}
-      >
-        {commandItems.slice(0, 10).map((it) => (
-          <DashRow
-            key={it.id}
-            title={it.title}
-            why={it.reason}
-            meta={it.caseNumber ?? timeAgo(it.updatedAt)}
-            overdue={it.status === 'overdue'}
-            onClick={() => router.push(it.deepLink)}
-          />
-        ))}
-      </DashPanel>
+        emptyText="No command decisions are waiting on you."
+        href="/action?preset=command"
+        hrefLabel="All command decisions →"
+      />
 
       <div>
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">Decision queues</h3>

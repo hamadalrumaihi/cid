@@ -54,7 +54,8 @@ not hypotheticals.
 - **The contract**: `list()` **throws**; mutations **return `{error}`**;
   `updateWhere` returning zero rows with no error = the predicate matched
   nothing (RLS-blocked or lost race) — treat as failure; `withRetry` is
-  reads-only; `deleteWithUndo` snapshots cascade children before deleting.
+  reads-only; `remove()` on a soft-deletable table is `soft_delete`, and
+  `deleteRecord` is the one delete helper (Undo = `restore_record`; Ch. 22).
 - **Risk: HIGH.** Every feature assumes this contract.
 - **Common mistakes**: discarding a mutation's `{error}` (silent no-op —
   historically a real bug class); auto-retrying a mutation.

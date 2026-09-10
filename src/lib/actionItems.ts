@@ -1,4 +1,5 @@
-import { canDecideCidTransfer, isCommandRole } from './permissions/mirrors'
+import { canDecideCidTransfer, canReviewReport, isCommandRole } from './permissions/mirrors'
+import { clusterDuplicates } from './gangDuplicates'
 /** Action Center priority model — the canonical normalizer that turns every
  *  "something is waiting on me" source (tasks, sign-offs, returned cases,
  *  transfers, access/membership requests, legal requests, DOJ-pipeline queue
@@ -59,7 +60,69 @@ export type ActionSourceType =
    *  'access_request'/'other' would hand these rows the CID inline actions
    *  (grant-case modal, mark-read on a non-notification id). */
   | 'sib_access_request' | 'sib_referral' | 'sib_disclosure'
+  /** Phase 7 (P7-02, #374) — every remaining "waiting on me" source. Command
+   *  decisions: restricted export windows, MDT export proposals, field-officer
+   *  access requests, tracker co-signs, justice applications. Reviewer work:
+   *  claim verdicts, narcotic suggestions, gang duplicate review, report
+   *  review, surveillance alerts, the three intel lanes. SIB: conflicts and
+   *  watchlist reviews. Owner: client-error signals. Everyone: legal comments. */
+  | 'restricted_export' | 'mdt_export' | 'field_access' | 'claim_verdict'
+  | 'narcotic_suggestion' | 'gang_duplicate' | 'tracker_cosign'
+  | 'sib_conflict' | 'sib_watch_review' | 'owner_signal' | 'justice_application'
+  | 'surveillance_alert' | 'legal_comment' | 'report_review'
+  | 'intel_reply' | 'intel_restore' | 'intel_validate'
   | 'other'
+
+/** Human label per source type — the Action Center's type filter chips (agent
+ *  A's TYPE_FILTERS) and any surface that names a kind read this ONE map. */
+export const SOURCE_TYPE_LABEL: Record<ActionSourceType, string> = {
+  task: 'Tasks',
+  signoff: 'Sign-offs',
+  returned_case: 'Returned cases',
+  transfer: 'Transfers',
+  access_request: 'Access requests',
+  access_expiring: 'Access expiring',
+  membership_request: 'Membership',
+  legal_request: 'Legal requests',
+  case_followup: 'Follow-ups',
+  handover: 'Handovers',
+  mention: 'Mentions',
+  blocker: 'Blockers',
+  document_ack: 'Required reading',
+  document_review: 'Policy reviews',
+  document_approval: 'Document approvals',
+  document_sync: 'Drive conflicts',
+  document_suggestion: 'Document suggestions',
+  legal_hold: 'Legal holds',
+  restricted_access: 'Restricted access',
+  unverified_observation: 'Observations',
+  surveillance_expiring: 'Surveillance',
+  legal_queue: 'Judicial queue',
+  draft: 'Drafts',
+  unassigned_intel: 'Unclaimed intel',
+  bolo_expiring: 'BOLOs',
+  sib_access_request: 'SIB access',
+  sib_referral: 'SIB referrals',
+  sib_disclosure: 'SIB releases',
+  restricted_export: 'Restricted exports',
+  mdt_export: 'MDT exports',
+  field_access: 'Field access',
+  claim_verdict: 'Claim verdicts',
+  narcotic_suggestion: 'Narcotic suggestions',
+  gang_duplicate: 'Gang duplicates',
+  tracker_cosign: 'Tracker co-signs',
+  sib_conflict: 'SIB conflicts',
+  sib_watch_review: 'SIB watchlist',
+  owner_signal: 'Owner signals',
+  justice_application: 'Justice applications',
+  surveillance_alert: 'Surveillance alerts',
+  legal_comment: 'Legal comments',
+  report_review: 'Report reviews',
+  intel_reply: 'Intel replies',
+  intel_restore: 'Rejected intel',
+  intel_validate: 'Intel validation',
+  other: 'Notifications',
+}
 
 export type ActionPriority = 'critical' | 'high' | 'normal' | 'low'
 export type ActionStatus =
@@ -94,6 +157,21 @@ export interface ActionItem {
   isWaitingOnCurrentUser: boolean
   dedupeKey: string
   sourceMetadata: Record<string, unknown>
+  /** Phase 7 (P7-03): when the escalation ledger (`action_escalations`) holds
+   *  a live row for this item's source — the queue renders an "Escalated"
+   *  badge and the item climbs by NUDGE.escalated. Null when not escalated. */
+  escalatedAt: string | null
+  /** Phase 7 (P7-01): the viewer's own `action_item_state` row for this
+   *  dedupe key (seen / snoozed / dismissed), merged in by the queue store;
+   *  null when the viewer never touched the item. */
+  state: ActionItemState | null
+}
+
+/** Per-viewer queue state (P7-01) — the `action_item_state` row projected. */
+export interface ActionItemState {
+  seenAt: string | null
+  snoozedUntil: string | null
+  dismissedAt: string | null
 }
 
 /* ---- input row projections ------------------------------------------------
@@ -105,6 +183,10 @@ export type AcCase = Pick<Tables<'cases'>,
   | 'created_by' | 'follow_up_at' | 'signoff_status' | 'signoff_stage'
   | 'signoff_assignee_id' | 'signoff_submitted_by' | 'signoff_submitted_at'
   | 'created_at' | 'updated_at'>
+  /** Phase 7 (#375): cases.priority lifts every item on the case — critical
+   *  +100, high +50 (NUDGE.priorityCritical / priorityHigh). Optional so the
+   *  existing fixtures compile; the loader's CASE_COLS selects it. */
+  & { priority?: string | null }
 export type AcTask = Pick<Tables<'case_tasks'>,
   'id' | 'case_id' | 'title' | 'due' | 'done' | 'assignee' | 'created_at' | 'updated_at'>
 export type AcTransfer = Pick<Tables<'transfer_requests'>,
@@ -182,7 +264,85 @@ export type AcSiuDisclosure = Pick<Tables<'siu_disclosures'>,
   'id' | 'title' | 'audience' | 'released_at' | 'acknowledged_at' | 'revoked_at'>
 /** All notifications columns — notifText helpers take the full row. */
 export type AcNotif = Pick<Tables<'notifications'>,
-  'id' | 'user_id' | 'type' | 'payload' | 'read' | 'created_at'>
+  'id' | 'user_id' | 'type' | 'payload' | 'read' | 'read_at' | 'created_at'>
+
+/* ---- Phase 7 (P7-02) source projections ------------------------------------
+ * Every Pick below is what the loader selects — slim, bounded, RLS-scoped and
+ * fail-open (a denied read and "nothing to do" are indistinguishable). */
+
+/** Fresh `packet_export` approvals (restricted_access_log, entity_type 'media',
+ *  entity_id = the CASE id — the row IS the 1-hour export window). */
+export type AcRestrictedExport = Pick<Tables<'restricted_access_log'>,
+  'id' | 'action' | 'actor_id' | 'entity_id' | 'entity_type' | 'reason' | 'created_at'>
+/** MDT export proposals awaiting a command approval (status 'proposed'). */
+export type AcMdtExport = Pick<Tables<'mdt_exports'>,
+  'id' | 'kind' | 'status' | 'subject_snapshot' | 'reason' | 'risk_level' | 'proposed_by' | 'proposed_at' | 'source_case_id' | 'updated_at'>
+/** Field-officer portal access requests awaiting a decision. */
+export type AcFieldAccessRequest = Pick<Tables<'field_access_requests'>,
+  'id' | 'user_id' | 'agency' | 'callsign' | 'status' | 'created_at' | 'updated_at'>
+/** My assigned field submissions (review-active) + their claim counts, for the
+ *  claim-verdict / validation-ready / needs-info-reply lanes. `counts` is the
+ *  field_submission_counts row (null = not loaded → no derived item). */
+export interface AcMySubmission {
+  id: string
+  submission_no: string | null
+  summary: string | null
+  status: string
+  assigned_to: string | null
+  validated_at: string | null
+  rejected_at: string | null
+  submitted_at: string | null
+  created_at: string
+  updated_at: string
+  /** Structured claims / decided claims / derived-validated (field_submission_counts). */
+  counts: { claims: number; decided: number; validated: boolean } | null
+  /** Newest officer message (from_reviewer = false) and newest reviewer note,
+   *  pre-reduced by the loader from the bounded message/review reads. */
+  lastOfficerMessageAt: string | null
+  lastReviewerNoteAt: string | null
+}
+/** Rejected field submissions in the restore window (command only). */
+export type AcRejectedSubmission = Pick<Tables<'field_submissions'>,
+  'id' | 'submission_no' | 'summary' | 'status' | 'rejected_at' | 'rejected_by' | 'updated_at' | 'created_at'>
+/** Open narcotic catalogue suggestions (RLS: catalogue managers + the author). */
+export type AcNarcoticSuggestion = Pick<Tables<'narcotic_suggestions'>,
+  'id' | 'title' | 'status' | 'suggestion_type' | 'created_by' | 'source_case_id' | 'created_at' | 'updated_at'>
+/** Unreviewed gang memberships — clustered by (gang, normalized name). */
+export type AcGangMember = Pick<Tables<'gang_members'>,
+  'id' | 'gang_id' | 'name' | 'person_id' | 'reviewed_at' | 'deleted_at' | 'created_at' | 'updated_at'>
+/** Pending trackers awaiting the second command signature. */
+export type AcTracker = Pick<Tables<'trackers'>,
+  'id' | 'tracker_code' | 'target' | 'status' | 'bureau' | 'case_id' | 'created_by' | 'director_sig' | 'deputy_sig' | 'created_at' | 'updated_at'>
+/** Declared SIB conflicts of interest (SIB command decides). */
+export type AcSiuConflict = Pick<Tables<'siu_conflicts'>,
+  'id' | 'case_id' | 'agent_id' | 'reason' | 'status' | 'declared_at' | 'updated_at'>
+/** Active SIB watchlist entries with a review or expiry inside 7 days. */
+export type AcSiuWatch = Pick<Tables<'siu_watchlist'>,
+  'id' | 'label' | 'entity_type' | 'priority' | 'status' | 'review_due_at' | 'expires_at' | 'removed_at' | 'assigned_agent' | 'created_at' | 'updated_at'>
+/** Client errors in the last 24 h — folded into ONE owner item per day. */
+export type AcClientError = Pick<Tables<'client_errors'>, 'id' | 'created_at' | 'route'>
+/** Open DOJ / Judiciary applications (command read since 20260731010000). */
+export type AcJusticeApplication = Pick<Tables<'justice_membership_requests'>,
+  'id' | 'applicant_id' | 'display_name' | 'requested_agency' | 'requested_justice_role' | 'status' | 'submitted_at' | 'created_at' | 'updated_at'>
+/** Open rule-generated surveillance alerts on cases I can access. */
+export type AcSurvAlert = Pick<Tables<'surveillance_alerts'>,
+  'id' | 'case_id' | 'title' | 'explanation' | 'alert_type' | 'status' | 'created_at'>
+/** Recent legal-request comments by others (7 d, bounded) — body NEVER
+ *  selected; the item says a comment exists and links to the thread. */
+export type AcLegalComment = Pick<Tables<'legal_request_comments'>,
+  'id' | 'legal_request_id' | 'author_id' | 'created_at' | 'deleted_at'>
+/** Reports submitted for review on cases I can read (the mirror decides). */
+export type AcReport = Pick<Tables<'reports'>,
+  'id' | 'case_id' | 'template' | 'kind' | 'seq' | 'author_id' | 'review_status' | 'finalized' | 'submitted_at' | 'created_at' | 'updated_at'>
+
+/** Live escalation-ledger rows (action_escalations, resolved_at IS NULL) —
+ *  RLS-scoped to cases the viewer can access. Merged onto items by kind. */
+export interface AcEscalation {
+  kind: string
+  source_id: string
+  case_id: string | null
+  escalated_at: string
+}
 /** Open member_transfers rows (DOJ transfers migration — the table is newer
  *  than the generated types, so this is a hand-kept projection the loader's
  *  cast-boundary read must match). RLS scopes the read: the subject, CID
@@ -325,6 +485,34 @@ export interface ActionSources {
   documents?: AcDoc[]
   /** Additive (defaults []): document-suggestion work, pre-derived. */
   suggestions?: AcSuggestion[]
+
+  /* ---- Phase 7 (P7-02) — every field optional so existing callers compile. */
+  /** Mirrors useAuth().canEdit — active member; gates the reviewer lanes. */
+  canEdit?: boolean
+  /** Fresh restricted-export windows (command only — see AcRestrictedExport). */
+  restrictedExports?: AcRestrictedExport[]
+  mdtExports?: AcMdtExport[]
+  fieldAccessRequests?: AcFieldAccessRequest[]
+  mySubmissions?: AcMySubmission[]
+  rejectedSubmissions?: AcRejectedSubmission[]
+  narcoticSuggestions?: AcNarcoticSuggestion[]
+  gangMembers?: AcGangMember[]
+  /** gang id → name, for the duplicate-review titles (optional). */
+  gangNames?: Record<string, string>
+  trackers?: AcTracker[]
+  sibConflicts?: AcSiuConflict[]
+  sibWatchlist?: AcSiuWatch[]
+  clientErrors?: AcClientError[]
+  justiceApplications?: AcJusticeApplication[]
+  survAlerts?: AcSurvAlert[]
+  legalComments?: AcLegalComment[]
+  reports?: AcReport[]
+  /** Live escalation ledger rows — see AcEscalation (P7-03). */
+  escalations?: AcEscalation[]
+  /** Per-viewer state by dedupe key (action_item_state) — merged onto
+   *  `item.state`; the store filters snoozed / dismissed AFTER the build so
+   *  `allItems` keeps them for the lanes. */
+  states?: Record<string, ActionItemState>
 }
 
 export interface ActionQueue { items: ActionItem[]; suppressedCount: number }
@@ -348,7 +536,27 @@ export const NUDGE = {
   legalNudged: 20,     // the reminder sweep nudged the responsible party (> 48 h)
   membership: 20,
   restrictedAccess: 40, // a member is blocked until command decides
+  /** Phase 7 (P7-03): a live action_escalations row for the item's source. */
+  escalated: 80,
+  /** Phase 7 (#375): cases.priority carried onto every item on the case. */
+  priorityCritical: 100,
+  priorityHigh: 50,
 } as const
+
+/** cases.priority → urgency lift (unknown / null → 0). */
+export function priorityNudge(priority: string | null | undefined): number {
+  return priority === 'critical' ? NUDGE.priorityCritical : priority === 'high' ? NUDGE.priorityHigh : 0
+}
+
+/** Escalation-ledger kind → the dedupe key of the item it lifts (P7-03 §4.1). */
+export function escalationKey(e: Pick<AcEscalation, 'kind' | 'source_id'>): string | null {
+  switch (e.kind) {
+    case 'signoff': return `case:${e.source_id}:signoff-decide`
+    case 'access_request': return `access:${e.source_id}`
+    case 'task_overdue': return `task:${e.source_id}`
+    default: return null
+  }
+}
 
 export function priorityFromScore(score: number): ActionPriority {
   return score >= 400 ? 'critical' : score >= 300 ? 'high' : score >= 100 ? 'normal' : 'low'
@@ -366,6 +574,8 @@ const INTEL_REVIEW_ACTIVE = new Set(['new', 'reviewing', 'needs_info'])
  *  intake decision) — redeclared so this module never imports the
  *  db-touching siu lib. */
 const SIB_REFERRAL_OPEN = new Set(['submitted', 'under_review', 'info_requested'])
+/** decide_narcotic_suggestion's open statuses — a decision is still owed. */
+const NARCOTIC_OPEN = new Set(['submitted', 'under_review', 'needs_more_information'])
 
 /* ---- draft-key vocabulary --------------------------------------------------
  * Human description of a user_drafts KEY — never its payload. The vocabulary
@@ -495,7 +705,7 @@ export function buildActionItems(s: ActionSources): ActionQueue {
       waitingSince: null, ownerId: null, responsibleRole: null, caseId: null,
       caseNumber: null, bureau: null, actionLabel: null, secondaryActionLabel: null,
       canAct: false, isCommandItem: false, isPersonalItem: false,
-      isWaitingOnCurrentUser: false, sourceMetadata: {}, nudge: 0, ...d,
+      isWaitingOnCurrentUser: false, sourceMetadata: {}, escalatedAt: null, state: null, nudge: 0, ...d,
     }
     drafts.push(full)
     index.set(full.dedupeKey, full)
@@ -518,6 +728,9 @@ export function buildActionItems(s: ActionSources): ActionQueue {
       deepLink: caseLink(t.case_id, 'tasks', { task: t.id }),
       actionLabel: 'Mark done', canAct: true,
       isPersonalItem: true, isWaitingOnCurrentUser: true,
+      // caseLeadId: the Reassign dialog's cosmetic gate (canReassignCaseWork —
+      // the case lead or command; action_reassign_task re-decides).
+      sourceMetadata: { case_id: t.case_id, caseLeadId: c?.lead_detective_id ?? null },
       dedupeKey: `task:${t.id}`,
     })
   }
@@ -784,6 +997,9 @@ export function buildActionItems(s: ActionSources): ActionQueue {
       isWaitingOnCurrentUser: d.viewerCanAct,
       nudge: (expiring ? NUDGE.legalExpiring : 0) + sla.nudge,
       sourceMetadata: sla.mark ? { sla: sla.mark } : {},
+      // The legal sweep's own escalation mark → the same "Escalated" badge
+      // the ledger drives for sign-offs / access / tasks (P7-03).
+      escalatedAt: l.escalated_at ?? null,
       dedupeKey: `legal:${l.id}`,
     })
   }
@@ -816,6 +1032,7 @@ export function buildActionItems(s: ActionSources): ActionQueue {
         isWaitingOnCurrentUser: true,
         nudge: sla.nudge,
         sourceMetadata: sla.mark ? { sla: sla.mark } : {},
+        escalatedAt: l.escalated_at ?? null,
       }
       const withSla = (reason: string) => (sla.label ? `${sla.label} — ${reason}` : reason)
       if (jr === 'judge' && st === 'submitted_to_judge' && !l.assigned_judge_id && l.classification !== 'sealed') {
@@ -916,7 +1133,7 @@ export function buildActionItems(s: ActionSources): ActionQueue {
       deepLink: caseLink(b.case_id),
       actionLabel: 'Resolve', canAct: true,
       isPersonalItem: true, isWaitingOnCurrentUser: true,
-      sourceMetadata: { case_id: b.case_id, type: b.type },
+      sourceMetadata: { case_id: b.case_id, type: b.type, caseLeadId: c?.lead_detective_id ?? null },
       dedupeKey: `blocker:${b.id}`,
     })
   }
@@ -1321,6 +1538,457 @@ export function buildActionItems(s: ActionSources): ActionQueue {
     }
   }
 
+  /* ── Phase 7 (P7-02, #374) — the remaining queue kinds ─────────────────────
+   * Every branch below reads an optional ActionSources array the loader fills
+   * only for the standing that can act; the gates here are cosmetic mirrors
+   * (RLS + the RPCs decide). Dedupe keys follow private.action_key_class. */
+  const canAdmin = s.isCommand || (s.isOwner ?? false)
+  const canEdit = s.canEdit ?? false
+  const caseCtx = (caseId: string | null | undefined) => {
+    const c = caseId ? caseById.get(caseId) : undefined
+    return { c, caseNumber: c?.case_number ?? null, bureau: c?.bureau ?? null, line: c ? `${c.case_number} · ${c.title || 'Untitled'}` : null }
+  }
+
+  /* 9k · restricted export windows — a fresh `packet_export` approval keeps
+   *      restricted media in case packets for ONE hour. Command sees the open
+   *      window (who approved it, when it closes) and may renew it; nothing
+   *      is "pending" here — the schema logs approvals, not attempts. */
+  if (s.isCommand) {
+    const rows = [...(s.restrictedExports ?? [])]
+      .filter((r) => r.action === 'packet_export' && r.entity_type === 'media')
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+    for (const r of rows) {
+      const opened = tsMs(r.created_at)
+      if (opened === null) continue
+      const closesAt = new Date(opened + 3_600_000).toISOString()
+      if (opened + 3_600_000 <= s.nowMs) continue
+      const { c, caseNumber, bureau } = caseCtx(r.entity_id)
+      const dl = deadlineInfo(closesAt, 'expires', { now: s.nowMs, soonHours: 1, urgentHours: 1 })
+      add({
+        id: `restricted:${r.entity_id}:export`, sourceType: 'restricted_export', sourceId: r.entity_id,
+        title: `Restricted export window open — ${caseNumber ?? 'case'}`,
+        summary: c ? `${c.case_number} · ${c.title || 'Untitled'}` : 'Restricted case media',
+        reason: `Approved by ${s.profileName(r.actor_id) || 'command'}${r.reason ? ` — ${r.reason}` : ''}${dl ? ` · ${dl.text}` : ''}`,
+        status: 'informational', dueAt: closesAt,
+        createdAt: r.created_at, updatedAt: r.created_at,
+        ownerId: s.me, responsibleRole: s.role,
+        caseId: r.entity_id, caseNumber, bureau,
+        deepLink: caseLink(r.entity_id, 'media'),
+        actionLabel: 'Renew window', canAct: true,
+        isCommandItem: true,
+        sourceMetadata: { case_id: r.entity_id, approved_by: r.actor_id, closes_at: closesAt },
+        dedupeKey: `restricted:${r.entity_id}:export`,
+      })
+    }
+  }
+
+  /* 9l · MDT export proposals — command approves what patrol will see; the
+   *      proposer waits (the RPC bars self-approval, mirrored). */
+  for (const e of s.mdtExports ?? []) {
+    if (e.status !== 'proposed') continue
+    const mine = e.proposed_by === s.me
+    if (!mine && !s.isCommand) continue
+    const { caseNumber, bureau } = caseCtx(e.source_case_id)
+    add({
+      id: `mdt_export:${e.id}`, sourceType: 'mdt_export', sourceId: e.id,
+      title: `MDT export — ${e.subject_snapshot}`,
+      summary: [humanize(e.kind), e.risk_level ? `${humanize(e.risk_level)} risk` : null].filter(Boolean).join(' · '),
+      reason: mine ? 'Waiting on a command approval before patrol sees it'
+        : e.reason || 'Awaiting your approval before patrol sees it',
+      status: mine ? 'waiting' : 'needs_action',
+      createdAt: e.proposed_at, updatedAt: e.updated_at, waitingSince: e.proposed_at,
+      ownerId: mine ? null : s.me, responsibleRole: mine ? null : s.role,
+      caseId: e.source_case_id, caseNumber, bureau,
+      deepLink: '/tools?tool=bolo',
+      actionLabel: mine ? null : 'Approve', canAct: !mine,
+      isCommandItem: !mine, isPersonalItem: mine, isWaitingOnCurrentUser: !mine,
+      sourceMetadata: { kind: e.kind, proposed_by: e.proposed_by },
+      dedupeKey: `mdt_export:${e.id}`,
+    })
+  }
+
+  /* 9m · field-officer access requests — command decides who joins the
+   *      Field Intelligence portal (field_access_decide). */
+  if (s.isCommand) {
+    for (const r of s.fieldAccessRequests ?? []) {
+      if (r.status !== 'pending') continue
+      add({
+        id: `field_access:${r.id}`, sourceType: 'field_access', sourceId: r.id,
+        title: `Field access request — ${r.callsign || humanize(r.agency)}`,
+        summary: humanize(r.agency),
+        reason: 'A patrol officer is asking for Field Intelligence access',
+        status: 'needs_action',
+        createdAt: r.created_at, updatedAt: r.updated_at, waitingSince: r.created_at,
+        ownerId: s.me, responsibleRole: s.role,
+        deepLink: '/tools?tool=field-review',
+        actionLabel: 'Approve', secondaryActionLabel: 'Deny', canAct: true,
+        isCommandItem: true, isWaitingOnCurrentUser: true,
+        sourceMetadata: { user_id: r.user_id, agency: r.agency },
+        dedupeKey: `field_access:${r.id}`,
+      })
+    }
+  }
+
+  /* 9n · my field submissions — three reviewer lanes over the reports
+   *      assigned to me: claim verdicts still owed, an officer reply newer
+   *      than my last note, and "every claim decided → validate". */
+  if (canEdit) {
+    for (const f of s.mySubmissions ?? []) {
+      if (f.assigned_to !== s.me) continue
+      if (f.status === 'archived' || f.status === 'rejected') continue
+      const no = f.submission_no || 'field report'
+      const link = `/tools?tool=field-review&record=${encodeURIComponent(f.id)}`
+      const base = {
+        sourceId: f.id, summary: f.summary || 'Field intelligence report',
+        createdAt: f.created_at, updatedAt: f.updated_at,
+        ownerId: s.me, deepLink: link,
+        isPersonalItem: true, isWaitingOnCurrentUser: true,
+        sourceMetadata: { submission_no: f.submission_no, status: f.status },
+      }
+      const c = f.counts
+      if (c && c.claims > c.decided) {
+        add({
+          ...base, id: `claim:${f.id}`, sourceType: 'claim_verdict',
+          title: `Claim verdicts due — ${no}`,
+          reason: `${c.claims - c.decided} of ${c.claims} claim${c.claims === 1 ? '' : 's'} still need a verdict`,
+          status: 'needs_action', waitingSince: f.submitted_at ?? f.created_at,
+          actionLabel: 'Review claims',
+          dedupeKey: `claim:${f.id}`,
+        })
+      }
+      if (c && c.validated && !f.validated_at) {
+        add({
+          ...base, id: `intel:${f.id}:validate`, sourceType: 'intel_validate',
+          title: `Ready to validate — ${no}`,
+          reason: 'Every claim is decided and the source is graded — record the validation',
+          status: 'needs_action', waitingSince: f.updated_at,
+          actionLabel: 'Validate',
+          dedupeKey: `intel:${f.id}:validate`,
+        })
+      }
+      if (f.lastOfficerMessageAt && (!f.lastReviewerNoteAt || f.lastOfficerMessageAt > f.lastReviewerNoteAt)) {
+        add({
+          ...base, id: `intel:${f.id}:reply`, sourceType: 'intel_reply',
+          title: `Officer replied — ${no}`,
+          reason: 'The submitting officer answered after your last note',
+          status: 'needs_action', waitingSince: f.lastOfficerMessageAt,
+          updatedAt: f.lastOfficerMessageAt,
+          actionLabel: 'Read reply',
+          dedupeKey: `intel:${f.id}:reply`,
+        })
+      }
+    }
+  }
+
+  /* 9o · rejected intel in its restore window — command only, 7 days. */
+  if (s.isCommand) {
+    for (const f of s.rejectedSubmissions ?? []) {
+      if (f.status !== 'rejected' || !f.rejected_at) continue
+      const at = tsMs(f.rejected_at)
+      if (at === null || s.nowMs - at > 7 * DAY_MS) continue
+      const restoreBy = new Date(at + 7 * DAY_MS).toISOString()
+      add({
+        id: `intel:${f.id}:rejected`, sourceType: 'intel_restore', sourceId: f.id,
+        title: `Rejected intel — ${f.submission_no || 'field report'}`,
+        summary: f.summary || 'Field intelligence report',
+        reason: `Rejected by ${s.profileName(f.rejected_by) || 'a reviewer'} — restore it within 7 days if the decision was wrong`,
+        status: 'informational', dueAt: restoreBy,
+        createdAt: f.rejected_at, updatedAt: f.updated_at,
+        ownerId: s.me, responsibleRole: s.role,
+        deepLink: `/tools?tool=field-review&record=${encodeURIComponent(f.id)}`,
+        isCommandItem: true,
+        sourceMetadata: { submission_no: f.submission_no, rejected_by: f.rejected_by },
+        dedupeKey: `intel:${f.id}:rejected`,
+      })
+    }
+  }
+
+  /* 9p · narcotic catalogue suggestions — RLS returns a non-self row only to
+   *      a catalogue manager, so a visible other's row is a decision owed;
+   *      the author sees their own waiting / needs-info state. */
+  if (canEdit) {
+    for (const g of s.narcoticSuggestions ?? []) {
+      if (!NARCOTIC_OPEN.has(g.status)) continue
+      const mine = g.created_by === s.me
+      const { caseNumber, bureau } = caseCtx(g.source_case_id)
+      if (!mine) {
+        add({
+          id: `narcotic:${g.id}`, sourceType: 'narcotic_suggestion', sourceId: g.id,
+          title: `Narcotic suggestion — ${g.title}`,
+          summary: humanize(g.suggestion_type),
+          reason: g.status === 'needs_more_information'
+            ? 'Waiting on the submitter — more information was requested'
+            : 'A catalogue change is proposed — accept or decline it',
+          status: g.status === 'needs_more_information' ? 'waiting' : 'needs_action',
+          createdAt: g.created_at, updatedAt: g.updated_at, waitingSince: g.created_at,
+          ownerId: s.me, caseId: g.source_case_id, caseNumber, bureau,
+          deepLink: '/tools?tool=narcotics',
+          actionLabel: 'Accept', secondaryActionLabel: 'Decline', canAct: g.status !== 'needs_more_information',
+          isWaitingOnCurrentUser: g.status !== 'needs_more_information',
+          sourceMetadata: { suggestion_type: g.suggestion_type, created_by: g.created_by },
+          dedupeKey: `narcotic:${g.id}`,
+        })
+      } else {
+        add({
+          id: `narcotic:${g.id}`, sourceType: 'narcotic_suggestion', sourceId: g.id,
+          title: `Your narcotic suggestion — ${g.title}`,
+          summary: humanize(g.suggestion_type),
+          reason: g.status === 'needs_more_information'
+            ? 'A catalogue manager asked for more information'
+            : 'Waiting on a catalogue manager',
+          status: g.status === 'needs_more_information' ? 'needs_action' : 'waiting',
+          createdAt: g.created_at, updatedAt: g.updated_at, waitingSince: g.updated_at,
+          ownerId: s.me, caseId: g.source_case_id, caseNumber, bureau,
+          deepLink: '/tools?tool=narcotics',
+          isPersonalItem: true, isWaitingOnCurrentUser: g.status === 'needs_more_information',
+          sourceMetadata: { suggestion_type: g.suggestion_type, created_by: g.created_by },
+          dedupeKey: `narcotic:${g.id}`,
+        })
+      }
+    }
+  }
+
+  /* 9q · gang duplicate review — the roster's cluster rule (same normalized
+   *      name inside one gang) over unreviewed memberships; one item per
+   *      unreviewed member so "mark reviewed" resolves exactly one row. */
+  if (canEdit && (s.gangMembers?.length ?? 0) > 0) {
+    for (const cl of clusterDuplicates(s.gangMembers ?? [])) {
+      for (const m of cl.members) {
+        if (m.reviewed_at || m.deleted_at) continue
+        const gang = s.gangNames?.[m.gang_id]
+        add({
+          id: `gang_dup:${m.id}`, sourceType: 'gang_duplicate', sourceId: m.id,
+          title: `Possible duplicate — ${m.name || 'member'}`,
+          summary: [gang, cl.reason].filter(Boolean).join(' · '),
+          reason: `${cl.members.length} memberships share this name — merge them or mark this one reviewed`,
+          status: 'needs_action',
+          createdAt: m.created_at, updatedAt: m.updated_at, waitingSince: m.created_at,
+          ownerId: s.me,
+          deepLink: `/gangs?gang=${encodeURIComponent(m.gang_id)}`,
+          actionLabel: 'Mark reviewed', canAct: true,
+          isWaitingOnCurrentUser: true,
+          sourceMetadata: { gang_id: m.gang_id, cluster: cl.key, person_id: m.person_id },
+          dedupeKey: `gang_dup:${m.id}`,
+        })
+      }
+    }
+  }
+
+  /* 9r · tracker co-sign — a pending tracker carries the Director's signature
+   *      and waits for a SECOND command officer (never the same person, never
+   *      the creator). The co-sign itself stays in Trackers.tsx. */
+  for (const t of s.trackers ?? []) {
+    if (t.status !== 'pending' || t.deputy_sig) continue
+    const signedByMe = t.director_sig === s.me || t.created_by === s.me
+    if (!signedByMe && !s.isCommand) continue
+    const { caseNumber, bureau } = caseCtx(t.case_id)
+    add({
+      id: `tracker:${t.id}`, sourceType: 'tracker_cosign', sourceId: t.id,
+      title: `Tracker co-sign — ${t.tracker_code}`,
+      summary: t.target,
+      reason: signedByMe
+        ? 'Waiting on a second command officer to co-sign'
+        : 'Awaiting a second command signature — no single-person approval',
+      status: signedByMe ? 'waiting' : 'needs_action',
+      createdAt: t.created_at, updatedAt: t.updated_at, waitingSince: t.created_at,
+      ownerId: signedByMe ? null : s.me, responsibleRole: signedByMe ? null : s.role,
+      caseId: t.case_id, caseNumber, bureau: bureau ?? t.bureau,
+      deepLink: '/command',
+      isCommandItem: !signedByMe, isPersonalItem: signedByMe, isWaitingOnCurrentUser: !signedByMe,
+      sourceMetadata: { tracker_code: t.tracker_code, director_sig: t.director_sig },
+      dedupeKey: `tracker:${t.id}`,
+    })
+  }
+
+  /* 9s · SIB conflicts of interest — declared, awaiting SIB command. */
+  if (sib?.isCommand) {
+    for (const k of s.sibConflicts ?? []) {
+      if (k.status !== 'declared') continue
+      const { caseNumber, bureau } = caseCtx(k.case_id)
+      add({
+        id: `siu_conflict:${k.id}`, sourceType: 'sib_conflict', sourceId: k.id,
+        title: `Conflict declared — ${s.profileName(k.agent_id) || 'agent'}`,
+        summary: k.reason,
+        reason: 'An agent declared a conflict of interest — acknowledge and reassign if needed',
+        status: 'needs_action',
+        createdAt: k.declared_at, updatedAt: k.updated_at, waitingSince: k.declared_at,
+        ownerId: s.me, caseId: k.case_id, caseNumber, bureau,
+        deepLink: '/siu?s=intake',
+        isCommandItem: true, isWaitingOnCurrentUser: true,
+        sourceMetadata: { agent_id: k.agent_id, case_id: k.case_id },
+        dedupeKey: `siu_conflict:${k.id}`,
+      })
+    }
+  }
+
+  /* 9t · SIB watchlist reviews — an active entry whose review or expiry falls
+   *      inside 7 days. Field agents only (the watchlist's own audience). */
+  if (sib?.isAgent) {
+    for (const w of s.sibWatchlist ?? []) {
+      if (w.status !== 'active' || w.removed_at) continue
+      const label = w.label || humanize(w.entity_type)
+      const review = w.review_due_at ? tsMs(w.review_due_at) : null
+      if (review !== null && review - s.nowMs <= 7 * DAY_MS) {
+        add({
+          id: `siu_watch:${w.id}`, sourceType: 'sib_watch_review', sourceId: w.id,
+          title: `Watchlist review — ${label}`,
+          summary: `${humanize(w.priority)} priority`,
+          reason: review <= s.nowMs ? 'The scheduled review date has passed' : 'Scheduled review is coming up',
+          status: review <= s.nowMs ? 'needs_action' : 'due_soon',
+          dueAt: w.review_due_at, createdAt: w.created_at, updatedAt: w.updated_at,
+          ownerId: w.assigned_agent === s.me ? s.me : null,
+          deepLink: '/siu?s=watchlist',
+          isPersonalItem: w.assigned_agent === s.me, isWaitingOnCurrentUser: true,
+          sourceMetadata: { entity_type: w.entity_type, priority: w.priority },
+          dedupeKey: `siu_watch:${w.id}`,
+        })
+      }
+      const expires = tsMs(w.expires_at)
+      if (expires !== null && expires - s.nowMs <= 7 * DAY_MS) {
+        add({
+          id: `siu_watch:${w.id}:expiry`, sourceType: 'sib_watch_review', sourceId: w.id,
+          title: `Watchlist entry expiring — ${label}`,
+          summary: `${humanize(w.priority)} priority`,
+          reason: expires <= s.nowMs ? 'The entry has lapsed — extend it or let it clear' : 'The entry lapses within 7 days — extend it or let it clear',
+          status: 'due_soon',
+          dueAt: w.expires_at, createdAt: w.created_at, updatedAt: w.updated_at,
+          ownerId: w.assigned_agent === s.me ? s.me : null,
+          deepLink: '/siu?s=watchlist',
+          isPersonalItem: w.assigned_agent === s.me, isWaitingOnCurrentUser: true,
+          sourceMetadata: { entity_type: w.entity_type, priority: w.priority },
+          dedupeKey: `siu_watch:${w.id}:expiry`,
+        })
+      }
+    }
+  }
+
+  /* 9u · Owner signals — client errors in the last 24 h fold into ONE item
+   *      per day (the audit-chain mismatch arrives as a notification and is
+   *      typed owner_signal in branch 10). */
+  if (s.isOwner ?? false) {
+    const recent = (s.clientErrors ?? []).filter((e) => {
+      const at = tsMs(e.created_at)
+      return at !== null && s.nowMs - at <= DAY_MS
+    })
+    if (recent.length) {
+      const newest = recent.reduce((a, b) => (a.created_at > b.created_at ? a : b))
+      const routes = new Set(recent.map((e) => e.route).filter(Boolean))
+      add({
+        id: `owner:client_errors:${s.todayISO}`, sourceType: 'owner_signal', sourceId: s.todayISO,
+        title: `${recent.length} client error${recent.length === 1 ? '' : 's'} in the last 24 hours`,
+        summary: routes.size ? `${routes.size} route${routes.size === 1 ? '' : 's'} affected` : 'Reported by the app',
+        reason: 'Errors members hit in the portal — triage them in the Owner Console',
+        status: 'informational',
+        createdAt: newest.created_at, updatedAt: newest.created_at,
+        ownerId: s.me,
+        deepLink: '/owner?s=security',
+        sourceMetadata: { count: recent.length },
+        dedupeKey: `owner:client_errors:${s.todayISO}`,
+      })
+    }
+  }
+
+  /* 9v · justice applications — one item per open DOJ / Judiciary request
+   *      (replaces the count-only fold; the membership summary stays). Justice
+   *      memberships are retired, so these are awareness rows for command
+   *      rather than decisions that nag. */
+  if (canAdmin) {
+    for (const j of s.justiceApplications ?? []) {
+      if (j.status !== 'pending' && j.status !== 'correction_requested') continue
+      add({
+        id: `justice:${j.id}`, sourceType: 'justice_application', sourceId: j.id,
+        title: `Justice application — ${j.display_name}`,
+        summary: `${humanize(j.requested_agency)} · ${humanize(j.requested_justice_role)}`,
+        reason: j.status === 'correction_requested'
+          ? 'Correction requested — waiting on the applicant'
+          : 'Legacy DOJ / Judiciary application — awareness only (justice memberships are retired)',
+        status: j.status === 'correction_requested' ? 'waiting' : 'informational',
+        createdAt: j.submitted_at ?? j.created_at, updatedAt: j.updated_at, waitingSince: j.submitted_at ?? j.created_at,
+        ownerId: s.me, responsibleRole: s.role,
+        deepLink: '/command-center?s=approvals',
+        isCommandItem: true,
+        sourceMetadata: { applicant_id: j.applicant_id, status: j.status },
+        dedupeKey: `justice:${j.id}`,
+      })
+    }
+  }
+
+  /* 9w · surveillance alerts — open rule-generated alerts on cases I can
+   *      access; acknowledge or dismiss (surveillance_alert_ack). */
+  if (canEdit) {
+    for (const a of s.survAlerts ?? []) {
+      if (a.status !== 'open') continue
+      const { caseNumber, bureau, line } = caseCtx(a.case_id)
+      add({
+        id: `surv_alert:${a.id}`, sourceType: 'surveillance_alert', sourceId: a.id,
+        title: `Alert — ${a.title}`,
+        summary: line ?? a.explanation,
+        reason: `${humanize(a.alert_type)} alert — acknowledge it or dismiss it`,
+        status: 'needs_action',
+        createdAt: a.created_at, updatedAt: a.created_at, waitingSince: a.created_at,
+        ownerId: s.me, caseId: a.case_id, caseNumber, bureau,
+        deepLink: caseLink(a.case_id, 'surveillance'),
+        actionLabel: 'Acknowledge', secondaryActionLabel: 'Dismiss', canAct: true,
+        isPersonalItem: true, isWaitingOnCurrentUser: true,
+        sourceMetadata: { case_id: a.case_id, alert_type: a.alert_type, explanation: a.explanation },
+        dedupeKey: `surv_alert:${a.id}`,
+      })
+    }
+  }
+
+  /* 9x · legal comments — comments by others in the last 7 days on requests I
+   *      can read (bodies never fetched). "Mark read" is the viewer's own
+   *      dismiss state — the thread has no read receipts. */
+  {
+    const legalById = new Map(s.legal.map((l) => [l.id, l]))
+    for (const k of s.legalComments ?? []) {
+      if (k.author_id === s.me || k.deleted_at) continue
+      const at = tsMs(k.created_at)
+      if (at === null || s.nowMs - at > 7 * DAY_MS) continue
+      const l = legalById.get(k.legal_request_id)
+      add({
+        id: `legal_comment:${k.id}`, sourceType: 'legal_comment', sourceId: k.id,
+        title: `New comment — ${l?.request_number ?? 'legal request'}`,
+        summary: l?.case_number_snapshot ? `Case ${l.case_number_snapshot}` : 'Legal request discussion',
+        reason: `${s.profileName(k.author_id) || 'Someone'} commented on the request`,
+        status: 'informational',
+        createdAt: k.created_at, updatedAt: k.created_at,
+        caseId: l?.case_id ?? null, caseNumber: l?.case_number_snapshot ?? null, bureau: l?.responsible_bureau ?? null,
+        deepLink: `/legal?request=${encodeURIComponent(k.legal_request_id)}`,
+        actionLabel: 'Mark read', canAct: true,
+        isPersonalItem: true,
+        sourceMetadata: { request_id: k.legal_request_id, author_id: k.author_id },
+        dedupeKey: `legal_comment:${k.id}`,
+      })
+    }
+  }
+
+  /* 9y · report review — submitted reports on cases I can read where the
+   *      private.can_review_report mirror admits me (never the author). */
+  if (canEdit) {
+    const reviewer = { id: s.me, role: s.role, division: s.division, active: true, is_owner: s.isOwner ?? false }
+    for (const r of s.reports ?? []) {
+      const { c, caseNumber, bureau, line } = caseCtx(r.case_id)
+      if (!canReviewReport(r, reviewer, c?.bureau)) continue
+      const byRole = isCommandRole(s.role)
+      add({
+        id: `report:${r.id}`, sourceType: 'report_review', sourceId: r.id,
+        title: `Report review — ${humanize(r.template || 'report')}${r.kind === 'supplemental' ? ` · Supplemental #${r.seq ?? ''}` : r.kind === 'followup' ? ` · Follow-up #${r.seq ?? ''}` : ''}`,
+        summary: line ?? 'Case report',
+        reason: `Submitted by ${s.profileName(r.author_id) || 'a detective'} — your review authority applies`,
+        status: 'needs_action',
+        createdAt: r.submitted_at ?? r.created_at, updatedAt: r.updated_at, waitingSince: r.submitted_at ?? r.created_at,
+        ownerId: s.me, responsibleRole: byRole ? s.role : null,
+        caseId: r.case_id, caseNumber, bureau,
+        deepLink: caseLink(r.case_id, 'reports', { report: r.id }),
+        actionLabel: 'Review report',
+        isCommandItem: byRole, isPersonalItem: !byRole, isWaitingOnCurrentUser: true,
+        sourceMetadata: { report_id: r.id, author_id: r.author_id, template: r.template },
+        dedupeKey: `report:${r.id}`,
+      })
+    }
+  }
+
   /* 10 · notifications — suppressed when a structural item covers the same
    *      fact (the matched item collects the ids so the UI can mark them
    *      read); otherwise emitted as mention/handover/other. */
@@ -1339,7 +2007,12 @@ export function buildActionItems(s: ActionSources): ActionQueue {
     const p = parseNotifPayload(n.payload)
     const sourceType: ActionSourceType =
       n.type === 'chat_mention' || n.type === 'mention' ? 'mention'
-        : n.type === 'case_handover' ? 'handover' : 'other'
+        : n.type === 'case_handover' ? 'handover'
+          // Owner signals (P7-02): the audit-chain verify and app-error reports
+          // keep their `notif:` key (dismissable) but a distinct type so the
+          // Owner preset can filter them.
+          : n.type === 'audit_chain_mismatch' || n.type === 'client_error' ? 'owner_signal'
+            : 'other'
     add({
       id: `notif:${n.id}`, sourceType, sourceId: n.id,
       title: notifTitle(n),
@@ -1356,10 +2029,31 @@ export function buildActionItems(s: ActionSources): ActionQueue {
     })
   }
 
+  /* Phase 7 merges — applied to every draft before scoring:
+   *   · cases.priority lifts every item on the case (+100 / +50);
+   *   · a live escalation-ledger row stamps escalatedAt (+80) — legal
+   *     requests carry their own sweep mark (branch 7 set it already);
+   *   · the viewer's action_item_state row rides along as `state` (the
+   *     store filters snoozed / dismissed AFTER the build). */
+  const escalatedAtByKey = new Map<string, string>()
+  for (const e of s.escalations ?? []) {
+    const key = escalationKey(e)
+    if (key) escalatedAtByKey.set(key, e.escalated_at)
+  }
   const items = drafts
     .map(({ nudge, ...rest }) => {
-      const urgencyScore = urgency(rest.status, rest.dueAt, rest.waitingSince ?? rest.createdAt, nudge, s.nowMs)
-      return { ...rest, urgencyScore, priority: priorityFromScore(urgencyScore) }
+      const fromLedger = escalatedAtByKey.get(rest.dedupeKey) ?? null
+      const escalatedAt = rest.escalatedAt ?? fromLedger
+      // A legal request's own sweep mark already carries NUDGE.legalEscalated
+      // (branch 7) — only a ledger escalation adds the queue-wide +80.
+      const lift = nudge
+        + priorityNudge(rest.caseId ? caseById.get(rest.caseId)?.priority : null)
+        + (!rest.escalatedAt && fromLedger ? NUDGE.escalated : 0)
+      const urgencyScore = urgency(rest.status, rest.dueAt, rest.waitingSince ?? rest.createdAt, lift, s.nowMs)
+      return {
+        ...rest, escalatedAt, state: s.states?.[rest.dedupeKey] ?? null,
+        urgencyScore, priority: priorityFromScore(urgencyScore),
+      }
     })
     .sort(compareItems)
 

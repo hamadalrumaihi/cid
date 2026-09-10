@@ -28,7 +28,7 @@ import { LegalView } from '@/components/legal/LegalView'
 // (components/tools/toolRegistry); their routes below redirect into /workspace.
 import {
   AuditView, ConcernView, DevDocsView, FeedbackView, HeatmapView,
-  OwnerView, ReportTemplatesView, RicoView, SiuView, WorkspaceView,
+  OwnerView, ReportTemplatesView, RicoView, SiuView, TrashView, WorkspaceView,
 } from './lazyViews'
 
 /** One route per leaf tab, statically prerendered via generateStaticParams. */
@@ -127,6 +127,13 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="audit" />}>
         <AuditView />
+      </Suspense>
+    )
+  }
+  if (tab === 'trash') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="trash" />}>
+        <TrashView />
       </Suspense>
     )
   }

@@ -66,6 +66,10 @@ versioned entry when they ship together.
 - Owner-facing operational changes → `src/components/owner/ownerData.ts`.
 - New or changed permission actions → a `permission_catalog` seed row in the
   migration + `npm run gen:permissions` (CI fails on drift).
+- New or renamed notification kinds → a title in
+  `src/lib/notificationTitles.json` + `node scripts/sync-notification-titles.mjs`
+  (`npm run check:notif-titles` — CI fails on drift between the app map and
+  the Discord edge function's copy).
 
 ## What every change must include
 

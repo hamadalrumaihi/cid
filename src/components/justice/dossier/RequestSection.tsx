@@ -8,7 +8,7 @@
 import { clearDraft, type LoadedDraft } from '@/lib/userDrafts'
 import { fmtDateTime, timeAgo } from '@/lib/format'
 import {
-  CLASSIFICATIONS, SOCIAL_PLATFORMS, STANDARDS_OF_PROOF,
+  CLASSIFICATIONS, SOCIAL_PLATFORMS, STANDARDS_OF_PROOF, isEditableDraft,
   type LegalRequest, type LegalVersion,
 } from '@/lib/justice'
 import type { LegalChargeRow } from '@/lib/legalExport'
@@ -18,6 +18,7 @@ import { parseLegalFormEntries } from '@/lib/schemas'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { RecordHistory } from '@/components/shared/RecordHistory'
 import { VersionViewer, type VersionItem } from '@/components/shared/VersionViewer'
 import { DiffView } from '@/components/sops/docDiff'
 import { ChargesBlock } from './ChargesBlock'
@@ -221,6 +222,16 @@ export function RequestSection({
         </Card>
       )}
       <ChargesBlock charges={charges} editable={editable} onEdit={onEditCharges} className="max-w-2xl" />
+      {/* Field-level edits while the request is a draft (record_versions,
+          P8-04). Read-only: the server treats legal as display_only for
+          restore_version; the frozen submitted versions follow below. */}
+      {isEditableDraft(r) && (
+        <Card pad="sm" className="max-w-2xl">
+          <h3 className="mb-1 text-[13px] font-semibold text-white">Draft history</h3>
+          <p className="mb-2 text-xs text-slate-400">Every save to the draft, field by field. Submitted versions are frozen in the history below.</p>
+          <RecordHistory kind="legal" id={r.id} canRestore={false} />
+        </Card>
+      )}
       <VersionHistory versions={versions} name={name} />
     </div>
   )

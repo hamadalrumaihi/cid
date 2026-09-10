@@ -24,7 +24,6 @@ import { Notice } from '@/components/ui/Notice'
 import { SectionHeader } from '@/components/ui/PageHeader'
 import { DashPanel } from '@/components/dash/DashPanel'
 import { DashRow } from '@/components/dash/DashRow'
-import { DashSwitcher } from '@/components/dash/DashSwitcher'
 import type { DojLists, DojRole, DojViewId } from './DojWorkspace'
 
 const TOP = 5
@@ -158,7 +157,6 @@ export function DojOverview({ role, myId, lists, requests, onOpen, onNavigate }:
 
   return (
     <div className="space-y-4">
-      <DashSwitcher />
       <SectionHeader title="Review overview" subtitle={subtitle} />
 
       {role === 'prosecutor' && (

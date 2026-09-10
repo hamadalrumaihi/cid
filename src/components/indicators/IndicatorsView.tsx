@@ -16,7 +16,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
-import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
+import { insert, list, update, withRetry } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { findDuplicates, type DuplicateRow } from '@/lib/entity'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
@@ -117,8 +118,8 @@ export function IndicatorsView() {
   }, [rows, query, kindFilter, caseById])
 
   const onDelete = async (r: IndicatorRow) => {
-    if (!(await uiConfirm(`Delete indicator “${r.value}”? Restorable via Undo.`, { confirmText: 'Delete' }))) return
-    await deleteWithUndo('indicators', r, { label: `Indicator ${r.value}`, noConfirm: true, after: refresh })
+    if (!(await uiConfirm(`Delete indicator “${r.value}”? It moves to the Trash and can be restored.`, { confirmText: 'Delete' }))) return
+    await deleteRecord('indicators', r, { label: `Indicator ${r.value}`, noConfirm: true, after: refresh })
   }
 
   const isHot = (r: IndicatorRow) => (matches.get(matchKey(r))?.caseIds.size ?? 0) >= 2

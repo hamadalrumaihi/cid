@@ -154,7 +154,7 @@ function payloadFor(r: Req, extra: Record<string, Json> = {}): Json {
 function notify(userIds: Iterable<string>, kind: string, payload: Json): number {
   const me = uid()
   const targets = [...new Set(userIds)].filter((id) => id && id !== me)
-  seedRows('notifications', targets.map((user_id) => ({ created_at: now(), id: mockId(), payload, read: false, type: kind, user_id })))
+  seedRows('notifications', targets.map((user_id) => ({ created_at: now(), id: mockId(), payload, read: false, read_at: null, type: kind, user_id })))
   return targets.length
 }
 /** creator + active participants + assigned judge — the fan-out set. */

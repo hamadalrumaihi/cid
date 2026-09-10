@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { insert, list, update, deleteWithUndo } from '@/lib/db'
+import { insert, list, update } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { todayISO } from '@/lib/format'
 import { PENAL_CLASS_ORDER, penalPredicateOptions } from '@/lib/penal'
 import { usePenalCode } from '@/lib/usePenalCode'
@@ -116,7 +117,7 @@ export function RicoTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolea
         <Button variant="primary" className="md:col-span-2" onAction={addPredicate}>Add predicate act</Button>
       </div>}
       <div className="space-y-2">
-        {preds.map((p) => <div key={p.id} className="rounded-lg border border-white/10 bg-ink-950/50 p-3"><p className="font-bold text-white">{p.predicate_type}</p><p className="text-sm text-slate-500">{p.act_date || 'No date'}{p.evidence_ref ? ` - ${p.evidence_ref}` : ''}</p>{p.note && <p className="mt-1 text-sm text-slate-300">{p.note}</p>}{canDelete && <button aria-label={`Delete predicate act: ${p.predicate_type}`} onClick={() => void deleteWithUndo('predicate_acts', p, { confirmTitle: 'Delete predicate act', confirmMessage: `Delete the predicate act “${p.predicate_type}”? You can undo this for a few seconds.`, confirmText: 'Delete act', label: 'predicate act', after: refresh })} className="mt-2 text-xs font-bold text-rose-300 hover:text-rose-200">Delete</button>}</div>)}
+        {preds.map((p) => <div key={p.id} className="rounded-lg border border-white/10 bg-ink-950/50 p-3"><p className="font-bold text-white">{p.predicate_type}</p><p className="text-sm text-slate-500">{p.act_date || 'No date'}{p.evidence_ref ? ` - ${p.evidence_ref}` : ''}</p>{p.note && <p className="mt-1 text-sm text-slate-300">{p.note}</p>}{canDelete && <button aria-label={`Delete predicate act: ${p.predicate_type}`} onClick={() => void deleteRecord('predicate_acts', p, { confirmTitle: 'Delete predicate act', confirmMessage: `Delete the predicate act “${p.predicate_type}”? You can undo this from the toast or the Trash.`, confirmText: 'Delete act', label: 'predicate act', after: refresh })} className="mt-2 text-xs font-bold text-rose-300 hover:text-rose-200">Delete</button>}</div>)}
         {!preds.length && <p className="rounded-lg border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-500">No predicate acts recorded.</p>}
       </div>
     </div>

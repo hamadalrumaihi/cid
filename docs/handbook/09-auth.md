@@ -143,6 +143,30 @@ Layer 3  Guard triggers  column-level locks                 → even allowed wri
   `block_direct_signoff`, `block_direct_report_finalize`,
   `block_tracker_self_cosign`.
 
+**The permission module (Phase 1, `20261005120000`)** puts one name on the
+three layers. On the server `permission_catalog` lists every `(action, kind)`
+with its rule in prose and the RLS suite that pins it; `public.my_permissions()`
+answers the viewer's access class (`owner` / `command` / `member` / `inactive`
+/ `none`), role, bureau, SIB standing, expiries and flags in one round trip;
+`public.can_record(action, kind, id)` answers a per-row question through
+`private.perm_dispatch`, which routes to the **same** `private.*` predicates
+the policies use (a case, a registry row, a legal request, a report, a field
+submission, an action item, the Trash — one arm per kind). A refusal is
+recorded either by returning `{ok:false, code}` after `private.perm_deny`
+(soft delete, the entity layer, report templates) or by raising through
+`private.perm_raise` — SQLSTATE `P0403`, the message unchanged — which
+`src/lib/db.ts` acknowledges once through `perm_denied_ack` (intel, the
+Action Center). On the client **everything** imports from
+`@/lib/permissions`: `usePermissions()` (server-first over `my_permissions()`,
+`NO_ACCESS` until it resolves; `can(action, kind)` reads the generated matrix
+`src/lib/permissionsMatrix.ts` — `npm run gen:permissions`; `canRecord()`
+asks the server), `useCapabilities()`, `useSiu()`, and the pure mirrors in
+`mirrors.ts` / `sibMirrors.ts`, which only hide buttons and are pinned to the
+matrix by `parity.test.ts`. An ESLint rule refuses a predicate imported from
+`roles.ts` / `siu.ts`. Layer 1 above is therefore no longer `useAuth()`'s
+`canEdit / canDelete` alone — it is the module's answer, and the module's
+answer comes from the server first.
+
 **Why**: the anon key ships in the JavaScript bundle — anyone can read it.
 That is safe only because the key grants nothing; every row crosses RLS.
 Client-side "security" would be theater.

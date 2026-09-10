@@ -15,7 +15,8 @@ import { Button } from '@/components/ui/Button'
 import { Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { uiConfirm } from '@/components/ui/dialog'
-import { deleteWithUndo, list, insert, rpc, update } from '@/lib/db'
+import { list, insert, rpc, update } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import type { Tables } from '@/lib/database.types'
 import { searchCaseHits } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
@@ -183,7 +184,7 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
     else { toast('Case removed from operation — history retained.', 'success'); onChanged() }
   }
   const del = async () => {
-    const ok = await deleteWithUndo('operations', op, { label: op.name, setNullRefs: [{ table: 'cases', column: 'operation_id' }] })
+    const ok = await deleteRecord('operations', op, { label: op.name })
     if (ok) { onBack(); onChanged() }
   }
   const setStatus = async (s: string) => {

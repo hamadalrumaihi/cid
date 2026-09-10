@@ -23,6 +23,9 @@ export const RicoView = lazy('rico', () => import('@/components/rico/RicoView').
 export const HeatmapView = lazy('heatmap', () => import('@/components/heatmap/HeatmapView').then((m) => m.HeatmapView))
 export const DevDocsView = lazy('devdocs', () => import('@/components/devdocs/DevDocsView').then((m) => m.DevDocsView))
 export const OwnerView = lazy('owner', () => import('@/components/owner/OwnerView').then((m) => m.OwnerView))
+// The Trash (Phase 8) — visited rarely; the permanent-delete flow it can open
+// is Owner-only, so neither belongs in the shared chunk.
+export const TrashView = lazy('trash', () => import('@/components/trash/TrashView').then((m) => m.TrashView))
 // Report template administration (Phase 5) — command-only, rarely opened.
 export const ReportTemplatesView = lazy('report-templates', () => import('@/components/reports/ReportTemplatesView').then((m) => m.ReportTemplatesView))
 // The unified workspace (/workspace, and /tools which renders the same

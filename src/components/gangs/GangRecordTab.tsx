@@ -7,7 +7,8 @@
  *  rollup cache) and owns the edit/delete/profile orchestration the registry
  *  screen normally provides. All reads stay RLS-scoped exactly as before. */
 import { useCallback, useEffect, useState } from 'react'
-import { deleteWithUndo, list, withRetry } from '@/lib/db'
+import { list, withRetry } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { uiConfirm } from '@/components/ui/dialog'
@@ -16,7 +17,7 @@ import { ViewPlaceholder } from '@/components/ViewPlaceholder'
 import { IntelProfile, type IntelTarget } from '@/components/persons/IntelProfile'
 import { GangDossier } from './GangDossier'
 import { GangModal } from './gangModals'
-import { GANG_DELETE_CHILDREN, GANG_NULL_REFS, type CaseOption, type GangRow } from './gangShared'
+import { type CaseOption, type GangRow } from './gangShared'
 
 export function GangRecordTab({ id, onBack }: { id: string; onBack: () => void }) {
   const { state, canEdit, canDelete } = useAuth()
@@ -61,9 +62,8 @@ export function GangRecordTab({ id, onBack }: { id: string; onBack: () => void }
 
   const deleteGang = async (g: GangRow) => {
     if (!(await uiConfirm(`Delete gang "${g.name}"? This removes its members, ranks, turf, and place links.`, { confirmText: 'Delete' }))) return
-    await deleteWithUndo('gangs', g, {
+    await deleteRecord('gangs', g, {
       label: `Gang "${g.name}"`, noConfirm: true, after: onBack,
-      children: GANG_DELETE_CHILDREN, setNullRefs: GANG_NULL_REFS,
     })
   }
 

@@ -1,7 +1,7 @@
 -- ============================================================
 -- CID Portal — live schema snapshot (REFERENCE ONLY)
 -- ============================================================
--- Generated 2026-09-07 from the live Supabase project `cid`
+-- Generated 2026-09-10 from the live Supabase project `cid`
 -- via scripts/schema-dump.sql (Postgres catalog queries) and
 -- scripts/build-schema-snapshot.mjs. Do not edit by hand: re-run the
 -- dump + build after applying migrations (see supabase/README.md).
@@ -138,6 +138,48 @@ alter table public.accounts add constraint accounts_merged_into_fkey FOREIGN KEY
 alter table public.accounts add constraint accounts_source_submission_id_fkey FOREIGN KEY (source_submission_id) REFERENCES field_submissions(id) ON DELETE SET NULL;
 alter table public.accounts add constraint accounts_pkey PRIMARY KEY (id);
 alter table public.accounts enable row level security;
+
+create table public.action_escalation_rules (
+  kind text not null,
+  after_hours integer not null,
+  target text not null,
+  enabled boolean not null default true,
+  note text,
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.action_escalation_rules add constraint action_escalation_rules_after_hours_check CHECK (((after_hours >= 1) AND (after_hours <= 720)));
+alter table public.action_escalation_rules add constraint action_escalation_rules_pkey PRIMARY KEY (kind);
+alter table public.action_escalation_rules enable row level security;
+
+create table public.action_escalations (
+  id uuid not null default gen_random_uuid(),
+  kind text not null,
+  source_id uuid not null,
+  case_id uuid,
+  escalated_at timestamp with time zone not null default now(),
+  notified uuid[] not null default '{}'::uuid[],
+  resolved_at timestamp with time zone,
+  stage text
+);
+alter table public.action_escalations add constraint action_escalations_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
+alter table public.action_escalations add constraint action_escalations_kind_fkey FOREIGN KEY (kind) REFERENCES action_escalation_rules(kind);
+alter table public.action_escalations add constraint action_escalations_pkey PRIMARY KEY (id);
+alter table public.action_escalations add constraint action_escalations_kind_source_id_key UNIQUE (kind, source_id);
+alter table public.action_escalations enable row level security;
+
+create table public.action_item_state (
+  user_id uuid not null,
+  dedupe_key text not null,
+  seen_at timestamp with time zone,
+  snoozed_until timestamp with time zone,
+  dismissed_at timestamp with time zone,
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.action_item_state add constraint action_item_state_dedupe_key_check CHECK (((length(dedupe_key) >= 1) AND (length(dedupe_key) <= 200)));
+alter table public.action_item_state add constraint action_item_state_key_shape CHECK ((dedupe_key ~ '^[a-z_]+:[A-Za-z0-9_:.@-]+$'::text));
+alter table public.action_item_state add constraint action_item_state_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+alter table public.action_item_state add constraint action_item_state_pkey PRIMARY KEY (user_id, dedupe_key);
+alter table public.action_item_state enable row level security;
 
 create table public.announcements (
   id uuid not null default gen_random_uuid(),
@@ -3047,7 +3089,8 @@ create table public.notifications (
   type text not null,
   payload jsonb default '{}'::jsonb,
   read boolean not null default false,
-  created_at timestamp with time zone not null default now()
+  created_at timestamp with time zone not null default now(),
+  read_at timestamp with time zone
 );
 alter table public.notifications add constraint notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
 alter table public.notifications add constraint notifications_pkey PRIMARY KEY (id);
@@ -4942,6 +4985,8 @@ CREATE INDEX accounts_lifecycle_idx ON public.accounts USING btree (lifecycle);
 CREATE INDEX accounts_merged_into_idx ON public.accounts USING btree (merged_into) WHERE (merged_into IS NOT NULL);
 CREATE UNIQUE INDEX accounts_platform_extid_uidx ON public.accounts USING btree (platform, external_id) WHERE ((external_id IS NOT NULL) AND (lifecycle <> 'merged'::text));
 CREATE INDEX accounts_platform_handle_idx ON public.accounts USING btree (platform, handle_normalized);
+CREATE INDEX action_escalations_case_idx ON public.action_escalations USING btree (case_id) WHERE (resolved_at IS NULL);
+CREATE INDEX action_item_state_snoozed_idx ON public.action_item_state USING btree (user_id, snoozed_until) WHERE (snoozed_until IS NOT NULL);
 CREATE INDEX announcements_author_id_fkey_idx ON public.announcements USING btree (author_id);
 CREATE INDEX audit_log_actor_id_fkey_idx ON public.audit_log USING btree (actor_id);
 CREATE INDEX audit_log_created_at_idx ON public.audit_log USING btree (created_at DESC);
@@ -5349,6 +5394,7 @@ CREATE INDEX narcotics_source_case_id_fkey_idx ON public.narcotics USING btree (
 CREATE INDEX narcotics_source_evidence_id_fkey_idx ON public.narcotics USING btree (source_evidence_id);
 CREATE INDEX narcotics_status_idx ON public.narcotics USING btree (status);
 CREATE INDEX notifications_user_id_read_idx ON public.notifications USING btree (user_id, read);
+CREATE INDEX notifications_user_unread_idx ON public.notifications USING btree (user_id, created_at DESC) WHERE (read = false);
 CREATE UNIQUE INDEX operation_bureaus_active_key ON public.operation_bureaus USING btree (operation_id, bureau) WHERE (left_at IS NULL);
 CREATE INDEX operation_bureaus_joined_by_fkey_idx ON public.operation_bureaus USING btree (joined_by);
 CREATE INDEX operation_bureaus_left_by_fkey_idx ON public.operation_bureaus USING btree (left_by);
@@ -5696,6 +5742,220 @@ begin
     set method = excluded.method
   returning * into ack;
   return ack;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.action_escalation_rule_set(p_kind text, p_after_hours integer, p_enabled boolean)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare r public.action_escalation_rules; v_from jsonb;
+begin
+  if not private.is_owner() then
+    perform private.perm_deny('sweep', 'action_escalation', null, 'not_owner');
+    return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'only the Owner may change the escalation rules');
+  end if;
+  select * into r from public.action_escalation_rules where kind = p_kind for update;
+  if not found then raise exception 'unknown escalation rule'; end if;
+  if p_after_hours is null or p_after_hours < 1 or p_after_hours > 720 then
+    raise exception 'escalate after 1 to 720 hours';
+  end if;
+  v_from := jsonb_build_object('after_hours', r.after_hours, 'enabled', r.enabled);
+  update public.action_escalation_rules
+     set after_hours = p_after_hours, enabled = coalesce(p_enabled, enabled), updated_at = now()
+   where kind = p_kind returning * into r;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values ((select auth.uid()), 'ACTION_ESCALATION_RULE_SET', 'action_escalation_rules', null,
+          jsonb_build_object('kind', p_kind, 'from', v_from,
+                             'to', jsonb_build_object('after_hours', r.after_hours, 'enabled', r.enabled)));
+  return jsonb_build_object('ok', true) || to_jsonb(r);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.action_escalation_run()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_out jsonb;
+begin
+  if not private.is_owner() then
+    perform private.perm_deny('sweep', 'action_escalation', null, 'not_owner');
+    return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'only the Owner may run the escalation sweep');
+  end if;
+  v_out := private.action_escalation_sweep();
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values ((select auth.uid()), 'ACTION_ESCALATION_RUN', 'action_escalations', null, v_out);
+  return jsonb_build_object('ok', true) || v_out;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.action_item_set_state(p_key text, p_op text, p_until timestamp with time zone DEFAULT NULL::timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_class text; v_row public.action_item_state;
+begin
+  if v_uid is null or not private.is_active() then
+    perform private.perm_raise('set_state', 'action_item', null, 'inactive', 'your account is not active');
+  end if;
+  if p_key is null or length(p_key) < 1 or length(p_key) > 200 then
+    raise exception 'that queue item key is not valid';
+  end if;
+  if p_op not in ('seen', 'snooze', 'unsnooze', 'dismiss', 'undismiss') then
+    raise exception 'unknown state operation';
+  end if;
+  v_class := private.action_key_class(p_key);
+  if p_op = 'snooze' and (p_until is null or p_until <= now() or p_until > now() + interval '48 hours') then
+    raise exception 'snooze for up to 48 hours';
+  end if;
+  if p_op = 'dismiss' and v_class <> 'dismissable' then
+    perform private.perm_raise('dismiss', 'action_item', null, 'not_dismissable',
+      'this item is a decision or assigned work — decide it, finish it or snooze it');
+  end if;
+
+  insert into public.action_item_state as s (user_id, dedupe_key, seen_at, snoozed_until, dismissed_at)
+  values (v_uid, p_key,
+          case when p_op = 'seen' then now() end,
+          case when p_op = 'snooze' then p_until end,
+          case when p_op = 'dismiss' then now() end)
+  on conflict (user_id, dedupe_key) do update set
+    seen_at       = case when p_op = 'seen' then now() else s.seen_at end,
+    snoozed_until = case p_op when 'snooze' then p_until when 'unsnooze' then null else s.snoozed_until end,
+    dismissed_at  = case p_op when 'dismiss' then now() when 'undismiss' then null else s.dismissed_at end,
+    updated_at    = now()
+  returning * into v_row;
+
+  if p_op = 'snooze' and v_class = 'decision' then
+    insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+    values (v_uid, 'ACTION_ITEM_SNOOZED', 'action_item', null,
+            jsonb_build_object('key', p_key, 'until', p_until));
+  end if;
+  return jsonb_build_object('ok', true, 'key', p_key, 'seen_at', v_row.seen_at,
+                            'snoozed_until', v_row.snoozed_until, 'dismissed_at', v_row.dismissed_at);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.action_item_set_state_many(p_keys text[], p_op text, p_until timestamp with time zone DEFAULT NULL::timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); k text; v_class text; v_applied int := 0;
+        v_skipped text[] := '{}'; v_decisions text[] := '{}';
+begin
+  if v_uid is null or not private.is_active() then
+    perform private.perm_raise('set_state', 'action_item', null, 'inactive', 'your account is not active');
+  end if;
+  if p_keys is null or coalesce(array_length(p_keys, 1), 0) = 0 then
+    return jsonb_build_object('ok', true, 'applied', 0, 'skipped', '[]'::jsonb);
+  end if;
+  if array_length(p_keys, 1) > 100 then raise exception 'at most 100 items at a time'; end if;
+  if p_op not in ('seen', 'snooze', 'unsnooze', 'dismiss', 'undismiss') then
+    raise exception 'unknown state operation';
+  end if;
+  if p_op = 'snooze' and (p_until is null or p_until <= now() or p_until > now() + interval '48 hours') then
+    raise exception 'snooze for up to 48 hours';
+  end if;
+  foreach k in array (select array_agg(distinct x) from unnest(p_keys) x) loop
+    if k is null or length(k) < 1 or length(k) > 200 then v_skipped := v_skipped || k; continue; end if;
+    v_class := private.action_key_class(k);
+    if p_op = 'dismiss' and v_class <> 'dismissable' then v_skipped := v_skipped || k; continue; end if;
+    insert into public.action_item_state as s (user_id, dedupe_key, seen_at, snoozed_until, dismissed_at)
+    values (v_uid, k,
+            case when p_op = 'seen' then now() end,
+            case when p_op = 'snooze' then p_until end,
+            case when p_op = 'dismiss' then now() end)
+    on conflict (user_id, dedupe_key) do update set
+      seen_at       = case when p_op = 'seen' then now() else s.seen_at end,
+      snoozed_until = case p_op when 'snooze' then p_until when 'unsnooze' then null else s.snoozed_until end,
+      dismissed_at  = case p_op when 'dismiss' then now() when 'undismiss' then null else s.dismissed_at end,
+      updated_at    = now();
+    v_applied := v_applied + 1;
+    if p_op = 'snooze' and v_class = 'decision' then v_decisions := v_decisions || k; end if;
+  end loop;
+  if coalesce(array_length(v_decisions, 1), 0) > 0 then
+    insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+    values (v_uid, 'ACTION_ITEM_SNOOZED', 'action_item', null,
+            jsonb_build_object('keys', to_jsonb(v_decisions), 'until', p_until));
+  end if;
+  return jsonb_build_object('ok', true, 'applied', v_applied, 'skipped', to_jsonb(v_skipped));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.action_reassign_blocker(p_blocker uuid, p_user uuid, p_reason text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare b public.case_blockers; c public.cases; v_uid uuid := (select auth.uid());
+begin
+  select * into b from public.case_blockers where id = p_blocker and deleted_at is null;
+  if not found then raise exception 'blocker not found'; end if;
+  if not private.can_grant_case(b.case_id) then
+    perform private.perm_raise('reassign', 'case_blocker', p_blocker, 'not_lead_or_command',
+      'only the case lead or command can reassign a blocker');
+  end if;
+  select * into c from public.cases where id = b.case_id;
+  if c.archived_at is not null or c.deleted_at is not null or not private.case_writable(b.case_id) then
+    perform private.perm_raise('reassign', 'case_blocker', p_blocker, 'archived', 'that case is archived');
+  end if;
+  select * into b from public.case_blockers where id = p_blocker for update;
+  if b.status <> 'open' then raise exception 'that blocker is already resolved'; end if;
+  if length(btrim(coalesce(p_reason, ''))) < 3 then raise exception 'say why the blocker is being reassigned'; end if;
+  if p_user is null or not private.user_can_access_case(p_user, b.case_id) then
+    raise exception 'that member cannot see this case';
+  end if;
+  if b.owner_id = p_user then raise exception 'already assigned to that member'; end if;
+
+  update public.case_blockers set owner_id = p_user, updated_at = now() where id = b.id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'BLOCKER_REASSIGNED', 'case_blockers', b.id,
+          jsonb_build_object('case_id', b.case_id, 'from', b.owner_id, 'to', p_user, 'reason', left(btrim(p_reason), 500)));
+  perform private.action_notify(p_user, 'blocker_assigned',
+    jsonb_build_object('case_id', b.case_id, 'case_number', c.case_number, 'blocker_id', b.id));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.action_reassign_task(p_task uuid, p_user uuid, p_reason text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare t public.case_tasks; c public.cases; v_uid uuid := (select auth.uid());
+begin
+  select * into t from public.case_tasks where id = p_task and deleted_at is null;
+  if not found then raise exception 'task not found'; end if;
+  if not private.can_grant_case(t.case_id) then
+    perform private.perm_raise('reassign', 'case_task', p_task, 'not_lead_or_command',
+      'only the case lead or command can reassign a task');
+  end if;
+  select * into c from public.cases where id = t.case_id;
+  if c.archived_at is not null or c.deleted_at is not null or not private.case_writable(t.case_id) then
+    perform private.perm_raise('reassign', 'case_task', p_task, 'archived', 'that case is archived');
+  end if;
+  select * into t from public.case_tasks where id = p_task for update;
+  if t.done or t.waived_at is not null then raise exception 'that task is already closed'; end if;
+  if length(btrim(coalesce(p_reason, ''))) < 3 then raise exception 'say why the task is being reassigned'; end if;
+  if p_user is null or not private.user_can_access_case(p_user, t.case_id) then
+    raise exception 'that member cannot see this case';
+  end if;
+  if t.assignee = p_user then raise exception 'already assigned to that member'; end if;
+
+  update public.case_tasks set assignee = p_user, updated_at = now() where id = t.id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'TASK_REASSIGNED', 'case_tasks', t.id,
+          jsonb_build_object('case_id', t.case_id, 'from', t.assignee, 'to', p_user, 'reason', left(btrim(p_reason), 500)));
+  perform private.action_notify(p_user, 'task_assigned',
+    jsonb_build_object('case_id', t.case_id, 'case_number', c.case_number, 'task_id', t.id));
 end $function$
 ;
 
@@ -6599,6 +6859,30 @@ begin
   values (v_uid, 'CASE_ARCHIVED', 'cases', p_case,
           jsonb_build_object('case_number', c.case_number, 'note', nullif(btrim(coalesce(p_note, '')), '')));
   return c;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.case_assignment_end(p_assignment uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare a public.case_assignments; v_uid uuid := (select auth.uid());
+begin
+  select * into a from public.case_assignments where id = p_assignment;
+  if not found then raise exception 'assignment not found'; end if;
+  if not (private.can_delete_case_child(a.case_id) and private.case_writable(a.case_id)) then
+    perform private.perm_raise('unassign', 'case_assignment', p_assignment, 'not_command',
+      'only a Bureau Lead or above can remove an officer from a case');
+  end if;
+  if a.assignment_source <> 'standard' then raise exception 'only a standard assignment can be ended here'; end if;
+  if a.removed_at is not null then raise exception 'that assignment has already ended'; end if;
+  update public.case_assignments set removed_at = now(), removed_by = v_uid where id = a.id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'CASE_UNASSIGNED', 'case_assignments', a.id,
+          jsonb_build_object('case_id', a.case_id, 'officer_id', a.officer_id, 'role', a.role));
+  return jsonb_build_object('ok', true, 'id', a.id, 'case_id', a.case_id, 'officer_id', a.officer_id);
 end $function$
 ;
 
@@ -14304,6 +14588,73 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.notification_resolve(p_ids uuid[])
+ RETURNS TABLE(id uuid, type text, subject_kind text, subject_id uuid, visible boolean, label text)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  with n as (
+    select n.id, n.type,
+           case when n.payload->>'report_id'     ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then (n.payload->>'report_id')::uuid end     as report_id,
+           case when n.payload->>'task_id'       ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then (n.payload->>'task_id')::uuid end       as task_id,
+           case when n.payload->>'blocker_id'    ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then (n.payload->>'blocker_id')::uuid end    as blocker_id,
+           case when n.payload->>'submission_id' ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then (n.payload->>'submission_id')::uuid end as submission_id,
+           case when n.payload->>'request_id'    ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then (n.payload->>'request_id')::uuid end    as request_id,
+           case when n.payload->>'case_id'       ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then (n.payload->>'case_id')::uuid end       as case_id
+      from public.notifications n
+     where n.id = any(p_ids[1:100]) and n.user_id = (select auth.uid())
+  ),
+  k as (
+    select n.id, n.type,
+           case when n.report_id is not null then 'report'
+                when n.task_id is not null then 'case_task'
+                when n.blocker_id is not null then 'case_blocker'
+                when n.submission_id is not null then 'field_submission'
+                when n.request_id is not null then 'legal'
+                when n.case_id is not null then 'case' end as subject_kind,
+           coalesce(n.report_id, n.task_id, n.blocker_id, n.submission_id, n.request_id, n.case_id) as subject_id
+      from n
+  )
+  select k.id, k.type, k.subject_kind, k.subject_id,
+         case k.subject_kind
+           when 'report'           then exists (select 1 from public.reports r where r.id = k.subject_id)
+           when 'case_task'        then exists (select 1 from public.case_tasks t where t.id = k.subject_id)
+           when 'case_blocker'     then exists (select 1 from public.case_blockers b where b.id = k.subject_id)
+           when 'field_submission' then exists (select 1 from public.field_submissions s where s.id = k.subject_id)
+           when 'legal'            then exists (select 1 from public.legal_requests l where l.id = k.subject_id)
+           when 'case'             then exists (select 1 from public.cases c where c.id = k.subject_id)
+           else false end as visible,
+         case k.subject_kind
+           when 'report'           then (select r.kind::text from public.reports r where r.id = k.subject_id)
+           when 'case_task'        then (select t.title from public.case_tasks t where t.id = k.subject_id)
+           when 'case_blocker'     then (select b.title from public.case_blockers b where b.id = k.subject_id)
+           when 'field_submission' then (select s.submission_no from public.field_submissions s where s.id = k.subject_id)
+           when 'legal'            then (select l.request_number from public.legal_requests l where l.id = k.subject_id)
+           when 'case'             then (select c.case_number from public.cases c where c.id = k.subject_id)
+           else null end as label
+    from k
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.notifications_mark_read(p_ids uuid[])
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_n int;
+begin
+  if v_uid is null then raise exception 'not authorized'; end if;
+  if p_ids is null or coalesce(array_length(p_ids, 1), 0) = 0 then return 0; end if;
+  if array_length(p_ids, 1) > 500 then raise exception 'at most 500 notifications at a time'; end if;
+  update public.notifications set read = true, read_at = coalesce(read_at, now())
+   where user_id = v_uid and id = any(p_ids) and not read;
+  get diagnostics v_n = row_count;
+  return v_n;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.observation_promote(p_observation uuid, p_note text DEFAULT NULL::text)
  RETURNS surveillance_observations
  LANGUAGE plpgsql
@@ -17650,6 +18001,8 @@ begin
   delete from public.report_templates t where t.created_by = any(ids) and not exists (select 1 from public.report_template_versions v where v.template_id = t.id);
   delete from public.intel_groups where created_by = any(ids);
   delete from public.field_submissions where officer_id = any(ids) or created_by = any(ids);
+  delete from public.action_escalations where case_id = any(case_ids);
+  delete from public.action_item_state where user_id = any(ids);
   delete from public.reports where case_id = any(case_ids);
   get diagnostics n_reports = row_count;
   select count(*) into n from public.reports r
@@ -17747,6 +18100,26 @@ begin
   return jsonb_build_object('siu_visibility', n_rows, 'siu_visibility_events', n_events);
 end
 $function$
+;
+
+CREATE OR REPLACE FUNCTION public.rls_test_escalation_run(p_case uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_email text; v_owner_email text;
+begin
+  select email into v_email from public.profiles where id = v_uid;
+  if v_email is null or v_email not like 'rls-test-%@cidportal.test' then
+    raise exception 'rls_test_escalation_run: caller is not a test fixture';
+  end if;
+  select p.email into v_owner_email from public.cases c join public.profiles p on p.id = c.created_by where c.id = p_case;
+  if v_owner_email is null or v_owner_email not like 'rls-test-%@cidportal.test' then
+    raise exception 'rls_test_escalation_run: case is not fixture-owned';
+  end if;
+  return jsonb_build_object('ok', true) || private.action_escalation_sweep(p_case);
+end $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.rls_test_reset_member(p_target uuid, p_role app_role, p_division bureau, p_active boolean)
@@ -22688,6 +23061,64 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.trash_count()
+ RETURNS integer
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select count(*)::integer from public.trash_list(null, 100)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.trash_list(p_kind text DEFAULT NULL::text, p_limit integer DEFAULT 300)
+ RETURNS TABLE(kind text, id uuid, label text, case_id uuid, case_number text, deleted_at timestamp with time zone, deleted_by uuid, deleted_by_name text, delete_reason text, delete_batch uuid, restorable boolean, permanently_deletable boolean)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_kinds text[] := array['person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation',
+                          'tracker', 'gang_member', 'gang_turf', 'person_place', 'person_vehicle',
+                          'person_relationship', 'account_link', 'case', 'report', 'media', 'evidence',
+                          'case_task', 'case_message', 'case_intel_link', 'case_blocker', 'rico_case',
+                          'predicate_act', 'case_note', 'case_link'];
+  v_limit integer := greatest(1, least(coalesce(p_limit, 300), 500));
+  v_owner boolean := private.is_owner();
+  k text; t text; v_case text; v_extra text; v_sql text := '';
+begin
+  if not private.is_active() then return; end if;
+  if p_kind is not null then
+    k := lower(btrim(p_kind));
+    if private.soft_delete_table(k) is null then raise exception 'unknown record kind'; end if;
+    v_kinds := array[k];
+  end if;
+  foreach k in array v_kinds loop
+    t := private.soft_delete_table(k);
+    v_case := private.trash_case_expr(t);
+    v_extra := case
+      when t = 'cases' or v_case = 'null::uuid' then ''
+      else format(' and private.can_read_case(%s)', v_case) end
+      || case when t = 'media' then ' and (not x.restricted or private.is_owner())' else '' end;
+    v_sql := v_sql || case when v_sql = '' then '' else ' union all ' end || format(
+      '(select %L::text as kind, x.id, x.deleted_at, x.deleted_by, x.delete_reason, x.delete_batch, %s as case_id, %L::text as tbl
+          from public.%I x
+         where x.deleted_at is not null and private.perm_dispatch(''restore'', %L, x.id)%s
+         order by x.deleted_at desc limit %s)',
+      k, v_case, t, t, k, v_extra, v_limit);
+  end loop;
+  return query execute format(
+    'select u.kind, u.id, private.permanent_delete_record_label(u.tbl, u.id), u.case_id,
+            (select c.case_number from public.cases c where c.id = u.case_id),
+            u.deleted_at, u.deleted_by,
+            (select p.display_name from public.profiles p where p.id = u.deleted_by),
+            u.delete_reason, u.delete_batch, true, %L::boolean
+       from (%s) u
+      order by u.deleted_at desc
+      limit %s', v_owner, v_sql, v_limit);
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.update_legal_draft(p_request uuid, p_title text DEFAULT NULL::text, p_priority text DEFAULT NULL::text, p_form jsonb DEFAULT NULL::jsonb, p_narrative text DEFAULT NULL::text, p_person uuid DEFAULT NULL::uuid, p_recipient_type text DEFAULT NULL::text, p_recipient_name text DEFAULT NULL::text, p_classification text DEFAULT NULL::text)
  RETURNS legal_requests
  LANGUAGE plpgsql
@@ -22966,6 +23397,241 @@ begin
     values (new.id, new.handle, true, 'renamed');
   end if;
   return new;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.action_escalation_job()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_run bigint; v_out jsonb;
+begin
+  v_run := private.job_begin('action_escalation_sweep');
+  begin
+    v_out := private.action_escalation_sweep();
+    perform private.job_end(v_run, 'succeeded', v_out);
+  exception when others then
+    perform private.job_end(v_run, 'failed', jsonb_build_object('error', left(sqlerrm, 300)));
+    raise;
+  end;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.action_escalation_mark(p_kind text, p_source uuid, p_case uuid, p_notified uuid[], p_stage text DEFAULT NULL::text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_id uuid;
+begin
+  insert into public.action_escalations as e (kind, source_id, case_id, notified, stage)
+  values (p_kind, p_source, p_case, coalesce(p_notified, '{}'), p_stage)
+  on conflict (kind, source_id) do update
+    set escalated_at = now(), resolved_at = null, notified = excluded.notified, case_id = excluded.case_id, stage = excluded.stage
+    where e.resolved_at is not null
+  returning id into v_id;
+  return v_id is not null;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.action_escalation_sweep(p_only_case uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare r public.action_escalation_rules; x record; v_targets uuid[]; v_told uuid[]; u uuid;
+        n_sig int := 0; n_acc int := 0; n_task int := 0; r_sig int := 0; r_acc int := 0; r_task int := 0;
+begin
+  update public.action_escalations e set resolved_at = now()
+   where e.kind = 'signoff' and e.resolved_at is null
+     and (p_only_case is null or e.case_id = p_only_case)
+     and not exists (select 1 from public.cases c where c.id = e.source_id
+                      and c.deleted_at is null and c.archived_at is null
+                      and c.signoff_status in ('awaiting_bureau_lead', 'awaiting_deputy', 'awaiting_director')
+                      and c.signoff_stage is not distinct from e.stage);
+  get diagnostics r_sig = row_count;
+  select * into r from public.action_escalation_rules where kind = 'signoff' and enabled;
+  if found then
+    for x in
+      select c.id, c.case_number, c.signoff_stage, c.created_by
+        from public.cases c
+       where c.deleted_at is null and c.archived_at is null
+         and (p_only_case is null or c.id = p_only_case)
+         and c.signoff_status in ('awaiting_bureau_lead', 'awaiting_deputy', 'awaiting_director')
+         and c.signoff_submitted_at is not null
+         and c.signoff_submitted_at < now() - make_interval(hours => r.after_hours)
+         and not exists (select 1 from public.action_escalations e
+                          where e.kind = 'signoff' and e.source_id = c.id and e.resolved_at is null)
+       order by c.signoff_submitted_at limit 200
+    loop
+      select coalesce(array_agg(p.id), '{}') into v_targets from public.profiles p
+       where p.active and p.removed_at is null
+         and case x.signoff_stage
+               when 'bureau_lead' then p.role = 'deputy_director'
+               when 'deputy' then p.role = 'director'
+               when 'director' then p.is_owner
+               else p.role in ('deputy_director', 'director') end
+         and private.user_can_access_case(p.id, x.id);
+      v_told := '{}';
+      foreach u in array v_targets loop
+        if private.action_notify(u, 'action_escalated',
+             jsonb_build_object('kind', 'signoff', 'source_id', x.id, 'case_id', x.id, 'case_number', x.case_number),
+             x.created_by) then v_told := v_told || u; end if;
+      end loop;
+      if private.action_escalation_mark('signoff', x.id, x.id, v_told, x.signoff_stage) then
+        insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+        values (null, 'ACTION_ESCALATED', 'cases', x.id,
+                jsonb_build_object('kind', 'signoff', 'case_id', x.id, 'stage', x.signoff_stage, 'notified', to_jsonb(v_told)));
+        n_sig := n_sig + 1;
+      end if;
+    end loop;
+  end if;
+
+  select * into r from public.action_escalation_rules where kind = 'access_request' and enabled;
+  if found then
+    for x in
+      select a.id, a.case_id, c.case_number, c.bureau, c.created_by
+        from public.case_access_requests a join public.cases c on c.id = a.case_id
+       where a.status = 'pending' and c.deleted_at is null
+         and (p_only_case is null or c.id = p_only_case)
+         and a.created_at < now() - make_interval(hours => r.after_hours)
+         and not exists (select 1 from public.action_escalations e
+                          where e.kind = 'access_request' and e.source_id = a.id and e.resolved_at is null)
+       order by a.created_at limit 200
+    loop
+      select coalesce(array_agg(p.id), '{}') into v_targets from public.profiles p
+       where p.active and p.removed_at is null
+         and ((p.role = 'bureau_lead' and p.division = x.bureau) or p.role = 'deputy_director')
+         and private.user_can_access_case(p.id, x.case_id);
+      v_told := '{}';
+      foreach u in array v_targets loop
+        if private.action_notify(u, 'action_escalated',
+             jsonb_build_object('kind', 'access_request', 'source_id', x.id, 'case_id', x.case_id, 'case_number', x.case_number),
+             x.created_by) then v_told := v_told || u; end if;
+      end loop;
+      if private.action_escalation_mark('access_request', x.id, x.case_id, v_told) then
+        insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+        values (null, 'ACTION_ESCALATED', 'case_access_requests', x.id,
+                jsonb_build_object('kind', 'access_request', 'case_id', x.case_id, 'notified', to_jsonb(v_told)));
+        n_acc := n_acc + 1;
+      end if;
+    end loop;
+  end if;
+  update public.action_escalations e set resolved_at = now()
+   where e.kind = 'access_request' and e.resolved_at is null
+     and (p_only_case is null or e.case_id = p_only_case)
+     and not exists (select 1 from public.case_access_requests a join public.cases c on c.id = a.case_id
+                      where a.id = e.source_id and a.status = 'pending' and c.deleted_at is null);
+  get diagnostics r_acc = row_count;
+
+  select * into r from public.action_escalation_rules where kind = 'task_overdue' and enabled;
+  if found then
+    for x in
+      select t.id, t.case_id, t.assignee, c.case_number, c.bureau, c.lead_detective_id, c.created_by
+        from public.case_tasks t join public.cases c on c.id = t.case_id
+       where not t.done and t.waived_at is null and t.deleted_at is null
+         and c.deleted_at is null and c.archived_at is null
+         and (p_only_case is null or c.id = p_only_case)
+         and t.due is not null and t.due < (now() - make_interval(hours => r.after_hours))::date
+         and not exists (select 1 from public.action_escalations e
+                          where e.kind = 'task_overdue' and e.source_id = t.id and e.resolved_at is null)
+       order by t.due limit 200
+    loop
+      if x.lead_detective_id is not null and x.lead_detective_id <> coalesce(x.assignee, '00000000-0000-0000-0000-000000000000') then
+        v_targets := array[x.lead_detective_id];
+      else
+        select coalesce(array_agg(p.id), '{}') into v_targets from public.profiles p
+         where p.active and p.removed_at is null and p.role = 'bureau_lead' and p.division = x.bureau
+           and private.user_can_access_case(p.id, x.case_id);
+      end if;
+      v_told := '{}';
+      foreach u in array v_targets loop
+        if private.action_notify(u, 'action_escalated',
+             jsonb_build_object('kind', 'task_overdue', 'source_id', x.id, 'case_id', x.case_id, 'case_number', x.case_number),
+             x.created_by) then v_told := v_told || u; end if;
+      end loop;
+      if private.action_escalation_mark('task_overdue', x.id, x.case_id, v_told) then
+        insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+        values (null, 'ACTION_ESCALATED', 'case_tasks', x.id,
+                jsonb_build_object('kind', 'task_overdue', 'case_id', x.case_id, 'assignee', x.assignee, 'notified', to_jsonb(v_told)));
+        n_task := n_task + 1;
+      end if;
+    end loop;
+  end if;
+  update public.action_escalations e set resolved_at = now()
+   where e.kind = 'task_overdue' and e.resolved_at is null
+     and (p_only_case is null or e.case_id = p_only_case)
+     and not exists (select 1 from public.case_tasks t join public.cases c on c.id = t.case_id
+                      where t.id = e.source_id and not t.done and t.waived_at is null and t.deleted_at is null
+                        and c.deleted_at is null and c.archived_at is null);
+  get diagnostics r_task = row_count;
+
+  return jsonb_build_object(
+    'signoff', jsonb_build_object('escalated', n_sig, 'resolved', r_sig),
+    'access_request', jsonb_build_object('escalated', n_acc, 'resolved', r_acc),
+    'task_overdue', jsonb_build_object('escalated', n_task, 'resolved', r_task));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.action_key_class(p_key text)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  select case
+    when p_key like '%:expiry' then 'dismissable'
+    when p_key like 'case:%:followup' then 'dismissable'
+    when p_key like 'case:%:signoff-decide' then 'decision'
+    when split_part(p_key, ':', 1) in ('notif', 'draft', 'legal_hold', 'sib_disclosure', 'bolo',
+                                        'document_ack', 'document_review', 'document_sync',
+                                        'surv_obs', 'grant', 'owner', 'legal_comment', 'siu_watch')
+      then 'dismissable'
+    when split_part(p_key, ':', 1) in ('transfer', 'member_transfer', 'access', 'membership',
+                                        'restricted', 'sib_access', 'mdt_export', 'field_access',
+                                        'tracker', 'justice', 'siu_conflict', 'surv_tgt', 'surv_alert',
+                                        'document_approval', 'document_suggestion', 'narcotic',
+                                        'claim', 'legal', 'legal_queue', 'report', 'gang_dup')
+      then 'decision'
+    else 'work' end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.action_notify(p_user uuid, p_kind text, p_payload jsonb, p_actor uuid DEFAULT NULL::uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_actor uuid := coalesce(p_actor, (select auth.uid())); v_actor_test boolean; v_target_test boolean;
+        v_payload jsonb; v_subject text;
+begin
+  if p_user is null or p_user = (select auth.uid()) then return false; end if;
+  if not exists (select 1 from public.profiles p where p.id = p_user and p.active) then return false; end if;
+  if v_actor is not null then
+    select private.is_test_user(v_actor) or exists (select 1 from auth.users u where u.id = v_actor and u.email like 'rls-test-%@cidportal.test') into v_actor_test;
+    select private.is_test_user(p_user) or exists (select 1 from auth.users u where u.id = p_user and u.email like 'rls-test-%@cidportal.test') into v_target_test;
+    if coalesce(v_actor_test, false) and not coalesce(v_target_test, false) then return false; end if;
+  end if;
+  v_payload := coalesce(p_payload, '{}'::jsonb) - 'summary' - 'details' - 'reason' - 'title' - 'body' - 'note';
+  if (select auth.uid()) is not null then
+    v_payload := v_payload || jsonb_build_object('actor_id', (select auth.uid()),
+      'actor_name', (select display_name from public.profiles where id = (select auth.uid())));
+  end if;
+  v_subject := coalesce(v_payload->>'task_id', v_payload->>'blocker_id', v_payload->>'source_id', v_payload->>'case_id');
+  if exists (select 1 from public.notifications n
+              where n.user_id = p_user and n.type = p_kind and not n.read
+                and n.created_at > now() - interval '1 hour'
+                and coalesce(n.payload->>'task_id', n.payload->>'blocker_id', n.payload->>'source_id', n.payload->>'case_id')
+                    is not distinct from v_subject) then
+    return false;
+  end if;
+  insert into public.notifications (user_id, type, payload) values (p_user, p_kind, v_payload);
+  return true;
 end $function$
 ;
 
@@ -27976,6 +28642,18 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.notifications_read_at_sync()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  if new.read then new.read_at := coalesce(new.read_at, old.read_at, now()); else new.read_at := null; end if;
+  return new;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.notify_owners_client_error()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -28200,6 +28878,30 @@ AS $function$
                                and exists (select 1 from public.cases c where c.id = p_id
                                             and (c.archived_at is not null or c.deleted_at is not null))
       else false end
+    -- Phase 7 (P7-01 … P7-04): the queue's own state, the Owner's sweep, and
+    -- reassignment — placed BEFORE the registry arm, which lists case_task /
+    -- case_blocker and would otherwise answer false for 'reassign'.
+    when p_kind = 'action_item' then case p_action
+      when 'set_state' then private.is_active()
+      else false end
+    when p_kind = 'action_escalation' then case p_action
+      when 'sweep' then private.is_owner()
+      else false end
+    when p_kind = 'case_task' and p_action = 'reassign' then exists (
+      select 1 from public.case_tasks t where t.id = p_id and t.deleted_at is null and not t.done
+         and t.waived_at is null and private.can_grant_case(t.case_id) and private.case_writable(t.case_id))
+    when p_kind = 'case_blocker' and p_action = 'reassign' then exists (
+      select 1 from public.case_blockers b where b.id = p_id and b.deleted_at is null and b.status = 'open'
+         and private.can_grant_case(b.case_id) and private.case_writable(b.case_id))
+    -- Phase 8 (P8-02): the Trash is a read every active member has; each row
+    -- is admitted by the 'restore' arm of the kind it belongs to.
+    when p_kind = 'trash' then case p_action
+      when 'list' then private.is_active()
+      else false end
+    when p_kind = 'case_assignment' and p_action = 'unassign' then exists (
+      select 1 from public.case_assignments a where a.id = p_id and a.removed_at is null
+         and a.assignment_source = 'standard'
+         and private.can_delete_case_child(a.case_id) and private.case_writable(a.case_id))
     when p_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'gang_member', 'gang_turf', 'person_place', 'person_vehicle', 'person_relationship', 'account_link', 'case', 'report', 'media', 'evidence', 'case_task', 'case_message', 'case_intel_link', 'case_blocker', 'rico_case', 'predicate_act', 'case_note', 'case_link') then (
       select case p_action
         when 'read' then st.p_exists and (st.p_deleted_at is null or private.is_owner())
@@ -30383,6 +31085,58 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.trash_case_expr(p_table text)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  select case p_table
+    when 'cases' then 'x.id'
+    when 'predicate_acts' then '(select r.case_id from public.rico_cases r where r.id = x.rico_case_id)'
+    when 'places' then 'x.case_id' when 'indicators' then 'x.case_id' when 'trackers' then 'x.case_id'
+    when 'gang_members' then 'x.case_id' when 'reports' then 'x.case_id' when 'media' then 'x.case_id'
+    when 'evidence' then 'x.case_id' when 'case_tasks' then 'x.case_id' when 'case_messages' then 'x.case_id'
+    when 'case_intel_links' then 'x.case_id' when 'case_blockers' then 'x.case_id' when 'rico_cases' then 'x.case_id'
+    when 'case_notes' then 'x.case_id' when 'case_links' then 'x.case_id'
+    else 'null::uuid' end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.user_can_access_case(p_user uuid, p_case uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select exists (
+    select 1 from public.profiles p, public.cases c
+     where p.id = p_user and p.active and p.removed_at is null and c.id = p_case
+       and case when c.case_authority = 'siu' then
+             private.siu_membership_role(p_user) is not null
+             and not private.siu_recused(p_case, p_user)
+             and case coalesce(c.siu_classification, 'siu')
+                   when 'siu_compartmented' then private.siu_in_compartment(p_case, p_user)
+                   when 'siu_command' then private.siu_membership_role(p_user) = 'special_agent_in_charge'
+                                           or private.siu_in_compartment(p_case, p_user)
+                   when 'siu_restricted' then private.siu_membership_role(p_user) = 'special_agent_in_charge'
+                                           or private.siu_case_assigned(p_case, p_user)
+                                           or private.siu_in_compartment(p_case, p_user)
+                   else true end
+           else (
+             private.siu_membership_role(p_user) is not null
+             or c.bureau = 'JTF' or c.bureau = p.division
+             or c.lead_detective_id = p_user or c.created_by = p_user
+             or p.role in ('bureau_lead', 'deputy_director', 'director')
+             or exists (select 1 from public.case_access_grants g
+                         where g.case_id = c.id and g.officer_id = p_user and g.expires_at > now())
+             or exists (select 1 from public.case_assignments a
+                         where a.case_id = c.id and a.officer_id = p_user and a.assignment_source = 'joint_case'
+                           and a.removed_at is null and (a.expires_at is null or a.expires_at > now()))
+           ) end)
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.user_department(p_user uuid DEFAULT NULL::uuid)
  RETURNS text
  LANGUAGE sql
@@ -30756,6 +31510,7 @@ CREATE TRIGGER narcotics_block_direct_soft_delete BEFORE INSERT OR UPDATE ON pub
 CREATE TRIGGER narcotics_guard BEFORE INSERT OR UPDATE ON public.narcotics FOR EACH ROW EXECUTE FUNCTION private.guard_narcotic();
 CREATE TRIGGER narcotics_touch BEFORE UPDATE ON public.narcotics FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER narcotics_version AFTER UPDATE ON public.narcotics FOR EACH ROW EXECUTE FUNCTION private.version_row();
+CREATE TRIGGER notifications_read_at_sync BEFORE UPDATE ON public.notifications FOR EACH ROW WHEN (((old.read IS DISTINCT FROM new.read) OR (old.read_at IS DISTINCT FROM new.read_at))) EXECUTE FUNCTION private.notifications_read_at_sync();
 CREATE TRIGGER operations_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.operations FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER operations_touch BEFORE UPDATE ON public.operations FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_audit_operation_status AFTER UPDATE ON public.operations FOR EACH ROW EXECUTE FUNCTION private.audit_operation_status();
@@ -30879,6 +31634,18 @@ create policy accounts_upd on public.accounts
   using (((private.is_live(deleted_at) OR private.is_owner()) AND (private.is_active() AND (NOT private.siu_blocked('account'::text, id, NULL::text)))))
   with check (((private.is_live(deleted_at) OR private.is_owner()) AND (private.is_active() AND (NOT private.siu_blocked('account'::text, id, NULL::text)))));
 
+create policy aer_sel on public.action_escalation_rules
+  as permissive for select to authenticated
+  using (private.is_owner());
+
+create policy aes_sel on public.action_escalations
+  as permissive for select to authenticated
+  using (((case_id IS NOT NULL) AND private.can_access_case(case_id) AND ((kind <> 'access_request'::text) OR private.can_grant_case(case_id))));
+
+create policy ais_sel on public.action_item_state
+  as permissive for select to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)));
+
 create policy ann_del on public.announcements
   as permissive for delete to authenticated
   using (private.can_announce());
@@ -30981,8 +31748,8 @@ create policy case_assignments_sel on public.case_assignments
 
 create policy case_assignments_upd on public.case_assignments
   as permissive for update to authenticated
-  using ((private.case_writable(case_id) AND (assignment_source = 'standard'::text)))
-  with check ((private.case_writable(case_id) AND (assignment_source = 'standard'::text)));
+  using ((private.case_writable(case_id) AND (assignment_source = 'standard'::text) AND (removed_at IS NULL)))
+  with check ((private.case_writable(case_id) AND (assignment_source = 'standard'::text) AND (removed_at IS NULL)));
 
 create policy case_blockers_ins on public.case_blockers
   as permissive for insert to authenticated
@@ -32874,6 +33641,8 @@ create policy wl_sel on public.watchlist
 -- ============================================================
 
 --
+--   public.action_escalations
+--   public.action_item_state
 --   public.announcements
 --   public.audit_log
 --   public.ballistic_footprints
@@ -32964,6 +33733,9 @@ create policy wl_sel on public.watchlist
 --   account_handles -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   account_links -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   accounts -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   action_escalation_rules -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   action_escalations -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   action_item_state -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   announcements -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   app_secrets -> service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   audit_log -> authenticated: INSERT, SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -33083,7 +33855,7 @@ create policy wl_sel on public.watchlist
 --   narcotic_suggestions -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   narcotic_vehicles -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   narcotics -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   notifications -> authenticated: DELETE, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   notifications -> authenticated: DELETE, SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   operation_bureaus -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   operation_case_links -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   operations -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -33222,6 +33994,7 @@ create policy wl_sel on public.watchlist
 --   membership_requests.submitted_at: {authenticated=r/postgres}
 --   membership_requests.created_at: {authenticated=r/postgres}
 --   membership_requests.updated_at: {authenticated=r/postgres}
+--   notifications.read: {authenticated=w/postgres}
 --   profiles.id: {authenticated=r/postgres}
 --   profiles.display_name: {authenticated=r/postgres}
 --   profiles.avatar_url: {authenticated=r/postgres}
@@ -33254,6 +34027,11 @@ create policy wl_sel on public.watchlist
 --   private.account_link_guard_confirm(): default (PUBLIC)
 --   private.account_link_stamp(): default (PUBLIC)
 --   private.account_track_handle(): default (PUBLIC)
+--   private.action_escalation_job(): {postgres=X/postgres}
+--   private.action_escalation_mark(p_kind text, p_source uuid, p_case uuid, p_notified uuid[], p_stage text): {postgres=X/postgres}
+--   private.action_escalation_sweep(p_only_case uuid): {postgres=X/postgres}
+--   private.action_key_class(p_key text): {postgres=X/postgres}
+--   private.action_notify(p_user uuid, p_kind text, p_payload jsonb, p_actor uuid): {postgres=X/postgres}
 --   private.announcement_recipients(p_audience text, p_mentions jsonb, p_author uuid): default (PUBLIC)
 --   private.assert_fresh_session(): default (PUBLIC)
 --   private.audit(): {=X/postgres,postgres=X/postgres,authenticated=X/postgres}
@@ -33469,6 +34247,7 @@ create policy wl_sel on public.watchlist
 --   private.norm_org(p text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.norm_phone(p text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.norm_plate(p text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   private.notifications_read_at_sync(): default (PUBLIC)
 --   private.notify_owners_client_error(): {postgres=X/postgres}
 --   private.op_has_bureau(p_op uuid, p_bureau bureau): {postgres=X/postgres}
 --   private.owner_flag(p_user uuid): default (PUBLIC)
@@ -33577,6 +34356,8 @@ create policy wl_sel on public.watchlist
 --   private.transfer_apply(p_id uuid, p_actor profiles, p_override boolean): default (PUBLIC)
 --   private.transfer_doj_set_membership(p_user uuid, p_role text, p_actor uuid, p_expires timestamp with time zone, p_bureau bureau): {postgres=X/postgres}
 --   private.transfer_notify(p_transfer transfer_requests, p_actor profiles, p_reason text): default (PUBLIC)
+--   private.trash_case_expr(p_table text): {postgres=X/postgres}
+--   private.user_can_access_case(p_user uuid, p_case uuid): {postgres=X/postgres}
 --   private.user_department(p_user uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.uuid_or_null(p text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.version_editable(p_kind text, p_table text, p_id uuid): {postgres=X/postgres}
@@ -33587,6 +34368,12 @@ create policy wl_sel on public.watchlist
 --   private.version_visible(p_table text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.account_merge(p_survivor uuid, p_victims uuid[], p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.acknowledge_document(p_document uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.action_escalation_rule_set(p_kind text, p_after_hours integer, p_enabled boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.action_escalation_run(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.action_item_set_state(p_key text, p_op text, p_until timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.action_item_set_state_many(p_keys text[], p_op text, p_until timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.action_reassign_blocker(p_blocker uuid, p_user uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.action_reassign_task(p_task uuid, p_user uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.add_legal_exhibit(p_request uuid, p_type text, p_source_id uuid, p_title text, p_meta jsonb, p_rationale text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.add_narcotic_sale_observation(p_series uuid, p_observation jsonb, p_stacks jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.admin_justice_membership_requests(): {postgres=X/postgres,service_role=X/postgres}
@@ -33609,6 +34396,7 @@ create policy wl_sel on public.watchlist
 --   public.case_access_decide(p_request uuid, p_approve boolean, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_access_renew(p_grant uuid, p_days integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_archive(p_case uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.case_assignment_end(p_assignment uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_audit_feed(p_case uuid, p_limit integer, p_before timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_charge_totals(p_case uuid): {=X/postgres,postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.case_charges_for(p_case uuid): {=X/postgres,postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -33774,6 +34562,8 @@ create policy wl_sel on public.watchlist
 --   public.my_permissions(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.next_case_number(p_bureau text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.next_siu_case_number(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.notification_resolve(p_ids uuid[]): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.notifications_mark_read(p_ids uuid[]): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.observation_promote(p_observation uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.observation_review(p_observation uuid, p_decision text, p_notes text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.operation_add_bureau(p_op uuid, p_bureau bureau): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -33842,6 +34632,7 @@ create policy wl_sel on public.watchlist
 --   public.review_membership_request(p_request uuid, p_decision text, p_final_bureau bureau, p_final_role app_role, p_applicant_note text, p_internal_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.rls_test_cleanup(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.rls_test_cleanup_visibility(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.rls_test_escalation_run(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.rls_test_reset_member(p_target uuid, p_role app_role, p_division bureau, p_active boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.rls_test_set_signoff(p_case uuid, p_status text, p_stage text, p_assignee uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.rls_test_spawn_disposable(p_suffix text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
@@ -33944,6 +34735,8 @@ create policy wl_sel on public.watchlist
 --   public.transfer_doj_decide(p_transfer uuid, p_stage text, p_decision text, p_note text, p_retain_cid boolean, p_dual_expires_at timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.transfer_doj_request(p_user uuid, p_direction text, p_role text, p_reason text, p_bureau bureau): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.transfer_handover(p_transfer uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.trash_count(): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.trash_list(p_kind text, p_limit integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.update_legal_draft(p_request uuid, p_title text, p_priority text, p_form jsonb, p_narrative text, p_person uuid, p_recipient_type text, p_recipient_name text, p_classification text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.warrant_set_status(p_report uuid, p_status text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.withdraw_legal_request(p_request uuid, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}

@@ -15,7 +15,7 @@ import { clearRecents, dropRecent, recentRecords, type RecentEntry } from '@/lib
 import { KindIcon } from '@/components/shell/icons'
 import { Card } from '@/components/ui/Card'
 import { useToolNav } from '@/components/tools/useToolNav'
-import type { CaseRow } from './commandUtils'
+import type { CaseRow } from '@/components/command-center/lib/commandUtils'
 
 /** What a resolved chip shows: an optional mono identifier (case number,
  *  plate, request number) and the human label. */

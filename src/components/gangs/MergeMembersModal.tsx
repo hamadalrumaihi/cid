@@ -4,7 +4,7 @@
  *  picks the survivor row, then resolves each conflicting field (prefilled
  *  keep-survivor, except where the survivor is empty and a duplicate has a
  *  value). On confirm the survivor is patched and the duplicates are deleted
- *  via deleteWithUndo, so the row deletions stay undo-backed. Nothing in the
+ *  via deleteRecord, so the row deletions stay undo-backed (Trash). Nothing in the
  *  schema references gang_members.id (verified against database.types.ts), so
  *  no child repointing is needed — person/media links key off person_id and
  *  gang_id, which live on the surviving row.
@@ -12,7 +12,8 @@
  *  All planning logic is in the pure helper planMerge (unit-tested); this
  *  modal only collects choices and executes the plan. */
 import { useMemo, useState } from 'react'
-import { deleteWithUndo, update } from '@/lib/db'
+import { update } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -75,7 +76,7 @@ export function MergeMembersModal({ cluster, onClose, onMerged }: {
         const res = await update('gang_members', survivor.id, plan.patch)
         if (res.error) { toast(`Merge failed: ${res.error.message}`, 'danger'); return }
       }
-      await deleteWithUndo('gang_members', plan.deletions, {
+      await deleteRecord('gang_members', plan.deletions, {
         label: n === 1 ? `Duplicate of "${survivor.name}"` : `${n} duplicates of "${survivor.name}"`,
         noConfirm: true, // the merge confirm above already spelled it out
         after: onMerged,

@@ -262,6 +262,135 @@ suites assert `error.code === 'P0403'` plus the message, never an audit row
   narcotic, missing / unknown keys, the wrong pair, a draft, the inactive
   denied. The registry rows are deleted by the lead in `afterAll`.
 
+### Action Center + scheduler, Phase 7 (`tests/rls/v189a`, `v189b`)
+
+Portal Improvements P7-01 / P7-03 / P7-04 / P7-07 (migration
+`20261101120000_action_center`): a per-viewer queue memory
+(`action_item_state`, RPC-only), notification read stamps and hydration,
+task / blocker reassignment, and an hourly escalation ladder whose ledger
+(`action_escalations`) is read with the case's own visibility. CID fixtures
+only — lsb (the MCB detective who creates and LEADS the fixture case),
+bcb (the SCB detective — the outsider until granted; the owner of the
+invisible case), lead (MCB Bureau Lead — the granter, command, and the
+escalation's recipient), owner (optional — audit reads, the rules, the
+sweep), inactive (optional — deny-by-default). **Authority refusals raise
+SQLSTATE `P0403`** (`private.perm_raise`) and are asserted as
+`error.code === 'P0403'` plus the message; validation refusals are plain
+raises; the Owner-only sweep functions answer jsonb `{ok:false,
+code:'denied'}`. `rls_test_cleanup` is spliced to sweep the fixtures'
+`action_item_state` rows (by user) and the fixture cases'
+`action_escalations` rows (by case); v189a runs it as lsb AND bcb (each
+owns a case).
+
+- **v189a** (P7-01 / P7-04 / P7-07): `seen` upserts a row only lsb reads
+  (bcb: zero rows for the same key); `snooze` needs a future `p_until`
+  within 48 h ('snooze for up to 48 hours' — 49 h, the past and a missing
+  value refused), `unsnooze` clears, an unknown op raises; `dismiss` is
+  allowed for `notif:` and refused with P0403 for `task:` / `blocker:` /
+  `case:…:signoff-decide` ('this item is a decision or assigned work —
+  decide it, finish it or snooze it'); `_many` applies per key, skips and
+  reports the non-dismissable keys, caps at 100; a decision snooze writes
+  `ACTION_ITEM_SNOOZED` (single `{key, until}`, bulk ONE row `{keys,
+  until}`; an informational snooze writes nothing — Owner reads); a key
+  with spaces or without a lowercase prefix → the shape CHECK (SQLSTATE
+  23514); no client INSERT / UPDATE / DELETE (42501 or zero rows); the
+  inactive fixture → P0403 'your account is not active'; `notifications_mark_read`
+  flips lsb's own unread `chat_mention` (emitted by the lead through
+  `create_notification` about lsb's case), stamps `read_at`, returns 1,
+  then 0, and bcb's call over the same ids counts 0; the client's column
+  grant on `read` still works on an own row (the trigger follows) while a
+  PATCH of `payload` is 42501; `notification_resolve`
+  answers `visible=true` + the case number for lsb's case and
+  `visible=false`, label null for bcb's SCB case (bcb's `chat_mention` to
+  lsb about it), never another user's rows, the first 100 ids without
+  raising; `action_reassign_task` to bcb
+  → 'that member cannot see this case' until the lead inserts a
+  `case_access_grants` row, then `assignee` flips, `TASK_REASSIGNED
+  {case_id, from, to, reason}` and `task_assigned {case_id, case_number,
+  task_id}` with no title / summary / reason; the same member → 'already
+  assigned to that member'; bcb → P0403 'only the case lead or command can
+  reassign a task' (also on the done task — authority is answered before
+  the row's state); 'say why the task is being reassigned', 'that task is
+  already closed', 'task not found'; the lead (command) reassigns back;
+  `action_reassign_blocker` mirrors it (`owner_id`, `BLOCKER_REASSIGNED`,
+  `blocker_assigned {case_id, case_number, blocker_id}`, 'that blocker is
+  already resolved' after lsb resolves it).
+- **v189b** (P7-03): `action_escalation_rules` zero rows (no error) for
+  lsb / bcb / the lead; the Owner reads the four seeded kinds (`signoff`
+  72, `access_request` 48, `task_overdue` 48, `legal` 120 **disabled** —
+  a tuned production value is reported, not failed); `action_escalation_rule_set`
+  and the dataset-wide `action_escalation_run()` by the lead and by lsb →
+  `{ok:false, code:'denied', message}`; a direct UPDATE of the rules and
+  INSERT into the ledger refused; the Owner may tune a rule **to its
+  current value** (a no-op — the suite never changes a production rule) and
+  gets `{ok:true}` + the row + `ACTION_ESCALATION_RULE_SET`; the sweep is
+  driven through the fixture-scoped runner `rls_test_escalation_run(case)`
+  as lsb (a fixture caller, a fixture-created case, ONE case — never the
+  dataset; a random id → 'case is not fixture-owned'): a task due three
+  days ago, **assigned to the case lead** (lsb) → one ledger row
+  (`task_overdue`, the task, the case, `stage` null) readable by lsb and
+  the lead, invisible to bcb, `notified = [lead]` (only recipients actually
+  written; the case creator is a test member, so no real MCB lead is paged);
+  `action_escalated {kind, source_id, case_id, case_number}` to the Bureau
+  Lead fixture only, with no actor and no title / summary / reason (lsb —
+  the assignee-lead — and bcb hear nothing); `ACTION_ESCALATED` (entity
+  `case_tasks`, actor null, `notified` in the detail); a second run adds no
+  row and re-notifies nobody; lsb marks the task done → the next run sets
+  `resolved_at`, and reopening it re-opens the SAME row; `scheduled_job_runs`
+  is the Owner's alone (the fixture runner writes no job row). Owner legs
+  `it.skipIf` without `RLS_TEST_PASSWORD_OWNER`.
+
+### The Trash, Phase 8 (`tests/rls/v190a`)
+
+Portal Improvements P8-02 (migration `20261102120000_trash_list`, applied
+live as `trash_list`): `public.trash_list(p_kind, p_limit)` — every
+soft-deletable kind, one row per record the caller could restore
+(`private.perm_dispatch('restore', kind, id)`: a detective their own case
+material and the links they created; command every deleted row of the cases
+they reach; the Owner everything), labelled through
+`private.permanent_delete_record_label`, tied to its case, ≤ 500 newest
+first — and `public.trash_count()`. CID fixtures only — lsb (the MCB
+detective who creates and LEADS both fixture cases and authors every row),
+bcb (the SCB detective — the outsider, creates nothing), lead (MCB Bureau
+Lead — command; the only fixture that may soft-delete a CASE), owner
+(optional — `permanently_deletable` and the preview), inactive (optional —
+zero rows). Nothing new is spliced into `rls_test_cleanup`: a soft-deleted
+row is the table's own row and the sweep of the fixture cases takes it
+either way (the freeze trigger is BEFORE INSERT OR UPDATE only; the sweep
+is a definer DELETE).
+
+- **v190a**: lsb soft-deletes two tasks and a note on their own case →
+  `trash_list()` for lsb carries them with `kind`, `label` (the title; the
+  note has no label column → the id), `case_id`, `case_number`,
+  `deleted_by` = lsb, `deleted_by_name`, `delete_batch`, `restorable` true,
+  `permanently_deletable` **false**, newest first; the lead reads the same
+  rows (not permanently deletable); bcb reads none of them; the inactive
+  fixture reads zero rows and counts 0; `trash_list('case_task')` /
+  `'  Case_Note '` filter to the kind, `p_limit` 1 → one row and 0 → still
+  one, `'bogus'` raises 'unknown record kind'; `trash_count()` equals the
+  list's length for lsb, bcb and the lead; `restore_record('case_task')`
+  removes the row, lowers the count by one, the row reads live again, a
+  second restore is refused and the row is in nobody's Trash; the lead
+  soft-deletes lsb's second case with a reason → the case in the lead's
+  Trash (`kind` case, `label` = the case number, the reason, `deleted_by` =
+  the lead) with its cascaded child task in the same `delete_batch`,
+  `trash_list('case')` filters to it, lsb's Trash carries the child (author)
+  but NOT the case (a detective cannot restore a case), lsb's restore of the
+  child → `{ok:false, code:'parent_deleted'}` 'restore the record this
+  belongs to first', bcb sees neither, the lead's restore of the case brings
+  the batch back and both rows leave the Trash; `permanent_delete_record_preview`
+  for lsb, the lead and bcb → 'permanent deletion is restricted to the
+  owner'; the Owner (`it.skipIf` without `RLS_TEST_PASSWORD_OWNER`) reads the
+  still-deleted task and note as `permanently_deletable` true and previews
+  the task `eligible` with `target.label` = its title, while the restored
+  (live) task previews ineligible — 'the record is not in the Trash';
+  `case_assignment_end` on a standard assignment lsb inserted on their own
+  case: lsb → P0403 'only a Bureau Lead or above can remove an officer from a
+  case', lsb's direct UPDATE of `removed_at` matches zero rows (or 42501),
+  the lead ends it → `{ok, id, case_id, officer_id}`, the stamps when the
+  row is still readable, 'already ended' on a repeat, `CASE_UNASSIGNED` for
+  the Owner.
+
 ### DOJ legal review (v1.13.0 — `tests/rls/legal.test.ts`; historical model)
 
 37 assertions covering the DOJ Legal Review System (see

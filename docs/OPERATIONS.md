@@ -139,28 +139,71 @@ itself is the config/code backup.
 
 > A backup that has never been restored is a hypothesis, not a backup.
 
-### Restore drill (do this once, then quarterly)
+### Restore drill (do this once, then quarterly) — runbook
 
-The goal is to prove the backup is real *without* touching production:
+The goal is to prove the backup is real *without* touching production. A
+restore needs a **scratch target** — a Supabase branch or a second project —
+which is a paid feature; the runbook below is written so the drill can be
+run the moment one exists, and steps 6–8 can be run today against the live
+project as a health check.
 
-1. Supabase dashboard → **Database → Backups** — confirm a recent backup
-   exists and note its timestamp.
-2. **Restore into a throwaway target**, never over prod:
-   - Preferred: create a short-lived **Supabase branch** (or a scratch
-     project) and restore the backup into it.
-   - Verify: run `npm run check:schema` mentally against it (table count),
-     sign in with a test account, open a case.
-3. **Record** the date, backup timestamp, and result in the log below.
-   Delete the scratch target.
-4. Delete-drill: separately confirm the app's own **6-second Undo** and the
-   `deleteWithUndo` children/set-null behavior still work (delete a test
-   case as a command account, undo it).
+1. **Confirm the backup.** Supabase dashboard → project `jhxuflzmqspidkvjckox`
+   → **Database → Backups**. Note the newest backup's timestamp (daily) and,
+   if PITR is on, the recovery window. Record both in the log below.
+2. **Create the scratch target** — never restore over prod:
+   - preferred: dashboard → **Branches → Create branch** (a persistent branch
+     on a Pro plan; a preview branch is fine for a drill), or
+   - a throwaway project: dashboard → **New project** in the same
+     organisation and region (the ref becomes `<scratch-ref>`).
+3. **Restore into it.** Dashboard → the scratch project → **Database →
+   Backups → Restore** (pick the backup from step 1; on PITR, the timestamp).
+   Wait for the project to report *Healthy*.
+4. **Table count** — in the scratch project's SQL editor:
+   ```sql
+   select count(*) from pg_tables where schemaname = 'public';
+   ```
+   must equal the table count in `supabase/schema-snapshot.sql`
+   (`grep -c '^CREATE TABLE public\.' supabase/schema-snapshot.sql`).
+5. **Schema sync** — from the repo, pointing the checker at the scratch
+   project (read-only; the anon key of the scratch project):
+   ```sh
+   NEXT_PUBLIC_SUPABASE_URL=https://<scratch-ref>.supabase.co \
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=<scratch anon key> npm run check:schema
+   ```
+   must pass — the restored schema is the snapshot's schema.
+6. **Audit chain** — in the scratch project (and, as the live health check,
+   in prod):
+   ```sql
+   select public.audit_chain_status();
+   ```
+   expects `ok: true` (a mismatch reports `first_bad_id` instead), `checked`
+   equal to the `audit_log` row count at backup time, and a `head_id` /
+   `head_hash` matching the last nightly `audit-chain-verify` run before the
+   backup (`scheduled_job_runs`; the chain is per row — a restored ledger
+   must re-verify end to end; see §6).
+7. **Sign in and read** — the scratch project has no OAuth app, so use a
+   fixture: with `RLS_TEST_SUPABASE_URL` / `RLS_TEST_ANON_KEY` pointing at it
+   and the fixture passwords set, `npm run test:rls -- tests/rls/rls.test.ts`
+   proves the wall holds on the restored data; alternatively mint a session
+   through the GoTrue password grant (`tests/support/signin.ts`) and open a
+   case.
+8. **Delete-drill through the Trash** (replaces the old 6-second-undo check;
+   works on prod too, on fixture data only): as the LSB fixture create a
+   `[rls-test]` case and a task, delete the task from the Tasks section — the
+   toast reads "Task deleted · In Trash" — press **Undo**; delete it again,
+   open **/trash**, the task is listed under Case material, press
+   **Restore**; then `select public.rls_test_cleanup();` as the fixture.
+   `tests/e2e/trash.spec.ts` is the same drill automated.
+9. **Record and dispose.** Fill the log row (date, backup timestamp, target,
+   result including the `audit_chain_status()` JSON). Delete the scratch
+   branch / project.
 
 **Restore-drill log**
 
 | Date | Backup timestamp | Target | Result |
 | --- | --- | --- | --- |
-| _pending_ | | | _first drill not yet run — schedule it_ |
+| 2026-09-09 | — | — | not performed — needs a scratch project (paid); runbook rewritten, audit chain verified live (as the Owner, 23:27 UTC): `{"ok": true, "checked": 80, "head_id": 613, "head_hash": "993ae2ef1291349b54a6b712ee6a3da031d0426e3bdb464952c7e19c08a0f4d2", "verified_at": "2026-09-09T23:27:40Z"}` — the last nightly `audit-chain-verify` run (id 393, 2026-09-09T03:15:00Z) succeeded with the same head |
+| _next_ | | | _schedule the first real restore once a branch / scratch project exists_ |
 
 ### Disaster recovery
 
@@ -211,6 +254,7 @@ to look when a sweep goes quiet.
 | `access-grant-expiry-sweep` | :20 hourly | `private.access_grant_expiry_sweep()`: `access_expiring` reminders three days before a case access grant lapses; `ACCESS_EXPIRED` + `access_expired` + row removal on lapse ([`20261012120000`](../supabase/migrations/20261012120000_case_access_grant_expiry.sql)) |
 | `siu-reconcile-scan` | every 15 min | `private.siu_reconcile_scan()`: compares every CID-visible person / vehicle / gang / place against the SIB-hidden rows on their normalized keys (phone, name, alias, plate, org name, name+area) and queues late collisions (a record hidden AFTER its twin was created) into `siu_reconcile_queue`; `siu_reconcile` notifications to SIB agents, one per agent per hidden record per hour ([`20261016120000`](../supabase/migrations/20261016120000_siu_reconcile.sql)) |
 | `legal-sweep` | :35 hourly | `private.legal_reminder_sweep()` + `private.legal_expiry_sweep()` ([`20261027120000`](../supabase/migrations/20261027120000_legal_sweeps.sql)): stage age from `legal_requests.stage_entered_at` — > 48 h → `legal_nudge` to the responsible party (`nudged_at`, `LEGAL_REMINDED`), > 5 d → `legal_escalated` to the next authority + creator (`escalated_at`, `LEGAL_ESCALATED`), approved / partially approved and unissued > 7 d → `legal_unissued`, `expires_at` within 72 h → `legal_expiring`; issued warrants past `expires_at` → `fulfilment_status='expired'` + `legal_expired` + `LEGAL_EXPIRED` + `mdt_project('expired')`, subpoenas past `response_deadline` → `legal_deadline_passed`. Idempotent through `legal_request_reminders` (unique per request / kind / stage); a fixture-created request only ever notifies `is_test` recipients. **Manual run:** `select public.legal_sweep_run();` — Owner-only, returns the jsonb counts of both sweeps (anyone else gets `{ok:false, code:'denied'}`); use it after a cron gap rather than waiting for :35 |
+| `action-escalation-sweep` | :50 hourly | `private.action_escalation_job()` → `private.action_escalation_sweep()` ([`20261101120000`](../supabase/migrations/20261101120000_action_center.sql)): for every enabled `action_escalation_rules` row — `signoff` (default 72 h in `awaiting_*` → the next authority: Deputy Directors / Directors / the Owner by stage), `access_request` (48 h `pending` → the case bureau's Bureau Leads + Deputy Directors), `task_overdue` (48 h past `due` → the case lead, or the bureau's Bureau Leads when the lead is the assignee); `legal` is seeded disabled (the legal sweep escalates itself). One `action_escalations` row per (kind, source) — `action_escalated` + `ACTION_ESCALATED` only when the row is (re)opened, `resolved_at` once the source is decided / done / deleted (a sign-off stage advance resolves and later re-opens the row for the next authority), `notified` = the recipients actually written — so a repeated run is idempotent; recipients pass `private.user_can_access_case`; a case created by a test member only ever notifies test recipients. The RLS suite never runs this: it uses `rls_test_escalation_run(case)` (fixture caller, fixture case, one case). **Manual run:** `select public.action_escalation_run();` — Owner-only, returns `{signoff:{escalated,resolved}, access_request:{…}, task_overdue:{…}}` (anyone else gets `{ok:false, code:'denied'}`), audits `ACTION_ESCALATION_RUN`; use it after a cron gap rather than waiting for :50. **Tuning:** `select public.action_escalation_rule_set('task_overdue', 48, true);` (Owner-only; `ACTION_ESCALATION_RULE_SET`) — the rules are readable to the Owner in `action_escalation_rules` |
 - The same rule extends to the append-only history tables the workflow RPCs
   write (`case_signoff_history`, membership/legal histories, `role_events`)
   and to sealed `report_versions` (client-immutable by trigger + revoked
@@ -218,6 +262,8 @@ to look when a sweep goes quiet.
 - When investigating an incident (including fixture drift, §4), the audit
   log is the primary forensic record — export the relevant window to CSV
   before drawing conclusions.
+
+**Notification titles (one map).** Every notification kind's human title lives in `src/lib/notificationTitles.json`; the bell / Action Center (`NOTIF_LABEL`) and the `discord-notify` edge function (`supabase/functions/discord-notify/titles.json`) both render from it. After adding or renaming a kind, run `node scripts/sync-notification-titles.mjs` to copy the map into the edge function and redeploy it; `npm run check:notif-titles` (CI) fails when the two files disagree. A kind without a title is still stored and shown in the bell, but the Discord DM is skipped (`{skipped:'no title'}`) — so a new server kind ships with its title in the same PR.
 
 ## 7. SOP sync from Google Drive
 

@@ -31,7 +31,7 @@ export type DojRole = 'prosecutor' | 'judge' | 'attorney_general' | null
 /** Client mirror of private.justice_role_effective: legacy ADA/DA memberships
  *  act with the effective role 'prosecutor' (now history-only); rows are
  *  never rewritten — only interpreted. The ONE copy (formerly three:
- *  capabilities, legalShared, useActionItems). */
+ *  capabilities, legalShared, useActionQueue). */
 export function effectiveDojRole(role: string | null | undefined): DojRole {
   if (role === 'assistant_district_attorney' || role === 'district_attorney' || role === 'prosecutor') return 'prosecutor'
   if (role === 'attorney_general' || role === 'judge') return role
@@ -64,6 +64,15 @@ export const canReassignBureau = (v: CidViewer): boolean =>
 /** Mirror of private.can_grant_case's command half — a case lead is the
  *  other half and is decided per case by the caller. */
 export const canGrantCaseByRole = (v: CidViewer): boolean => !!v.is_owner || isCommandRole(v.role)
+
+/** Mirror of action_reassign_task / action_reassign_blocker's authority
+ *  (Phase 7 §2.6–2.7: `private.can_grant_case` — the case lead or Bureau
+ *  Lead / Deputy / Director — plus the Owner), for an ACTIVE viewer. Case
+ *  writability (archived → refused) is the server's; the queue never lists
+ *  archived-case work. */
+export const canReassignCaseWork = (c: { lead_detective_id: string | null }, v: CidViewer | null): boolean =>
+  !!v?.id && v.active !== false
+  && (v.id === c.lead_detective_id || isCommandRole(v.role) || !!v.is_owner)
 
 /** Command reach over a bureau's cases: a Bureau Lead of THAT bureau, or
  *  Deputy Director+ anywhere (the stale-case escalation audience). The

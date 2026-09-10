@@ -1,18 +1,28 @@
 /** Shared notification actions — ONE implementation of mark-read, mark-all,
- *  the accurate unread count and the mute preferences, used by the bell
- *  panel, My Desk and the Action Center's absorb — so a notification marked
+ *  the accurate unread count, subject hydration and the preferences, used by
+ *  the bell panel, My Desk and the Action Center — so a notification marked
  *  read anywhere behaves the same everywhere. RLS scopes every query here to
  *  the signed-in user's own rows. */
-import { countRows, list, update, updateWhere, upsert, type DbError } from './db'
+import { countRows, list, rpc, updateWhere, upsert, type DbError } from './db'
+import { NOTIF_CATEGORY } from './notifText'
 
-/** Mark specific notifications read. db's updateWhere matches on eq/is only
- *  (no `in`), so this is per-id updates — bounded by the group size the
- *  caller hands in, never by the table. Returns the first error, if any. */
+const chunk = <T,>(xs: readonly T[], n: number): T[][] => {
+  const out: T[][] = []
+  for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n))
+  return out
+}
+
+/** Mark specific notifications read through `notifications_mark_read`
+ *  (Phase 7, P7-01): one RPC per ≤500 ids, own unread rows only (the server
+ *  stamps read_at). Returns the first error, if any. */
 export async function markRead(ids: readonly string[]): Promise<DbError | null> {
-  const unique = [...new Set(ids)]
+  const unique = [...new Set(ids)].filter(Boolean)
   if (!unique.length) return null
-  const results = await Promise.all(unique.map((id) => update('notifications', id, { read: true })))
-  return results.find((r) => r.error)?.error ?? null
+  for (const part of chunk(unique, 500)) {
+    const res = await rpc('notifications_mark_read', { p_ids: part })
+    if (res.error) return res.error
+  }
+  return null
 }
 
 /** Mark EVERYTHING read in ONE conditional update — RLS scopes the write to
@@ -31,6 +41,38 @@ export async function unreadCount(mutedTypes: readonly string[] = []): Promise<n
   const rows = await list('notifications', { select: 'id,type', eq: { read: false } }) as unknown as { id: string; type: string }[]
   const muted = new Set(mutedTypes)
   return rows.reduce((n, r) => (muted.has(r.type) ? n : n + 1), 0)
+}
+
+/* ---- subject hydration (notification_resolve, P7-07) ---------------------- */
+
+export interface NotifSubject {
+  subjectKind: string | null
+  subjectId: string | null
+  /** The subject row is readable under the viewer's RLS right now. False →
+   *  the row reads "An item you no longer have access to" and its deep link
+   *  is suppressed. */
+  visible: boolean
+  /** Case number / request number / report title … null when not visible. */
+  label: string | null
+}
+
+/** Resolve the subjects of the given notification ids (own rows, ≤100 per
+ *  call — chunked). SECURITY INVOKER server-side: it sees exactly what the
+ *  caller can see. Fail-open: an error resolves nothing (the rows render as
+ *  before, links intact) rather than hiding the whole page. */
+export async function resolveNotifications(ids: readonly string[]): Promise<Map<string, NotifSubject>> {
+  const out = new Map<string, NotifSubject>()
+  const unique = [...new Set(ids)].filter(Boolean)
+  for (const part of chunk(unique, 100)) {
+    try {
+      const res = await rpc('notification_resolve', { p_ids: part })
+      if (res.error || !Array.isArray(res.data)) continue
+      for (const r of res.data) {
+        out.set(r.id, { subjectKind: r.subject_kind, subjectId: r.subject_id, visible: !!r.visible, label: r.label })
+      }
+    } catch { /* fail-open */ }
+  }
+  return out
 }
 
 /* ---- mute preferences (user_prefs key 'notif_muted') ---------------------- */
@@ -77,5 +119,60 @@ export async function saveMutedTypes(types: readonly string[]): Promise<DbError 
   // user_id defaults to auth.uid() server-side; select only the key back so
   // the returning clause can never trip a column grant.
   const res = await upsert('user_prefs', { key: PREF_KEY, value: { types: clean } }, 'user_id,key', 'key')
+  return res.error
+}
+
+/* ---- Discord DM opt-in (user_prefs key 'notif_discord', P7-07) ------------ */
+
+const DISCORD_PREF_KEY = 'notif_discord'
+
+export interface DiscordCategory {
+  key: string
+  label: string
+  hint: string
+}
+
+/** The opt-in categories a member with a linked Discord may choose. A type's
+ *  category is the JSON's `category` (lib/notifText NOTIF_CATEGORY); a type
+ *  outside every category is `other` and is always DM'd when a title exists.
+ *  A missing pref row = every category (today's behaviour). The edge function
+ *  reads the same row with the service role and skips a muted category. */
+export const DISCORD_CATEGORIES: readonly DiscordCategory[] = [
+  { key: 'assignments', label: 'Assignments', hint: 'Tasks, blockers, cases and SIB cases assigned to you' },
+  { key: 'decisions', label: 'Decisions', hint: 'Sign-offs, access, membership, SIB, restricted media, tracker and suggestion decisions' },
+  { key: 'legal', label: 'Legal', hint: 'Legal requests, comments and instrument deadlines' },
+  { key: 'mentions', label: 'Mentions', hint: 'Chat, note and announcement mentions' },
+  { key: 'escalations', label: 'Escalations', hint: 'Work escalated to you and stale-case reminders' },
+  { key: 'intel', label: 'Intelligence', hint: 'Field intelligence assigned, questions and replies' },
+  { key: 'reports', label: 'Reports', hint: 'Report review, returns and finalizations' },
+  { key: 'announcements', label: 'Announcements', hint: 'Department-wide posts' },
+  { key: 'security', label: 'Security', hint: 'Portal access changes, audit and app errors' },
+]
+
+export const ALL_DISCORD_CATEGORY_KEYS: readonly string[] = DISCORD_CATEGORIES.map((c) => c.key)
+
+/** The Discord category of a notification type (`other` when unmapped). */
+export const discordCategoryOf = (type: string): string => NOTIF_CATEGORY[type] ?? 'other'
+
+/** The viewer's enabled Discord categories. No row means EVERY category
+ *  (the pre-Phase-7 behaviour for a linked Discord); a row with `[]` means
+ *  none. A FAILED read returns `null` — distinct from "no row" on purpose:
+ *  the profile toggle must never mistake an outage for "everything on" and
+ *  write the widened list back over the member's real preference. */
+export async function loadDiscordCategories(): Promise<string[] | null> {
+  try {
+    const rows = await list('user_prefs', { select: 'value', eq: { key: DISCORD_PREF_KEY } })
+    if (!rows.length) return [...ALL_DISCORD_CATEGORY_KEYS]
+    const v = (rows[0]?.value ?? null) as { categories?: unknown } | null
+    const cats = Array.isArray(v?.categories) ? v.categories.filter((t): t is string => typeof t === 'string') : []
+    return cats.filter((c) => ALL_DISCORD_CATEGORY_KEYS.includes(c))
+  } catch {
+    return null
+  }
+}
+
+export async function saveDiscordCategories(categories: readonly string[]): Promise<DbError | null> {
+  const clean = [...new Set(categories)].filter((c) => ALL_DISCORD_CATEGORY_KEYS.includes(c))
+  const res = await upsert('user_prefs', { key: DISCORD_PREF_KEY, value: { categories: clean } }, 'user_id,key', 'key')
   return res.error
 }

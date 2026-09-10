@@ -1,6 +1,6 @@
 {
   "name": "web",
-  "version": "1.17.0",
+  "version": "1.18.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -24,6 +24,8 @@
     "check:submit": "node scripts/check-submit-buttons.mjs",
     "check:freshness": "node scripts/check-snapshot-freshness.mjs",
     "check:realtime": "node scripts/check-realtime.mjs",
+    "check:notif-titles": "node scripts/sync-notification-titles.mjs --check",
+    "sync:notif-titles": "node scripts/sync-notification-titles.mjs",
     "gen:snapshot": "node scripts/build-schema-snapshot.mjs",
     "gen:permissions": "node scripts/gen-permissions-matrix.mjs",
     "check:bundle": "node scripts/check-bundle-budget.mjs",

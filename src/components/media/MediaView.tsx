@@ -8,7 +8,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Json, Tables } from '@/lib/database.types'
-import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
+import { insert, list, update, withRetry } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { useAuth } from '@/lib/auth'
 import { uiConfirm } from '@/components/ui/dialog'
 import { FileTypeIcon, GangIcon, IndicatorIcon, PersonIcon, PhotoIcon, PlaceIcon, RadioIcon, TrashIcon } from '@/components/shell/icons'
@@ -149,8 +150,8 @@ export function MediaView() {
               onTags={() => setTagEdit(m)}
               onDelete={canDelete ? () => {
                 void (async () => {
-                  if (!(await uiConfirm(`Delete “${m.title}” from the vault? Restorable via Undo.`, { confirmText: 'Delete' }))) return
-                  await deleteWithUndo('media', m, { label: `Media “${m.title}”`, noConfirm: true, after: () => void refresh() })
+                  if (!(await uiConfirm(`Delete “${m.title}” from the vault? It moves to the Trash and can be restored.`, { confirmText: 'Delete' }))) return
+                  await deleteRecord('media', m, { label: `Media “${m.title}”`, noConfirm: true, after: () => void refresh() })
                 })()
               } : undefined}
             />

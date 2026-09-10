@@ -33,7 +33,9 @@ import { isRoutingBureau } from '@/lib/legalWorkflow'
 import { PERMANENT_BUREAUS, bureauShort } from '@/lib/roles'
 import { StickyActionBar } from '@/components/shared/StickyActionBar'
 import { useWorkspaceNav } from '@/components/tools/useToolNav'
+import { desktopOnMobile, mobileCaseHref } from '@/components/mobile/mobileCaseRoute'
 import { normalizeCaseTab } from '@/lib/caseLinks'
+import { useNarrow } from '@/lib/useNarrow'
 import { CaseBoard } from './CaseBoard'
 import { CaseFilterBar } from './CaseFilterBar'
 import { CaseModal } from './CaseModal'
@@ -151,15 +153,21 @@ function CasesViewInner() {
   // `/workspace?case=…` with its record params carried over (plan §5.5).
   const caseId = sp.get('case')
   const wsNav = useWorkspaceNav()
+  // Phone-first (P8-01): a narrow viewport lands on `/m/cases/<id>?s=` instead,
+  // unless this browser tab chose the desktop (the mobile screen's "Open on
+  // desktop" flag). Record params stay a desktop concern and go with it.
+  const narrow = useNarrow()
   useEffect(() => {
     if (!caseId) return
     const t = window.setTimeout(() => {
-      router.replace(wsNav.caseHref(caseId, normalizeCaseTab(sp.get('tab')), {
+      const section = normalizeCaseTab(sp.get('tab'))
+      if (narrow && !desktopOnMobile()) { router.replace(mobileCaseHref(caseId, section)); return }
+      router.replace(wsNav.caseHref(caseId, section, {
         report: sp.get('report'), task: sp.get('task'), evidence: sp.get('evidence'),
       }))
     }, 0)
     return () => window.clearTimeout(t)
-  }, [caseId, sp, router, wsNav])
+  }, [caseId, sp, router, wsNav, narrow])
   const caps = useCapabilities()
 
   // ONE bounded projection over open tasks → the set of case ids with an

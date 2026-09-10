@@ -16,7 +16,8 @@
  *  other sections are marked stale and reload on next open. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { deleteWithUndo, update } from '@/lib/db'
+import { update } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { useAuth } from '@/lib/auth'
 import { SiuPersonActions } from '@/components/siu/SiuPersonActions'
 import { RestrictToSiuButton } from '@/components/siu/RestrictToSiu'
@@ -53,7 +54,7 @@ import {
   PERSON_REVIEW_DAYS, classificationLabel, isPersonStale, legalStatusOf, personQualityWarnings,
   placeRoleLabel, relationshipLabel, vehicleRoleLabel,
 } from './personIntel'
-import { PERSON_NULL_REFS, PersonModal, parseProperties, type PersonRow, type PersonProperty } from './PersonModal'
+import { PersonModal, parseProperties, type PersonRow, type PersonProperty } from './PersonModal'
 import { dossierParas, dossierPdfSpec, gatherPersonDossier } from './dossier'
 import {
   loadActivityData, loadCasesData, loadMediaRows, loadPersonCore, loadPlacesData, loadProfileCounts, loadRelations,
@@ -73,10 +74,11 @@ import { PersonAccountsSection } from './PersonAccountsSection'
 import { ReportMentions } from '@/components/cases/tabs/reports/ReportMentions'
 import { PersonDuplicatesModal } from './PersonMergeModal'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
+import { RecordHistory } from '@/components/shared/RecordHistory'
 import { PinButton } from '@/components/shared/PinButton'
 
-type SectionId = 'overview' | 'identity' | 'relationships' | 'cases' | 'legal' | 'vehicles' | 'accounts' | 'locations' | 'observations' | 'media' | 'activity'
-const SECTION_IDS: SectionId[] = ['overview', 'identity', 'relationships', 'cases', 'legal', 'vehicles', 'accounts', 'locations', 'observations', 'media', 'activity']
+type SectionId = 'overview' | 'identity' | 'relationships' | 'cases' | 'legal' | 'vehicles' | 'accounts' | 'locations' | 'observations' | 'media' | 'activity' | 'history'
+const SECTION_IDS: SectionId[] = ['overview', 'identity', 'relationships', 'cases', 'legal', 'vehicles', 'accounts', 'locations', 'observations', 'media', 'activity', 'history']
 
 /** Stable empty fallback so memo deps don't churn while the core loads. */
 const NO_LEGAL: PersonCore['legal'] = []
@@ -212,6 +214,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
       case 'identity': // person row only — nothing extra to fetch
       case 'legal': // served by the core's slim legal projection
       case 'observations': // ObservationHistory fetches its own slice
+      case 'history': // RecordHistory reads record_history itself
         break
     }
   }, [id])
@@ -282,8 +285,8 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
   const del = async () => {
     if (!p) return
     if (!(await uiConfirm(`Delete person "${p.name}"? This removes the registry record (not any linked officer account).`, { confirmText: 'Delete' }))) return
-    const ok = await deleteWithUndo('persons', p, {
-      label: `Person "${p.name}"`, noConfirm: true, setNullRefs: PERSON_NULL_REFS,
+    const ok = await deleteRecord('persons', p, {
+      label: `Person "${p.name}"`, noConfirm: true,
     })
     if (ok) onBack()
   }
@@ -370,6 +373,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
     { id: 'observations', label: 'Observations' },
     { id: 'media', label: 'Media', count: counts?.media ?? slices.media?.length },
     { id: 'activity', label: 'Activity', marker: !!p && isPersonStale(p.reviewed_at, now), markerLabel: 'Intelligence overdue for review' },
+    { id: 'history', label: 'History' },
   ]
 
   const menuItems: ActionItem[] = [
@@ -526,6 +530,15 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
               slices.activity
                 ? <ActivitySection entries={activity.slice(0, ACTIVITY_CAP)} total={activity.length} reviewedAt={p.reviewed_at} now={now} />
                 : <Notice text="Loading activity…" />
+            )}
+            {/* Field-level versions (record_versions, P8-04): what changed,
+                by whom; Restore only where the viewer may edit (the RPC
+                re-checks). */}
+            {section === 'history' && (
+              <Card pad="lg">
+                <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-300">Record history</h3>
+                <RecordHistory kind="person" id={p.id} canRestore={mayEdit ? undefined : false} onRestored={() => void loadCore()} />
+              </Card>
             )}
           </div>
         </>

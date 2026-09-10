@@ -14,11 +14,7 @@
     // the resolve.alias in .storybook/main.ts, which knip's import graph
     // can't follow. (The storybook plugin handles .storybook/* and *.stories.*
     // automatically.)
-    ".storybook/mocks/next-navigation.ts",
-    // Wired dashboard switcher (Phase-1A): its presentational core
-    // (DashSwitcherView) is consumed by the Sidebar and Storybook today; the
-    // wired component mounts in the Phase-1B dashboard views.
-    "src/components/dash/DashSwitcher.tsx"
+    ".storybook/mocks/next-navigation.ts"
   ],
   "ignore": [
     // Generated TypeScript mirror of the live schema — exports exist for

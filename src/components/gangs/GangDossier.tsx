@@ -34,6 +34,7 @@ import { ConfidenceBadge, StaleIntelBadge } from '@/components/ui/IntelBadges'
 import { EntityLink } from '@/components/ui/EntityLink'
 import { uiConfirm } from '@/components/ui/dialog'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
+import { RecordHistory } from '@/components/shared/RecordHistory'
 import { LinkEditPopover } from '@/components/shared/LinkEditPopover'
 import { PinButton } from '@/components/shared/PinButton'
 import { RecordPeekButton } from '@/components/shared/RecordPeekButton'
@@ -49,8 +50,8 @@ import {
 } from './gangIntel'
 import { densityTint, cap, type CaseOption, type CaseRow, type GangPlaceRow, type GangRow, type IntelLinkRow, type LinkedPlace, type MediaRow, type MemberRow, type PlaceRow, type TurfRow, type VehicleRow } from './gangShared'
 
-type SectionId = 'overview' | 'members' | 'territory' | 'places' | 'vehicles' | 'accounts' | 'narcotics' | 'cases' | 'observations' | 'media' | 'activity'
-const SECTION_IDS: SectionId[] = ['overview', 'members', 'territory', 'places', 'vehicles', 'accounts', 'narcotics', 'cases', 'observations', 'media', 'activity']
+type SectionId = 'overview' | 'members' | 'territory' | 'places' | 'vehicles' | 'accounts' | 'narcotics' | 'cases' | 'observations' | 'media' | 'activity' | 'history'
+const SECTION_IDS: SectionId[] = ['overview', 'members', 'territory', 'places', 'vehicles', 'accounts', 'narcotics', 'cases', 'observations', 'media', 'activity', 'history']
 
 const fmtDate = (iso: string | null | undefined) => {
   if (!iso) return '—'
@@ -551,6 +552,7 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
     { id: 'observations', label: 'Observations' },
     { id: 'media', label: 'Media', count: media.length },
     { id: 'activity', label: 'Activity', count: activity.length, marker: isGangStale(gang, now), markerLabel: 'Intelligence overdue for review' },
+    { id: 'history', label: 'History' },
   ]
 
   const deleteTurf = async (t: TurfRow) => {
@@ -676,6 +678,13 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
             <p className="mt-2 text-[11px] text-slate-500">Derived from records visible to you. The authoritative audit trail (audit_log) is available to command/owner.</p>
           </Card>
         )}
+        {/* Field-level versions (record_versions, P8-04). */}
+        {section === 'history' && (
+          <Card pad="lg">
+            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-300">Record history</h3>
+            <RecordHistory kind="gang" id={gang.id} canRestore={canEdit ? undefined : false} onRestored={() => { void load(); void onRefresh() }} />
+          </Card>
+        )}
       </div>
 
       {memberEditor && (
@@ -687,7 +696,7 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
           canDelete={canDelete}
           onClose={() => setMemberEditor(null)}
           onSaved={() => { setMemberEditor(null); void load(); void onRefresh() }}
-          onDelete={async (m) => { setMemberEditor(null); const { deleteWithUndo } = await import('@/lib/db'); await deleteWithUndo('gang_members', m, { label: `Member${m.name ? ` "${m.name}"` : ''}`, after: () => void load() }) }}
+          onDelete={async (m) => { setMemberEditor(null); const { deleteRecord } = await import('@/lib/deleteRecord'); await deleteRecord('gang_members', m, { label: `Member${m.name ? ` "${m.name}"` : ''}`, after: () => void load() }) }}
         />
       )}
       {turfOpen && <TurfModal gangId={gang.id} onClose={() => setTurfOpen(false)} onSaved={() => { setTurfOpen(false); void load() }} />}

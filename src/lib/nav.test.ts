@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DASH_LABEL, DASH_TAB } from '@/components/dash/DashSwitcherView'
+import { DASH_LABEL, DASH_TAB } from '@/lib/nav'
 import {
   CAT_DEFAULT, NAV_CATEGORIES, PAGE_META, SIU_NAV_CATEGORIES, SIU_TAB_LABEL,
   SUBTAB_GROUPS, TAB_CATEGORY, TAB_LABEL, isValidTab,

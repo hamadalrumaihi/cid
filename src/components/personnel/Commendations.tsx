@@ -6,7 +6,8 @@
  *  the roster cache as fallback name resolution. */
 import { useState } from 'react'
 import type { Tables } from '@/lib/database.types'
-import { deleteWithUndo, insert, update } from '@/lib/db'
+import { insert, remove, update } from '@/lib/db'
+import { uiConfirm } from '@/components/ui/dialog'
 import { useAuth } from '@/lib/auth'
 import { officerName } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
@@ -97,10 +98,16 @@ function CommendModal({ record, onClose, onSaved }: { record: CommendationRow | 
     onSaved()
   }
 
+  // commendations is not a soft-delete table: this is a real delete with no
+  // Trash and no Undo, and the confirm says so.
   const del = async () => {
     if (!record) return
+    if (!(await uiConfirm(`Delete the commendation "${record.title}"? This cannot be undone — it is removed for good, not moved to the Trash.`, { title: 'Delete commendation', confirmText: 'Delete permanently' }))) return
+    const res = await remove('commendations', record.id)
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Commendation deleted', 'success')
     onClose()
-    await deleteWithUndo('commendations', record, { label: 'Commendation', after: onSaved })
+    onSaved()
   }
 
   const dirty = () =>

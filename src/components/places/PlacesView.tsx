@@ -12,7 +12,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import type { Database, Json, Tables } from '@/lib/database.types'
-import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
+import { insert, list, update, withRetry } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { searchCaseHits, searchGangHits, searchNarcoticHits, searchPlaceHits } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
@@ -58,8 +59,6 @@ const InvestigationMap = dynamic(() => import('@/components/map/InvestigationMap
     </div>
   ),
 })
-
-const PLACE_DELETE_CHILDREN = [{ table: 'place_process_steps' as const, column: 'place_id' }]
 
 /** The narcotic detail the cards actually render — resolved via bounded
  *  in:{id} lookups on just the referenced substances, never a whole-registry
@@ -216,23 +215,21 @@ export function PlacesView() {
   const deleteRows = async (rows: PlaceRow[]) => {
     if (!rows.length) return
     const n = rows.length
-    if (!(await uiConfirm(`Delete ${n} selected location${n > 1 ? 's' : ''}? Restorable via Undo.`, { confirmText: `Delete ${n}` }))) return
+    if (!(await uiConfirm(`Delete ${n} selected location${n > 1 ? 's' : ''}? It moves to the Trash and can be restored.`, { confirmText: `Delete ${n}` }))) return
     setSelected(new Set())
-    await deleteWithUndo('places', rows, {
+    await deleteRecord('places', rows, {
       label: `${n} location${n > 1 ? 's' : ''}`,
       noConfirm: true,
       after: () => void refresh(),
-      children: PLACE_DELETE_CHILDREN,
     })
   }
 
   const deleteOne = async (place: PlaceRow) => {
     if (!(await uiConfirm(`Delete location "${place.name}"?`, { confirmText: 'Delete' }))) return
-    await deleteWithUndo('places', place, {
+    await deleteRecord('places', place, {
       label: `Location "${place.name}"`,
       noConfirm: true,
       after: () => void refresh(),
-      children: PLACE_DELETE_CHILDREN,
     })
   }
 

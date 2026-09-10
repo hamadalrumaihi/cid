@@ -15,6 +15,7 @@
  *  preview object either way — the console just shows all of it.
  */
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { useProfilesStore } from '@/lib/profiles'
 import { bureauLabel, roleLabel } from '@/lib/roles'
@@ -108,6 +109,11 @@ export function PermanentDeletionSection() {
           entry preserves the identity snapshot, the reason, and the member&rsquo;s role history. Members
           referenced by immutable records (legal requests, sign-off history, sealed reports, custody,
           tracker signatures, justice identity) can never be permanently deleted.
+        </p>
+        <p className="mt-2 text-sm text-rose-200/80">
+          Records (cases, registry rows, case material) are permanently deleted from the Trash, row by row, through
+          the same armed protocol —{' '}
+          <Link href="/trash" className="font-semibold text-rose-100 underline underline-offset-2 hover:text-white">Records in the Trash →</Link>
         </p>
       </div>
 

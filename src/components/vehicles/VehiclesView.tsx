@@ -8,7 +8,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
-import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
+import { insert, list, update, withRetry } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import { findDuplicates } from '@/lib/entity'
 import { searchGangHits, searchPersonHits, type EntityHit } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
@@ -97,8 +98,8 @@ export function VehiclesView() {
   }, [vehicles, query, ownerName, gangName])
 
   const onDelete = async (v: VehicleRow) => {
-    if (!(await uiConfirm(`Delete vehicle ${v.plate}? Restorable via Undo.`, { confirmText: 'Delete' }))) return
-    await deleteWithUndo('vehicles', v, { label: `Vehicle ${v.plate}`, noConfirm: true, after: refresh })
+    if (!(await uiConfirm(`Delete vehicle ${v.plate}? It moves to the Trash and can be restored.`, { confirmText: 'Delete' }))) return
+    await deleteRecord('vehicles', v, { label: `Vehicle ${v.plate}`, noConfirm: true, after: refresh })
   }
 
   if (state !== 'in') return <Notice text="Live vehicle records require sign-in." />

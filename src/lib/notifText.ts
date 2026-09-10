@@ -4,93 +4,30 @@
  *  notification the same way instead of falling back to raw payload JSON. */
 import { caseLink } from './caseLinks'
 import type { Json, Tables } from './database.types'
+import titles from './notificationTitles.json'
 import { parseNotifPayload, type NotifPayload } from './schemas'
 
 export type NotificationRow = Tables<'notifications'>
 
-/** Human titles per type — vanilla app.js NOTIF_LABEL, plus the types emitted
- *  outside that map (`member_approved`, `mention`, stale-case escalation —
- *  vanilla wrote `case_stale`, the rebuild's cases slice writes `stale_case`;
- *  both are mapped so history from either app renders). Unknown types fall
- *  back to the raw type string, never to JSON. */
-export const NOTIF_LABEL: Record<string, string> = {
-  tracker_pending: 'Tracker awaiting co-sign',
-  tracker_authorized: 'Tracker authorized',
-  case_assigned: 'Case assigned',
-  case_reassigned: 'Case moved to another bureau',
-  task_assigned: 'Task assigned to you',
-  case_handover: 'Case handed over',
-  report_finalized: 'Report finalized',
-  // Phase 5 review flow (contract §4): reviewers on the case / the author.
-  report_submitted: 'Report submitted for your review',
-  report_returned: 'Report returned for revision',
-  report_reopened: 'Report reopened',
-  rico_ready: 'RICO elements satisfied',
-  signoff_waiting: 'Case awaiting your sign-off',
-  signoff_approved: 'Case sign-off approved',
-  signoff_denied: 'Case sign-off denied',
-  signoff_changes: 'Sign-off — changes requested',
-  signoff_escalated: 'Case auto-escalated (LOA)',
-  signoff_heads_up: 'Deputy approved a case',
-  chat_mention: 'You were mentioned',
-  mention: 'You were mentioned',
-  note_mention: 'You were mentioned in a case note',
-  access_requested: 'Case access requested',
-  access_granted: 'Case access granted',
-  access_denied: 'Case access denied',
-  access_expiring: 'Case access expiring soon',
-  access_expired: 'Case access expired',
-  access_renewed: 'Case access renewed',
-  siu_reconcile: 'SIB reconcile: a CID record matches a compartmented one',
-  entity_update_suggested: 'Record update suggested',
-  entity_suggestion_decided: 'Your record update was decided',
-  announcement: '📣 Announcement',
-  member_approved: 'Access approved',
-  membership_request: 'Membership request awaiting review',
-  membership_update: 'Membership request update',
-  joint_case_added: 'Added to a joint case',
-  audit_chain_mismatch: 'Audit chain verification failed',
-  joint_case_removed: 'Joint-case access removed',
-  joint_case_ended: 'Joint case ended',
-  op_joint_linked: 'Case joined a Joint Operation',
-  op_joint_removed: 'Case removed from a Joint Operation',
-  login_denied: '⛔ Portal access denied',
-  login_restored: 'Portal access restored',
-  justice_membership_request: 'Justice membership request awaiting review',
-  justice_membership_update: 'Justice membership update',
-  ada_assignment: 'Prosecutor bureau assignment', // legacy (bureau slots retired)
-  legal_request: '⚖️ Legal request needs your attention',
-  legal_update: '⚖️ Legal request update',
-  legal_decision: '⚖️ Legal decision recorded',
-  legal_coverage: '⚠ Legal coverage gap', // legacy kind (prosecutor coverage retired)
-  // Phase 4 legal kinds (contract §7). Sealed payloads carry only
-  // {request_id, sealed:true} — the title is all the bell ever shows.
-  legal_comment: '💬 New comment on a legal request',
-  legal_nudge: '⏰ Legal request awaiting action',
-  legal_escalated: '⚠ Legal request escalated',
-  legal_unissued: 'Approved request not yet issued',
-  legal_expiring: 'Legal instrument expiring soon',
-  legal_expired: 'Legal instrument expired',
-  legal_deadline_passed: 'Subpoena response deadline passed',
-  legal_observer: 'You were added as an observer',
-  client_error: '⚠ App error reported',
-  case_stale: 'Case going stale',
-  stale_case: 'Case going stale',
-  document_suggestion: 'Document suggestion update',
-  restricted_break_glass: '🔓 Restricted media break-glass',
-  restricted_access_requested: '🔓 Restricted access requested',
-  restricted_access_granted: '🔓 Restricted access granted',
-  restricted_access_denied: '🔒 Restricted access denied',
-  restricted_access_revoked: '🔒 Restricted access revoked',
-  surveillance_decided: 'Surveillance request decided',
-  // Phase 6 intel triage (contract §4). Payloads carry {submission_id,
-  // submission_no, jurisdiction, actor} and nothing of the report itself.
-  intel_new: '🛈 New intelligence submitted',
-  intel_assigned: 'Intelligence assigned to you',
-  intel_question: 'A question about your report',
-  intel_reply: 'The officer replied on a report',
-  intel_referred: 'Intelligence referred to SIB',
-}
+/** The ONE title map (Phase 7, P7-07): `notificationTitles.json` carries every
+ *  kind the portal emits with its human title AND its Discord category; the
+ *  discord-notify Edge Function ships a byte-identical copy (scripts/
+ *  sync-notification-titles.mjs, gate `check:notif-titles`). Unknown types
+ *  fall back to the raw type string, never to JSON. */
+type TitleEntry = { title: string; category: string }
+const TITLES = titles as Record<string, TitleEntry>
+
+/** Human titles per type — derived from the JSON so the bell, My Desk, the
+ *  Action Center and the Discord DM all say the same words. */
+export const NOTIF_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(TITLES).map(([k, v]) => [k, v.title]),
+)
+
+/** Discord opt-in category per type (`other` when the JSON has no entry —
+ *  always sent when a title exists). */
+export const NOTIF_CATEGORY: Record<string, string> = Object.fromEntries(
+  Object.entries(TITLES).map(([k, v]) => [k, v.category]),
+)
 
 const isIntel = (t: string): boolean => t.startsWith('intel_')
 
@@ -132,6 +69,9 @@ export function notifSub(n: NotificationRow): string | null {
  *  URLs the tab strip writes). Types not listed open the Overview. */
 const NOTIF_CASE_TAB: Record<string, string> = {
   task_assigned: 'tasks',
+  // Blockers are hosted on the Brief (CaseBlockersPanel in OverviewTab) —
+  // explicit so a future move of the panel is a one-line edit here.
+  blocker_assigned: 'overview',
   chat_mention: 'chat',
   mention: 'chat',
   note_mention: 'notes',
@@ -166,6 +106,15 @@ const NOTIF_CASE_TAB: Record<string, string> = {
 export function notifHref(n: NotificationRow, opts: { command?: boolean } = {}): string | null {
   const p = asPayload(n.payload)
   const t = n.type
+  // Escalation ladder (P7-03): the payload names the escalated SOURCE — a
+  // sign-off lands on the Sign-off tab, an overdue task on that task, an
+  // access request on the case (where the decision is made).
+  if (t === 'action_escalated' && p.case_id) {
+    if (p.kind === 'signoff') return caseLink(p.case_id, 'signoff')
+    if (p.kind === 'task_overdue') return caseLink(p.case_id, 'tasks', { task: p.source_id })
+    return caseLink(p.case_id)
+  }
+  if (t === 'action_escalated') return '/action?f=escalated'
   // Report notifications carry report_id — land on THAT report (?report=),
   // not just the Reports tab (contract §4 deep link).
   if (p.case_id) return caseLink(p.case_id, NOTIF_CASE_TAB[t], { report: typeof p.report_id === 'string' ? p.report_id : undefined })

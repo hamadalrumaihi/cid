@@ -5,7 +5,7 @@
  *  Allocation form. */
 import { useState } from 'react'
 import { fmtUSD } from '@/lib/format'
-import { BRACKETS, COMP_SPLIT, findBracket } from './commandUtils'
+import { BRACKETS, COMP_SPLIT, findBracket } from '@/components/command-center/lib/commandUtils'
 import { Card } from '@/components/ui/Card'
 
 export function RaidComp() {

@@ -11,7 +11,8 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { caseLink } from '@/lib/caseLinks'
 import type { Tables } from '@/lib/database.types'
-import { deleteWithUndo, insert, list } from '@/lib/db'
+import { insert, list } from '@/lib/db'
+import { deleteRecord } from '@/lib/deleteRecord'
 import type { EntityHit } from '@/lib/entitySearch'
 import { useCaseTableVersion } from '@/lib/realtime'
 import { statusTint } from '@/lib/tint'
@@ -136,8 +137,8 @@ export function RelatedCasesPanel({ c, canEdit }: { c: CaseRow; canEdit: boolean
                   <Button
                     size="sm" variant="ghost" className="ml-auto text-rose-300 hover:text-rose-200"
                     aria-label={`Unlink ${other?.case_number ?? 'this case'}`}
-                    onClick={() => void deleteWithUndo('case_links', l, {
-                      confirmTitle: 'Unlink cases', confirmMessage: `Remove the link to ${other?.case_number ?? 'this case'}? Both cases are kept. You can undo this for a few seconds.`,
+                    onClick={() => void deleteRecord('case_links', l, {
+                      confirmTitle: 'Unlink cases', confirmMessage: `Remove the link to ${other?.case_number ?? 'this case'}? Both cases are kept. You can undo this from the toast or the Trash.`,
                       confirmText: 'Unlink', label: 'case link', after: () => void refresh(),
                     })}
                   >

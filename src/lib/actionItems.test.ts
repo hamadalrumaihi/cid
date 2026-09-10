@@ -84,7 +84,7 @@ function mkBlocker(over: Partial<AcBlocker> = {}): AcBlocker {
 function mkNotif(over: Partial<AcNotif> = {}): AcNotif {
   return {
     id: 'n-1', user_id: ME, type: 'chat_mention', payload: { case_id: 'c-1' },
-    read: false, created_at: NOW_ISO, ...over,
+    read: false, read_at: null, created_at: NOW_ISO, ...over,
   }
 }
 
@@ -667,7 +667,7 @@ describe('library governance items (AcDoc — pre-derived facts)', () => {
       documents: [mkDoc({ ackPending: true })],
       notifications: [{
         id: 'n-1', user_id: ME, type: 'document_required',
-        payload: { document_id: 'd-1' }, read: false, created_at: NOW_ISO,
+        payload: { document_id: 'd-1' }, read: false, read_at: null, created_at: NOW_ISO,
       }],
     }))
     expect(withNotif.suppressedCount).toBe(1)
@@ -726,7 +726,7 @@ describe('document suggestions (AcSuggestion — pre-derived facts)', () => {
       suggestions: [mkSug({ canManage: true })],
       notifications: [{
         id: 'n-9', user_id: ME, type: 'document_suggestion',
-        payload: { suggestion_id: 's-1', document_id: 'd-1' }, read: false, created_at: NOW_ISO,
+        payload: { suggestion_id: 's-1', document_id: 'd-1' }, read: false, read_at: null, created_at: NOW_ISO,
       }],
     }))
     expect(q.suppressedCount).toBe(1)
@@ -990,5 +990,255 @@ describe('SIB work (sibStanding-gated)', () => {
     expect(byKey(acked, 'sib_disclosure:dis-1')).toBeUndefined()
     const revoked = buildActionItems(src({ sibStanding: AGENT, sibDisclosures: [mkSibDisclosure({ revoked_at: NOW_ISO })] }))
     expect(byKey(revoked, 'sib_disclosure:dis-1')).toBeUndefined()
+  })
+})
+
+/* ── Phase 7 (P7-02 #374, P7-03 #375) — the new kinds, the priority weight,
+ *    the escalation ledger and the per-viewer state merge. ───────────────── */
+import {
+  SOURCE_TYPE_LABEL, escalationKey, priorityNudge,
+  type AcClientError, type AcEscalation, type AcFieldAccessRequest, type AcGangMember,
+  type AcJusticeApplication, type AcLegalComment, type AcMdtExport, type AcMySubmission,
+  type AcNarcoticSuggestion, type AcRejectedSubmission, type AcReport, type AcRestrictedExport,
+  type AcSiuConflict, type AcSiuWatch, type AcSurvAlert, type AcTracker, type ActionSourceType,
+} from './actionItems'
+
+const HOUR = 3_600_000
+const iso = (deltaMs: number) => new Date(NOW + deltaMs).toISOString()
+const findKey = (s: ActionSources, key: string) => buildActionItems(s).items.find((i) => i.dedupeKey === key)
+
+describe('Phase 7 — SOURCE_TYPE_LABEL', () => {
+  it('names every source type the builder can emit', () => {
+    const emitted: ActionSourceType[] = [
+      'task', 'signoff', 'returned_case', 'transfer', 'access_request', 'access_expiring', 'membership_request',
+      'legal_request', 'case_followup', 'handover', 'mention', 'blocker', 'document_ack', 'document_review',
+      'document_approval', 'document_sync', 'document_suggestion', 'legal_hold', 'restricted_access',
+      'unverified_observation', 'surveillance_expiring', 'legal_queue', 'draft', 'unassigned_intel', 'bolo_expiring',
+      'sib_access_request', 'sib_referral', 'sib_disclosure', 'restricted_export', 'mdt_export', 'field_access',
+      'claim_verdict', 'narcotic_suggestion', 'gang_duplicate', 'tracker_cosign', 'sib_conflict', 'sib_watch_review',
+      'owner_signal', 'justice_application', 'surveillance_alert', 'legal_comment', 'report_review',
+      'intel_reply', 'intel_restore', 'intel_validate', 'other',
+    ]
+    for (const t of emitted) expect(SOURCE_TYPE_LABEL[t], t).toBeTruthy()
+  })
+})
+
+describe('Phase 7 — cases.priority weight (#375)', () => {
+  it('lifts every item on a critical case by +100 and a high case by +50', () => {
+    expect(priorityNudge('critical')).toBe(NUDGE.priorityCritical)
+    expect(priorityNudge('high')).toBe(NUDGE.priorityHigh)
+    expect(priorityNudge('normal')).toBe(0)
+    expect(priorityNudge(null)).toBe(0)
+    const base = findKey(src({ cases: [mkCase()], tasks: [mkTask()] }), 'task:t-1')!
+    const crit = findKey(src({ cases: [mkCase({ priority: 'critical' })], tasks: [mkTask()] }), 'task:t-1')!
+    const high = findKey(src({ cases: [mkCase({ priority: 'high' })], tasks: [mkTask()] }), 'task:t-1')!
+    expect(crit.urgencyScore - base.urgencyScore).toBe(100)
+    expect(high.urgencyScore - base.urgencyScore).toBe(50)
+    expect(crit.priority).toBe('critical')
+  })
+})
+
+describe('Phase 7 — escalation ledger + viewer state merge', () => {
+  it('maps ledger kinds onto the dedupe keys they lift', () => {
+    expect(escalationKey({ kind: 'signoff', source_id: 'c-1' })).toBe('case:c-1:signoff-decide')
+    expect(escalationKey({ kind: 'access_request', source_id: 'ar-1' })).toBe('access:ar-1')
+    expect(escalationKey({ kind: 'task_overdue', source_id: 't-1' })).toBe('task:t-1')
+    expect(escalationKey({ kind: 'legal', source_id: 'x' })).toBeNull()
+  })
+
+  it('stamps escalatedAt and adds +80 to the escalated item only', () => {
+    const escalations: AcEscalation[] = [{ kind: 'task_overdue', source_id: 't-1', case_id: 'c-1', escalated_at: iso(-2 * HOUR) }]
+    const s = src({ cases: [mkCase()], tasks: [mkTask(), mkTask({ id: 't-2' })] })
+    const plain = findKey(s, 'task:t-1')!
+    const lifted = findKey({ ...s, escalations }, 'task:t-1')!
+    const other = findKey({ ...s, escalations }, 'task:t-2')!
+    expect(lifted.escalatedAt).toBe(iso(-2 * HOUR))
+    expect(lifted.urgencyScore - plain.urgencyScore).toBe(NUDGE.escalated)
+    expect(other.escalatedAt).toBeNull()
+  })
+
+  it('a legal request escalated by the legal sweep carries escalatedAt without the ledger lift', () => {
+    const l = mkLegal({ review_status: 'submitted_to_judge', escalated_at: iso(-HOUR) })
+    const it = findKey(src({ legal: [l] }), 'legal:lr-1')!
+    expect(it.escalatedAt).toBe(iso(-HOUR))
+    expect(it.reason.startsWith('Escalated')).toBe(true)
+  })
+
+  it('merges the viewer state row onto the item; the builder never filters by it', () => {
+    const states = { 'task:t-1': { seenAt: null, snoozedUntil: iso(HOUR), dismissedAt: null } }
+    const it = findKey(src({ cases: [mkCase()], tasks: [mkTask()], states }), 'task:t-1')!
+    expect(it.state?.snoozedUntil).toBe(iso(HOUR))
+    expect(findKey(src({ tasks: [mkTask()] }), 'task:t-1')!.state).toBeNull()
+  })
+
+  it('tasks and blockers carry caseLeadId for the reassign gate', () => {
+    const s = src({ cases: [mkCase({ lead_detective_id: 'off-2' })], tasks: [mkTask()], blockers: [mkBlocker()] })
+    expect(findKey(s, 'task:t-1')!.sourceMetadata.caseLeadId).toBe('off-2')
+    expect(findKey(s, 'blocker:b-1')!.sourceMetadata.caseLeadId).toBe('off-2')
+  })
+})
+
+describe('Phase 7 — new queue kinds (#374)', () => {
+  const cmd = { role: 'bureau_lead', isCommand: true, canEdit: true } as const
+
+  it('restricted export window — command sees the open 1-hour window, may renew it', () => {
+    const rows: AcRestrictedExport[] = [
+      { id: 'l1', action: 'packet_export', actor_id: 'off-2', entity_id: 'c-1', entity_type: 'media', reason: 'court', created_at: iso(-20 * 60_000) },
+      { id: 'l0', action: 'packet_export', actor_id: 'off-2', entity_id: 'c-1', entity_type: 'media', reason: null, created_at: iso(-3 * HOUR) },
+    ]
+    const it = findKey(src({ ...cmd, cases: [mkCase()], restrictedExports: rows }), 'restricted:c-1:export')!
+    expect(it.sourceType).toBe('restricted_export')
+    expect(it.isCommandItem).toBe(true)
+    expect(it.status).toBe('informational')
+    expect(it.reason).toContain('Det. Ortiz')
+    expect(it.deepLink).toBe('/cases?case=c-1&tab=media')
+    expect(buildActionItems(src({ ...cmd, restrictedExports: rows })).items.filter((i) => i.sourceType === 'restricted_export')).toHaveLength(1)
+    expect(findKey(src({ cases: [mkCase()], restrictedExports: rows }), 'restricted:c-1:export')).toBeUndefined()
+  })
+
+  it('MDT export proposal — command decides, the proposer waits', () => {
+    const e: AcMdtExport = { id: 'm1', kind: 'wanted', status: 'proposed', subject_snapshot: 'Marcus Reed', reason: 'armed', risk_level: 'high', proposed_by: 'off-2', proposed_at: NOW_ISO, source_case_id: 'c-1', updated_at: NOW_ISO }
+    const it = findKey(src({ ...cmd, cases: [mkCase()], mdtExports: [e] }), 'mdt_export:m1')!
+    expect(it).toMatchObject({ sourceType: 'mdt_export', status: 'needs_action', isCommandItem: true, canAct: true, deepLink: '/tools?tool=bolo', caseNumber: 'CID-26-001' })
+    const mine = findKey(src({ mdtExports: [{ ...e, proposed_by: ME }] }), 'mdt_export:m1')!
+    expect(mine).toMatchObject({ status: 'waiting', isPersonalItem: true, canAct: false })
+    expect(findKey(src({ mdtExports: [{ ...e, status: 'exported' }] }), 'mdt_export:m1')).toBeUndefined()
+  })
+
+  it('field access request — command only', () => {
+    const r: AcFieldAccessRequest = { id: 'fa1', user_id: 'u9', agency: 'lspd', callsign: '1L-20', status: 'pending', created_at: NOW_ISO, updated_at: NOW_ISO }
+    const it = findKey(src({ ...cmd, fieldAccessRequests: [r] }), 'field_access:fa1')!
+    expect(it).toMatchObject({ sourceType: 'field_access', isCommandItem: true, actionLabel: 'Approve', secondaryActionLabel: 'Deny', deepLink: '/tools?tool=field-review' })
+    expect(it.title).toContain('1L-20')
+    expect(findKey(src({ fieldAccessRequests: [r] }), 'field_access:fa1')).toBeUndefined()
+  })
+
+  it('my submissions — claim verdicts, validation-ready and officer replies', () => {
+    const base: AcMySubmission = {
+      id: 'fs1', submission_no: 'FI-26-0007', summary: 'Two plates', status: 'reviewing', assigned_to: ME,
+      validated_at: null, rejected_at: null, submitted_at: NOW_ISO, created_at: NOW_ISO, updated_at: NOW_ISO,
+      counts: { claims: 3, decided: 1, validated: false }, lastOfficerMessageAt: null, lastReviewerNoteAt: null,
+    }
+    const s = src({ canEdit: true, mySubmissions: [base] })
+    expect(findKey(s, 'claim:fs1')).toMatchObject({ sourceType: 'claim_verdict', isPersonalItem: true, deepLink: '/tools?tool=field-review&record=fs1' })
+    expect(findKey(s, 'claim:fs1')!.reason).toBe('2 of 3 claims still need a verdict')
+    expect(findKey(s, 'intel:fs1:validate')).toBeUndefined()
+    const ready = src({ canEdit: true, mySubmissions: [{ ...base, counts: { claims: 3, decided: 3, validated: true } }] })
+    expect(findKey(ready, 'intel:fs1:validate')).toMatchObject({ sourceType: 'intel_validate' })
+    expect(findKey(ready, 'claim:fs1')).toBeUndefined()
+    const replied = src({ canEdit: true, mySubmissions: [{ ...base, lastOfficerMessageAt: iso(-HOUR), lastReviewerNoteAt: iso(-2 * HOUR) }] })
+    expect(findKey(replied, 'intel:fs1:reply')).toMatchObject({ sourceType: 'intel_reply' })
+    const answered = src({ canEdit: true, mySubmissions: [{ ...base, lastOfficerMessageAt: iso(-2 * HOUR), lastReviewerNoteAt: iso(-HOUR) }] })
+    expect(findKey(answered, 'intel:fs1:reply')).toBeUndefined()
+    // Not assigned to me / inactive viewer → nothing.
+    expect(findKey(src({ canEdit: true, mySubmissions: [{ ...base, assigned_to: 'off-2' }] }), 'claim:fs1')).toBeUndefined()
+    expect(findKey(src({ mySubmissions: [base] }), 'claim:fs1')).toBeUndefined()
+  })
+
+  it('rejected intel — command, inside the 7-day restore window', () => {
+    const r: AcRejectedSubmission = { id: 'fs2', submission_no: 'FI-26-0008', summary: null, status: 'rejected', rejected_at: iso(-2 * 86_400_000), rejected_by: 'off-3', updated_at: NOW_ISO, created_at: NOW_ISO }
+    const it = findKey(src({ ...cmd, rejectedSubmissions: [r] }), 'intel:fs2:rejected')!
+    expect(it).toMatchObject({ sourceType: 'intel_restore', status: 'informational', isCommandItem: true })
+    expect(it.reason).toContain('Det. Vale')
+    expect(findKey(src({ ...cmd, rejectedSubmissions: [{ ...r, rejected_at: iso(-9 * 86_400_000) }] }), 'intel:fs2:rejected')).toBeUndefined()
+  })
+
+  it('narcotic suggestion — a manager decides, the author waits or answers', () => {
+    const g: AcNarcoticSuggestion = { id: 'ns1', title: 'Add "Blue Fen"', status: 'submitted', suggestion_type: 'new_substance', created_by: 'off-2', source_case_id: null, created_at: NOW_ISO, updated_at: NOW_ISO }
+    const it = findKey(src({ canEdit: true, narcoticSuggestions: [g] }), 'narcotic:ns1')!
+    expect(it).toMatchObject({ sourceType: 'narcotic_suggestion', status: 'needs_action', actionLabel: 'Accept', secondaryActionLabel: 'Decline', deepLink: '/tools?tool=narcotics' })
+    expect(findKey(src({ canEdit: true, narcoticSuggestions: [{ ...g, created_by: ME }] }), 'narcotic:ns1')).toMatchObject({ status: 'waiting', isPersonalItem: true })
+    expect(findKey(src({ canEdit: true, narcoticSuggestions: [{ ...g, created_by: ME, status: 'needs_more_information' }] }), 'narcotic:ns1')).toMatchObject({ status: 'needs_action' })
+    expect(findKey(src({ canEdit: true, narcoticSuggestions: [{ ...g, status: 'accepted' }] }), 'narcotic:ns1')).toBeUndefined()
+  })
+
+  it('gang duplicate review — one item per unreviewed member in a same-name cluster', () => {
+    const m = (id: string, name: string, over: Partial<AcGangMember> = {}): AcGangMember =>
+      ({ id, gang_id: 'g-1', name, person_id: null, reviewed_at: null, deleted_at: null, created_at: NOW_ISO, updated_at: NOW_ISO, ...over })
+    const s = src({ canEdit: true, gangMembers: [m('a', 'Trey Sanders'), m('b', 'trey-sanders!'), m('c', 'Solo Name'), m('d', 'Trey Sanders', { reviewed_at: NOW_ISO })], gangNames: { 'g-1': 'Ballas' } })
+    const items = buildActionItems(s).items.filter((i) => i.sourceType === 'gang_duplicate')
+    expect(items.map((i) => i.dedupeKey).sort()).toEqual(['gang_dup:a', 'gang_dup:b'])
+    expect(items[0].summary).toContain('Ballas')
+    expect(items[0].deepLink).toBe('/gangs?gang=g-1')
+    expect(items[0].reason).toContain('3 memberships')
+    // A different gang with the same name is not a cluster.
+    expect(buildActionItems(src({ canEdit: true, gangMembers: [m('a', 'X'), m('b', 'X', { gang_id: 'g-2' })] })).items.filter((i) => i.sourceType === 'gang_duplicate')).toHaveLength(0)
+  })
+
+  it('tracker co-sign — a second command officer, never the signer or the creator', () => {
+    const t: AcTracker = { id: 'tk1', tracker_code: 'TRK-07', target: 'Black SUV', status: 'pending', bureau: 'major_crimes', case_id: null, created_by: 'off-2', director_sig: 'off-2', deputy_sig: null, created_at: NOW_ISO, updated_at: NOW_ISO }
+    expect(findKey(src({ ...cmd, trackers: [t] }), 'tracker:tk1')).toMatchObject({ sourceType: 'tracker_cosign', status: 'needs_action', isCommandItem: true, deepLink: '/command' })
+    expect(findKey(src({ ...cmd, trackers: [{ ...t, director_sig: ME }] }), 'tracker:tk1')).toMatchObject({ status: 'waiting', isPersonalItem: true })
+    expect(findKey(src({ trackers: [t] }), 'tracker:tk1')).toBeUndefined()
+    expect(findKey(src({ ...cmd, trackers: [{ ...t, deputy_sig: 'off-3', status: 'authorized' }] }), 'tracker:tk1')).toBeUndefined()
+  })
+
+  it('SIB conflict — SIB command only', () => {
+    const k: AcSiuConflict = { id: 'k1', case_id: 'c-1', agent_id: 'off-2', reason: 'Relative', status: 'declared', declared_at: NOW_ISO, updated_at: NOW_ISO }
+    const it = findKey(src({ sibStanding: { isAgent: true, isCommand: true }, sibConflicts: [k] }), 'siu_conflict:k1')!
+    expect(it).toMatchObject({ sourceType: 'sib_conflict', isCommandItem: true, deepLink: '/siu?s=intake' })
+    expect(it.title).toContain('Det. Ortiz')
+    expect(findKey(src({ sibStanding: { isAgent: true, isCommand: false }, sibConflicts: [k] }), 'siu_conflict:k1')).toBeUndefined()
+  })
+
+  it('SIB watchlist — review due and expiry inside 7 days, agents only', () => {
+    const w: AcSiuWatch = { id: 'w1', label: 'Harbor crew', entity_type: 'gang', priority: 'high', status: 'active', review_due_at: iso(2 * 86_400_000), expires_at: iso(30 * 86_400_000), removed_at: null, assigned_agent: ME, created_at: NOW_ISO, updated_at: NOW_ISO }
+    const s = src({ sibStanding: { isAgent: true, isCommand: false }, sibWatchlist: [w] })
+    expect(findKey(s, 'siu_watch:w1')).toMatchObject({ sourceType: 'sib_watch_review', status: 'due_soon', isPersonalItem: true, deepLink: '/siu?s=watchlist' })
+    expect(findKey(s, 'siu_watch:w1:expiry')).toBeUndefined()
+    const lapsing = src({ sibStanding: { isAgent: true, isCommand: false }, sibWatchlist: [{ ...w, review_due_at: null, expires_at: iso(3 * 86_400_000) }] })
+    expect(findKey(lapsing, 'siu_watch:w1:expiry')).toMatchObject({ status: 'due_soon' })
+    expect(findKey(src({ sibWatchlist: [w] }), 'siu_watch:w1')).toBeUndefined()
+  })
+
+  it('Owner signals — client errors fold into one item per day; the audit mismatch is typed owner_signal', () => {
+    const errs: AcClientError[] = [
+      { id: 'e1', created_at: iso(-HOUR), route: '/cases' }, { id: 'e2', created_at: iso(-2 * HOUR), route: '/legal' },
+      { id: 'e3', created_at: iso(-30 * HOUR), route: '/x' },
+    ]
+    const s = src({ isOwner: true, clientErrors: errs, notifications: [mkNotif({ id: 'n9', type: 'audit_chain_mismatch', payload: {} })] })
+    const owner = findKey(s, `owner:client_errors:${TODAY}`)!
+    expect(owner).toMatchObject({ sourceType: 'owner_signal', status: 'informational', deepLink: '/owner?s=security' })
+    expect(owner.title).toBe('2 client errors in the last 24 hours')
+    expect(findKey(s, 'notif:n9')).toMatchObject({ sourceType: 'owner_signal', deepLink: '/audit' })
+    expect(findKey(src({ clientErrors: errs }), `owner:client_errors:${TODAY}`)).toBeUndefined()
+  })
+
+  it('justice applications — one item per open request for command/owner (awareness)', () => {
+    const j: AcJusticeApplication = { id: 'j1', applicant_id: 'u1', display_name: 'A. Vance', requested_agency: 'doj', requested_justice_role: 'judge', status: 'pending', submitted_at: NOW_ISO, created_at: NOW_ISO, updated_at: NOW_ISO }
+    const s = src({ ...cmd, justiceApplications: [j, { ...j, id: 'j2', status: 'approved' }, { ...j, id: 'j3', status: 'correction_requested' }] })
+    expect(findKey(s, 'justice:j1')).toMatchObject({ sourceType: 'justice_application', isCommandItem: true, status: 'informational', deepLink: '/command-center?s=approvals' })
+    expect(findKey(s, 'justice:j2')).toBeUndefined()
+    expect(findKey(s, 'justice:j3')).toMatchObject({ status: 'waiting' })
+    expect(findKey(src({ justiceApplications: [j] }), 'justice:j1')).toBeUndefined()
+  })
+
+  it('surveillance alert — acknowledge / dismiss on the case Surveillance tab', () => {
+    const a: AcSurvAlert = { id: 'al1', case_id: 'c-1', title: 'Repeat plate', explanation: 'Seen 4× near the pier', alert_type: 'pattern', status: 'open', created_at: NOW_ISO }
+    const it = findKey(src({ canEdit: true, cases: [mkCase()], survAlerts: [a] }), 'surv_alert:al1')!
+    expect(it).toMatchObject({ sourceType: 'surveillance_alert', actionLabel: 'Acknowledge', secondaryActionLabel: 'Dismiss', canAct: true, deepLink: '/cases?case=c-1&tab=surveillance', caseNumber: 'CID-26-001' })
+    expect(findKey(src({ canEdit: true, survAlerts: [{ ...a, status: 'acknowledged' }] }), 'surv_alert:al1')).toBeUndefined()
+  })
+
+  it('legal comments — others\' comments in the last 7 days, never my own or deleted ones', () => {
+    const k: AcLegalComment = { id: 'lc1', legal_request_id: 'lr-1', author_id: 'off-2', created_at: iso(-HOUR), deleted_at: null }
+    const s = src({ legal: [mkLegal()], legalComments: [k, { ...k, id: 'lc2', author_id: ME }, { ...k, id: 'lc3', deleted_at: NOW_ISO }, { ...k, id: 'lc4', created_at: iso(-8 * 86_400_000) }] })
+    const it = findKey(s, 'legal_comment:lc1')!
+    expect(it).toMatchObject({ sourceType: 'legal_comment', status: 'informational', actionLabel: 'Mark read', deepLink: '/legal?request=lr-1', caseNumber: 'CID-26-001' })
+    expect(it.title).toBe('New comment — LR-26-004')
+    expect(it.reason).toContain('Det. Ortiz')
+    for (const k2 of ['lc2', 'lc3', 'lc4']) expect(findKey(s, `legal_comment:${k2}`), k2).toBeUndefined()
+  })
+
+  it('report review — the can_review_report mirror: reviewer roles, never the author, bureau-scoped leads', () => {
+    const r: AcReport = { id: 'r1', case_id: 'c-1', template: 'arrest_report', kind: 'initial', seq: null, author_id: 'off-2', review_status: 'submitted', finalized: false, submitted_at: NOW_ISO, created_at: NOW_ISO, updated_at: NOW_ISO }
+    const lead = findKey(src({ role: 'bureau_lead', isCommand: true, canEdit: true, cases: [mkCase()], reports: [r] }), 'report:r1')!
+    expect(lead).toMatchObject({ sourceType: 'report_review', isCommandItem: true, deepLink: '/cases?case=c-1&tab=reports&report=r1' })
+    const senior = findKey(src({ role: 'senior_detective', canEdit: true, cases: [mkCase()], reports: [r] }), 'report:r1')!
+    expect(senior).toMatchObject({ isPersonalItem: true, isCommandItem: false })
+    expect(findKey(src({ role: 'detective', canEdit: true, cases: [mkCase()], reports: [r] }), 'report:r1')).toBeUndefined()
+    expect(findKey(src({ role: 'bureau_lead', isCommand: true, canEdit: true, cases: [mkCase()], reports: [{ ...r, author_id: ME }] }), 'report:r1')).toBeUndefined()
+    expect(findKey(src({ role: 'bureau_lead', division: 'street_crimes', isCommand: true, canEdit: true, cases: [mkCase()], reports: [r] }), 'report:r1')).toBeUndefined()
+    expect(findKey(src({ role: 'bureau_lead', isCommand: true, canEdit: true, cases: [mkCase()], reports: [{ ...r, review_status: 'draft' }] }), 'report:r1')).toBeUndefined()
   })
 })
