@@ -8,6 +8,73 @@ the merged PRs that compose it.
 
 ## [Unreleased]
 
+### The guide system
+
+The guides were corrected, moved into one library, and joined by the five
+guides the division actually needed. One migration
+(`20261108120000_guide_library_v2`), one destination, one copy of each guide.
+
+- **The Portal User Guide is a guide now.** It was a Reference tab of its own,
+  generated from `docs/USER-GUIDE.md` into a second copy that drifted. It is
+  now `/guides/user-guide`, written as a document module and audited against
+  the portal as it stands: the sidebar table, the landing page, the Audit Log's
+  home and the case tab names were all wrong, and are corrected. Fifteen
+  sections — Getting Started; Navigation and Search; Dashboard and My Desk;
+  Action Center; Cases; Reports; Evidence and Media; Tasks and Notes; People,
+  Vehicles, Organizations, Places and Narcotics; Legal Requests; Notifications;
+  Account and Membership; Mobile and Tablet Use; Common Problems; and Where to
+  Find Additional Guides. It introduces the portal and points at the
+  specialized guides rather than trying to replace them. `/guide` redirects.
+- **Five new guides, written from the code.** Case Management, Reports and
+  Evidence, Legal Requests, Action Center, and Entities and Organizations —
+  each built from the screens, the RPCs and the status vocabularies as they
+  actually are (the Action Center guide's queue table uses the portal's own
+  section titles; the Legal guide's decision table uses the portal's own
+  wording), so a heading on screen and a row in a guide read the same. No
+  invented features, permissions or workflows, and no SOP text copied in:
+  policy says what you must do, a guide says how the portal does it, and a
+  guide links to the policy rather than restating it.
+- **The library works like a library.** Continue Reading, Pinned, Recently
+  Updated, Browse by Category and All Guides — each hidden when empty. Search
+  across titles, summaries, section headings and content that opens the guide
+  **at the matching section**; category, audience and status filters; sort by
+  recently updated, A–Z or most read; bookmarks; reading progress; reading
+  estimates; last-updated dates; New / Updated / Draft / Archived / Restricted
+  badges — every one of them carrying a word, never colour alone.
+- **A guide page that can be read and sent.** Breadcrumbs, a sticky contents
+  rail on a wide screen and a section sheet on a narrow one, search within the
+  guide, permanent section anchors, previous/next section, copy a link to a
+  section, related guides, an "updated since you last read it" notice, and
+  **Mark as read**. Where you left off is remembered.
+- **Help where the work is.** The case workspace, the report editor, the
+  evidence area, the legal request form, an organization record and the Action
+  Center each carry one small link into the right section of the right guide —
+  not a panel over the interface, and not a tour that starts itself.
+- **Guides can now be written in the portal.** Command and the Owner get an
+  editor: metadata, sections, drafts, preview, publish and unpublish, archive
+  and restore, duplicate as a draft, revision history and restore, categories
+  and tags, optional imagery, and autosave with a real conflict check — a save
+  carrying a stale timestamp is refused rather than overwriting somebody's
+  work. Categories are rows now, so the library is reorganized without a
+  deploy; retiring a category leaves every guide filed under it readable.
+- **Reading is private.** Where somebody got to in a guide and whether they
+  marked it read is visible to exactly one person — not to command and not to
+  the Owner. It is not audited, nothing aggregates it, and counting a read
+  never makes a guide look freshly revised. It is not a training record.
+- **Feedback goes to a queue.** "Was this guide helpful?", a broken link, an
+  out-of-date note or a suggestion all land in a list the guide's owners work
+  through, rather than in anybody's notifications.
+- **Audience is a wall.** A guide outside your audience is *absent* — not
+  listed, not readable by id, not counted, not searched, not offered as a
+  related guide. A draft, an archived guide, a guide outside the audience and
+  a guide that never existed are one answer, because anything else discloses
+  the guide by the shape of the refusal. The corollary is written down in
+  `AUTHORIZATION.md` §25: a restricted guide must be **written in the portal**,
+  never shipped as a module, because RLS protects rows and not bundles.
+  Pinned by `tests/rls/v195a` and `v195b`.
+- **Images stay optional.** A guide with no imagery renders none and no
+  placeholder, and removing every image changes nothing else on the page.
+
 ### The Guide Library
 
 Guides get a permanent home of their own. One migration

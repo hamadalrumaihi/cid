@@ -75,8 +75,9 @@ is the source of truth), `functions/` (the Deno edge
 functions — discord-announce, discord-notify, sops-sync), and backend READMEs. Details: [Ch. 8](08-database.md).
 
 ### `docs/` — documentation
-This handbook (`handbook/`), `USER-GUIDE.md` (canonical text of the in-app
-guide — the in-app copy `src/components/guide/guideContent.ts` is
+This handbook (`handbook/`), `USER-GUIDE.md` (a signpost — the user guide
+itself is a guide in the library, `src/components/guides/docs/userGuideDoc.ts`,
+and the old generated copy is
 **generated from it**), `archive/HARDENING.md` (the historical security checklist),
 `DEFERRED.md` (parked work with triggers). Historical build-era notes and
 dated reports (HANDOFF, ROADMAP, REACT-PARITY, BACKLOG, RELEASE-READINESS,

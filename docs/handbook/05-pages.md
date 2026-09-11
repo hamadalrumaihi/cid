@@ -62,7 +62,7 @@ One row per leaf tab in `PAGE_META` (`src/lib/nav.ts` — the routing truth).
 | `records` ¹ | Records | cid_records | edit = creator/command |
 | `penal` | Penal Code | static (no DB) | — |
 | `sops` | SOPs & Library | documents + versions | writes = command |
-| `guide` | User Guide | static visual guide (generated from docs/USER-GUIDE.md) | — |
+| `guide` | *(retired)* | redirects to `/guides/user-guide` — the Portal User Guide is a guide in the library | — |
 | `devdocs` | Developer Handbook (`DevDocsView`) | generated handbook content | **owner-only** |
 | `action` | Action Center (`ActionCenterView`) | prioritized pending decisions across cases, command, personnel + Unassigned intel / Expiring BOLOs / Drafts lanes and an SIB items branch (`lib/actionItems`), type + bureau filters | self-scoped |
 | `inbox` | My Dashboard (`InboxView`) — the **default landing**: needs-attention (Action Center top slice), my cases, "Jump back in" (`command/JumpBack.tsx`), open tool tabs, drafts, watched items, bounded recent activity; capability-gated dashboard switcher chip row (labels from `src/lib/nav.ts`; the Phase-1B `DashSwitcher` component was retired in Phase 7) | slim limited projections over cases/reports/messages/legal/drafts + user_pins/watchlist | self-scoped |

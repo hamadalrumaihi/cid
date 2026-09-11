@@ -15,7 +15,6 @@ import { PenalView } from '@/components/penal/PenalView'
 import { ShiftsView } from '@/components/shifts/ShiftsView'
 import { CaseFilesView } from '@/components/casefiles/CaseFilesView'
 import { SopsView } from '@/components/sops/SopsView'
-import { GuideView } from '@/components/guide/GuideView'
 import { CalendarView } from '@/components/calendar/CalendarView'
 import { AnalyticsView } from '@/components/analytics/AnalyticsView'
 import { ProfileView } from '@/components/profile/ProfileView'
@@ -61,6 +60,9 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
   // routable so every bookmark and cross-link resolves, and there is exactly
   // ONE copy of the guide — at /guides/undergrnd.
   if (tab === 'undergrnd') return <LegacyRedirect to="/guides/undergrnd" />
+  // The Portal User Guide moved into the library for the same reason. One
+  // library, one copy of each guide; the old address is the door to it.
+  if (tab === 'guide') return <LegacyRedirect to="/guides/user-guide" />
   // Legacy Intelligence tool routes → the unified workspace. The routes stay
   // prerendered and valid (deep links, bookmarks, notifications, case
   // cross-links); a tiny client shim maps their query params onto
@@ -220,13 +222,6 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="sops" />}>
         <SopsView />
-      </Suspense>
-    )
-  }
-  if (tab === 'guide') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="guide" />}>
-        <GuideView />
       </Suspense>
     )
   }

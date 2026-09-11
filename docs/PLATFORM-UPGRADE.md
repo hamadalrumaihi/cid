@@ -11,7 +11,7 @@ inventory of what shipped, tests, deployment, rollback, known issues and the
 final feature matrix. Authority rules live in
 [AUTHORIZATION.md §22](AUTHORIZATION.md#22-platform-services--evidence-packets-sources-graph-search-jobs-flags-20261105120000),
 the member's view in [WORKFLOWS.md §16–§18](WORKFLOWS.md) and
-[USER-GUIDE.md](USER-GUIDE.md), operations in [OPERATIONS.md](OPERATIONS.md),
+the Portal User Guide (`/guides/user-guide`), operations in [OPERATIONS.md](OPERATIONS.md),
 shipping in [DEPLOYMENT.md](DEPLOYMENT.md), the developer's map in
 [handbook ch. 24](handbook/24-platform-services.md).
 

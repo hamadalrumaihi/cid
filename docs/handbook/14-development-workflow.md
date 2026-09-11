@@ -55,8 +55,8 @@ instant rollback available in the Vercel dashboard).
    project, RLS policies (copy the closest pattern in [Ch. 8](08-database.md)),
    realtime publication, FK indexes, then hand-add to
    `database.types.ts`.
-4. **Docs**: update `docs/USER-GUIDE.md` (+ regenerate
-   `src/components/guide/guideContent.ts`) and this handbook if contracts
+4. **Docs**: update the relevant guide module in
+   `src/components/guides/docs/` and this handbook if contracts
    changed.
 5. Gates → PR → preview-test the live behavior (two browsers to see
    realtime) → merge.

@@ -594,7 +594,7 @@ stateDiagram-v2
 
 **Deletion.** A source is soft-deleted by CI command through the standard `soft_delete('ci', id, reason)` (Trash label = the CI number); intelligence, contacts and payments through their own `ci_*_delete` RPCs (a handler may delete their own); restore and permanent deletion follow §13 (restore by CI command, destruction the Owner's). Exports (`ci_export` — one source for a handler, the roster for CI command) are audited server-side (`CI_EXPORTED`).
 
-Pinned by `tests/rls/v191a` … `v191c`; the offline contract in `src/mocks/handlers/ci.ts`; the member's view in [USER-GUIDE.md §K](USER-GUIDE.md).
+Pinned by `tests/rls/v191a` … `v191c`; the offline contract in `src/mocks/handlers/ci.ts`; the member's view in the Portal User Guide (`/guides/user-guide`).
 
 ## 16. Evidence lifecycle ([`20261105120000`](../supabase/migrations/20261105120000_platform_upgrade.sql); authority in [AUTHORIZATION.md §22](AUTHORIZATION.md#22-platform-services--evidence-packets-sources-graph-search-jobs-flags-20261105120000); design in [PLATFORM-UPGRADE.md §5–§6](PLATFORM-UPGRADE.md))
 
@@ -633,4 +633,4 @@ Tests: `tests/rls/v192b`, `tests/e2e/packets.spec.ts`.
 - **Announcements** — audience-targeted publish (`publish_announcement()` resolves recipients server-side; `all` is DD+/Owner-only, bureau audiences are that bureau's lead or DD+, `specific_members` mentions only): [`20260713050000`](../supabase/migrations/20260713050000_announcement_audiences.sql), [handbook ch. 4.5](handbook/04-features.md).
 - **Prosecutor bureau coverage** — assignment lifecycle (`assign_ada_to_bureau`, `set_primary_ada`, `set_acting_ada`, `end_ada_bureau_assignment`; append-only, assignments end rather than delete): [DOJ-INTEGRATION.md](DOJ-INTEGRATION.md#bureau-aligned-ada-coverage).
 - **Feedback triage, SOP versioning, shift reports** — [handbook ch. 4](handbook/04-features.md).
-- **The Investigation Graph, search (documents / sources / semantic), background jobs, System Health and feature flags** — [PLATFORM-UPGRADE.md](PLATFORM-UPGRADE.md) §9–§13, [USER-GUIDE.md §H / §I](USER-GUIDE.md), [handbook ch. 24](handbook/24-platform-services.md).
+- **The Investigation Graph, search (documents / sources / semantic), background jobs, System Health and feature flags** — [PLATFORM-UPGRADE.md](PLATFORM-UPGRADE.md) §9–§13, the Portal User Guide (`/guides/user-guide`), [handbook ch. 24](handbook/24-platform-services.md).

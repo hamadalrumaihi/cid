@@ -154,9 +154,10 @@ public/           # static assets
 
 Start with the developer handbook,
 [`docs/handbook/`](docs/handbook/README.md) — architecture, the database,
-every file, and a recommended learning order. End users get the in-app guide
-(Reference → User Guide, canonical copy in
-[`docs/USER-GUIDE.md`](docs/USER-GUIDE.md)).
+every file, and a recommended learning order. End users get the **Guide Library** in the portal (`/guides`) — the Portal
+User Guide plus one guide per area; see
+[`docs/USER-GUIDE.md`](docs/USER-GUIDE.md) for where each guide's text
+lives.
 A point-in-time engineering review (July 2026) lives in
 [`docs/archive/CTO-REVIEW.md`](docs/archive/CTO-REVIEW.md); deferred work is tracked in
 [`docs/DEFERRED.md`](docs/DEFERRED.md).
@@ -183,9 +184,9 @@ Supabase **Site URL** and **Redirect URLs** to your deployed origin (see
 
 ## Screenshots
 
-*Screenshots are not yet included. The in-app User Guide
-(Reference → User Guide) contains illustrated walkthroughs of every
-screen.*
+*Screenshots are not yet included. The Guide Library in the portal
+(`/guides`) walks through every screen; guides carry optional imagery, so
+screenshots can be added to a guide without touching its text.*
 
 ## Contributing
 

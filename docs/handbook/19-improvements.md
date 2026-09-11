@@ -12,8 +12,8 @@ shipped. Effort: S < 1d, M = days, L = week+.
 | ~~Drop unused deps (`react-hook-form`, `@tanstack/react-query`)~~ **done** — dropped; zod kept and adopted (`src/lib/schemas.ts`) | Zero imports; smaller install/audit surface | none |
 | Drop/verify `bootstrap_*` RPCs | Close a setup-era privileged path | none (verify first) |
 | ~~Wire or delete `lib/drafts.ts`~~ **done** — wired into the report/chat/legal editors; **superseded 2026-08-25** by the DB-backed `lib/userDrafts.ts` (`user_drafts`, cross-device, per-user local mirror) — `drafts.ts` survives as its mirror primitive + the legal stash | Never-lose-work code | none |
-| ~~Script + CI check for `guideContent.ts` generation~~ **done** — `npm run gen:guide` + drift check | Kills a proven drift class | none |
-| ~~Fix the guide's hardcoded case-tab illustration~~ **done** — the guide regenerates from `docs/USER-GUIDE.md` | Was drifting from the real tabs | none |
+| ~~Script + CI check for `guideContent.ts` generation~~ **superseded** — the dual-copy system is gone; a guide's prose is its module and nothing else | Killed the drift class at the source | none |
+| ~~Fix the guide's hardcoded case-tab illustration~~ **done** — rewritten from the real `caseTabs.ts` registry in the September 2026 guide audit | Was drifting from the real tabs | none |
 | Fold `chargeByCode` into `penalByCode`; migrate off deprecated `roles.isCommand` | Naming hygiene | trivial |
 
 

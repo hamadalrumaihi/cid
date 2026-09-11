@@ -107,7 +107,7 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 `caseUtils`, `StaleBadge`, `WatchButton` ·
 `command/`: ⚠`CommandView` + 8 widgets + `commandUtils` ·
 `feedback/FeedbackView` · `gangs/`⚠`GangsView` · `guide/GuideView`
-(+generated `guideContent.ts`) · `heatmap/`⚠`HeatmapView` ·
+`guides/`→the Guide Library (`GuideLibraryView`, `GuidePage`, `docs/*`) · `heatmap/`⚠`HeatmapView` ·
 `inbox/`⚠`InboxView` · `indicators/IndicatorsView` (matchKey) ·
 `media/MediaView` · `modus/ModusView` (crossref) ·
 `narcotics/NarcoticsView` · `network/NetworkView` ·

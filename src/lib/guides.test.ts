@@ -1,14 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import {
-  GUIDE_CATEGORIES, GUIDE_CATEGORY_LABEL, GUIDE_IMAGE_MAX_BYTES, GUIDE_IMAGE_TYPES,
-  guideCategoryLabel, isPublished, matchGuides, sortGuides, validateGuideImage, type GuideRow,
+  GUIDE_AUDIENCES, GUIDE_AUDIENCE_LABEL, GUIDE_IMAGE_MAX_BYTES, GUIDE_IMAGE_TYPES,
+  categoryLabelFrom, guideAudienceLabel, humanizeSlug, isArchived, isNewToReader, isPublished,
+  isRestrictedAudience, isUpdatedSinceSeen, matchGuides, sortGuides, validateGuideImage,
+  type GuideCategoryRow, type GuideProgressRow, type GuideRow,
 } from './guides'
 import { SOFT_DELETE_KIND, REASON_REQUIRED } from './db'
 
-/** The library model. The categories mirror a CHECK constraint in
- *  20261107120000_guide_library.sql and the upload rules mirror three more —
- *  if the server grows a value and this module does not, the helpers must
- *  degrade gracefully rather than drop it. */
+/** The library model.
+ *
+ *  Categories are DATA now — public.guide_categories, which an administrator
+ *  edits without a deploy — so what this file pins is that the helpers read
+ *  whatever the table says and degrade sensibly when it says nothing. The
+ *  audiences and the upload rules are still server constraints, and if the
+ *  server grows a value and this module does not, the helpers must degrade
+ *  gracefully rather than drop it. */
 
 const guide = (over: Partial<GuideRow> = {}): GuideRow => ({
   id: 'g1',
@@ -19,6 +25,22 @@ const guide = (over: Partial<GuideRow> = {}): GuideRow => ({
   status: 'published',
   body_key: 'undergrnd',
   pinned: false,
+  audience: 'all',
+  custom_roles: [],
+  tags: [],
+  keywords: null,
+  body_kind: 'module',
+  read_minutes: null,
+  view_count: 0,
+  content_owner: null,
+  last_reviewed_at: null,
+  next_review_at: null,
+  archived_at: null,
+  archived_by: null,
+  publication_note: null,
+  outdated_at: null,
+  outdated_by: null,
+  outdated_reason: null,
   published_at: '2026-09-11T00:00:00.000Z',
   created_by: null,
   updated_by: null,
@@ -31,24 +53,98 @@ const guide = (over: Partial<GuideRow> = {}): GuideRow => ({
   ...over,
 })
 
-describe('categories', () => {
-  it('are exactly the six the CHECK constraint allows, and each has a label', () => {
-    expect([...GUIDE_CATEGORIES]).toEqual(['systems', 'equipment', 'jobs', 'organizations', 'locations', 'general'])
-    for (const c of GUIDE_CATEGORIES) expect(GUIDE_CATEGORY_LABEL[c], c).toBeTruthy()
+const category = (slug: string, label: string): GuideCategoryRow => ({
+  slug,
+  label,
+  description: null,
+  sort_order: 10,
+  active: true,
+  created_at: '2026-09-11T00:00:00.000Z',
+  updated_at: '2026-09-11T00:00:00.000Z',
+})
+
+describe('categories come from the table, not from the build', () => {
+  const cats = [category('systems', 'Systems'), category('reports-evidence', 'Reports and Evidence')]
+
+  it('labels a category from the rows the library loaded', () => {
+    expect(categoryLabelFrom(cats, 'systems')).toBe('Systems')
+    expect(categoryLabelFrom(cats, 'reports-evidence')).toBe('Reports and Evidence')
   })
 
-  it('humanizes a category the client does not know, and treats a blank as General', () => {
-    expect(guideCategoryLabel('systems')).toBe('Systems')
-    expect(guideCategoryLabel('field_craft')).toBe('Field Craft')
-    expect(guideCategoryLabel(null)).toBe('General')
-    expect(guideCategoryLabel(undefined)).toBe('General')
+  it('humanizes a category the table did not return rather than showing a raw slug', () => {
+    expect(categoryLabelFrom(cats, 'field-craft')).toBe('Field Craft')
+    expect(categoryLabelFrom([], 'systems')).toBe('Systems')
+    expect(categoryLabelFrom(cats, null)).toBe('General')
+    expect(categoryLabelFrom(cats, undefined)).toBe('General')
+  })
+
+  it('humanizeSlug reads both separators, because slugs use hyphens and columns use underscores', () => {
+    expect(humanizeSlug('command-admin')).toBe('Command Admin')
+    expect(humanizeSlug('ci_handlers')).toBe('Ci Handlers')
+    // It humanizes; inventing a name for nothing is the caller's job.
+    expect(humanizeSlug('')).toBe('')
+  })
+})
+
+describe('audiences', () => {
+  it('are the eight the server accepts, and each has a label', () => {
+    expect([...GUIDE_AUDIENCES]).toEqual([
+      'all', 'investigative', 'command', 'doj', 'sib', 'ci_handlers', 'owner', 'custom',
+    ])
+    for (const a of GUIDE_AUDIENCES) expect(GUIDE_AUDIENCE_LABEL[a], a).toBeTruthy()
+  })
+
+  it('the two ordinary audiences are open; every narrower one is restricted, known or not', () => {
+    expect(isRestrictedAudience('all')).toBe(false)
+    expect(isRestrictedAudience('investigative')).toBe(false)
+    expect(isRestrictedAudience(null)).toBe(false)
+    for (const a of GUIDE_AUDIENCES.filter((x) => x !== 'all' && x !== 'investigative')) {
+      expect(isRestrictedAudience(a), a).toBe(true)
+    }
+    // An audience the build has never heard of is treated as the narrower
+    // case, never as the open one.
+    expect(isRestrictedAudience('task_force')).toBe(true)
+    expect(guideAudienceLabel('task_force')).toBe('Task Force')
   })
 })
 
 describe('publication state', () => {
+  const progress = (over: Partial<GuideProgressRow> = {}): GuideProgressRow => ({
+    guide_id: 'g1',
+    user_id: 'u1',
+    last_anchor: null,
+    last_viewed_at: '2026-09-01T00:00:00.000Z',
+    seen_updated_at: '2026-09-01T00:00:00.000Z',
+    completed_at: null,
+    updated_at: '2026-09-01T00:00:00.000Z',
+    ...over,
+  })
+
   it('only "published" is published — anything else is a draft', () => {
     expect(isPublished(guide())).toBe(true)
     expect(isPublished(guide({ status: 'draft' }))).toBe(false)
+  })
+
+  it('archived is its own state: a guide can be published and still archived', () => {
+    expect(isArchived(guide())).toBe(false)
+    expect(isArchived(guide({ archived_at: '2026-09-05T00:00:00.000Z' }))).toBe(true)
+  })
+
+  it('"updated since you last read it" needs a previous read — a guide nobody opened is never marked changed', () => {
+    const g = guide({ updated_at: '2026-09-10T00:00:00.000Z' })
+    expect(isUpdatedSinceSeen(g, undefined)).toBe(false)
+    expect(isUpdatedSinceSeen(g, progress({ seen_updated_at: null }))).toBe(false)
+    expect(isUpdatedSinceSeen(g, progress())).toBe(true)
+    expect(isUpdatedSinceSeen(g, progress({ seen_updated_at: '2026-09-10T00:00:00.000Z' }))).toBe(false)
+  })
+
+  it('"new" is recently published AND never opened by this reader', () => {
+    const at = Date.parse('2026-09-11T00:00:00.000Z')
+    const fresh = guide({ published_at: '2026-09-08T00:00:00.000Z' })
+    expect(isNewToReader(fresh, undefined, at)).toBe(true)
+    expect(isNewToReader(fresh, progress(), at)).toBe(false)
+    expect(isNewToReader(guide({ published_at: '2026-07-01T00:00:00.000Z' }), undefined, at)).toBe(false)
+    expect(isNewToReader(guide({ published_at: null }), undefined, at)).toBe(false)
   })
 })
 

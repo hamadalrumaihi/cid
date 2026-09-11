@@ -118,7 +118,7 @@ two weeks:
   *Why first*: "the database is the authority" reframes everything; skip
   it and every view looks over-engineered.
 - [ ] **2. Use the app as a user** — the in-app guide (Reference → User
-  Guide) or \`docs/USER-GUIDE.md\`. *Why*: you can't debug flows you've
+  Guides → Portal User Guide). *Why*: you can't debug flows you've
   never run.
 - [ ] **3. The three foundation files** — \`lib/supabase.ts\` → \`lib/db.ts\`
   → \`lib/auth.tsx\` (~450 lines total). *Why*: after these, every view's
@@ -221,8 +221,9 @@ is the source of truth), \`functions/\` (the Deno edge
 functions — discord-announce, discord-notify, sops-sync), and backend READMEs. Details: [Ch. 8](08-database.md).
 
 ### \`docs/\` — documentation
-This handbook (\`handbook/\`), \`USER-GUIDE.md\` (canonical text of the in-app
-guide — the in-app copy \`src/components/guide/guideContent.ts\` is
+This handbook (\`handbook/\`), \`USER-GUIDE.md\` (a signpost — the user guide
+itself is a guide in the library, \`src/components/guides/docs/userGuideDoc.ts\`,
+and the old generated copy is
 **generated from it**), \`archive/HARDENING.md\` (the historical security checklist),
 \`DEFERRED.md\` (parked work with triggers). Historical build-era notes and
 dated reports (HANDOFF, ROADMAP, REACT-PARITY, BACKLOG, RELEASE-READINESS,
@@ -658,7 +659,7 @@ leaf nodes, safe to study, intricate to edit.`,
 \`caseUtils\`, \`StaleBadge\`, \`WatchButton\` ·
 \`command/\`: ⚠\`CommandView\` + 8 widgets + \`commandUtils\` ·
 \`feedback/FeedbackView\` · \`gangs/\`⚠\`GangsView\` · \`guide/GuideView\`
-(+generated \`guideContent.ts\`) · \`heatmap/\`⚠\`HeatmapView\` ·
+\`guides/\`→the Guide Library (\`GuideLibraryView\`, \`GuidePage\`, \`docs/*\`) · \`heatmap/\`⚠\`HeatmapView\` ·
 \`inbox/\`⚠\`InboxView\` · \`indicators/IndicatorsView\` (matchKey) ·
 \`media/MediaView\` · \`modus/ModusView\` (crossref) ·
 \`narcotics/NarcoticsView\` · \`network/NetworkView\` ·
@@ -967,7 +968,7 @@ One row per leaf tab in \`PAGE_META\` (\`src/lib/nav.ts\` — the routing truth)
 | \`records\` ¹ | Records | cid_records | edit = creator/command |
 | \`penal\` | Penal Code | static (no DB) | — |
 | \`sops\` | SOPs & Library | documents + versions | writes = command |
-| \`guide\` | User Guide | static visual guide (generated from docs/USER-GUIDE.md) | — |
+| \`guide\` | *(retired)* | redirects to \`/guides/user-guide\` — the Portal User Guide is a guide in the library | — |
 | \`devdocs\` | Developer Handbook (\`DevDocsView\`) | generated handbook content | **owner-only** |
 | \`action\` | Action Center (\`ActionCenterView\`) | prioritized pending decisions across cases, command, personnel + Unassigned intel / Expiring BOLOs / Drafts lanes and an SIB items branch (\`lib/actionItems\`), type + bureau filters | self-scoped |
 | \`inbox\` | My Dashboard (\`InboxView\`) — the **default landing**: needs-attention (Action Center top slice), my cases, "Jump back in" (\`command/JumpBack.tsx\`), open tool tabs, drafts, watched items, bounded recent activity; capability-gated dashboard switcher chip row (labels from \`src/lib/nav.ts\`; the Phase-1B \`DashSwitcher\` component was retired in Phase 7) | slim limited projections over cases/reports/messages/legal/drafts + user_pins/watchlist | self-scoped |
@@ -1549,7 +1550,7 @@ User clicks "Save" in a modal
 - \`lib/forms\` ← CaseDetail, BoloView, CaseGraphTab, dossier, packet
 - \`shared/RecordSearchPicker\` ← ~23 files (the one "attach a record"
   contract) · \`lib/entitySearch\` ← ~14 components (its loaders)
-- \`guideContent.ts\` ← **generated from** \`docs/USER-GUIDE.md\``,
+- \`src/components/guides/docs/*.ts\` ← the guides' prose; \`guides.body_key\` joins a library row to one`,
   },
   {
     slug: "integration",
@@ -1859,7 +1860,7 @@ tiers, feature flags and system health. This chapter is the developer's map.
 The design and the decisions are in [\`docs/PLATFORM-UPGRADE.md\`](../PLATFORM-UPGRADE.md),
 the authority rules in [\`docs/AUTHORIZATION.md\` §22](../AUTHORIZATION.md),
 the member's view in [\`docs/WORKFLOWS.md\` §16–§18](../WORKFLOWS.md) and
-[\`docs/USER-GUIDE.md\`](../USER-GUIDE.md), operations in
+the Portal User Guide (\`/guides/user-guide\`), operations in
 [\`docs/OPERATIONS.md\` §11](../OPERATIONS.md).
 
 ## 24.1 The one rule, restated
@@ -2299,7 +2300,7 @@ nor CI command must not be able to tell that it exists. This chapter is the
 developer's map. The authority rules are in
 [\`docs/AUTHORIZATION.md\` §21](../AUTHORIZATION.md), the member's view in
 [\`docs/WORKFLOWS.md\` §15](../WORKFLOWS.md) and
-[\`docs/USER-GUIDE.md\` §K](../USER-GUIDE.md).
+the Portal User Guide (\`/guides/user-guide\`).
 
 ## 23.1 The one rule
 
@@ -2549,8 +2550,8 @@ instant rollback available in the Vercel dashboard).
    project, RLS policies (copy the closest pattern in [Ch. 8](08-database.md)),
    realtime publication, FK indexes, then hand-add to
    \`database.types.ts\`.
-4. **Docs**: update \`docs/USER-GUIDE.md\` (+ regenerate
-   \`src/components/guide/guideContent.ts\`) and this handbook if contracts
+4. **Docs**: update the relevant guide module in
+   \`src/components/guides/docs/\` and this handbook if contracts
    changed.
 5. Gates → PR → preview-test the live behavior (two browsers to see
    realtime) → merge.
@@ -2723,8 +2724,9 @@ export function FeatureView() {
 - Never auto-retry a mutation.
 - Never rename \`Store\` keys or nav slugs casually — they're contracts
   (legacy app, deep links).
-- Never edit \`guideContent.ts\` by hand (generated) or let it drift from
-  \`docs/USER-GUIDE.md\`.
+- A guide's prose has exactly one copy: its module in
+  \`src/components/guides/docs/\`. Never mirror it into the database, and never
+  rename a section anchor — links into a guide are permanent.
 - Never "clean up" the deferred-effect pattern, Modal's ref-routing, or a
   sequence guard because it looks redundant — each fixes a real bug.
 
@@ -2762,7 +2764,7 @@ export function FeatureView() {
 | A saved-view \`config\` shape (per list) | That list's apply/save functions only (\`caseUtils\`, registry filter modules) | \`lib/savedViews\` treats config as opaque — each list owns its own migration/tolerance |
 | \`globals.css\` accent remap / \`.nav-collapsed\` | Sidebar collapse logic, \`PREF_APPLIER\`, AppearanceModal | The class/dataset contracts live in three places |
 | CSP (\`next.config.ts\`) | PDF export (WASM), Supabase REST+WSS, FiveManage, Discord | The allow-lists are exact |
-| \`docs/USER-GUIDE.md\` | Regenerate \`guideContent.ts\` | Dual-copy system |
+| A guide's prose (\`src/components/guides/docs/*.ts\`) | Nothing — the module is the only copy | Reading progress keeps working; anchors must not be renamed |
 | An environment variable | \`vercel.json\` AND \`.github/workflows/ci.yml\` | Duplicated values must agree; \`NEXT_PUBLIC_\` values need a rebuild |
 | A user's role (data, not code) | The audited RPCs only: \`change_member_role\` (rank), the \`*_transfer\` workflow (department), \`assign_member\` (activation) | \`profiles.role/division/active/is_owner/removed_at\` are trigger-frozen against every direct client write |
 | Component props on a shared UI primitive | All call sites (grep the import) — especially \`Modal\`'s \`dirty\`/\`onClose\` contract | Focus/scroll/discard behavior is relied on everywhere |`,
@@ -2876,8 +2878,8 @@ shipped. Effort: S < 1d, M = days, L = week+.
 | ~~Drop unused deps (\`react-hook-form\`, \`@tanstack/react-query\`)~~ **done** — dropped; zod kept and adopted (\`src/lib/schemas.ts\`) | Zero imports; smaller install/audit surface | none |
 | Drop/verify \`bootstrap_*\` RPCs | Close a setup-era privileged path | none (verify first) |
 | ~~Wire or delete \`lib/drafts.ts\`~~ **done** — wired into the report/chat/legal editors; **superseded 2026-08-25** by the DB-backed \`lib/userDrafts.ts\` (\`user_drafts\`, cross-device, per-user local mirror) — \`drafts.ts\` survives as its mirror primitive + the legal stash | Never-lose-work code | none |
-| ~~Script + CI check for \`guideContent.ts\` generation~~ **done** — \`npm run gen:guide\` + drift check | Kills a proven drift class | none |
-| ~~Fix the guide's hardcoded case-tab illustration~~ **done** — the guide regenerates from \`docs/USER-GUIDE.md\` | Was drifting from the real tabs | none |
+| ~~Script + CI check for \`guideContent.ts\` generation~~ **superseded** — the dual-copy system is gone; a guide's prose is its module and nothing else | Killed the drift class at the source | none |
+| ~~Fix the guide's hardcoded case-tab illustration~~ **done** — rewritten from the real \`caseTabs.ts\` registry in the September 2026 guide audit | Was drifting from the real tabs | none |
 | Fold \`chargeByCode\` into \`penalByCode\`; migrate off deprecated \`roles.isCommand\` | Naming hygiene | trivial |
 
 
@@ -3073,8 +3075,9 @@ state lives in \`user_pins\`/\`user_drafts\`/\`user_prefs\`, not here.`,
 Four places, all required: (1) \`src/components/<feature>/<Feature>View.tsx\`
 (copy \`VehiclesView\` as a template); (2) \`src/lib/nav.ts\` — a \`PAGE_META\`
 entry, the slug in a category's \`tabs\`, a \`TAB_LABEL\`; (3) the switch in
-\`src/app/(app)/[tab]/page.tsx\`; (4) \`docs/USER-GUIDE.md\` + regenerate
-\`guideContent.ts\`. Miss (2) or (3) and the tab redirects or renders a
+\`src/app/(app)/[tab]/page.tsx\`; (4) the Portal User Guide module,
+\`src/components/guides/docs/userGuideDoc.ts\`. Miss (2) or (3) and the tab
+redirects or renders a
 placeholder. Full recipe: [Ch. 14](14-development-workflow.md).
 An *intelligence tool* is the one exception: keep its slug in
 \`PAGE_META\`/\`TAB_LABEL\`, then register it in \`src/lib/toolsModel.ts\` and

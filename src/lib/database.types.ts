@@ -6743,6 +6743,275 @@ export type Database = {
           },
         ]
       }
+      guide_categories: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          label: string
+          slug: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          label: string
+          slug: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          label?: string
+          slug?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      guide_feedback: {
+        Row: {
+          anchor: string | null
+          comment: string | null
+          created_at: string
+          created_by: string | null
+          guide_id: string
+          id: string
+          kind: string
+          rating: string | null
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          anchor?: string | null
+          comment?: string | null
+          created_at?: string
+          created_by?: string | null
+          guide_id: string
+          id?: string
+          kind?: string
+          rating?: string | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          anchor?: string | null
+          comment?: string | null
+          created_at?: string
+          created_by?: string | null
+          guide_id?: string
+          id?: string
+          kind?: string
+          rating?: string | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_feedback_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guide_feedback_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "guides"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guide_feedback_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guide_progress: {
+        Row: {
+          completed_at: string | null
+          guide_id: string
+          last_anchor: string | null
+          last_viewed_at: string
+          seen_updated_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          guide_id: string
+          last_anchor?: string | null
+          last_viewed_at?: string
+          seen_updated_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          guide_id?: string
+          last_anchor?: string | null
+          last_viewed_at?: string
+          seen_updated_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_progress_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "guides"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guide_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guide_revisions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          guide_id: string
+          id: string
+          revision_no: number
+          snapshot: Json
+          summary: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          guide_id: string
+          id?: string
+          revision_no: number
+          snapshot: Json
+          summary?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          guide_id?: string
+          id?: string
+          revision_no?: number
+          snapshot?: Json
+          summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_revisions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guide_revisions_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "guides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guide_search_index: {
+        Row: {
+          anchor: string
+          guide_id: string
+          heading: string
+          id: string
+          sort_order: number
+          terms: string
+          updated_at: string
+        }
+        Insert: {
+          anchor: string
+          guide_id: string
+          heading: string
+          id?: string
+          sort_order?: number
+          terms?: string
+          updated_at?: string
+        }
+        Update: {
+          anchor?: string
+          guide_id?: string
+          heading?: string
+          id?: string
+          sort_order?: number
+          terms?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_search_index_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "guides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guide_sections: {
+        Row: {
+          anchor: string
+          body: string
+          created_at: string
+          guide_id: string
+          heading: string
+          id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          anchor: string
+          body?: string
+          created_at?: string
+          guide_id: string
+          heading: string
+          id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          anchor?: string
+          body?: string
+          created_at?: string
+          guide_id?: string
+          heading?: string
+          id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_sections_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "guides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guide_bookmarks: {
         Row: {
           created_at: string
@@ -6838,6 +7107,22 @@ export type Database = {
       }
       guides: {
         Row: {
+          archived_at: string | null
+          archived_by: string | null
+          audience: string
+          body_kind: string
+          content_owner: string | null
+          custom_roles: string[]
+          keywords: string | null
+          last_reviewed_at: string | null
+          next_review_at: string | null
+          outdated_at: string | null
+          outdated_by: string | null
+          outdated_reason: string | null
+          publication_note: string | null
+          read_minutes: number | null
+          tags: string[]
+          view_count: number
           body_key: string
           category: string
           created_at: string
@@ -6857,6 +7142,22 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
+          audience?: string
+          body_kind?: string
+          content_owner?: string | null
+          custom_roles?: string[]
+          keywords?: string | null
+          last_reviewed_at?: string | null
+          next_review_at?: string | null
+          outdated_at?: string | null
+          outdated_by?: string | null
+          outdated_reason?: string | null
+          publication_note?: string | null
+          read_minutes?: number | null
+          tags?: string[]
+          view_count?: number
           body_key: string
           category?: string
           created_at?: string
@@ -6876,6 +7177,22 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          archived_at?: string | null
+          archived_by?: string | null
+          audience?: string
+          body_kind?: string
+          content_owner?: string | null
+          custom_roles?: string[]
+          keywords?: string | null
+          last_reviewed_at?: string | null
+          next_review_at?: string | null
+          outdated_at?: string | null
+          outdated_by?: string | null
+          outdated_reason?: string | null
+          publication_note?: string | null
+          read_minutes?: number | null
+          tags?: string[]
+          view_count?: number
           body_key?: string
           category?: string
           created_at?: string
@@ -18231,12 +18548,78 @@ export type Database = {
         Returns: Json
       }
       guide_upsert: {
-        Args: { p_id?: string | null; p_slug?: string | null; p_title?: string | null; p_summary?: string | null; p_category?: string | null; p_body_key?: string | null }
+        Args: { p_id?: string | null; p_slug?: string | null; p_title?: string | null; p_summary?: string | null; p_category?: string | null; p_body_key?: string | null; p_audience?: string | null; p_custom_roles?: string[] | null; p_tags?: string[] | null; p_keywords?: string | null; p_body_kind?: string | null; p_read_minutes?: number | null; p_content_owner?: string | null; p_next_review_at?: string | null; p_expected_updated_at?: string | null }
         Returns: Json
       }
       guide_publish: {
-        Args: { p_id: string; p_published?: boolean }
+        Args: { p_id: string; p_published?: boolean; p_note?: string | null }
         Returns: Json
+      }
+      guide_archive: {
+        Args: { p_id: string; p_archived?: boolean; p_reason?: string | null }
+        Returns: Json
+      }
+      guide_duplicate: {
+        Args: { p_id: string; p_slug: string; p_title?: string | null }
+        Returns: Json
+      }
+      guide_category_upsert: {
+        Args: { p_slug: string; p_label?: string | null; p_description?: string | null; p_sort_order?: number | null; p_active?: boolean | null }
+        Returns: Json
+      }
+      guide_section_upsert: {
+        Args: { p_guide: string; p_id?: string | null; p_heading?: string | null; p_body?: string | null; p_anchor?: string | null; p_expected_updated_at?: string | null }
+        Returns: Json
+      }
+      guide_sections_reorder: {
+        Args: { p_guide: string; p_ids: string[] }
+        Returns: Json
+      }
+      guide_section_remove: {
+        Args: { p_id: string }
+        Returns: Json
+      }
+      guide_revision_restore: {
+        Args: { p_id: string }
+        Returns: Json
+      }
+      guide_view: {
+        Args: { p_id: string; p_anchor?: string | null }
+        Returns: Json
+      }
+      guide_mark_complete: {
+        Args: { p_id: string; p_complete?: boolean }
+        Returns: Json
+      }
+      guide_mark_reviewed: {
+        Args: { p_id: string; p_next_review_at?: string | null }
+        Returns: Json
+      }
+      guide_mark_outdated: {
+        Args: { p_id: string; p_reason: string }
+        Returns: Json
+      }
+      guide_feedback_submit: {
+        Args: { p_id: string; p_kind?: string | null; p_rating?: string | null; p_comment?: string | null; p_anchor?: string | null }
+        Returns: Json
+      }
+      guide_feedback_resolve: {
+        Args: { p_id: string; p_status: string; p_note?: string | null }
+        Returns: Json
+      }
+      guides_search: {
+        Args: { p_query: string; p_limit?: number }
+        Returns: {
+          guide_id: string
+          slug: string
+          title: string
+          summary: string | null
+          category: string
+          anchor: string
+          heading: string
+          snippet: string
+          rank: number
+        }[]
       }
       guide_set_pinned: {
         Args: { p_id: string; p_pinned?: boolean }

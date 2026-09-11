@@ -6,8 +6,9 @@
 Four places, all required: (1) `src/components/<feature>/<Feature>View.tsx`
 (copy `VehiclesView` as a template); (2) `src/lib/nav.ts` — a `PAGE_META`
 entry, the slug in a category's `tabs`, a `TAB_LABEL`; (3) the switch in
-`src/app/(app)/[tab]/page.tsx`; (4) `docs/USER-GUIDE.md` + regenerate
-`guideContent.ts`. Miss (2) or (3) and the tab redirects or renders a
+`src/app/(app)/[tab]/page.tsx`; (4) the Portal User Guide module,
+`src/components/guides/docs/userGuideDoc.ts`. Miss (2) or (3) and the tab
+redirects or renders a
 placeholder. Full recipe: [Ch. 14](14-development-workflow.md).
 An *intelligence tool* is the one exception: keep its slug in
 `PAGE_META`/`TAB_LABEL`, then register it in `src/lib/toolsModel.ts` and

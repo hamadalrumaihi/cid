@@ -22,6 +22,7 @@ import {
   ArchiveIcon, DocumentIcon, GangIcon, MapIcon, NarcoticIcon, NetworkIcon, PlaceIcon, ReceiptIcon, TrashIcon, UndoIcon, VehicleIcon, VideoIcon,
 } from '@/components/shell/icons'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
+import { GuideHelpLink } from '@/components/guides/GuideHelpLink'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -633,6 +634,11 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
             {canEdit && <button onClick={onEdit} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-blue-200 hover:bg-white/10">Add intelligence</button>}
             {canEdit && <button onClick={() => setAttachOpen(true)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-blue-200 hover:bg-white/10">Attach to case</button>}
             <RestrictToSiuButton type="gang" id={gang.id} />
+            <GuideHelpLink
+              slug="entities-organizations"
+              anchor="organizations"
+              title="Open the Entities and Organizations Guide at Organizations"
+            />
             <ActionMenu items={menuItems} />
           </div>
         </div>
