@@ -23130,6 +23130,10 @@ begin
   -- Guide library (20261107120000): guides a fixture authored (guide_media
   -- and guide_bookmarks cascade), and bookmarks a fixture left on a real one.
   delete from public.guide_bookmarks where user_id = any(ids);
+  -- Guide library v2 (20261108120000): a fixture's reading position and its
+  -- feedback on a REAL guide do not cascade from anything it authored.
+  delete from public.guide_progress where user_id = any(ids);
+  delete from public.guide_feedback where created_by = any(ids) or resolved_by = any(ids);
   delete from public.guides where created_by = any(ids) or updated_by = any(ids) or deleted_by = any(ids);
 
   delete from public.entity_associations
@@ -33861,6 +33865,29 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.guide_category_audit()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (
+    (select auth.uid()),
+    tg_op,
+    tg_table_name,
+    null,
+    case tg_op
+      when 'DELETE' then jsonb_build_object('slug', old.slug, 'old', to_jsonb(old))
+      when 'INSERT' then jsonb_build_object('slug', new.slug, 'new', to_jsonb(new))
+      else jsonb_build_object('slug', new.slug, 'old', to_jsonb(old), 'new', to_jsonb(new))
+    end
+  );
+  return null;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.guide_readable(p_id uuid)
  RETURNS boolean
  LANGUAGE sql
@@ -39011,7 +39038,7 @@ CREATE TRIGGER gangs_siu_reconcile AFTER INSERT OR UPDATE OF name ON public.gang
 CREATE TRIGGER gangs_touch BEFORE UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER gangs_version AFTER UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER gangs_visibility_forget AFTER DELETE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.siu_visibility_forget('gang');
-CREATE TRIGGER guide_categories_audit AFTER INSERT OR DELETE OR UPDATE ON public.guide_categories FOR EACH ROW EXECUTE FUNCTION private.audit_detail();
+CREATE TRIGGER guide_categories_audit AFTER INSERT OR DELETE OR UPDATE ON public.guide_categories FOR EACH ROW EXECUTE FUNCTION private.guide_category_audit();
 CREATE TRIGGER guide_categories_touch BEFORE UPDATE ON public.guide_categories FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER guide_feedback_touch BEFORE UPDATE ON public.guide_feedback FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER guide_media_audit AFTER INSERT OR DELETE OR UPDATE ON public.guide_media FOR EACH ROW EXECUTE FUNCTION private.audit_detail();
@@ -42000,6 +42027,7 @@ create policy wl_sel on public.watchlist
 --   private.guard_surveillance_event(): default (PUBLIC)
 --   private.guard_surveillance_observation(): default (PUBLIC)
 --   private.guide_audience_ok(p_audience text, p_custom_roles text[]): {postgres=X/postgres,authenticated=X/postgres}
+--   private.guide_category_audit(): {postgres=X/postgres}
 --   private.guide_readable(p_id uuid): {postgres=X/postgres,authenticated=X/postgres}
 --   private.guide_revision_save(p_id uuid, p_summary text): {postgres=X/postgres}
 --   private.guide_section_index(): default (PUBLIC)

@@ -82,6 +82,8 @@
 --                                             guides the repository ships)
 --   8. guide_library_v2_rls_test_cleanup     (the fixture sweep for reading
 --                                             positions and feedback)
+--   9. guide_library_v2_category_audit_fix    (the audit trigger for a table
+--                                             keyed by text, not by id)
 -- ============================================================================
 
 -- ===== PART 1: guide_library_v2_categories_audience =====
@@ -1286,6 +1288,50 @@ begin
   execute replace(v_def, v_anchor, v_anchor || E'\n' || v_add);
 end $do$;
 
+-- ===== PART 9: guide_library_v2_category_audit_fix =====
+-- private.guide_category_audit — the audit row for a table keyed by TEXT.
+--
+-- Found by verifying the editor surface live, in a rolled-back transaction,
+-- after the CI security job turned out to skip every RLS suite (the fixture
+-- passwords are not configured as repository secrets, so it exits 0 without
+-- running anything).
+--
+-- PART 1 gave public.guide_categories the house `private.audit_detail()`
+-- trigger like every other audited table. That function reads new.id / old.id,
+-- and a category is keyed by its SLUG — there is no id column. So the trigger
+-- raised 42703 on every insert and every update, and took
+-- public.guide_category_upsert down with it: a category could not be added or
+-- retired at all, which is the whole point of making categories data.
+--
+-- The fix keeps the audit — the `manage_categories` catalog row promises it —
+-- and drops only the assumption: the slug goes in `detail`, and entity_id
+-- stays null because there is no uuid to put there. The RPC's own
+-- GUIDE_CATEGORY_SAVED row is unchanged, so a category change still records
+-- twice, the same double entry as every other guide RPC.
+create or replace function private.guide_category_audit()
+returns trigger language plpgsql security definer set search_path to '' as $$
+begin
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (
+    (select auth.uid()),
+    tg_op,
+    tg_table_name,
+    null,
+    case tg_op
+      when 'DELETE' then jsonb_build_object('slug', old.slug, 'old', to_jsonb(old))
+      when 'INSERT' then jsonb_build_object('slug', new.slug, 'new', to_jsonb(new))
+      else jsonb_build_object('slug', new.slug, 'old', to_jsonb(old), 'new', to_jsonb(new))
+    end
+  );
+  return null;
+end $$;
+revoke all on function private.guide_category_audit() from public, anon, authenticated;
+
+drop trigger if exists guide_categories_audit on public.guide_categories;
+create trigger guide_categories_audit
+  after insert or update or delete on public.guide_categories
+  for each row execute function private.guide_category_audit();
+
 -- ---------------------------------------------------------------------------
 -- ROLLBACK NOTE
 -- ---------------------------------------------------------------------------
@@ -1303,4 +1349,4 @@ end $do$;
 -- back); and finally drop public.guide_search_index, public.guide_feedback,
 -- public.guide_progress, public.guide_revisions, public.guide_sections and
 -- public.guide_categories. The library rows seeded in PART 7 are content, not
--- schema — decide them separately.
+-- schema — decide them separately. PART 9's trigger goes with its table.

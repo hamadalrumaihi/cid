@@ -106,6 +106,18 @@ Environment knobs:
 - `PW_SUPABASE_SHIM=1` — relays the browser's Supabase HTTP calls through Node; needed only in sandboxes whose egress proxy Chromium cannot traverse (realtime websockets stay unshimmed; the covered flows don't depend on them).
 - `PW_CHROMIUM_PATH=/path/to/chrome` — use a preinstalled Chromium instead of a version-pinned download.
 - **Env-gated skips**: every spec self-skips without `RLS_TEST_PASSWORD_LSB` (and each additionally skips when its specific account password is absent), so CI and forks without secrets stay green.
+  **Read that literally**: as of the September 2026 guide release the fixture
+  passwords are NOT configured as repository secrets on this project, so the
+  `security-suites` job skips all 107 files / 1107 cases and exits 0. A green
+  tick on that job is not evidence any RLS rule was exercised. Until the
+  secrets are set, a change to a policy or a definer RPC has to be verified
+  live, inside a rolled-back transaction (`begin; select set_config(
+  'request.jwt.claims', …, true); set local role authenticated; … rollback;`),
+  and the suite you add is the record of what should hold rather than proof
+  that it does. The category audit bug fixed in
+  `20261108120000_guide_library_v2` PART 9 — a `private.audit_detail()` trigger
+  on a table keyed by text, which broke `guide_category_upsert` outright — got
+  through precisely because the suite that covers it never ran.
 
 The server under test is `next start -p 3111` against the existing build — always `npm run build` first.
 

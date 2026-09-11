@@ -74,6 +74,17 @@ guides the division actually needed. One migration
   Pinned by `tests/rls/v195a` and `v195b`.
 - **Images stay optional.** A guide with no imagery renders none and no
   placeholder, and removing every image changes nothing else on the page.
+- **A category could not be added or retired at all**, until this release
+  fixed it: `public.guide_categories` is keyed by its slug, and it had been
+  given the house audit trigger, which reads `new.id`. Every insert and update
+  raised `42703` and took `guide_category_upsert` down with it. The audit is
+  kept — the slug goes in the detail and `entity_id` stays null — because a
+  category change is worth recording; only the assumption is gone. Found by
+  verifying the editor surface live in a rolled-back transaction, which is
+  currently the only way it *could* be found: the `rls-test-*` fixture
+  passwords are not configured as repository secrets, so CI's security job
+  skips all 107 RLS files and exits 0. That is now written down in
+  `TESTING.md` rather than left as a green tick that means nothing.
 
 ### The Guide Library
 
