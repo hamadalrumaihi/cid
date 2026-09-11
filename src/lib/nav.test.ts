@@ -63,7 +63,7 @@ describe('nav — categories', () => {
     expect(NAV_CATEGORIES.map((c) => [c.id, c.label, c.tabs])).toEqual([
       ['command', 'Command', ['inbox', 'dashboard', 'analytics', 'announce', 'heatmap', 'personnel']],
       ['cases', 'Investigations', ['cases', 'operations', 'legal', 'intelligence', 'informants', 'registries', 'rico', 'case-files']],
-      ['reference', 'Reference', ['penal', 'sops', 'guide']],
+      ['reference', 'Reference', ['penal', 'sops', 'guide', 'undergrnd']],
       ['oversight', 'Oversight', ['calendar', 'shifts', 'trash']],
       ['owner', 'Owner', ['owner', 'audit', 'devdocs', 'report-templates']],
     ])

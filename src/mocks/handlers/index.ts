@@ -7,6 +7,7 @@
  *  before the catch-all so a direct INSERT / UPDATE / DELETE never reaches
  *  the store. */
 import { actionHandlers } from './action'
+import { associationHandlers } from './associations'
 import { authHandlers } from './auth'
 import { ciHandlers } from './ci'
 import { documentHandlers } from './documents'
@@ -25,6 +26,7 @@ export const handlers = [
   ...trashHandlers,
   ...ciHandlers,
   ...platformHandlers,
+  ...associationHandlers,
   ...documentHandlers,
   ...rpcHandlers,
   ...legalHandlers,

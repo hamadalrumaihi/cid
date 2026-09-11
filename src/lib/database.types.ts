@@ -4107,6 +4107,103 @@ export type Database = {
           },
         ]
       }
+      entity_associations: {
+        Row: {
+          association: string
+          confidence: string | null
+          created_at: string
+          created_by: string | null
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          first_observed: string | null
+          id: string
+          last_confirmed: string | null
+          note: string | null
+          object_id: string
+          object_kind: string
+          source_type: string | null
+          status: string
+          subject_id: string
+          subject_kind: string
+          updated_at: string
+        }
+        Insert: {
+          association: string
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          first_observed?: string | null
+          id?: string
+          last_confirmed?: string | null
+          note?: string | null
+          object_id: string
+          object_kind: string
+          source_type?: string | null
+          status?: string
+          subject_id: string
+          subject_kind: string
+          updated_at?: string
+        }
+        Update: {
+          association?: string
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          first_observed?: string | null
+          id?: string
+          last_confirmed?: string | null
+          note?: string | null
+          object_id?: string
+          object_kind?: string
+          source_type?: string | null
+          status?: string
+          subject_id?: string
+          subject_kind?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entity_associations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entity_associations_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entity_associations_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       entity_field_observations: {
         Row: {
           case_id: string
@@ -17917,6 +18014,46 @@ export type Database = {
           edge_kind: string | null
           edge_label: string | null
         }[]
+      }
+      entity_association_create: {
+        Args: { p_subject_kind: string; p_subject_id: string; p_object_kind: string; p_object_id: string; p_association: string; p_note?: string | null; p_confidence?: string | null; p_source_type?: string | null; p_first_observed?: string | null }
+        Returns: Json
+      }
+      entity_association_decide: {
+        Args: { p_id: string; p_status: string; p_note?: string | null; p_association?: string | null; p_confidence?: string | null }
+        Returns: Json
+      }
+      entity_association_update: {
+        Args: { p_id: string; p_patch: Json }
+        Returns: Json
+      }
+      entity_associations_for: {
+        Args: { p_kind: string; p_id: string }
+        Returns: {
+          id: string
+          direction: string
+          other_kind: string
+          other_id: string
+          other_label: string | null
+          association: string
+          status: string
+          confidence: string | null
+          source_type: string | null
+          note: string | null
+          first_observed: string | null
+          last_confirmed: string | null
+          created_by: string | null
+          created_by_name: string | null
+          created_at: string
+          decided_by: string | null
+          decided_by_name: string | null
+          decided_at: string | null
+          decision_note: string | null
+        }[]
+      }
+      registry_media_attach: {
+        Args: { p_kind: string; p_entity_id: string; p_title: string; p_filename: string; p_mime?: string | null; p_byte_size?: number | null; p_category?: string | null; p_caption?: string | null }
+        Returns: Json
       }
     }
     Enums: {

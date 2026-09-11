@@ -968,6 +968,11 @@ const objectKey = (bucket: string, path: string) => `${bucket}/${path}`
 export function resetMockStorage(): void { objects.clear() }
 export function mockStorageObjects(): StoredObject[] { return [...objects.values()] }
 
+/** kind → the media column that must name the entity in the registry path. */
+const REGISTRY_MEDIA_COLUMN: Record<string, 'gang_id' | 'person_id' | 'place_id' | 'vehicle_id' | 'narcotic_id' | undefined> = {
+  gang: 'gang_id', person: 'person_id', place: 'place_id', vehicle: 'vehicle_id', narcotic: 'narcotic_id',
+}
+
 const storageError = (status: number, message: string, error = 'InvalidRequest') =>
   HttpResponse.json({ statusCode: String(status), error, message }, { status })
 
@@ -975,6 +980,10 @@ const storageError = (status: number, message: string, error = 'InvalidRequest')
 function storageRead(bucket: string, path: string): boolean {
   const seg = path.split('/')
   if (!isActive()) return false
+  // registry/<kind>/<entity_id>/<media_id>/<file> (20261106120000): the second
+  // prefix the case-evidence bucket accepts — registry INTELLIGENCE, read
+  // through the media row's own visibility like any other private object.
+  if (bucket === 'case-evidence' && seg[0] === 'registry') return mediaVisible(seg[3])
   if (bucket === 'case-evidence' || bucket === 'case-documents') return seg[0] === 'case' && mediaVisible(seg[2])
   if (bucket === 'case-packets') return seg[0] === 'case' && packetVisible(rows('case_packets').find((p) => p.id === seg[2]))
   if (bucket === 'external-source-snapshots') return seg[0] === 'source' && sourceVisible(seg[1])
@@ -985,6 +994,16 @@ function storageWrite(bucket: string, path: string): boolean {
   const seg = path.split('/')
   if (!isActive()) return false
   if (bucket !== 'case-evidence' && bucket !== 'case-documents') return false
+  // The registry arm binds the object to a live, CASE-LESS, caller-owned media
+  // row that already names this exact path and points at the entity in the
+  // path — so the prefix cannot be used to plant an object in another
+  // record's namespace or to smuggle a case object past the case rules.
+  if (bucket === 'case-evidence' && seg[0] === 'registry') {
+    const m = mediaOf(seg[3])
+    const column = REGISTRY_MEDIA_COLUMN[seg[1] ?? '']
+    return !!m && !!column && m.deleted_at == null && m.case_id == null
+      && m.uploaded_by === uid() && m.storage_path === path && str(m[column]) === seg[2]
+  }
   if (seg[0] !== 'case' || !caseWritable(seg[1])) return false
   const m = mediaOf(seg[2])
   return !!m && m.deleted_at == null && m.uploaded_by === uid() && m.case_id === seg[1] && (m.storage_path == null || m.storage_path === path)

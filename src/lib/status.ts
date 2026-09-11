@@ -37,6 +37,7 @@ export type StatusDomain =
   | 'personReview'
   | 'accountOwnership'
   | 'caseCharge'
+  | 'entityAssociation'
 
 export interface StatusMeta {
   /** Human label — always rendered; color is never the only signal. */
@@ -215,6 +216,22 @@ const ACCOUNT_OWNERSHIP: Record<string, StatusMeta> = {
   confirmed: { label: 'Confirmed', cls: EMERALD, meaning: 'Ownership confirmed.' },
 }
 
+/* ── Entity associations (20261106120000) ─────────────────────────────────
+ * The workflow of a reviewable registry link. Pending is AMBER because it is
+ * an open question, not a finding — the label says "Pending Investigation"
+ * and the tooltip says what that means, so the chip can never be skimmed as
+ * a confirmed tie. */
+const ENTITY_ASSOCIATION: Record<string, StatusMeta> = {
+  pending_investigation: {
+    label: 'Pending Investigation', cls: AMBER,
+    meaning: 'Recorded as an observation. No investigator has ruled on it — this is not a finding.',
+    actor: 'Any member who can see both records confirms, rejects or retires it',
+  },
+  confirmed: { label: 'Confirmed', cls: EMERALD, meaning: 'An investigator confirmed the association, with a reason on the record.' },
+  rejected: { label: 'Rejected', cls: ROSE, meaning: 'An investigator ruled the association does not hold.' },
+  historical: { label: 'Historical', cls: SLATE, meaning: 'It was true and no longer is.' },
+}
+
 /* ── Case charges (lib/caseCharges vocabulary) ───────────────────────────── */
 const CASE_CHARGE_CLS: Record<CaseChargeStatus, string> = {
   approved: ACCENT,
@@ -268,6 +285,8 @@ export function statusMeta(domain: StatusDomain, value: string | null | undefine
       return PERSON_REVIEW[v] ?? PERSON_REVIEW.unreviewed
     case 'accountOwnership':
       return ACCOUNT_OWNERSHIP[v] ?? { label: humanize(v || 'suspected'), cls: SLATE }
+    case 'entityAssociation':
+      return ENTITY_ASSOCIATION[v || 'pending_investigation'] ?? { label: humanize(v), cls: NEUTRAL }
     case 'caseCharge':
       return isCaseChargeStatus(v)
         ? { label: caseChargeStatusLabel(v), cls: CASE_CHARGE_CLS[v], meaning: caseChargeStatusMeaning(v) }

@@ -11,7 +11,7 @@ import { useAuth } from '@/lib/auth'
 import { toast } from '@/lib/toast'
 import { safeUrl } from '@/lib/safeUrl'
 import { useMediaSrc } from '@/lib/evidence'
-import { fmConfigured, fmUpload } from '@/lib/fivemanage'
+import { REGISTRY_MEDIA_ACCEPT, attachRegistryMedia } from '@/lib/registryMedia'
 import { parseIntelSummary } from '@/lib/jsonShapes'
 import { RadioIcon } from '@/components/shell/icons'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -769,29 +769,29 @@ export function LinkPlaceModal({ gang, existing, onClose, onSaved }: {
   )
 }
 
-/** Add a photo to the gang — FiveManage upload when configured, else paste a URL.
- *  Mirrors the Places photo flow but writes media.gang_id. */
+/** Attach a photograph to the gang. The file itself goes to the PRIVATE
+ *  case-evidence bucket under `registry/gang/<id>/…` through
+ *  `registry_media_attach` (20261106120000) instead of a browser-visible
+ *  external host — the same exposure the platform upgrade closed for case
+ *  evidence. It is registry INTELLIGENCE, not case evidence: no EV- number,
+ *  no custody chain, no integrity badge. Pasting a URL stays as the fallback
+ *  for imagery that already lives somewhere else. */
 export function AddGangPhotoModal({ gang, onClose, onSaved }: { gang: GangRow; onClose: () => void; onSaved: () => void }) {
   const [title, setTitle] = useState('')
+  const [caption, setCaption] = useState('')
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
-  const canUpload = fmConfigured()
-
-  const persist = async (externalUrl: string, kind: string) => {
-    const res = await insert('media', {
-      title: title.trim() || `${gang.name} photo`, type: 'image', kind, external_url: externalUrl,
-      gang_id: gang.id, tags: { labels: ['Gang'] },
-    })
-    if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return false }
-    return true
-  }
 
   const onFile = async (file: File | undefined) => {
     if (!file) return
     setBusy(true)
     try {
-      const { url: up, kind } = await fmUpload(file)
-      if (await persist(up, kind)) { toast('Photo added', 'success'); onSaved() }
+      await attachRegistryMedia({
+        kind: 'gang', entityId: gang.id, file,
+        title: title.trim() || `${gang.name} photograph`, caption,
+      })
+      toast('Photograph attached', 'success')
+      onSaved()
     } catch (e) { toast(e instanceof Error ? e.message : 'Upload failed', 'danger') } finally { setBusy(false) }
   }
 
@@ -799,29 +799,33 @@ export function AddGangPhotoModal({ gang, onClose, onSaved }: { gang: GangRow; o
     const clean = safeUrl(url.trim())
     if (!clean) { toast('Enter a valid image URL.', 'warn'); return }
     setBusy(true)
-    if (await persist(clean, 'image')) { toast('Photo added', 'success'); onSaved() }
+    const res = await insert('media', {
+      title: title.trim() || `${gang.name} photo`, type: 'image', kind: 'image', external_url: clean,
+      gang_id: gang.id, tags: { labels: ['Gang'] },
+    })
     setBusy(false)
+    if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
+    toast('Photo added', 'success')
+    onSaved()
   }
 
   return (
-    <Modal open onClose={onClose} dirty={() => !!(title.trim() || url.trim())}>
+    <Modal open onClose={onClose} dirty={() => !!(title.trim() || caption.trim() || url.trim())}>
       <div className="p-6">
-        <ModalHeader title={`Add photo — ${gang.name}`} onClose={onClose} />
+        <ModalHeader title={`Attach photograph — ${gang.name}`} onClose={onClose} />
         <div className="space-y-3">
-          <div><label htmlFor="gp-title" className={label}>Title</label><input id="gp-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={`${gang.name} photo`} className={input} /></div>
-          {canUpload ? (
-            <div>
-              <label htmlFor="gp-file" className={label}>Upload image</label>
-              <input id="gp-file" type="file" accept="image/*" disabled={busy} onChange={(e) => void onFile(e.target.files?.[0])} className="block w-full text-xs text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-badge-500 file:px-3 file:py-1.5 file:text-white" />
-              <p className="mt-1 text-[11px] text-slate-500">Uploads to the media host and links it to this gang.</p>
-            </div>
-          ) : (
-            <div>
-              <label htmlFor="gp-url" className={label}>Image URL</label>
-              <input id="gp-url" value={url} onChange={(e) => setUrl(e.target.value)} className={input} />
-              <Button variant="primary" className="mt-3 w-full" loading={busy} onClick={() => void saveUrl()}>{busy ? 'Saving…' : 'Add photo'}</Button>
-            </div>
-          )}
+          <div><label htmlFor="gp-title" className={label}>Title</label><input id="gp-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={`${gang.name} photograph`} className={input} /></div>
+          <div><label htmlFor="gp-caption" className={label}>Caption</label><input id="gp-caption" value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Where and when it was taken…" className={input} /></div>
+          <div>
+            <label htmlFor="gp-file" className={label}>Upload image</label>
+            <input id="gp-file" type="file" accept={REGISTRY_MEDIA_ACCEPT} disabled={busy} onChange={(e) => void onFile(e.target.files?.[0])} className="block w-full text-xs text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-badge-500 file:px-3 file:py-1.5 file:text-white" />
+            <p className="mt-1 text-[11px] text-slate-400">Stored privately against this record and read through a short-lived signed link. Intelligence, not case evidence.</p>
+          </div>
+          <div>
+            <label htmlFor="gp-url" className={label}>Or paste an image URL</label>
+            <input id="gp-url" value={url} onChange={(e) => setUrl(e.target.value)} className={input} />
+            <Button variant="primary" className="mt-3 w-full" loading={busy} disabled={!url.trim()} onClick={() => void saveUrl()}>{busy ? 'Saving…' : 'Add linked photo'}</Button>
+          </div>
         </div>
       </div>
     </Modal>

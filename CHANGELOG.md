@@ -8,6 +8,54 @@ the merged PRs that compose it.
 
 ## [Unreleased]
 
+### Gang & Organization Registry — associations and visual intelligence
+
+One migration (`20261106120000_org_associations_registry_intel`) closing two
+gaps the 2026-09-11 registry intake ran into, plus the intake itself.
+
+- **Organization associations** — `entity_associations` is the registry's
+  first link between two organizations, and its first way to connect a record
+  to a property without claiming control of it. A row is an **observation,
+  not a finding**: it lands on *Pending Investigation* with no decision, and
+  an *Unconfirmed Association* never reads as an alliance, a merger or shared
+  command. An investigator confirms, rejects or retires it with a stated
+  reason, may correct the claim at the same time, and may reopen it, which
+  clears the decision trail. Reading follows **both** endpoints, so a link can
+  never reveal a record the reader could not otherwise see. The pair is
+  canonical, so recording the same association from the other direction
+  returns the existing row instead of duplicating or overwriting it.
+  Associations appear on the gang and place dossiers, and go to the Trash and
+  come back like any other record.
+- **Registry intelligence photographs** — a photograph attached to a gang,
+  person, place, vehicle or narcotic now lands in the **private**
+  `case-evidence` bucket under `registry/<kind>/<id>/<media_id>/`, read
+  through 300 s signed URLs, instead of going to a public host and coming
+  back as a browser-visible URL. These are intelligence attachments, not case
+  evidence: no `EV-` number, no custody chain, no integrity sweep, and the
+  evidence series refuses them. A second photograph adds to a record rather
+  than replacing the first.
+- **The intake** — seven organizations recorded as separate registry records
+  (Vital, Vagos, Miyuzuki, White Lotus, Copperhead Cartel, Devils San Andreas
+  MC, The Black Hand Mafia), each submitted by Tom Wood, X-2 Special Agent, as
+  Visual Intelligence / Field Observation at preliminary confidence, with
+  every branding-only classification marked preliminary in the record itself.
+  Route 68 Garage was created as a location carrying the shared-branding note
+  verbatim and linked to both organizations observed there, with no
+  controlling organization claimed; the two are joined by an Unconfirmed
+  Association at Pending Investigation. Duplicates were checked against
+  normalized names and aliases before insertion and the records were not
+  merged.
+- **UNDERGRND SIM — Complete System Guide** — a new reference page
+  documenting the in-city UNDERGRND SIM job network: the ten-step flow and its
+  three currencies, the five contract lines and their buy-ins, the six
+  quartermaster items, Today's Board, the eleven milestone categories, the
+  Rap Sheet, the leaderboard and its privacy rule, a recommended progression,
+  an organization-use panel and an eleven-question FAQ. Confirmed information
+  and screenshot examples are marked apart throughout.
+
+Authority `docs/AUTHORIZATION.md` §23; RLS `docs/RLS.md` §7 (`v193a`);
+migration notes `supabase/MIGRATION-HISTORY.md`.
+
 ### Platform upgrade
 
 One phase, one migration (`20261105120000_platform_upgrade`): the evidence

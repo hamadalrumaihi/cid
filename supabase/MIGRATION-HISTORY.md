@@ -1317,6 +1317,117 @@ false, while the Director sees it; a media row pointing at another case's
 folder is refused by extraction and by the document tools (`bad_request`); an
 assumed `authenticated` role without claims is not the service.
 
+
+## Organization associations and registry intelligence media
+
+`20261106120000_org_associations_registry_intel.sql`, applied live in six
+parts (`org_associations_core`, `org_registry_media`,
+`org_associations_plumbing`, `org_associations_rls_test_cleanup`,
+`org_associations_review_fixes`) plus two follow-ups the verification pass
+found (`org_associations_registry_label_grant`, `org_associations_perm_dispatch`).
+Additive throughout: one new table, two storage policies, five RPCs, five
+private helpers, seven `permission_catalog` rows, and five existing functions
+re-emitted with one arm added.
+
+**Why.** The registry could relate a person to a person
+(`person_relationships`) and a gang to a block (`gang_turf`), but nothing
+related one organization to another, and the only way to say an organization
+was connected to a property was `places.controlling_gang_id` — a
+single-valued CONTROL claim, which is the wrong statement to make when all
+that was observed is two organizations' branding on the same garage.
+`public.entity_associations` is the general, reviewable link: subject to
+object, an association verb, a workflow status that starts at
+`pending_investigation`, and a decision trail. Recording one never implies
+alliance, merger or control; only an investigator's explicit decision does.
+
+Separately, a photograph could only be stored against a CASE — the
+`case-evidence` bucket accepted `case/<case_id>/<media_id>/…` and nothing
+else — so registry intelligence had to go to the public FiveManage host and
+come back as a browser-visible `external_url`. The same private bucket now
+also accepts `registry/<kind>/<entity_id>/<media_id>/<file>`, reserved by
+`public.registry_media_attach`. These are intelligence attachments, **not**
+case evidence: no `EV-` number, no custody ledger, no integrity sweep, and
+the media integrity columns stay service-only exactly as before.
+
+**The pair is canonical.** A partial unique index over
+`(subject_kind, object_kind, LEAST/GREATEST of the ids for a same-kind pair,
+association)` means the direction a submitter happens to pick cannot create a
+second row. `entity_association_create` returns the existing row with
+`created:false` rather than inserting or overwriting — the intake rule was
+"do not overwrite existing records", and that is where it is enforced.
+
+**Polymorphic endpoints.** `subject_id` and `object_id` are plain uuids, not
+foreign keys, because either endpoint may be any of seven registry kinds. Two
+consequences are handled explicitly rather than left to cascade:
+`private.permanent_delete_record_apply` sweeps the association rows of a
+record being permanently destroyed (the FK walk in
+`permanent_delete_record_refs` cannot see them) and records the count in the
+ledger; and the `rls_test_cleanup` splice does the same for fixtures.
+
+**Two things the verification pass caught.** `public.entity_associations_for`
+is SECURITY INVOKER on purpose — `entity_associations_sel` is the wall — so
+the caller must be able to execute `private.registry_label`, the same grant
+`private.perm_registry_visible` and `private.can_read_case` already carry
+(`org_associations_registry_label_grant`). And PART 3's re-emission of
+`private.perm_dispatch` had to be built from the PART 6 text of
+`20261105120000_platform_upgrade.sql`, **not** from
+`supabase/schema-snapshot.sql`: the snapshot committed with that phase
+carried the PART 5 body, so the packet read/download guard and the
+`case/<case_id>/<media_id>/` document binding were missing from it, and
+building on it would have silently reverted that security fix. The snapshot
+is rebuilt from a fresh live dump with this migration, which corrects it.
+
+**Three things the verification pass found (PART 5).** An association could
+name a record that did not exist: `private.perm_registry_visible` answers "may
+the caller see it" and, for the four SIU-walled kinds, never touches the table,
+so any random uuid passed it — `private.registry_exists` is the missing half
+and both RPCs now require it. Vocabulary and date values went straight to the
+CHECK constraints and to `::date`, so an unknown kind, claim, confidence or
+source came back as a 23514 and a malformed date as a 22007; every vocabulary
+is now checked in the RPC and the date casts are wrapped, so a bad value is
+`{ok:false, code:'bad_value'}` as the house contract requires. And a
+photograph of a **restricted** narcotic was being stored `restricted = false`:
+`media_sel` gates `restricted` on `can_edit_narcotics_intel()` but has no
+`narcotic_id` arm of its own, so the picture of a restricted substance would
+have been readable by every active member — the same leak `20260804010000`
+closed for the imported sale screenshots. `registry_media_attach` now mirrors
+the substance's own restriction onto the media row.
+
+**What an independent security review found (PART 6).** Nine defects across
+PARTS 1-5; seven fixed here, two accepted and recorded in
+`docs/SECURITY-REVIEW.md`. The worst was the `perm_dispatch` `restore` arm: it
+omitted `private.assoc_visible`, and for this kind that arm is the whole wall,
+because `trash_list` is SECURITY DEFINER, admits rows on
+`perm_dispatch('restore', ...)` alone, and `trash_case_expr` has no arm for an
+association. A Bureau Lead with no SIU standing could read a withdrawn
+association naming an SIU-hidden gang out of the Trash -- its claim, its label,
+the officer who withdrew it and their reason -- and restore it, writing to a row
+they cannot read. Next worst: PART 5's restricted-narcotics fix was a snapshot
+copied at attach time, not a live predicate, so a substance restricted *after* a
+photograph was attached left that photograph readable by every active member;
+the block is now `private.media_narcotic_blocked`, evaluated on every read. Also
+fixed: the pair was canonical only within a kind, so a rejected cross-kind claim
+could be re-litigated by flipping the argument order; visibility had no liveness
+term, so an association could name a trashed record and `registry_label` would
+resolve its name; merging did not repoint associations, leaving one naming a
+record that is gone or associated with itself; a registry photograph could be
+deleted by nobody, not even the Owner, because the media delete arm required a
+case; and `confidence` and `last_confirmed` were amendable after a ruling,
+letting an author attribute a strengthened claim to the officer who decided.
+
+Verified live in three rolled-back transactions: 35 checks, then 10 for the
+PART 5 review fixes, then 11 for PART 6 -- the last run as a plain detective
+rather than the Owner, since the liveness rule deliberately exempts the Owner
+and an Owner actor cannot observe it. The pair is
+canonical in both directions; a self-association is refused; confirming or
+rejecting without a reason is refused; a confirmation records who, when and
+the corrected claim, and reopening clears the trail; the Trash round trip
+works and labels the row by its claim; `registry_media_attach` produces a row
+with no evidence number, no hash and no integrity status; and the storage
+policy accepts the object it reserved while refusing the same media id under
+another record's folder, and an unregistered media id under the right one.
+
+
 | Version (live) | Name | Repo file |
 |---|---|---|
 | applied via MCP (`entity_normalization`, `entity_normalization_phone_fix`) | entity_normalization | `20261014120000_entity_normalization.sql` |
@@ -1341,7 +1452,8 @@ assumed `authenticated` role without claims is not the service.
 | applied via MCP (`trash_list`, `trash_list_review_fixes`) | trash_list | `20261102120000_trash_list.sql` |
 | applied via MCP (`confidential_informants`, `confidential_informants_rpcs`, `confidential_informants_plumbing`, `confidential_informants_review_fixes`) | confidential_informants | `20261103120000_confidential_informants.sql` |
 | applied via MCP (`soft_delete_templates_commendations`) | soft_delete_templates_commendations | `20261104120000_soft_delete_templates_commendations.sql` |
-| applied via MCP (`platform_upgrade_core`, `platform_upgrade_evidence`, `platform_upgrade_documents`, `platform_upgrade_sources_graph_search`, `platform_upgrade_plumbing`) | platform_upgrade | `20261105120000_platform_upgrade.sql` |
+| applied via MCP (`platform_upgrade_core`, `platform_upgrade_evidence`, `platform_upgrade_documents`, `platform_upgrade_sources_graph_search`, `platform_upgrade_plumbing`, `platform_upgrade_review_fixes`) | platform_upgrade | `20261105120000_platform_upgrade.sql` |
+| applied via MCP (`org_associations_core`, `org_registry_media`, `org_associations_plumbing`, `org_associations_registry_label_grant`, `org_associations_perm_dispatch`, `org_associations_rls_test_cleanup`, `org_associations_review_fixes`) | org_associations_registry_intel | `20261106120000_org_associations_registry_intel.sql` |
 | applied via MCP (`record_versions`) | record_versions | `20261011120000_record_versions.sql` |
 | applied via MCP (`case_access_grant_expiry`) | case_access_grant_expiry | `20261012120000_case_access_grant_expiry.sql` |
 | applied via MCP (`permanent_delete_record`, `permanent_delete_record_preview_fix`) | permanent_delete_record | `20261013120000_permanent_delete_record.sql` |

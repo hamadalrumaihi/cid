@@ -83,6 +83,9 @@ export const SOFT_DELETE_KIND = {
   // hard-deleted now follow the one rule (DESIGN-SYSTEM.md "Deleting things").
   case_templates: 'case_template', commendations: 'commendation',
   case_packets: 'case_packet', external_sources: 'external_source',
+  // Organization associations (20261106120000): the reviewable registry link
+  // withdraws to the Trash like any other member-created row.
+  entity_associations: 'entity_association',
 } as const satisfies Partial<Record<TableName, string>>
 export type SoftDeleteTable = keyof typeof SOFT_DELETE_KIND
 /** Kinds whose soft_delete requires a reason (the parent records and the

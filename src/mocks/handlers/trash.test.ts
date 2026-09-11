@@ -56,13 +56,14 @@ function trashedCaseMaterial(c: Cast, deletedAt = mockTimestamp(-10)) {
 describe('trash — vocabulary and helpers', () => {
   beforeEach(() => resetMockStore())
 
-  it('the kind → table map is the inverse of db.ts SOFT_DELETE_KIND (31 kinds incl. case_packet / external_source, never a second vocabulary)', () => {
+  it('the kind → table map is the inverse of db.ts SOFT_DELETE_KIND (32 kinds incl. case_packet / external_source / entity_association, never a second vocabulary)', () => {
     const inverse = Object.fromEntries(Object.entries(SOFT_DELETE_KIND).map(([table, kind]) => [kind, table]))
     expect(TRASH_TABLE_OF_KIND).toEqual(inverse)
-    expect(TRASH_KINDS).toHaveLength(31)
+    expect(TRASH_KINDS).toHaveLength(32)
     expect(isTrashKind('case_packet')).toBe(true)
     expect(isTrashKind('external_source')).toBe(true)
     expect(isTrashKind('case_note')).toBe(true)
+    expect(isTrashKind('entity_association')).toBe(true)
     expect(isTrashKind('legal')).toBe(false)
   })
 
