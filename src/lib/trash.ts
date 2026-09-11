@@ -28,6 +28,7 @@ export const TRASH_KIND_LABEL: Record<string, string> = {
   narcotic: 'Narcotic', operation: 'Operation', tracker: 'Tracker',
   gang_member: 'Gang member', gang_turf: 'Gang turf', person_place: 'Person–place link',
   person_vehicle: 'Person–vehicle link', person_relationship: 'Person relationship', account_link: 'Account link',
+  entity_association: 'Association',
 }
 
 /** Kind → label, degrading to a readable form of the kind for anything the
@@ -50,7 +51,7 @@ export const TRASH_GROUPS: readonly TrashGroup[] = [
   { id: 'admin', label: 'Administration', kinds: ['case_template', 'commendation'] },
   { id: 'material', label: 'Case material', kinds: ['report', 'media', 'evidence', 'case_task', 'case_message', 'case_blocker', 'rico_case', 'predicate_act', 'case_note', 'case_packet'] },
   { id: 'registry', label: 'Registry', kinds: ['person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'external_source'] },
-  { id: 'links', label: 'Links', kinds: ['case_intel_link', 'case_link', 'gang_member', 'gang_turf', 'person_place', 'person_vehicle', 'person_relationship', 'account_link'] },
+  { id: 'links', label: 'Links', kinds: ['case_intel_link', 'case_link', 'gang_member', 'gang_turf', 'person_place', 'person_vehicle', 'person_relationship', 'account_link', 'entity_association'] },
 ]
 
 export function trashGroupOf(kind: string): TrashGroupId {

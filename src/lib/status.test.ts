@@ -37,6 +37,7 @@ const DOMAIN_VALUES: Record<StatusDomain, string[]> = {
   personReview: ['fresh', 'due', 'stale', 'unreviewed'],
   accountOwnership: ['suspected', 'probable', 'confirmed'],
   caseCharge: ['approved', 'filed', 'convicted', 'dismissed', 'withdrawn'],
+  entityAssociation: ['pending_investigation', 'confirmed', 'rejected', 'historical'],
 }
 
 describe('statusMeta — every domain covers its canonical value set', () => {

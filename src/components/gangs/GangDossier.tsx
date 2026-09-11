@@ -13,7 +13,9 @@ import { list, remove } from '@/lib/db'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { copyText } from '@/lib/format'
+import { useMediaSrc } from '@/lib/evidence'
 import { officerName } from '@/lib/profiles'
+import { REGISTRY_MEDIA_KIND, registryMediaCaption } from '@/lib/registryMedia'
 import { parseIntelSummary } from '@/lib/jsonShapes'
 import { statusTint, threatTint } from '@/lib/tint'
 import {
@@ -33,6 +35,7 @@ import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTi
 import { ConfidenceBadge, StaleIntelBadge } from '@/components/ui/IntelBadges'
 import { EntityLink } from '@/components/ui/EntityLink'
 import { uiConfirm } from '@/components/ui/dialog'
+import { AssociationsSection } from '@/components/shared/AssociationsSection'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
 import { RecordHistory } from '@/components/shared/RecordHistory'
 import { LinkEditPopover } from '@/components/shared/LinkEditPopover'
@@ -50,8 +53,8 @@ import {
 } from './gangIntel'
 import { densityTint, cap, type CaseOption, type CaseRow, type GangPlaceRow, type GangRow, type IntelLinkRow, type LinkedPlace, type MediaRow, type MemberRow, type PlaceRow, type TurfRow, type VehicleRow } from './gangShared'
 
-type SectionId = 'overview' | 'members' | 'territory' | 'places' | 'vehicles' | 'accounts' | 'narcotics' | 'cases' | 'observations' | 'media' | 'activity' | 'history'
-const SECTION_IDS: SectionId[] = ['overview', 'members', 'territory', 'places', 'vehicles', 'accounts', 'narcotics', 'cases', 'observations', 'media', 'activity', 'history']
+type SectionId = 'overview' | 'members' | 'territory' | 'places' | 'vehicles' | 'accounts' | 'narcotics' | 'associations' | 'cases' | 'observations' | 'media' | 'activity' | 'history'
+const SECTION_IDS: SectionId[] = ['overview', 'members', 'territory', 'places', 'vehicles', 'accounts', 'narcotics', 'associations', 'cases', 'observations', 'media', 'activity', 'history']
 
 const fmtDate = (iso: string | null | undefined) => {
   if (!iso) return '—'
@@ -369,28 +372,39 @@ function CasesSection({ links, cases, indirect, canEdit, onAttach, onUnlink }: {
 }
 
 // ── Media ────────────────────────────────────────────────────────────────────
+/** One thumbnail. A registry attachment lives in the PRIVATE bucket, so its
+ *  `storage_path` is a path and not a URL — useMediaSrc signs it (300 s,
+ *  cached) exactly as the lightbox does; a legacy external row is direct. */
+function MediaThumb({ media }: { media: MediaRow }) {
+  const src = safeUrl(useMediaSrc(media) ?? '')
+  if (src && media.type !== 'document') {
+    // eslint-disable-next-line @next/next/no-img-element -- signed storage / external media URL
+    return <img src={src} alt={media.title} loading="lazy" className="h-28 w-full object-cover transition group-hover:opacity-90" />
+  }
+  return <div className="grid h-28 w-full place-items-center text-slate-400" aria-hidden>{media.type === 'video' ? <VideoIcon size={28} /> : <DocumentIcon size={28} />}</div>
+}
+
 function MediaSection({ media, canEdit, onAdd, onOpen }: { media: MediaRow[]; canEdit: boolean; onAdd: () => void; onOpen: (m: MediaRow) => void }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-white">Media</h3><Badge>{media.length}</Badge></div>
-        {canEdit && <button onClick={onAdd} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">+ Photo</button>}
+        {canEdit && <button onClick={onAdd} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">Attach photograph</button>}
       </div>
       {!media.length ? (
-        <EmptyState title="No media" hint={canEdit ? 'Add a photo or link imagery to this gang.' : undefined} />
+        <EmptyState title="No media" hint={canEdit ? 'Attach a photograph — it is stored privately against this record as intelligence, not as case evidence.' : undefined} />
       ) : (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
           {media.map((m) => {
-            const src = safeUrl(m.external_url || m.storage_path || '')
+            const caption = registryMediaCaption(m.tags)
+            const intel = m.kind === REGISTRY_MEDIA_KIND
             return (
-              <button key={m.id} onClick={() => onOpen(m)} className="group relative overflow-hidden rounded-lg border border-white/5 bg-ink-850" title={m.title}>
-                {src && m.type !== 'document' ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- external media CDN
-                  <img src={src} alt={m.title} className="h-28 w-full object-cover transition group-hover:opacity-90" />
-                ) : (
-                  <div className="grid h-28 w-full place-items-center text-slate-400" aria-hidden>{m.type === 'video' ? <VideoIcon size={28} /> : <DocumentIcon size={28} />}</div>
-                )}
+              <button key={m.id} onClick={() => onOpen(m)} className="group relative overflow-hidden rounded-lg border border-white/5 bg-ink-850" title={caption ? `${m.title} — ${caption}` : m.title}>
+                <MediaThumb media={m} />
                 <span className="block truncate px-1.5 py-1 text-left text-[11px] text-slate-400">{m.title}</span>
+                {/* Registry intelligence is labelled as such: it carries no EV
+                    number, no custody chain and no integrity badge. */}
+                {intel && <span className="block px-1.5 pb-1 text-left text-[10px] text-slate-400">Intelligence · not case evidence</span>}
               </button>
             )
           })}
@@ -548,6 +562,7 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
     { id: 'vehicles', label: 'Vehicles', count: vehicles.length },
     { id: 'accounts', label: 'Accounts' },
     { id: 'narcotics', label: 'Narcotics' },
+    { id: 'associations', label: 'Associations' },
     { id: 'cases', label: 'Cases', count: intelLinks.length },
     { id: 'observations', label: 'Observations' },
     { id: 'media', label: 'Media', count: media.length },
@@ -658,6 +673,9 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
         {section === 'vehicles' && <VehiclesSection vehicles={vehicles} />}
         {section === 'accounts' && <GangAccountsPanel gangId={gang.id} canEdit={canEdit} />}
         {section === 'narcotics' && <GangNarcoticsPanel gangId={gang.id} canEdit={canEdit} />}
+        {/* Organisation-to-organisation / organisation-to-property links
+            (20261106120000). Reviewable claims, never a merger of records. */}
+        {section === 'associations' && <AssociationsSection kind="gang" id={gang.id} label={gang.name} />}
         {section === 'cases' && (
           <div className="space-y-4">
             <CasesSection links={intelLinks} cases={linkedCases} indirect={indirectCases} canEdit={canEdit} onAttach={() => setAttachOpen(true)} onUnlink={(l) => void unlinkCase(l)} />

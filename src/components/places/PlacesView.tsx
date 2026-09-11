@@ -16,8 +16,9 @@ import { insert, list, update, withRetry } from '@/lib/db'
 import { deleteRecord } from '@/lib/deleteRecord'
 import { searchCaseHits, searchGangHits, searchNarcoticHits, searchPlaceHits } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
-import { fmConfigured, fmUpload } from '@/lib/fivemanage'
+import { useMediaSrc } from '@/lib/evidence'
 import { useTableVersion } from '@/lib/realtime'
+import { REGISTRY_MEDIA_ACCEPT, attachRegistryMedia } from '@/lib/registryMedia'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { PhotoIcon, RadioIcon } from '@/components/shell/icons'
@@ -31,6 +32,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { EntityLink } from '@/components/ui/EntityLink'
 import { EntityLegalLine, fetchEntityLegalRefs, type EntityLegalRef } from '@/components/justice/EntityLegalSection'
+import { AssociationsSection } from '@/components/shared/AssociationsSection'
 import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
@@ -368,13 +370,18 @@ function AddPlacePhotoModal({ place, onClose, onSaved }: { place: PlaceRow; onCl
   const fileRef = useRef<HTMLInputElement>(null)
   const input = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
 
+  // The bytes go to the PRIVATE case-evidence bucket under
+  // `registry/place/<id>/…` (registry_media_attach, 20261106120000): registry
+  // INTELLIGENCE, not case evidence — no EV- number, no custody chain.
   const upload = async (file: File) => {
     setUploading(true)
     try {
-      const out = await fmUpload(file)
-      setSrc(out.url)
-      if (!title) setTitle(file.name.replace(/\.[a-z0-9]+$/i, ''))
-      toast('Uploaded to FiveManage', 'success')
+      await attachRegistryMedia({
+        kind: 'place', entityId: place.id, file,
+        title: title.trim() || file.name.replace(/\.[a-z0-9]+$/i, ''),
+      })
+      toast(`Photograph attached to "${place.name}"`, 'success')
+      onSaved()
     } catch (e) {
       toast(`Upload failed: ${e instanceof Error ? e.message : String(e)}`, 'danger')
     } finally { setUploading(false) }
@@ -400,22 +407,21 @@ function AddPlacePhotoModal({ place, onClose, onSaved }: { place: PlaceRow; onCl
   return (
     <Modal open onClose={onClose} dirty={() => !!(title || src)}>
       <div className="p-6">
-        <ModalHeader title={`Add photo — ${place.name}`} onClose={onClose} />
+        <ModalHeader title={`Attach photograph — ${place.name}`} onClose={onClose} />
         <div className="space-y-3">
           <div>
             <label htmlFor="pp-title" className="mb-1 block text-xs font-semibold text-slate-400">Title</label>
             <input id="pp-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={place.name} className={input} />
           </div>
-          {fmConfigured() && (
-            <div>
-              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f) }} />
-              <button onClick={() => fileRef.current?.click()} disabled={uploading} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-white/20 bg-white/5 py-3 text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50">
-                {uploading ? 'Uploading…' : <><PhotoIcon size={16} className="text-slate-400" /> Upload photo</>}
-              </button>
-            </div>
-          )}
           <div>
-            <label htmlFor="pp-src" className="mb-1 block text-xs font-semibold text-slate-400">{fmConfigured() ? 'Or paste an image URL' : 'Image URL'}</label>
+            <input ref={fileRef} type="file" accept={REGISTRY_MEDIA_ACCEPT} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f) }} />
+            <button onClick={() => fileRef.current?.click()} disabled={uploading} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-white/20 bg-white/5 py-3 text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50">
+              {uploading ? 'Uploading…' : <><PhotoIcon size={16} className="text-slate-400" /> Attach photograph</>}
+            </button>
+            <p className="mt-1 text-[11px] text-slate-400">Stored privately against this location and read through a short-lived signed link.</p>
+          </div>
+          <div>
+            <label htmlFor="pp-src" className="mb-1 block text-xs font-semibold text-slate-400">Or paste an image URL</label>
             <input id="pp-src" value={src} onChange={(e) => setSrc(e.target.value)} placeholder="https://…" className={input} />
           </div>
           {safeUrl(src) && (
@@ -423,8 +429,8 @@ function AddPlacePhotoModal({ place, onClose, onSaved }: { place: PlaceRow; onCl
             <img src={safeUrl(src)!} alt="Preview" className="max-h-48 w-full rounded-lg border border-white/10 object-contain" />
           )}
         </div>
-        <Button variant="primary" className="mt-5 w-full" disabled={busy || uploading} onClick={() => void save()}>
-          {busy ? 'Saving…' : 'Add photo'}
+        <Button variant="primary" className="mt-5 w-full" disabled={busy || uploading || !src.trim()} onClick={() => void save()}>
+          {busy ? 'Saving…' : 'Add linked photo'}
         </Button>
       </div>
     </Modal>
@@ -432,7 +438,8 @@ function AddPlacePhotoModal({ place, onClose, onSaved }: { place: PlaceRow; onCl
 }
 
 function PhotoLightbox({ photo, onClose }: { photo: PlacePhoto; onClose: () => void }) {
-  const safe = safeUrl(photo.external_url || photo.storage_path || '')
+  // Storage-hosted rows sign on demand (300 s, cached); external rows are direct.
+  const safe = safeUrl(useMediaSrc(photo) ?? '')
   return (
     <Modal open onClose={onClose} wide>
       <div className="p-6">
@@ -480,7 +487,7 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, observationCo
           <p className="mt-0.5 text-xs text-slate-400">{locLabel(place.type)} · {place.area || '-'}</p>
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
-          {canEdit && <button onClick={onAddPhoto} aria-label="Add a photo of this location" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-emerald-200 transition hover:bg-white/10" title="Add a photo of this location"><PhotoIcon size={16} /></button>}
+          {canEdit && <button onClick={onAddPhoto} aria-label="Attach a photograph of this location" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-emerald-200 transition hover:bg-white/10" title="Attach a photograph of this location"><PhotoIcon size={16} /></button>}
           {canEdit && <button onClick={onAttach} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-blue-200 transition hover:bg-white/10" title="Attach to case">Attach</button>}
           {canEdit && <button onClick={onEdit} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
           {canDelete && <button aria-label="Remove location" onClick={onDelete} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
@@ -509,31 +516,11 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, observationCo
         </div>
       )}
       {observationCount > 0 && <PlaceObservations placeId={place.id} count={observationCount} />}
+      <PlaceAssociations place={place} />
       <PlaceReportMentions placeId={place.id} />
       {photos.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
-          {photos.map((p) => {
-            const safe = safeUrl(p.external_url || p.storage_path || '')
-            if (!safe) return null
-            return (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => onOpenPhoto(p)}
-                aria-label={`Preview ${p.title}`}
-                title={p.title}
-                className="cursor-zoom-in rounded-lg transition hover:brightness-110"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element -- external evidence URL */}
-                <img
-                  src={safe}
-                  alt=""
-                  loading="lazy"
-                  className="h-20 w-28 rounded-lg border border-white/10 object-cover"
-                />
-              </button>
-            )
-          })}
+          {photos.map((p) => <PlacePhotoThumb key={p.id} photo={p} onOpen={onOpenPhoto} />)}
         </div>
       )}
       {productionSite && drug && (
@@ -557,6 +544,52 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, observationCo
         </div>
       )}
     </Card>
+  )
+}
+
+/** One thumbnail. A registry attachment lives in the PRIVATE bucket, so its
+ *  `storage_path` is a path and not a URL — useMediaSrc signs it (300 s,
+ *  cached); a legacy external row is direct. */
+function PlacePhotoThumb({ photo, onOpen }: { photo: PlacePhoto; onOpen: (p: PlacePhoto) => void }) {
+  const safe = safeUrl(useMediaSrc(photo) ?? '')
+  if (!safe) return null
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(photo)}
+      aria-label={`Preview ${photo.title}`}
+      title={photo.title}
+      className="cursor-zoom-in rounded-lg transition hover:brightness-110"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element -- signed storage / external URL */}
+      <img
+        src={safe}
+        alt=""
+        loading="lazy"
+        className="h-20 w-28 rounded-lg border border-white/10 object-cover"
+      />
+    </button>
+  )
+}
+
+/** Reviewable links to other registry records (20261106120000) as a lazy
+ *  expandable — places have no dossier view, so the section only mounts (and
+ *  queries) once opened, like the two panels below. */
+function PlaceAssociations({ place }: { place: PlaceRow }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="inline-flex min-h-[40px] items-center gap-1.5 rounded text-[11px] font-semibold text-slate-400 transition hover:text-slate-200 sm:min-h-0"
+      >
+        <span aria-hidden>{open ? '▾' : '▸'}</span>
+        Associations
+      </button>
+      {open && <AssociationsSection kind="place" id={place.id} label={place.name} className="mt-2" />}
+    </div>
   )
 }
 

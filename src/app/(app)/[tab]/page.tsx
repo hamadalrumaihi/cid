@@ -28,7 +28,7 @@ import { LegalView } from '@/components/legal/LegalView'
 // (components/tools/toolRegistry); their routes below redirect into /workspace.
 import {
   AuditView, InformantsView, ConcernView, DevDocsView, FeedbackView, HeatmapView,
-  OwnerView, ReportTemplatesView, RicoView, SiuView, TrashView, WorkspaceView,
+  OwnerView, ReportTemplatesView, RicoView, SiuView, TrashView, UndergrndView, WorkspaceView,
 } from './lazyViews'
 
 /** One route per leaf tab, statically prerendered via generateStaticParams.
@@ -217,6 +217,15 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="guide" />}>
         <GuideView />
+      </Suspense>
+    )
+  }
+  // Reference content, same standing as /guide — static, no fetches, no CID
+  // data; lazy so the long document stays out of the shared page chunk.
+  if (tab === 'undergrnd') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="undergrnd" />}>
+        <UndergrndView />
       </Suspense>
     )
   }
