@@ -1,3 +1,4 @@
+import { MEDIA_INTEGRITY_DEFAULTS } from '@/mocks/fixtures'
 /** Legal-workflow mocks (Portal Improvements plan, Phase 4 — P4-01 … P4-11;
  *  migrations 20261024120000_legal_tables → 20261027120000_legal_sweeps).
  *
@@ -457,6 +458,7 @@ export function legalAddEvidenceAndExhibit(args: Args): Fns['legal_add_evidence_
     evidence_ref: null, external_url: str(args.p_external_url), featured: false, gang_id: null, id: mockId(), kind: 'legal_upload',
     narcotic_id: null, observation_id: null, person_id: null, place_id: null, report_id: null, restricted: false, storage_path: null,
     tags: [], title: str(args.p_title), type: str(args.p_type) as Tables<'media'>['type'], updated_at: now(), uploaded_by: uid(), vehicle_id: null,
+    ...MEDIA_INTEGRITY_DEFAULTS,
   }])
   const [ex] = seedRows('legal_request_exhibits', [{
     added_by: uid()!, created_at: now(), display_title: m.title ?? 'Evidence', exhibit_type: 'case_media', id: mockId(),

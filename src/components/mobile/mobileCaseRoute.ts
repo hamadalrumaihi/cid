@@ -13,12 +13,13 @@ export const DESKTOP_ON_MOBILE_KEY = 'cid:desktop-on-mobile'
 /** Sections that make sense on a phone. Graph / map-style sections and the
  *  dense editors (charges, RICO, legal, sign-off, chat, timeline,
  *  surveillance, extractions, intel) stay desktop-only: a `?s=` for one of
- *  those renders a "desktop only" card with the workspace link. The
+ *  those renders a "desktop only" card with the workspace link. Documents
+ *  is phone-capable in its packet form: the packets list + Generate. The
  *  conditional `ci` tab is not a phone section at all — `isCaseTab` rejects
  *  it, so `?s=ci` falls back to the overview like any unknown value (no
  *  "desktop only" card that would name the tab). */
 export const MOBILE_CASE_SECTIONS = [
-  'overview', 'tasks', 'notes', 'people', 'vehicles', 'gangs', 'locations', 'media', 'reports', 'activity',
+  'overview', 'tasks', 'notes', 'people', 'vehicles', 'gangs', 'locations', 'media', 'documents', 'reports', 'activity',
 ] as const satisfies readonly CaseTabId[]
 export type MobileCaseSection = (typeof MOBILE_CASE_SECTIONS)[number]
 

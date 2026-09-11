@@ -17,11 +17,13 @@ import Link from 'next/link'
 import { insert, list } from '@/lib/db'
 import { deleteRecord } from '@/lib/deleteRecord'
 import { searchEntities, type EntityHit } from '@/lib/entitySearch'
-import { useCaseTableVersion } from '@/lib/realtime'
+import { fetchCaseSources, sourceStatusLabel, sourceStatusTone, verificationLabel, verificationTone, type SourceRow } from '@/lib/externalSources'
+import { useCaseTableVersion, useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import { EmptyState } from '@/components/ui/Notice'
+import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import { CaseReleasedIntel } from '../sections/CaseReleasedIntel'
@@ -115,9 +117,58 @@ export function IntelTab({ c, canEdit }: { c: CaseRow; canEdit: boolean }) {
           )}
         </div>
       ))}
+      {/* Crawled web pages bound or linked to this case (platform upgrade
+          §2.6) — UNVERIFIED INTELLIGENCE until an analyst verifies one. */}
+      <ExternalSourcesSection caseId={c.id} />
       {/* Sanitized confidential intelligence released to this case (CI §6.4)
           — renders nothing at all when there is none. */}
       <CaseReleasedIntel caseId={c.id} />
+    </div>
+  )
+}
+
+/* ── External sources — read-only list, managed in Intelligence ──────────── */
+function ExternalSourcesSection({ caseId }: { caseId: string }) {
+  const [rows, setRows] = useState<SourceRow[] | null>(null)
+  const [error, setError] = useState<unknown>(null)
+  const v = useTableVersion('external_sources')
+
+  const refresh = useCallback(async () => {
+    try {
+      setRows(await fetchCaseSources(caseId))
+      setError(null)
+    } catch (e) {
+      setError(e)
+    }
+  }, [caseId])
+  useEffect(() => { const t = window.setTimeout(() => { void refresh() }, 0); return () => window.clearTimeout(t) }, [refresh, v])
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="font-bold text-white">External sources</h3>
+        <Link href="/intelligence" className="text-xs text-badge-300 hover:underline">Manage in Intelligence</Link>
+      </div>
+      {error ? (
+        <ErrorNotice message={error} onRetry={() => void refresh()} />
+      ) : rows === null ? (
+        <p className="text-sm text-slate-400">Loading…</p>
+      ) : rows.length === 0 ? (
+        <EmptyState title="No external sources linked" hint="Submit or link a web page from Intelligence → External Sources." />
+      ) : (
+        <ul className="divide-y divide-white/5">
+          {rows.map((s) => (
+            <li key={s.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
+              <Link href={`/intelligence?source=${encodeURIComponent(s.id)}`} className="font-mono text-xs text-badge-300 hover:underline" translate="no">
+                {s.source_number}
+              </Link>
+              <span className="min-w-0 flex-1 truncate text-slate-200" title={s.title ?? s.domain}>{s.title || s.domain}</span>
+              <Badge tone={sourceStatusTone(s.status)}>{sourceStatusLabel(s.status)}</Badge>
+              <Badge tone={verificationTone(s.verification_status)}>{verificationLabel(s.verification_status)}</Badge>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

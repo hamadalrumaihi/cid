@@ -88,5 +88,15 @@
   "ci_compromised": { "title": "Source compromised", "category": "informants", "destination": "portal" },
   "ci_capacity_request": { "title": "CI capacity or assignment request", "category": "informants", "destination": "portal" },
   "ci_request_decided": { "title": "Your CI request was decided", "category": "informants", "destination": "portal" },
-  "case_intel_released": { "title": "Confidential intelligence released to your case", "category": "intel" }
+  "case_intel_released": { "title": "Confidential intelligence released to your case", "category": "intel" },
+  "case_packet_ready": { "title": "Case packet ready", "category": "reports" },
+  "case_packet_failed": { "title": "Case packet failed", "category": "reports" },
+  "evidence_bundle_ready": { "title": "Evidence bundle ready", "category": "reports" },
+  "evidence_integrity_failure": { "title": "⚠ Evidence integrity failure", "category": "security", "priority": "high" },
+  "evidence_custody_transfer": { "title": "Evidence custody transferred to you", "category": "assignments" },
+  "external_source_changed": { "title": "External source changed", "category": "intel" },
+  "external_source_failed": { "title": "External source fetch failed", "category": "intel" },
+  "document_ready": { "title": "Document ready", "category": "reports" },
+  "document_failed": { "title": "Document processing failed", "category": "reports" },
+  "background_job_failed": { "title": "⚠ Background job failed", "category": "security" }
 }

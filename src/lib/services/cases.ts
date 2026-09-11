@@ -17,6 +17,20 @@ type CaseRow = Tables<'cases'>
 export type CaseTimelineRow =
   Database['public']['Functions']['case_timeline']['Returns'][number]
 
+/** The `kind` vocabulary `case_timeline` emits (20261002130000 + the
+ *  platform-upgrade lanes: `custody` carries meta.event_type from
+ *  evidence_custody_events, `packet` a ready case packet, `source` an
+ *  external source linked to the case, `document` a ready extraction).
+ *  The Timeline tab maps these onto TimelineBand lanes; an unknown kind
+ *  is dropped, never a crash. */
+export const CASE_TIMELINE_KINDS = [
+  'evidence', 'media_added', 'media_archived', 'media_featured', 'report', 'task', 'signoff',
+  'hold_placed', 'hold_lifted', 'restricted', 'op_link', 'op_unlink',
+  'surv_requested', 'surv_authorized', 'surv_ended', 'surv_observation', 'surv_verified', 'surv_alert',
+  'custody', 'packet', 'source', 'document',
+] as const
+export type CaseTimelineKind = (typeof CASE_TIMELINE_KINDS)[number]
+
 /** Create a case atomically: server-side gate (private.can_create_case),
  *  collision-safe number minting (or a clear error on an explicit-number
  *  collision — never a timestamp fallback), lead rule (command chooses,

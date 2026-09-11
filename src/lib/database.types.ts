@@ -438,6 +438,102 @@ export type Database = {
         }
         Relationships: []
       }
+      background_jobs: {
+        Row: {
+          args: Json
+          attempts: number
+          case_id: string | null
+          claimed_at: string | null
+          claimed_by: string | null
+          created_at: string
+          created_by: string | null
+          error: string | null
+          finished_at: string | null
+          id: string
+          idempotency_key: string
+          kind: string
+          lease_until: string | null
+          max_attempts: number
+          priority: number
+          progress: Json
+          queue: string
+          result: Json | null
+          run_after: string
+          started_at: string | null
+          status: string
+          subject_id: string | null
+          subject_kind: string | null
+          updated_at: string
+        }
+        Insert: {
+          args?: Json
+          attempts?: number
+          case_id?: string | null
+          claimed_at?: string | null
+          claimed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          idempotency_key: string
+          kind: string
+          lease_until?: string | null
+          max_attempts?: number
+          priority?: number
+          progress?: Json
+          queue: string
+          result?: Json | null
+          run_after?: string
+          started_at?: string | null
+          status?: string
+          subject_id?: string | null
+          subject_kind?: string | null
+          updated_at?: string
+        }
+        Update: {
+          args?: Json
+          attempts?: number
+          case_id?: string | null
+          claimed_at?: string | null
+          claimed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          idempotency_key?: string
+          kind?: string
+          lease_until?: string | null
+          max_attempts?: number
+          priority?: number
+          progress?: Json
+          queue?: string
+          result?: Json | null
+          run_after?: string
+          started_at?: string | null
+          status?: string
+          subject_id?: string | null
+          subject_kind?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "background_jobs_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "background_jobs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ballistic_footprints: {
         Row: {
           case_id: string | null
@@ -1346,6 +1442,110 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      case_packets: {
+        Row: {
+          byte_size: number | null
+          case_id: string
+          created_at: string
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          error: string | null
+          finished_at: string | null
+          id: string
+          job_id: string | null
+          manifest_id: string | null
+          options: Json
+          packet_type: string
+          page_count: number | null
+          requested_by: string | null
+          sections: string[]
+          sha256: string | null
+          snapshot: Json | null
+          status: string
+          storage_path: string | null
+          watermark: string | null
+        }
+        Insert: {
+          byte_size?: number | null
+          case_id: string
+          created_at?: string
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          job_id?: string | null
+          manifest_id?: string | null
+          options?: Json
+          packet_type: string
+          page_count?: number | null
+          requested_by?: string | null
+          sections: string[]
+          sha256?: string | null
+          snapshot?: Json | null
+          status?: string
+          storage_path?: string | null
+          watermark?: string | null
+        }
+        Update: {
+          byte_size?: number | null
+          case_id?: string
+          created_at?: string
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          job_id?: string | null
+          manifest_id?: string | null
+          options?: Json
+          packet_type?: string
+          page_count?: number | null
+          requested_by?: string | null
+          sections?: string[]
+          sha256?: string | null
+          snapshot?: Json | null
+          status?: string
+          storage_path?: string | null
+          watermark?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_packets_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_packets_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_packets_manifest_id_fkey"
+            columns: ["manifest_id"]
+            isOneToOne: false
+            referencedRelation: "export_manifests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_packets_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       case_signoff_history: {
         Row: {
@@ -2872,6 +3072,56 @@ export type Database = {
           },
         ]
       }
+      crawler_policy: {
+        Row: {
+          allow_domains: string[]
+          block_domains: string[]
+          id: number
+          max_bytes: number
+          max_depth: number
+          max_pages: number
+          rate_per_min: number
+          recheck_hours: number
+          timeout_ms: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          allow_domains?: string[]
+          block_domains?: string[]
+          id?: number
+          max_bytes?: number
+          max_depth?: number
+          max_pages?: number
+          rate_per_min?: number
+          recheck_hours?: number
+          timeout_ms?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          allow_domains?: string[]
+          block_domains?: string[]
+          id?: number
+          max_bytes?: number
+          max_depth?: number
+          max_pages?: number
+          rate_per_min?: number
+          recheck_hours?: number
+          timeout_ms?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crawler_policy_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       custody_chain: {
         Row: {
           at: string
@@ -3096,6 +3346,88 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_pages: {
+        Row: {
+          id: number
+          media_id: string
+          page_no: number
+          text: string | null
+          tsv: unknown | null
+        }
+        Insert: {
+          id?: never
+          media_id: string
+          page_no: number
+          text?: string | null
+          tsv?: never
+        }
+        Update: {
+          id?: never
+          media_id?: string
+          page_no?: number
+          text?: string | null
+          tsv?: never
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_pages_media_id_fkey"
+            columns: ["media_id"]
+            isOneToOne: false
+            referencedRelation: "media"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_extractions: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          media_id: string
+          page_count: number | null
+          service: string | null
+          service_version: string | null
+          status: string
+          structure: Json | null
+          tables: Json | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          media_id: string
+          page_count?: number | null
+          service?: string | null
+          service_version?: string | null
+          status?: string
+          structure?: Json | null
+          tables?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          media_id?: string
+          page_count?: number | null
+          service?: string | null
+          service_version?: string | null
+          status?: string
+          structure?: Json | null
+          tables?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_extractions_media_id_fkey"
+            columns: ["media_id"]
+            isOneToOne: false
+            referencedRelation: "media"
             referencedColumns: ["id"]
           },
         ]
@@ -4001,6 +4333,119 @@ export type Database = {
           },
         ]
       }
+      evidence_custody_events: {
+        Row: {
+          actor_id: string | null
+          case_id: string | null
+          event_hash: string
+          event_type: string
+          export_id: string | null
+          id: number
+          job_id: string | null
+          media_id: string
+          metadata: Json
+          new_custodian: string | null
+          occurred_at: string
+          prev_hash: string | null
+          previous_custodian: string | null
+          reason: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          case_id?: string | null
+          event_hash: string
+          event_type: string
+          export_id?: string | null
+          id?: never
+          job_id?: string | null
+          media_id: string
+          metadata?: Json
+          new_custodian?: string | null
+          occurred_at?: string
+          prev_hash?: string | null
+          previous_custodian?: string | null
+          reason?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          case_id?: string | null
+          event_hash?: string
+          event_type?: string
+          export_id?: string | null
+          id?: never
+          job_id?: string | null
+          media_id?: string
+          metadata?: Json
+          new_custodian?: string | null
+          occurred_at?: string
+          prev_hash?: string | null
+          previous_custodian?: string | null
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "evidence_custody_events_media_id_fkey"
+            columns: ["media_id"]
+            isOneToOne: false
+            referencedRelation: "media"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      export_manifests: {
+        Row: {
+          bundle_id: string
+          case_id: string | null
+          classification: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          manifest: Json
+          manifest_sha256: string
+          storage_path: string
+        }
+        Insert: {
+          bundle_id: string
+          case_id?: string | null
+          classification?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind: string
+          manifest: Json
+          manifest_sha256: string
+          storage_path: string
+        }
+        Update: {
+          bundle_id?: string
+          case_id?: string | null
+          classification?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          manifest?: Json
+          manifest_sha256?: string
+          storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "export_manifests_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "export_manifests_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       external_links: {
         Row: {
           created_at: string
@@ -4191,6 +4636,254 @@ export type Database = {
           },
         ]
       }
+      external_sources: {
+        Row: {
+          analyst_notes: string | null
+          author: string | null
+          canonical_url: string | null
+          case_id: string | null
+          classification: string
+          content_type: string | null
+          created_at: string
+          current_version_id: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          domain: string
+          fetch_error: string | null
+          http_status: number | null
+          id: string
+          last_checked_at: string | null
+          published_at: string | null
+          reliability: string
+          retrieved_at: string | null
+          source_number: string
+          status: string
+          submitted_by: string
+          title: string | null
+          updated_at: string
+          url: string
+          verification_status: string
+          verified_at: string | null
+          verified_by: string | null
+          version_count: number
+        }
+        Insert: {
+          analyst_notes?: string | null
+          author?: string | null
+          canonical_url?: string | null
+          case_id?: string | null
+          classification?: string
+          content_type?: string | null
+          created_at?: string
+          current_version_id?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          domain: string
+          fetch_error?: string | null
+          http_status?: number | null
+          id?: string
+          last_checked_at?: string | null
+          published_at?: string | null
+          reliability?: string
+          retrieved_at?: string | null
+          source_number: string
+          status?: string
+          submitted_by: string
+          title?: string | null
+          updated_at?: string
+          url: string
+          verification_status?: string
+          verified_at?: string | null
+          verified_by?: string | null
+          version_count?: number
+        }
+        Update: {
+          analyst_notes?: string | null
+          author?: string | null
+          canonical_url?: string | null
+          case_id?: string | null
+          classification?: string
+          content_type?: string | null
+          created_at?: string
+          current_version_id?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          domain?: string
+          fetch_error?: string | null
+          http_status?: number | null
+          id?: string
+          last_checked_at?: string | null
+          published_at?: string | null
+          reliability?: string
+          retrieved_at?: string | null
+          source_number?: string
+          status?: string
+          submitted_by?: string
+          title?: string | null
+          updated_at?: string
+          url?: string
+          verification_status?: string
+          verified_at?: string | null
+          verified_by?: string | null
+          version_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_sources_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_sources_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_sources_verified_by_fkey"
+            columns: ["verified_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_sources_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      external_source_versions: {
+        Row: {
+          byte_size: number | null
+          content_hash: string
+          content_type: string | null
+          diff_summary: Json | null
+          http_status: number | null
+          id: string
+          markdown: string | null
+          retrieved_at: string
+          retrieved_by: string | null
+          service: string | null
+          service_version: string | null
+          snapshot_path: string | null
+          source_id: string
+          text: string | null
+          title: string | null
+          tsv: unknown | null
+          version_no: number
+        }
+        Insert: {
+          byte_size?: number | null
+          content_hash: string
+          content_type?: string | null
+          diff_summary?: Json | null
+          http_status?: number | null
+          id?: string
+          markdown?: string | null
+          retrieved_at?: string
+          retrieved_by?: string | null
+          service?: string | null
+          service_version?: string | null
+          snapshot_path?: string | null
+          source_id: string
+          text?: string | null
+          title?: string | null
+          tsv?: never
+          version_no: number
+        }
+        Update: {
+          byte_size?: number | null
+          content_hash?: string
+          content_type?: string | null
+          diff_summary?: Json | null
+          http_status?: number | null
+          id?: string
+          markdown?: string | null
+          retrieved_at?: string
+          retrieved_by?: string | null
+          service?: string | null
+          service_version?: string | null
+          snapshot_path?: string | null
+          source_id?: string
+          text?: string | null
+          title?: string | null
+          tsv?: never
+          version_no?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_source_versions_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "external_sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_source_versions_retrieved_by_fkey"
+            columns: ["retrieved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      external_source_links: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          note: string | null
+          ref_id: string
+          source_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind: string
+          note?: string | null
+          ref_id: string
+          source_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          note?: string | null
+          ref_id?: string
+          source_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_source_links_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "external_sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_source_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       external_storage_refs: {
         Row: {
           case_id: string | null
@@ -4266,6 +4959,38 @@ export type Database = {
             columns: ["source"]
             isOneToOne: false
             referencedRelation: "integration_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      feature_flags: {
+        Row: {
+          enabled: boolean
+          key: string
+          note: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          enabled?: boolean
+          key: string
+          note?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          enabled?: boolean
+          key?: string
+          note?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feature_flags_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -7798,27 +8523,47 @@ export type Database = {
       media: {
         Row: {
           archived_at: string | null
+          byte_size: number | null
           case_id: string | null
           category: string | null
+          classification: string | null
+          collected_at: string | null
+          collected_by: string | null
           created_at: string
+          current_custodian: string | null
           delete_batch: string | null
           delete_reason: string | null
           deleted_at: string | null
           deleted_by: string | null
+          derivative_service: string | null
+          derivative_service_version: string | null
+          derivative_type: string | null
           evidence_designated_at: string | null
           evidence_designated_by: string | null
+          evidence_number: string | null
           evidence_ref: string | null
           external_url: string | null
           featured: boolean
           gang_id: string | null
           id: string
+          integrity_status: string | null
           kind: string | null
+          last_integrity_check: string | null
+          location_collected: string | null
+          mime: string | null
           narcotic_id: string | null
           observation_id: string | null
+          original_filename: string | null
+          parent_media_id: string | null
+          parent_sha256: string | null
           person_id: string | null
           place_id: string | null
           report_id: string | null
           restricted: boolean
+          sealed_at: string | null
+          sealed_by: string | null
+          sha256: string | null
+          source: string | null
           storage_path: string | null
           tags: Json | null
           title: string
@@ -7829,27 +8574,47 @@ export type Database = {
         }
         Insert: {
           archived_at?: string | null
+          byte_size?: number | null
           case_id?: string | null
           category?: string | null
+          classification?: string | null
+          collected_at?: string | null
+          collected_by?: string | null
           created_at?: string
+          current_custodian?: string | null
           delete_batch?: string | null
           delete_reason?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
+          derivative_service?: string | null
+          derivative_service_version?: string | null
+          derivative_type?: string | null
           evidence_designated_at?: string | null
           evidence_designated_by?: string | null
+          evidence_number?: string | null
           evidence_ref?: string | null
           external_url?: string | null
           featured?: boolean
           gang_id?: string | null
           id?: string
+          integrity_status?: string | null
           kind?: string | null
+          last_integrity_check?: string | null
+          location_collected?: string | null
+          mime?: string | null
           narcotic_id?: string | null
           observation_id?: string | null
+          original_filename?: string | null
+          parent_media_id?: string | null
+          parent_sha256?: string | null
           person_id?: string | null
           place_id?: string | null
           report_id?: string | null
           restricted?: boolean
+          sealed_at?: string | null
+          sealed_by?: string | null
+          sha256?: string | null
+          source?: string | null
           storage_path?: string | null
           tags?: Json | null
           title: string
@@ -7860,27 +8625,47 @@ export type Database = {
         }
         Update: {
           archived_at?: string | null
+          byte_size?: number | null
           case_id?: string | null
           category?: string | null
+          classification?: string | null
+          collected_at?: string | null
+          collected_by?: string | null
           created_at?: string
+          current_custodian?: string | null
           delete_batch?: string | null
           delete_reason?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
+          derivative_service?: string | null
+          derivative_service_version?: string | null
+          derivative_type?: string | null
           evidence_designated_at?: string | null
           evidence_designated_by?: string | null
+          evidence_number?: string | null
           evidence_ref?: string | null
           external_url?: string | null
           featured?: boolean
           gang_id?: string | null
           id?: string
+          integrity_status?: string | null
           kind?: string | null
+          last_integrity_check?: string | null
+          location_collected?: string | null
+          mime?: string | null
           narcotic_id?: string | null
           observation_id?: string | null
+          original_filename?: string | null
+          parent_media_id?: string | null
+          parent_sha256?: string | null
           person_id?: string | null
           place_id?: string | null
           report_id?: string | null
           restricted?: boolean
+          sealed_at?: string | null
+          sealed_by?: string | null
+          sha256?: string | null
+          source?: string | null
           storage_path?: string | null
           tags?: Json | null
           title?: string
@@ -7890,6 +8675,34 @@ export type Database = {
           vehicle_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "media_current_custodian_fkey"
+            columns: ["current_custodian"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_collected_by_fkey"
+            columns: ["collected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_parent_media_id_fkey"
+            columns: ["parent_media_id"]
+            isOneToOne: false
+            referencedRelation: "media"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_sealed_by_fkey"
+            columns: ["sealed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "media_case_id_fkey"
             columns: ["case_id"]
@@ -11514,6 +12327,117 @@ export type Database = {
           target_id?: string
         }
         Relationships: []
+      }
+      search_index_queue: {
+        Row: {
+          attempts: number
+          error: string | null
+          id: number
+          indexed_at: string | null
+          kind: string
+          op: string
+          page_no: number | null
+          queued_at: string
+          ref_id: string
+        }
+        Insert: {
+          attempts?: number
+          error?: string | null
+          id?: never
+          indexed_at?: string | null
+          kind: string
+          op: string
+          page_no?: number | null
+          queued_at?: string
+          ref_id: string
+        }
+        Update: {
+          attempts?: number
+          error?: string | null
+          id?: never
+          indexed_at?: string | null
+          kind?: string
+          op?: string
+          page_no?: number | null
+          queued_at?: string
+          ref_id?: string
+        }
+        Relationships: [
+        ]
+      }
+      semantic_chunks: {
+        Row: {
+          case_id: string | null
+          chunk_no: number
+          content: string
+          content_hash: string
+          created_at: string
+          embedding: string | null
+          id: number
+          media_id: string | null
+          model: string | null
+          page_no: number | null
+          source_id: string
+          source_kind: string
+        }
+        Insert: {
+          case_id?: string | null
+          chunk_no: number
+          content: string
+          content_hash: string
+          created_at?: string
+          embedding?: string | null
+          id?: never
+          media_id?: string | null
+          model?: string | null
+          page_no?: number | null
+          source_id: string
+          source_kind: string
+        }
+        Update: {
+          case_id?: string | null
+          chunk_no?: number
+          content?: string
+          content_hash?: string
+          created_at?: string
+          embedding?: string | null
+          id?: never
+          media_id?: string | null
+          model?: string | null
+          page_no?: number | null
+          source_id?: string
+          source_kind?: string
+        }
+        Relationships: [
+        ]
+      }
+      service_health_events: {
+        Row: {
+          checked_at: string
+          detail: Json
+          id: number
+          latency_ms: number | null
+          service: string
+          status: string
+        }
+        Insert: {
+          checked_at?: string
+          detail?: Json
+          id?: never
+          latency_ms?: number | null
+          service: string
+          status: string
+        }
+        Update: {
+          checked_at?: string
+          detail?: Json
+          id?: never
+          latency_ms?: number | null
+          service?: string
+          status?: string
+        }
+        Relationships: [
+        ]
       }
       transfer_requests: {
         Row: {
@@ -16755,6 +17679,244 @@ export type Database = {
       rls_test_ci_sweep: {
         Args: { p_ci: string }
         Returns: Json
+      }
+      feature_flag_set: {
+        Args: { p_key: string; p_enabled: boolean }
+        Returns: Json
+      }
+      job_claim: {
+        Args: { p_worker: string; p_queues: string[]; p_kinds?: string[] | null; p_batch?: number }
+        Returns: Database["public"]["Tables"]["background_jobs"]["Row"][]
+      }
+      job_heartbeat: {
+        Args: { p_id: string; p_progress: Json }
+        Returns: boolean
+      }
+      job_complete: {
+        Args: { p_id: string; p_result: Json }
+        Returns: boolean
+      }
+      job_fail: {
+        Args: { p_id: string; p_error: string; p_retryable?: boolean }
+        Returns: boolean
+      }
+      background_job_cancel: {
+        Args: { p_id: string; p_reason: string }
+        Returns: Json
+      }
+      background_job_retry: {
+        Args: { p_id: string }
+        Returns: Json
+      }
+      background_jobs_stats: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      evidence_register: {
+        Args: { p_media: string; p_sha256: string; p_byte_size: number; p_mime: string; p_original_filename: string; p_collected_by?: string | null; p_collected_at?: string | null; p_location?: string | null; p_source?: string | null; p_classification?: string | null }
+        Returns: Json
+      }
+      evidence_verify_request: {
+        Args: { p_media: string }
+        Returns: Json
+      }
+      evidence_custody_transfer: {
+        Args: { p_media: string; p_to: string; p_reason: string }
+        Returns: Json
+      }
+      evidence_access_log: {
+        Args: { p_media: string; p_action: string }
+        Returns: boolean
+      }
+      evidence_chain_verify: {
+        Args: { p_media: string }
+        Returns: Json
+      }
+      evidence_seal: {
+        Args: { p_media: string }
+        Returns: Json
+      }
+      evidence_release: {
+        Args: { p_media: string; p_reason: string }
+        Returns: Json
+      }
+      evidence_verify_result: {
+        Args: { p_job: string; p_media: string; p_sha256: string; p_byte_size: number }
+        Returns: Json
+      }
+      evidence_derivative_register: {
+        Args: { p_job: string; p_parent: string; p_storage_path: string; p_derivative_type: string; p_sha256: string; p_byte_size: number; p_mime: string; p_service: string; p_service_version: string; p_title?: string | null }
+        Returns: string
+      }
+      manifest_verify: {
+        Args: { p_manifest: string; p_files: Json }
+        Returns: Json
+      }
+      case_packet_request: {
+        Args: { p_case: string; p_type: string; p_sections?: string[] | null; p_options?: Json }
+        Returns: Json
+      }
+      case_packet_render_result: {
+        Args: { p_job: string; p_packet: string; p_storage_path: string; p_sha256: string; p_byte_size: number; p_page_count: number; p_manifest: Json; p_manifest_sha256?: string | null }
+        Returns: Json
+      }
+      case_packet_failed: {
+        Args: { p_job: string; p_packet: string; p_error: string }
+        Returns: boolean
+      }
+      case_packet_access_log: {
+        Args: { p_packet: string }
+        Returns: boolean
+      }
+      evidence_bundle_request: {
+        Args: { p_case: string; p_media: string[]; p_purpose: string }
+        Returns: Json
+      }
+      evidence_bundle_result: {
+        Args: { p_job: string; p_storage_path: string; p_sha256: string; p_byte_size: number; p_manifest: Json; p_manifest_sha256?: string | null }
+        Returns: Json
+      }
+      document_tool_request: {
+        Args: { p_case: string; p_tool: string; p_inputs: Json; p_options?: Json }
+        Returns: Json
+      }
+      document_extract_request: {
+        Args: { p_media: string }
+        Returns: Json
+      }
+      document_extract_result: {
+        Args: { p_job: string; p_media: string; p_service: string; p_service_version: string; p_pages: Json; p_structure?: Json | null; p_tables?: Json | null }
+        Returns: boolean
+      }
+      document_extract_failed: {
+        Args: { p_job: string; p_media: string; p_error: string }
+        Returns: boolean
+      }
+      document_search: {
+        Args: { p_q: string; p_case?: string | null; p_limit?: number }
+        Returns: {
+          media_id: string
+          case_id: string | null
+          title: string
+          evidence_number: string | null
+          page_no: number
+          headline: string
+          rank: number
+        }[]
+      }
+      external_source_submit: {
+        Args: { p_url: string; p_case?: string | null; p_notes?: string | null }
+        Returns: Json
+      }
+      external_source_recrawl: {
+        Args: { p_source: string }
+        Returns: Json
+      }
+      external_source_verify: {
+        Args: { p_source: string; p_status: string; p_reliability?: string | null; p_notes?: string | null }
+        Returns: Json
+      }
+      external_source_link: {
+        Args: { p_source: string; p_kind: string; p_ref: string; p_note?: string | null }
+        Returns: Json
+      }
+      external_source_unlink: {
+        Args: { p_link: string }
+        Returns: Json
+      }
+      external_source_update: {
+        Args: { p_source: string; p_patch: Json }
+        Returns: Json
+      }
+      external_source_search: {
+        Args: { p_q: string; p_limit?: number }
+        Returns: {
+          source_id: string
+          source_number: string
+          title: string | null
+          domain: string
+          headline: string
+          rank: number
+        }[]
+      }
+      crawler_policy_set: {
+        Args: { p_patch: Json }
+        Returns: Json
+      }
+      external_source_ingest: {
+        Args: { p_job: string; p_source: string; p_result: Json }
+        Returns: Json
+      }
+      external_source_failed: {
+        Args: { p_job: string; p_source: string; p_error: string }
+        Returns: boolean
+      }
+      graph_expand: {
+        Args: { p_kind: string; p_id: string; p_depth?: number; p_kinds?: string[] | null; p_limit?: number }
+        Returns: {
+          node_kind: string
+          node_id: string
+          label: string
+          sublabel: string | null
+          depth: number
+          edge_kind: string | null
+          from_kind: string | null
+          from_id: string | null
+          to_kind: string | null
+          to_id: string | null
+          confidence: string | null
+          provenance: string | null
+          edge_label: string | null
+        }[]
+      }
+      search_authorize: {
+        Args: { p_hits: Json }
+        Returns: Json
+      }
+      semantic_chunks_replace: {
+        Args: { p_source_kind: string; p_source_id: string; p_chunks: Json }
+        Returns: number
+      }
+      semantic_search: {
+        Args: { p_embedding: string; p_limit?: number; p_case?: string | null }
+        Returns: {
+          source_kind: string
+          source_id: string
+          case_id: string | null
+          media_id: string | null
+          page_no: number | null
+          content: string
+          similarity: number
+        }[]
+      }
+      hybrid_search: {
+        Args: { p_q: string; p_embedding?: string | null; p_limit?: number; p_case?: string | null }
+        Returns: {
+          kind: string
+          id: string
+          case_id: string | null
+          page_no: number | null
+          title: string
+          snippet: string
+          score: number
+          mode: string
+        }[]
+      }
+      system_health: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      graph_path: {
+        Args: { p_from_kind: string; p_from_id: string; p_to_kind: string; p_to_id: string; p_max_depth?: number }
+        Returns: {
+          step: number
+          node_kind: string
+          node_id: string
+          label: string
+          sublabel: string | null
+          edge_kind: string | null
+          edge_label: string | null
+        }[]
       }
     }
     Enums: {

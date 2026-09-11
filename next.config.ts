@@ -24,7 +24,11 @@ const csp = [
   "child-src 'self' blob:",
   "img-src 'self' data: blob: https:",
   "font-src 'self'",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://discord.com https://*.discord.com https://api.fivemanage.com",
+  // Sentry ingest (platform upgrade §5.2 Telemetry): the browser SDK is
+  // loaded lazily inside src/lib/errorReport.ts only when
+  // NEXT_PUBLIC_SENTRY_DSN is set; the origins are allow-listed here so the
+  // envelope POSTs pass CSP. Both the global and the US ingest hosts.
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://discord.com https://*.discord.com https://api.fivemanage.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

@@ -43,6 +43,7 @@ import { gatherCasePacket, packetDocx, packetMarkdown, packetPdfSpec, type Packe
 import { toast } from '@/lib/toast'
 import { StaleBadge } from './StaleBadge'
 import { JointCaseModal } from './JointCaseModal'
+import { GeneratePacketDialog } from './tabs/documents/GeneratePacketDialog'
 import type { AssignmentRow, CaseRow } from './tabs/shared'
 
 export const CASE_PRIORITIES = ['low', 'medium', 'high', 'critical'] as const
@@ -144,6 +145,7 @@ export function CaseCommandHeader({
   const [followUpOpen, setFollowUpOpen] = useState(false)
   const [stageOpen, setStageOpen] = useState(false)
   const [packetOpen, setPacketOpen] = useState(false)
+  const [generateOpen, setGenerateOpen] = useState(false)
   const [jointOpen, setJointOpen] = useState(false)
   const [jointAssignments, setJointAssignments] = useState<AssignmentRow[]>([])
 
@@ -199,7 +201,11 @@ export function CaseCommandHeader({
   items.push({ label: pinned ? 'Unpin case' : 'Pin case', onClick: onPinToggle, separatorBefore: items.length > 0 })
   items.push({ label: watched ? 'Unfollow case' : 'Follow case', onClick: () => void watch.run(), disabled: watch.busy })
   items.push({ label: 'Copy case link', onClick: () => copyText(`${window.location.origin}${caseLink(c.id)}`, 'Case link') })
-  items.push({ label: 'Case packet…', onClick: () => setPacketOpen(true) })
+  // Two packet paths, deliberately both: the server-rendered, manifested
+  // packet (Documents → Case Packets; audited, hashed, verifiable) and the
+  // legacy in-browser export for a quick unrecorded copy.
+  items.push({ label: 'Generate Case Packet…', onClick: () => setGenerateOpen(true) })
+  items.push({ label: 'Quick export (this browser)…', onClick: () => setPacketOpen(true) })
   const admin: ActionItem[] = []
   if (canHandover) admin.push({ label: 'Hand over case…', onClick: onHandover })
   if (canReassignBureau) admin.push({ label: 'Reassign bureau…', onClick: onReassign })
@@ -405,6 +411,7 @@ export function CaseCommandHeader({
       <FollowUpModal open={followUpOpen} c={c} onClose={() => setFollowUpOpen(false)} onChanged={onChanged} />
       <StageModal open={stageOpen} c={c} onClose={() => setStageOpen(false)} onChanged={onChanged} />
       <PacketModal open={packetOpen} c={c} onClose={() => setPacketOpen(false)} />
+      <GeneratePacketDialog open={generateOpen} c={c} onClose={() => setGenerateOpen(false)} onRequested={() => onGoTab('documents')} />
       <JointCaseModal
         open={jointOpen}
         onClose={() => setJointOpen(false)}
@@ -548,7 +555,11 @@ function PacketModal({ open, c, onClose }: { open: boolean; c: CaseRow; onClose:
   return (
     <Modal open={open} onClose={onClose}>
       <div className="p-5">
-        <ModalHeader title="Case packet" onClose={onClose} />
+        <ModalHeader title="Quick export (this browser)" onClose={onClose} />
+        <p className="mb-3 text-sm text-slate-400">
+          Built in this browser from what you can see, without a manifest or export record. For a court-ready,
+          hashed packet use <span className="font-semibold text-slate-200">Generate Case Packet…</span>.
+        </p>
         {data != null && data.restrictedExcluded > 0 && (
           <div className="mb-3 space-y-2 rounded-lg border border-rose-400/30 bg-rose-500/[0.07] p-3">
             <p className="text-xs text-rose-100">

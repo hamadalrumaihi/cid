@@ -27,6 +27,14 @@ database**:
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | live publishable key | placeholder | `.env.local` |
 | `NEXT_PUBLIC_FIVEMANAGE_API_KEY` | live token (referrer-bound) | unset/placeholder — previews use the paste-URL fallback | `.env.local` |
 | `NEXT_PUBLIC_FIVEMANAGE_BASE_URL` | `https://api.fivemanage.com` | same | same |
+| `NEXT_PUBLIC_EVIDENCE_HOST` (optional) | `supabase` (default — private bucket + SHA-256 + `evidence_register`) or `fivemanage` (legacy host primary) | same | same |
+| `NEXT_PUBLIC_SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_ENV` (optional) | the DSN; `production` | unset, or `preview` | unset |
+| `NEXT_PUBLIC_ENABLE_<FLAG>` (optional; STIRLING_PDF, CRAWL4AI, DOCUMENT_PROCESSING, ADVANCED_GRAPH, MEILISEARCH, SEMANTIC_SEARCH, EVIDENCE_SEALING, OPENFGA, ADVANCED_EDITOR, AI_ASSISTANT) | unset — the `feature_flags` row decides | `on` / `off` to exercise an optional service on one preview | unset |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` (optional, server only — never `NEXT_PUBLIC_`) | a collector, if any | unset | unset |
+
+**The portal runs with every optional variable unset.** They are listed in
+[`.env.example`](../.env.example) and in the Owner Console's environment
+table (`src/components/owner/ownerData.ts`).
 
 CI ([`ci.yml`](../.github/workflows/ci.yml)) keeps the production Supabase
 URL/publishable key inline (needed by the prod-fixture security suites; the
@@ -54,6 +62,8 @@ and `RLS_TEST_ANON_KEY`.
 | --- | --- | --- |
 | Supabase function secrets | `DISCORD_BOT_TOKEN` | `discord-announce`, `discord-notify` (no-op without it) |
 | `app_secrets` table (RLS deny-all; env vars as optional overrides) | `GOOGLE_SA_EMAIL`, `GOOGLE_SA_KEY`, `SYNC_SECRET`, `SOPS_FOLDER_ID` (optional) | `sops-sync` |
+| `app_secrets` **and** the function secret (must match) | `JOBS_SECRET` | `jobs-runner` (`x-jobs-secret`; `private.jobs_kick` reads the row, the function reads its env) |
+| Supabase function secrets (all optional) | `MEILI_URL`, `MEILI_MASTER_KEY`, `EMBEDDINGS_BASE_URL`, `EMBEDDINGS_API_KEY`, `EMBEDDINGS_MODEL`, `STIRLING_URL`, `CRAWL4AI_URL`, `DOCLING_URL` | `jobs-runner` (`search.sync`, `embeddings.generate`, `health.probe`), `semantic-query`, `search-query` — each answers `503 unavailable` / skips when its variable is unset |
 
 `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` are injected by the platform
 inside functions and never leave it.
@@ -175,11 +185,53 @@ Functions in [`supabase/functions/`](../supabase/functions) are **deploy-gated**
 supabase functions deploy discord-announce   # JWT-verified (default)
 supabase functions deploy discord-notify     # JWT-verified (default)
 supabase functions deploy sops-sync --no-verify-jwt   # pg_cron caller; guarded by SYNC_SECRET
+supabase functions deploy jobs-runner --no-verify-jwt # pg_cron / enqueue caller; guarded by JOBS_SECRET (x-jobs-secret)
+supabase functions deploy semantic-query              # JWT-verified; embeds server-side, calls hybrid_search AS THE CALLER
+supabase functions deploy search-query                # JWT-verified; Meilisearch candidates → search_authorize AS THE CALLER
 ```
+
+The three platform functions share `supabase/functions/_shared/` (the URL
+policy, job core, manifest, chunking, packet renderer); the worker carries
+byte-identical copies under `workers/src/` and a test fails when they drift.
+Before the first `jobs-runner` deploy, insert `JOBS_SECRET` into
+`app_secrets` and set the same value as the function secret (`supabase
+secrets set JOBS_SECRET=…`). Without it `private.jobs_kick()` is a silent
+no-op and jobs simply wait — nothing in the portal blocks on a job.
 
 `sops-sync` reads its config from `app_secrets`, so deploying it needs no
 dashboard secrets; the Discord functions need `DISCORD_BOT_TOKEN` set as a
 function secret (§1).
+
+## 5a. Optional services — docker-compose / Coolify
+
+Nothing below is required. [`docker-compose.yml`](../docker-compose.yml)
+runs the worker and the auxiliary services on one host — **worker**
+(BullMQ, `workers/`), **redis** (transport only), **stirling** (PDF tools),
+**crawl4ai** (crawler), **docling** (document understanding),
+**meilisearch** (search index) — on an internal network with nothing
+published except, optionally, Meilisearch. The worker needs
+`SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (a host you control, never
+Vercel) and takes every service URL from env; the full table is
+[`workers/README.md`](../workers/README.md).
+
+```bash
+cp .env.docker.example .env.worker    # names only in the repo; fill the values on the host
+docker compose --env-file .env.worker up -d
+```
+
+**Coolify**: import the compose file as a *Docker Compose* resource, paste
+the same env, deploy; Coolify's health checks read the containers'
+healthchecks. Then, in Owner Console → System Health, turn on the flag for
+each service whose card is HEALTHY (`stirling_pdf`, `crawl4ai`,
+`document_processing`, `meilisearch`, `semantic_search`). Turning a flag off
+(or stopping the stack) returns that surface to its runner fallback at once
+— the failure-isolation table in [PLATFORM-UPGRADE.md §13](PLATFORM-UPGRADE.md).
+
+**It runs without any of it.** With no compose stack and no optional
+secrets the portal still hashes, registers and verifies evidence, renders
+packets, extracts PDF text, fetches sources with the guarded basic fetch,
+searches with Postgres FTS and charts the graph — the in-Supabase runner
+handles every lightweight kind.
 
 ## 6. Rollback
 
@@ -190,6 +242,7 @@ function secret (§1).
 - **Because migrations are additive-only, an app rollback never needs a
   schema rollback** — the prior build keeps working against the newer
   schema. That is the whole point of the convention.
+- **The platform services roll back by switching off**: flags off in Owner Console → System Health, the compose stack stopped, the three functions deleted (`supabase functions delete jobs-runner semantic-query search-query`) — jobs wait, every synchronous surface keeps working; the additive migration carries a `-- Rollback:` block as a last resort ([PLATFORM-UPGRADE.md §18](PLATFORM-UPGRADE.md)).
 - **A bad migration** is rarer and is fixed *forward* (a corrective
   migration) or, in the worst case, by restoring a backup — see
   [OPERATIONS.md §5](OPERATIONS.md). There is no down-migration mechanism.

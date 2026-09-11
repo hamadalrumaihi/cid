@@ -92,7 +92,7 @@ Enter submits quick-add rows.
 `tab` · `collapsed` · `accent` · `density` · `annSeen` · `annDismissed` ·
 `casesScope` · `casesView` · `caseFilters` · `benchType` · `watchSeen` ·
 `recentSearches` · `recentRecords` (ids-only recents trail, `lib/recents`) ·
-`caseSeen:<caseId>` · `graphLayout:<caseId>` · per-registry view/sort/filter
+`caseSeen:<caseId>` · graph saved views (`lib/savedViews`, key from `graphViewKey(root)`) · per-registry view/sort/filter
 keys (`personFilters`, `personsView`, `personsSort`, `narcoticsView`,
 `narcoticsFilters`, `sopsShelfView`, `sopsShelfSort`).
 

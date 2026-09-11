@@ -1334,3 +1334,76 @@ describe('Phase 7 — new queue kinds (#374)', () => {
   })
 
 })
+
+/* ---- Platform upgrade (§2.10) — notification kinds → queue items ------------------- */
+
+describe('platform-upgrade notification kinds', () => {
+  const C = 'c-1'
+  const M = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+  const notif = (id: string, type: string, payload: Record<string, unknown>): AcNotif =>
+    mkNotif({ id, type, payload: { case_id: C, case_number: 'CID-26-001', ...payload } })
+
+  it('evidence integrity failure → critical, keyed on the media, deep-links the media', () => {
+    const it = findKey(src({ notifications: [notif('n-1', 'evidence_integrity_failure', { media_id: M, evidence_number: 'EV-000004' })] }), `evidence_integrity:${M}`)!
+    expect(it.priority).toBe('critical')
+    expect(it.status).toBe('needs_action')
+    expect(it.sourceType).toBe('other')
+    expect(it.deepLink).toBe(`/cases?case=${C}&tab=media&media=${M}`)
+    expect(it.summary).toBe('CID-26-001') // case number leads; the evidence number is the fallback identifier
+    expect(it.actionLabel).toBe('Mark read')
+    expect(it.sourceMetadata.notificationIds).toEqual(['n-1'])
+  })
+
+  it('packet ready → normal; packet failed → high; both land on the Documents tab with the packet selected', () => {
+    const ready = findKey(src({ notifications: [notif('n-1', 'case_packet_ready', { packet_id: 'p-1' })] }), 'packet:p-1')!
+    expect(ready.priority).toBe('normal')
+    expect(ready.status).toBe('informational')
+    expect(ready.deepLink).toBe(`/cases?case=${C}&tab=documents&packet=p-1`)
+    const failed = findKey(src({ notifications: [notif('n-2', 'case_packet_failed', { packet_id: 'p-1' })] }), 'packet_failed:p-1')!
+    expect(failed.priority).toBe('high')
+    expect(failed.status).toBe('needs_action')
+  })
+
+  it('source changed → normal at /intelligence?source=; source failed → high', () => {
+    const changed = findKey(src({ notifications: [notif('n-1', 'external_source_changed', { source_id: 's-1' })] }), 'source:s-1')!
+    expect(changed.priority).toBe('normal')
+    expect(changed.deepLink).toBe('/intelligence?source=s-1')
+    const failed = findKey(src({ notifications: [notif('n-2', 'external_source_failed', { source_id: 's-1' })] }), 'source_failed:s-1')!
+    expect(failed.priority).toBe('high')
+  })
+
+  it('documents, bundles and custody', () => {
+    const q = buildActionItems(src({ notifications: [
+      notif('n-1', 'document_ready', { media_id: M }),
+      notif('n-2', 'document_failed', { media_id: M }),
+      notif('n-3', 'evidence_bundle_ready', { job_id: 'j-1' }),
+      notif('n-4', 'evidence_custody_transfer', { media_id: M, evidence_number: 'EV-000004' }),
+    ] }))
+    expect(byKey(q, `document:${M}`)).toMatchObject({ priority: 'normal', deepLink: `/cases?case=${C}&tab=documents&media=${M}` })
+    expect(byKey(q, `document_failed:${M}`)).toMatchObject({ priority: 'high' })
+    expect(byKey(q, 'bundle:j-1')).toMatchObject({ priority: 'normal', deepLink: `/cases?case=${C}&tab=documents` })
+    expect(byKey(q, `custody:${M}`)).toMatchObject({ priority: 'high', status: 'needs_action', isWaitingOnCurrentUser: true, deepLink: `/cases?case=${C}&tab=media&media=${M}` })
+  })
+
+  it('background job failed → an owner signal (high) pointing at System Health, named by job kind', () => {
+    const it = findKey(src({ notifications: [notif('n-1', 'background_job_failed', { job_id: 'j-9', kind: 'packet.render' })] }), 'job:j-9')!
+    expect(it.sourceType).toBe('owner_signal')
+    expect(it.priority).toBe('high')
+    expect(it.deepLink).toBe('/owner?s=health')
+    expect(it.summary).toBe('Packet render')
+    expect(it.isCommandItem).toBe(true)
+  })
+
+  it('a second ping about the same subject folds into the first item; a payload without an id keys on the notification', () => {
+    const q = buildActionItems(src({ notifications: [
+      notif('n-1', 'external_source_changed', { source_id: 's-1' }),
+      notif('n-2', 'external_source_changed', { source_id: 's-1' }),
+      notif('n-3', 'case_packet_ready', {}),
+    ] }))
+    expect(q.suppressedCount).toBe(1)
+    expect(byKey(q, 'source:s-1')?.sourceMetadata.notificationIds).toEqual(['n-1', 'n-2'])
+    expect(byKey(q, 'notif:n-3')).toMatchObject({ priority: 'normal' })
+    // Every key satisfies action_item_state's grammar.
+    for (const it of q.items) expect(it.dedupeKey).toMatch(/^[a-z_]+:[A-Za-z0-9_:.@-]+$/)
+  })
+})

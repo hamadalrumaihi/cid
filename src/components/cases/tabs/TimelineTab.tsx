@@ -4,8 +4,12 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { Json } from '@/lib/database.types'
 import { caseLink } from '@/lib/caseLinks'
+import { custodyEventLabel } from '@/lib/evidence'
 import { timeAgo } from '@/lib/format'
-import { fetchCaseTimeline, type CaseTimelineRow } from '@/lib/services/cases'
+import {
+  filterTimelineEvents, readTimelineFilters, TIMELINE_GROUPS, toggleTimelineGroup, writeTimelineFilters, type TimelineGroup,
+} from '@/lib/timelineFilters'
+import { fetchCaseTimeline, type CaseTimelineKind, type CaseTimelineRow } from '@/lib/services/cases'
 import { useOperationsStore } from '@/lib/operations'
 import { officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
@@ -24,7 +28,11 @@ import type { CaseRow } from './shared'
  *  - "Case opened" / "Follow-up due" come from the cases row already in hand;
  *  - operation NAMES and the JTF resolution event resolve from the RLS-scoped
  *    operations store (the RPC returns operation_id only — resolving names
- *    server-side would leak operations the viewer cannot list). */
+ *    server-side would leak operations the viewer cannot list).
+ *
+ *  Filter chips (Investigation / Evidence / Custody / Legal / Intelligence /
+ *  Documents) narrow both the band and the list; the selection persists in
+ *  localStorage (`lib/timelineFilters`). */
 
 /** Tolerant meta readers — meta is jsonb and may omit keys. */
 const metaOf = (m: Json): Record<string, unknown> =>
@@ -64,7 +72,7 @@ interface OpLite { id: string; name: string; status: string; resolved_at: string
 function mapRow(row: CaseTimelineRow, caseId: string, operations: readonly OpLite[]): BandEvent[] {
   const m = metaOf(row.meta)
   const actorName = officerName(row.actor) || undefined
-  switch (row.kind) {
+  switch (row.kind as CaseTimelineKind) {
     case 'evidence':
       return [{ at: row.at, label: `Evidence ${row.title || ''}`, sub: mStr(m, 'description') ?? undefined, type: 'evidence', href: row.ref_id ? caseLink(caseId, 'media', { evidence: row.ref_id }) : caseLink(caseId, 'media') }]
     case 'media_added': {
@@ -128,22 +136,43 @@ function mapRow(row: CaseTimelineRow, caseId: string, operations: readonly OpLit
         type: 'task',
       }]
     }
-    // Surveillance lifecycle — short labels, 'task' lane (BandEvent's union
-    // is closed; surveillance rides the generic activity lane).
+    // Surveillance lifecycle — short labels on the 'task' lane, filtered
+    // under Intelligence (group overrides the lane's default).
     case 'surv_requested':
-      return [{ at: row.at, label: `Surveillance requested — ${row.title ?? ''}`, type: 'task', href: caseLink(caseId, 'surveillance') }]
+      return [{ at: row.at, label: `Surveillance requested — ${row.title ?? ''}`, type: 'task', group: 'intelligence', href: caseLink(caseId, 'surveillance') }]
     case 'surv_authorized':
-      return [{ at: row.at, label: 'Surveillance authorized', sub: row.title ?? undefined, type: 'task', href: caseLink(caseId, 'surveillance') }]
+      return [{ at: row.at, label: 'Surveillance authorized', sub: row.title ?? undefined, type: 'task', group: 'intelligence', href: caseLink(caseId, 'surveillance') }]
     case 'surv_ended': {
       const status = mStr(m, 'status') ?? 'ended'
-      return [{ at: row.at, label: `Surveillance ${status === 'denied' ? 'denied' : status}`, sub: row.title ?? undefined, type: 'task', href: caseLink(caseId, 'surveillance') }]
+      return [{ at: row.at, label: `Surveillance ${status === 'denied' ? 'denied' : status}`, sub: row.title ?? undefined, type: 'task', group: 'intelligence', href: caseLink(caseId, 'surveillance') }]
     }
     case 'surv_observation':
-      return [{ at: row.at, label: 'Observation received', sub: mStr(m, 'activity') ?? undefined, type: 'task', href: caseLink(caseId, 'surveillance') }]
+      return [{ at: row.at, label: 'Observation received', sub: mStr(m, 'activity') ?? undefined, type: 'task', group: 'intelligence', href: caseLink(caseId, 'surveillance') }]
     case 'surv_verified':
-      return [{ at: row.at, label: 'Observation verified', sub: mStr(m, 'activity') ?? undefined, type: 'task', href: caseLink(caseId, 'surveillance') }]
+      return [{ at: row.at, label: 'Observation verified', sub: mStr(m, 'activity') ?? undefined, type: 'task', group: 'intelligence', href: caseLink(caseId, 'surveillance') }]
     case 'surv_alert':
-      return [{ at: row.at, label: `Surveillance alert — ${row.title ?? ''}`, type: 'task', href: caseLink(caseId, 'surveillance') }]
+      return [{ at: row.at, label: `Surveillance alert — ${row.title ?? ''}`, type: 'task', group: 'intelligence', href: caseLink(caseId, 'surveillance') }]
+    // Platform upgrade lanes (20261105120000). `custody` carries the
+    // evidence_custody_events event_type in meta; title is the evidence
+    // number or media title the server resolved under the viewer's rights.
+    case 'custody': {
+      const eventType = mStr(m, 'event_type')
+      const item = row.title ?? mStr(m, 'evidence_number') ?? 'evidence'
+      const custodian = officerName(mStr(m, 'new_custodian')) ?? undefined
+      return [{
+        at: row.at,
+        label: `${custodyEventLabel(eventType)} — ${item}`,
+        sub: [actorName, eventType === 'TRANSFERRED' && custodian ? `to ${custodian}` : null, mStr(m, 'reason')].filter(Boolean).join(' · ') || undefined,
+        type: 'custody',
+        href: row.ref_id ? caseLink(caseId, 'media', { media: row.ref_id }) : caseLink(caseId, 'media'),
+      }]
+    }
+    case 'packet':
+      return [{ at: row.at, label: `Case packet ready — ${row.title ?? mStr(m, 'packet_type') ?? 'packet'}`, sub: actorName, type: 'packet', href: row.ref_id ? caseLink(caseId, 'documents', { packet: row.ref_id }) : caseLink(caseId, 'documents') }]
+    case 'source':
+      return [{ at: row.at, label: `External source linked — ${row.title ?? mStr(m, 'source_number') ?? mStr(m, 'domain') ?? 'source'}`, sub: [actorName, mStr(m, 'domain')].filter(Boolean).join(' · ') || undefined, type: 'source', href: row.ref_id ? `/intelligence?source=${encodeURIComponent(row.ref_id)}` : '/intelligence' }]
+    case 'document':
+      return [{ at: row.at, label: `Document processed — ${row.title ?? 'document'}`, sub: [mStr(m, 'service'), mNum(m, 'page_count') ? `${mNum(m, 'page_count')} pages` : null].filter(Boolean).join(' · ') || undefined, type: 'document', href: row.ref_id ? caseLink(caseId, 'documents', { media: row.ref_id }) : caseLink(caseId, 'documents') }]
     default:
       // Forward compatibility: an event kind this build doesn't know is
       // dropped rather than crashing the tab.
@@ -153,6 +182,19 @@ function mapRow(row: CaseTimelineRow, caseId: string, operations: readonly OpLit
 
 export function TimelineTab({ c }: { c: CaseRow }) {
   const [rows, setRows] = useState<BandEvent[]>([])
+  // Filter chips — persisted per browser; the server snapshot renders
+  // everything on, the client corrects after mount.
+  const [enabled, setEnabled] = useState<Set<TimelineGroup>>(() => new Set(TIMELINE_GROUPS.map((g) => g.id)))
+  useEffect(() => {
+    const stored = readTimelineFilters(window.localStorage)
+    // Only adopt a stored selection that differs (avoids a no-op re-render).
+    if (stored.size !== TIMELINE_GROUPS.length) queueMicrotask(() => setEnabled(stored))
+  }, [])
+  const toggle = (g: TimelineGroup) => {
+    const next = toggleTimelineGroup(enabled, g)
+    setEnabled(next)
+    writeTimelineFilters(window.localStorage, next)
+  }
   // A load failure surfaces with Retry (IntelTab's rule: a fetch error must
   // never read as an empty timeline). Cleared on the next good fetch.
   const [err, setErr] = useState<unknown>(null)
@@ -169,6 +211,10 @@ export function TimelineTab({ c }: { c: CaseRow }) {
   const vSvT = useTableVersion('surveillance_targets')
   const vSvO = useTableVersion('surveillance_observations')
   const vSvA = useTableVersion('surveillance_alerts')
+  const vC = useTableVersion('evidence_custody_events')
+  const vP = useTableVersion('case_packets')
+  const vX = useTableVersion('external_source_links')
+  const vD = useTableVersion('document_extractions')
   const operations = useOperationsStore((st) => st.operations)
   const refresh = useCallback(async () => {
     try {
@@ -181,13 +227,35 @@ export function TimelineTab({ c }: { c: CaseRow }) {
       setErr(null)
     } catch (e) { setErr(e) }
   }, [c, operations])
-  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vE, vM, vR, vT, vS, vH, vG, vOL, vSvT, vSvO, vSvA])
+  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vE, vM, vR, vT, vS, vH, vG, vOL, vSvT, vSvO, vSvA, vC, vP, vX, vD])
   if (err) return <ErrorNotice message={err} onRetry={() => void refresh()} />
+  const visible = filterTimelineEvents(rows, enabled)
   return (
     <div>
-      <TimelineBand events={rows} />
+      <div className="-mx-1 mb-3 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Filter timeline by area">
+        {TIMELINE_GROUPS.map((g) => {
+          const on = enabled.has(g.id)
+          return (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => toggle(g.id)}
+              aria-pressed={on}
+              className={`min-h-9 flex-shrink-0 touch-manipulation whitespace-nowrap rounded-md border px-3 py-1.5 text-xs font-semibold transition lg:min-h-0 ${on ? 'border-badge-500 bg-blue-500/10 text-white' : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'}`}
+            >
+              {g.label}
+            </button>
+          )
+        })}
+      </div>
+      <TimelineBand events={visible} />
+      {visible.length === 0 && rows.length > 0 && (
+        <p className="rounded-lg border border-white/10 bg-ink-950/50 p-6 text-center text-sm text-slate-400">
+          No events in the selected areas — turn a filter back on to see them.
+        </p>
+      )}
       <div className="space-y-2">
-        {rows.map((r, i) => {
+        {visible.map((r, i) => {
           const body = (
             <>
               <p className="font-semibold text-white">{r.label}</p>

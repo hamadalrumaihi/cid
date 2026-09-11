@@ -85,6 +85,7 @@ export const SOFT_DELETE_TABLE: Record<string, MockTableName> = {
   rico_case: 'rico_cases', predicate_act: 'predicate_acts',
   case_note: 'case_notes', case_link: 'case_links',
   case_template: 'case_templates', commendation: 'commendations',
+  case_packet: 'case_packets', external_source: 'external_sources',
 }
 const SOFT_DELETE_REASON_REQUIRED = new Set([
   'person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker',

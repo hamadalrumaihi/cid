@@ -56,6 +56,7 @@ import { IntelActions } from './IntelActions'
 import { IntelGroups, IntelGroupsList } from './IntelGroups'
 import { SiuPanel } from './SiuPanel'
 import { FieldSubmitForm } from './FieldSubmitForm'
+import { ExternalSourcesPanel, useExternalSourceCount } from './ExternalSourcesPanel'
 import { siuCategoryLabel, siuStateLabel, siuStateTone } from '@/lib/fieldSiu'
 import { canRejectIntel, canRestoreIntel, canValidateIntel, useSiu, type CidViewer } from '@/lib/permissions'
 import { Badge } from '@/components/ui/Badge'
@@ -81,11 +82,15 @@ export function FieldReviewView() {
   // if the URL changes while it stays mounted.
   const sp = useSearchParams()
   const seed = sp.get('submission') ?? sp.get('record')
+  // `/intelligence?source=<id>` opens an external source's detail (search
+  // palette hits, notifications, the case Intel tab) on the External
+  // Sources registry tab.
+  const sourceSeed = sp.get('source')
   const [rows, setRows] = useState<FieldSubmissionRow[] | null>(null)
   const [counts, setCounts] = useState<Record<string, SubmissionCounts>>({})
   const [selected, setSelected] = useState<string | null>(seed)
   const [tab, setTab] = useState<
-    QueueFilter | SiuFilter | typeof DELETED_FILTER | 'access' | 'legacy'>('unclaimed')
+    QueueFilter | SiuFilter | typeof DELETED_FILTER | 'access' | 'legacy' | 'external'>(sourceSeed ? 'external' : 'unclaimed')
   const [writing, setWriting] = useState(false)
   // Search is a MODE, not another filter. A reviewer searching has stopped
   // asking "what is in my queue" and started asking "where is that report", and
@@ -114,6 +119,12 @@ export function FieldReviewView() {
     const t = window.setTimeout(() => setSelected(seed), 0)
     return () => window.clearTimeout(t)
   }, [seed])
+  useEffect(() => {
+    if (!sourceSeed) return
+    const t = window.setTimeout(() => { setSelected(null); setTab('external') }, 0)
+    return () => window.clearTimeout(t)
+  }, [sourceSeed])
+  const externalCount = useExternalSourceCount(state === 'in')
 
   // Debounced, because the search reaches seven tables and a reviewer types
   // faster than that deserves.
@@ -130,7 +141,7 @@ export function FieldReviewView() {
 
   const all = rows ?? []
   const searching = hits !== null
-  const shown = tab === 'access' || tab === 'legacy'
+  const shown = tab === 'access' || tab === 'legacy' || tab === 'external'
     ? []
     // Searching spans every queue INCLUDING the archive, and deliberately keeps
     // the deleted out -- a deleted record is only ever in the Deleted list.
@@ -205,14 +216,14 @@ export function FieldReviewView() {
           onChange={setTab}
           tabs={[
             ...QUEUE_FILTERS.map((f) => ({
-              id: f as QueueFilter | SiuFilter | 'access' | 'legacy',
+              id: f as QueueFilter | SiuFilter | 'access' | 'legacy' | 'external',
               label: QUEUE_LABEL[f],
               count: countFor(f),
             })),
             // Same table, same reports: SIB is a specialist detachment inside
             // CID, so these are filters rather than a second application.
             ...(siu.isAgent ? SIU_FILTERS.map((f) => ({
-              id: f as QueueFilter | SiuFilter | 'access' | 'legacy',
+              id: f as QueueFilter | SiuFilter | 'access' | 'legacy' | 'external',
               label: SIU_FILTER_LABEL[f],
               count: countFor(f),
             })) : []),
@@ -220,7 +231,7 @@ export function FieldReviewView() {
             // all, and this is the only place one appears -- so that undoing a
             // deletion does not depend on whoever made it.
             ...(isOwner ? [{
-              id: DELETED_FILTER as QueueFilter | SiuFilter | 'access' | 'legacy',
+              id: DELETED_FILTER as QueueFilter | SiuFilter | 'access' | 'legacy' | 'external',
               label: 'Deleted',
               count: countFor(DELETED_FILTER),
             }] : []),
@@ -230,6 +241,14 @@ export function FieldReviewView() {
               id: 'access' as const,
               label: 'Submitter access',
               count: (roster.rows ?? []).filter((r) => r.standing_active).length,
+            },
+            // A registry, not a queue: crawled web pages (platform upgrade
+            // §2.6). UNVERIFIED INTELLIGENCE until an analyst verifies one;
+            // the count is the live rows this viewer can see.
+            {
+              id: 'external' as const,
+              label: 'External Sources',
+              count: externalCount,
             },
             // Only while genuinely undecided requests from before self-service
             // still exist. Nothing files new ones, so this tab disappears for
@@ -245,7 +264,9 @@ export function FieldReviewView() {
         />
       )}
 
-      {!current && tab === 'access' ? (
+      {!current && tab === 'external' ? (
+        <ExternalSourcesPanel seed={sourceSeed} />
+      ) : !current && tab === 'access' ? (
         <FieldAccessRoster rows={roster.rows} onChanged={() => void roster.refresh()} />
       ) : !current && tab === 'legacy' ? (
         <FieldAccessQueue rows={access.rows} onChanged={() => void access.refresh()} />

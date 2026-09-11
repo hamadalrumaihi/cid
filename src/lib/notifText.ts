@@ -73,9 +73,59 @@ export function notifTitle(n: NotificationRow): string {
  *  matching the vanilla row's blue mono line. Null when nothing applies. */
 export function notifDetail(n: NotificationRow): string | null {
   const p = asPayload(n.payload)
-  const detail = p.request_number || p.case_number || p.tracker_code || p.target
+  // Platform kinds carry ids and numbers only (§2.10): the evidence number
+  // is the one human identifier a media-scoped payload may show.
+  const detail = p.request_number || p.case_number || strField(p, 'evidence_number') || p.tracker_code || p.target
   if (!detail) return null
   return p.detective ? `${detail} · ${p.detective}` : detail
+}
+
+/** A string payload field that is not part of the typed schema (the loose
+ *  parse keeps it as `unknown`). */
+const strField = (p: NotifPayload, key: string): string | null => {
+  const v = (p as Record<string, unknown>)[key]
+  return typeof v === 'string' && v ? v : null
+}
+
+/** `packet.render` → "Packet render" — the job kind humanised for the
+ *  Owner's failure ping (no reason text travels by contract). */
+const jobKindText = (kind: string): string => kind.replace(/[._-]+/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
+
+/** The platform-upgrade kinds (§2.10) and where each lands: packets and
+ *  generated documents on the case's Documents tab (the packet / media
+ *  selected), evidence events on Evidence & Media (the media selected),
+ *  sources in the Intelligence workspace, job failures in the Owner
+ *  Console's System Health section. Ids only — a missing id falls back to
+ *  the owning surface, never to a dead row. */
+export const PLATFORM_NOTIF_KINDS: ReadonlySet<string> = new Set([
+  'case_packet_ready', 'case_packet_failed', 'evidence_bundle_ready', 'evidence_integrity_failure', 'evidence_custody_transfer',
+  'external_source_changed', 'external_source_failed', 'document_ready', 'document_failed', 'background_job_failed',
+])
+
+function platformNotifHref(type: string, p: NotifPayload): string | null {
+  const caseId = p.case_id || null
+  switch (type) {
+    case 'case_packet_ready':
+    case 'case_packet_failed':
+      return caseId ? caseLink(caseId, 'documents', { packet: strField(p, 'packet_id') ?? undefined }) : null
+    case 'evidence_bundle_ready':
+      return caseId ? caseLink(caseId, 'documents') : null
+    case 'evidence_integrity_failure':
+    case 'evidence_custody_transfer':
+      return caseId ? caseLink(caseId, 'media', { media: strField(p, 'media_id') ?? undefined }) : null
+    case 'document_ready':
+    case 'document_failed':
+      return caseId ? caseLink(caseId, 'documents', { media: strField(p, 'media_id') ?? undefined }) : null
+    case 'external_source_changed':
+    case 'external_source_failed': {
+      const id = strField(p, 'source_id')
+      return id ? `/intelligence?source=${encodeURIComponent(id)}` : '/intelligence'
+    }
+    case 'background_job_failed':
+      return '/owner?s=health'
+    default:
+      return null
+  }
 }
 
 /** Secondary human line — the reason (or tracker/target context). */
@@ -84,6 +134,8 @@ export function notifSub(n: NotificationRow): string | null {
   // Intel kinds show the FI number and nothing else — by contract the payload
   // carries no reason or summary, and this line must never grow one.
   if (isIntel(n.type)) return p.submission_no || null
+  // The Owner's job-failure ping names the job kind (ids only otherwise).
+  if (n.type === 'background_job_failed') return p.kind ? jobKindText(p.kind) : null
   return p.reason || p.title || [p.tracker_code, p.target].filter(Boolean).join(' · ') || null
 }
 
@@ -154,6 +206,10 @@ export function notifHref(n: NotificationRow, opts: { command?: boolean } = {}):
   // Confidential-informant kinds route to the compartment BEFORE the generic
   // case arm — a CI notification never lands on a case surface.
   if (t.startsWith('ci_')) return ciNotifHref(t, p)
+  // Platform-upgrade kinds (§2.10) carry their own deep links (packet /
+  // media / source ids) — before the generic case arm so the click lands on
+  // the record, not the case Overview.
+  if (PLATFORM_NOTIF_KINDS.has(t)) return platformNotifHref(t, p)
   // Report notifications carry report_id — land on THAT report (?report=),
   // not just the Reports tab (contract §4 deep link).
   if (p.case_id) return caseLink(p.case_id, NOTIF_CASE_TAB[t], { report: typeof p.report_id === 'string' ? p.report_id : undefined })

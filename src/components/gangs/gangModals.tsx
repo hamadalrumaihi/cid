@@ -10,6 +10,7 @@ import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDraft
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/lib/toast'
 import { safeUrl } from '@/lib/safeUrl'
+import { useMediaSrc } from '@/lib/evidence'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { parseIntelSummary } from '@/lib/jsonShapes'
 import { RadioIcon } from '@/components/shell/icons'
@@ -828,7 +829,8 @@ export function AddGangPhotoModal({ gang, onClose, onSaved }: { gang: GangRow; o
 }
 
 export function GangPhotoLightbox({ media, onClose }: { media: { title: string; external_url: string | null; storage_path: string | null; type: string }; onClose: () => void }) {
-  const src = safeUrl(media.external_url || media.storage_path || '')
+  // Storage-hosted rows sign on demand (300 s, cached); external rows are direct.
+  const src = safeUrl(useMediaSrc(media) ?? '')
   return (
     <Modal open wide onClose={onClose}>
       <div className="p-4">

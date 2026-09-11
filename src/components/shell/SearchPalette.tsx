@@ -15,7 +15,18 @@
  *  Open with Cmd/Ctrl-K anywhere, or Enter in the header search box (which
  *  seeds the query). `/` focuses the header box (vanilla parity). Arrow keys
  *  move the selection, Enter opens/runs, Esc closes — including when focus
- *  has wandered off the input (document-level capture while open). */
+ *  has wandered off the input (document-level capture while open).
+ *
+ *  Platform upgrade (§5.2 Search): results come through the search adapter
+ *  (lib/services/search) — the exact path (search_all + document_search +
+ *  external_source_search) always, the index / semantic paths only when
+ *  their feature flag is on, fused by RRF. Two new groups ("Case documents"
+ *  page hits, "External sources") deep-link through the hit's own `href`.
+ *  The "Semantic" chip exists only while flag `semantic_search` is on and is
+ *  remembered per device (Store). `ts_headline` text is rendered by
+ *  SPLITTING its `<b>` markers into React nodes — never as HTML. CI rules
+ *  are unchanged: `ci_search` still fires only for an involved viewer, and
+ *  CI hits are never written to recents. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuth } from '@/lib/auth'
@@ -26,13 +37,16 @@ import { PAGE_META, TAB_LABEL, TOOL_META } from '@/lib/nav'
 import { TOOL_TABS } from '@/lib/toolsModel'
 import { useProfilesStore } from '@/lib/profiles'
 import { pushRecent } from '@/lib/recents'
-import { recentSearches, rememberSearch, runSearch, SEARCH_KINDS, SEARCH_SECTION_ORDER, type SearchHit } from '@/lib/search'
+import { useFlag } from '@/lib/flags'
+import { recentSearches, rememberSearch, SEARCH_KINDS, SEARCH_SECTION_ORDER, headlineText, splitHeadline, type SearchHit } from '@/lib/search'
+import { SearchService, type SearchOptions } from '@/lib/services/search/search-service'
+import type { SearchResult } from '@/lib/services/search/types'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { useSiu } from '@/lib/permissions'
 import { DASH_LABEL, DASH_TAB } from '@/lib/nav'
 import { useCreate, type CreateKind } from '@/components/shell/CreateHost'
-import { CalendarIcon, CaseIcon, ChevronIcon, ClockIcon, KindIcon, PlusIcon, RadioIcon, ScaleIcon, XMarkIcon } from '@/components/shell/icons'
+import { CalendarIcon, CaseIcon, ChevronIcon, ClockIcon, KindIcon, LinkIcon, PlusIcon, RadioIcon, ScaleIcon, XMarkIcon } from '@/components/shell/icons'
 import { useToolNav } from '@/components/tools/useToolNav'
 
 interface Row {
@@ -53,6 +67,35 @@ interface Action {
  *  vehicles/places/penal; others navigate plain until their slices land or
  *  have no filter box). */
 const Q_SEEDED_TABS = new Set(['persons', 'gangs', 'vehicles', 'places', 'penal'])
+
+/** Device memory for the Semantic toggle (Store — the same localStorage
+ *  blob as the other palette prefs). */
+const SEMANTIC_PREF = 'searchSemantic'
+
+/** The glyph for the two upgrade kinds: page hits share the document glyph,
+ *  sources the link glyph (KindIcon falls back to a search glyph otherwise). */
+function HitIcon({ kind }: { kind: string }) {
+  if (kind === 'document_page') return <KindIcon kind="document" />
+  if (kind === 'source') return <LinkIcon size={15} />
+  return <KindIcon kind={kind} />
+}
+
+/** The secondary line: plain text for historical hits; for FTS hits the
+ *  `ts_headline` string split into text / <b> segments (the sublabel's
+ *  non-headline prefix — "Page 3 · " / the domain — stays plain). */
+function HitSublabel({ hit }: { hit: SearchHit }) {
+  if (!hit.sublabel) return null
+  if (!hit.headline) return <>{hit.sublabel}</>
+  const text = headlineText(hit.headline)
+  const prefix = text && hit.sublabel.endsWith(text) ? hit.sublabel.slice(0, hit.sublabel.length - text.length) : hit.sublabel
+  const segs = text ? splitHeadline(hit.headline) : []
+  return (
+    <>
+      {prefix}
+      {segs.map((seg, i) => (seg.bold ? <b key={i} className="font-semibold text-slate-200">{seg.text}</b> : <span key={i}>{seg.text}</span>))}
+    </>
+  )
+}
 
 /** Actions surfaced on an empty query (the everyday verbs). */
 const QUICK_IDS = new Set(['new-case', 'my-cases', 'go:inbox', 'go:action', 'go:calendar', 'loa', 'signout'])
@@ -84,6 +127,11 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
   const [query, setQuery] = useState(initialQuery)
   const [hits, setHits] = useState<SearchHit[]>([])
   const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  // Semantic toggle: offered only while the flag is on; the preference is
+  // remembered per device but never fires the function while the flag is off.
+  const semanticFlag = useFlag('semantic_search')
+  const [semantic, setSemantic] = useState<boolean>(() => Store.get<boolean>(SEMANTIC_PREF, false))
+  const [fallback, setFallback] = useState<SearchResult['fallback']>(null)
   const [sel, setSel] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -137,12 +185,17 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
     }
     const t = setTimeout(() => {
       setState('loading')
-      runSearch(q, { ci: ciOn })
-        .then((rows) => { if (seq.current === mine) { setHits(rows); setState('ready'); setSel(0) } })
-        .catch(() => { if (seq.current === mine) { setHits([]); setState('error') } })
+      const opts: SearchOptions = { ci: ciOn, semantic: semanticFlag && semantic }
+      SearchService.search(q, opts)
+        .then((res) => { if (seq.current === mine) { setHits(res.hits); setFallback(res.fallback); setState('ready'); setSel(0) } })
+        .catch(() => { if (seq.current === mine) { setHits([]); setFallback(null); setState('error') } })
     }, 200)
     return () => clearTimeout(t)
-  }, [open, query, ciOn])
+  }, [open, query, ciOn, semantic, semanticFlag])
+
+  const toggleSemantic = () => {
+    setSemantic((v) => { Store.set(SEMANTIC_PREF, !v); return !v })
+  }
 
   const onLoa = !!profile?.loa
   const siuCanAccess = siu.canAccess
@@ -258,6 +311,11 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
     const meta = SEARCH_KINDS[hit.kind]
     if (!meta) return
     const enc = encodeURIComponent
+    // Platform upgrade hits (document pages, external sources, index hits)
+    // carry their own deep link — open it as-is. No recents entry: these
+    // kinds have no recent type, and a page hit is a place inside a record,
+    // not the record.
+    if (hit.href) { openHref(hit.href); return }
     // Reports, evidence and tasks live inside a case — search_all returns the
     // CASE id for those kinds (the task's own id rides in `term`), so open the
     // case on the matching tab. Landing on a case is an open: record it.
@@ -330,22 +388,36 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
       {/* Full-screen sheet below lg (safe-area padded, results scroll under
           the fixed input); the familiar centered card from lg up. */}
       <div className="flex h-full w-full flex-col overflow-hidden bg-ink-850 pt-[env(safe-area-inset-top)] shadow-pop lg:h-auto lg:max-w-xl lg:rounded-lg lg:border lg:border-white/10 lg:pt-0">
-        <input
-          ref={inputRef}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={onKeyDown}
-          type="text"
-          placeholder="Search everything, or type a command…"
-          aria-label="Search everything"
-          role="combobox"
-          aria-expanded="true"
-          aria-autocomplete="list"
-          aria-controls="cid-palette-listbox"
-          aria-activedescendant={total > 0 && sel < total ? optId(sel) : undefined}
-          autoComplete="off"
-          className="w-full flex-shrink-0 border-b border-white/10 bg-transparent px-4 py-3 text-sm text-white outline-none"
-        />
+        <div className="flex flex-shrink-0 items-center border-b border-white/10">
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={onKeyDown}
+            type="text"
+            placeholder="Search everything, or type a command…"
+            aria-label="Search everything"
+            role="combobox"
+            aria-expanded="true"
+            aria-autocomplete="list"
+            aria-controls="cid-palette-listbox"
+            aria-activedescendant={total > 0 && sel < total ? optId(sel) : undefined}
+            autoComplete="off"
+            className="min-w-0 flex-1 bg-transparent px-4 py-3 text-sm text-white outline-none"
+          />
+          {semanticFlag && (
+            <button
+              type="button"
+              aria-pressed={semantic}
+              onClick={toggleSemantic}
+              title={semantic ? 'Semantic search on — meaning-based matches are merged in' : 'Semantic search off — exact matches only'}
+              className={`mr-2 inline-flex min-h-11 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition lg:min-h-9 ${semantic ? 'border-badge-500/60 bg-badge-500/15 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}`}
+            >
+              <span aria-hidden className={`t-dot ${semantic ? 't-dot-green' : ''}`} />
+              Semantic
+            </button>
+          )}
+        </div>
         <div ref={listRef} id="cid-palette-listbox" role="listbox" aria-label="Search results" className="min-h-0 flex-1 overflow-y-auto p-1.5 lg:max-h-[55vh] lg:flex-none">
           {matchedActions.length > 0 && (
             <>
@@ -370,7 +442,12 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
           )}
           {state === 'loading' && <p className="px-3 py-6 text-center text-sm text-slate-400">Searching…</p>}
           {state === 'error' && <p className="px-3 py-6 text-center text-sm text-rose-300">Search failed — check your connection and try again.</p>}
-          {state === 'ready' && !rows.length && !matchedActions.length && <p className="px-3 py-6 text-center text-sm text-slate-400">No matches across cases, legal requests, persons, BOLOs, gangs, places, vehicles, narcotics, ballistics, documents, intelligence, members or charges.</p>}
+          {state === 'ready' && fallback && (
+            <p className="px-3 pt-2 text-[11px] text-amber-300/80" role="status">
+              {fallback === 'unavailable' ? 'Semantic / index search is not available right now — showing exact matches.' : 'The search service did not answer — showing exact matches.'}
+            </p>
+          )}
+          {state === 'ready' && !rows.length && !matchedActions.length && <p className="px-3 py-6 text-center text-sm text-slate-400">No matches across cases, legal requests, persons, BOLOs, gangs, places, vehicles, narcotics, ballistics, documents, document pages, external sources, intelligence, members or charges.</p>}
           {state === 'idle' && recents.length > 0 && (
             <>
               <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Recent searches</p>
@@ -395,9 +472,9 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
                   onMouseEnter={() => setSel(gi)}
                   className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${gi === sel ? 'bg-blue-500/15 text-white' : 'text-slate-200 hover:bg-white/5'}`}
                 >
-                  <span aria-hidden className="flex w-5 justify-center text-slate-400"><KindIcon kind={row.hit.kind} /></span>
+                  <span aria-hidden className="flex w-5 justify-center text-slate-400"><HitIcon kind={row.hit.kind} /></span>
                   <span className="min-w-0 flex-1 truncate">{row.hit.label}</span>
-                  {row.hit.sublabel && <span className="max-w-[40%] flex-shrink-0 truncate text-[11px] text-slate-400">{row.hit.sublabel}</span>}
+                  {row.hit.sublabel && <span className="max-w-[40%] flex-shrink-0 truncate text-[11px] text-slate-400"><HitSublabel hit={row.hit} /></span>}
                   <span className="flex-shrink-0 text-[10px] uppercase tracking-wider text-slate-500">{SEARCH_KINDS[row.hit.kind]?.tag ?? row.hit.kind}</span>
                 </button>
               </div>

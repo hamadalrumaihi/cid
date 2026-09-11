@@ -14,12 +14,19 @@
  *  lists it only when `useCiCaseCount(id) > 0` (never a lock, placeholder or
  *  zero pill; RLS is the wall), and it never appears on the phone screen or
  *  in the documented rail. Rarely-populated tabs (CASE_TAB_OPTIONAL) fold
- *  into a "More…" chip while their count is 0. */
+ *  into a "More…" chip while their count is 0.
+ *
+ *  Platform upgrade: `media` is labelled "Evidence & Media" (the integrity /
+ *  custody surface) and `documents` joins the Evidence & Case Record group —
+ *  reports, evidence documents, legal documents, generated documents, case
+ *  packets and document tools. It is OPTIONAL: it folds into More… until the
+ *  case has a document or a packet (count = live case_packets + media rows
+ *  that are documents or generated derivatives). */
 import type { SectionTabGroup } from '@/components/ui/SectionTabs'
 
 export const CASE_TABS = [
   'overview', 'people', 'vehicles', 'gangs', 'locations', 'intel', 'ci', 'surveillance', 'extractions', 'timeline', 'graph',
-  'media', 'charges', 'rico', 'reports',
+  'media', 'documents', 'charges', 'rico', 'reports',
   'notes', 'activity', 'legal', 'tasks', 'signoff', 'chat',
 ] as const
 export type CaseTabId = (typeof CASE_TABS)[number]
@@ -27,7 +34,7 @@ export type CaseTabId = (typeof CASE_TABS)[number]
 export const CASE_TAB_LABELS: Record<CaseTabId, string> = {
   overview: 'Brief', people: 'People', vehicles: 'Vehicles', gangs: 'Gangs', locations: 'Locations',
   intel: 'Intel', ci: 'CI Intelligence', surveillance: 'Surveillance', extractions: 'Extractions', timeline: 'Timeline', graph: 'Graph',
-  media: 'Evidence', charges: 'Charges', rico: 'RICO', reports: 'Reports',
+  media: 'Evidence & Media', documents: 'Documents', charges: 'Charges', rico: 'RICO', reports: 'Reports',
   notes: 'Notes', activity: 'Activity', legal: 'Legal', tasks: 'Tasks', signoff: 'Sign-off', chat: 'Chat',
 }
 
@@ -40,7 +47,7 @@ export const CASE_TAB_CONDITIONAL: ReadonlySet<CaseTabId> = new Set<CaseTabId>([
  *  they are not the active tab. `ci` is deliberately NOT here — it is either
  *  present with a count or absent. */
 export const CASE_TAB_OPTIONAL: ReadonlySet<CaseTabId> = new Set<CaseTabId>([
-  'graph', 'charges', 'rico', 'legal', 'surveillance', 'extractions', 'timeline',
+  'graph', 'charges', 'rico', 'legal', 'surveillance', 'extractions', 'timeline', 'documents',
 ])
 
 /** Visual grouping only — the three-area case-jacket IA: how a detective
@@ -52,7 +59,7 @@ export const CASE_TAB_OPTIONAL: ReadonlySet<CaseTabId> = new Set<CaseTabId>([
  *  CaseDetail's desktop strip. */
 export const CASE_TAB_GROUPS_ALL: ReadonlyArray<SectionTabGroup<CaseTabId>> = [
   { label: 'Investigation', tabs: ['overview', 'people', 'vehicles', 'gangs', 'locations', 'intel', 'ci', 'surveillance', 'extractions', 'timeline', 'graph'] },
-  { label: 'Evidence & Case Record', tabs: ['media', 'charges', 'rico', 'reports'] },
+  { label: 'Evidence & Case Record', tabs: ['media', 'documents', 'charges', 'rico', 'reports'] },
   { label: 'Coordination & Closure', tabs: ['notes', 'activity', 'legal', 'tasks', 'signoff', 'chat'] },
 ]
 

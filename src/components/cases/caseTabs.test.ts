@@ -31,8 +31,10 @@ describe('case tab rail', () => {
     expect(labels).not.toContain('Overview')
     expect(labels).not.toContain('Intel & Notes')
     expect(labels).not.toContain('Photos & Media')
-    // Phase 3: "Evidence" is the media section's label again (plan §5.5).
-    expect(CASE_TAB_LABELS.media).toBe('Evidence')
+    // Platform upgrade: the media section is "Evidence & Media" (integrity,
+    // custody, derivatives) and Documents sits beside it.
+    expect(CASE_TAB_LABELS.media).toBe('Evidence & Media')
+    expect(CASE_TAB_LABELS.documents).toBe('Documents')
     expect(new Set(labels).size).toBe(labels.length)
   })
 
@@ -40,6 +42,12 @@ describe('case tab rail', () => {
     for (const t of ['people', 'vehicles', 'gangs', 'locations', 'notes', 'activity'] as const) {
       expect(CASE_TABS).toContain(t)
     }
+  })
+
+  it('Documents sits in Evidence & Case Record, right after Evidence & Media', () => {
+    const record = CASE_TAB_GROUPS_ALL[1].tabs
+    expect(record[record.indexOf('media') + 1]).toBe('documents')
+    expect(CASE_TAB_CONDITIONAL.has('documents')).toBe(false)
   })
 
   it('the three-area IA is the one the guide documents', () => {
@@ -57,7 +65,7 @@ describe('case tab rail', () => {
   })
 
   it('the More… fold covers exactly the rarely-populated tabs', () => {
-    expect([...CASE_TAB_OPTIONAL].sort()).toEqual(['charges', 'extractions', 'graph', 'legal', 'rico', 'surveillance', 'timeline'])
+    expect([...CASE_TAB_OPTIONAL].sort()).toEqual(['charges', 'documents', 'extractions', 'graph', 'legal', 'rico', 'surveillance', 'timeline'])
     // The fold never hides a section that every case needs.
     for (const t of ['overview', 'people', 'media', 'reports', 'notes', 'tasks', 'signoff', 'chat'] as const) {
       expect(CASE_TAB_OPTIONAL.has(t)).toBe(false)

@@ -20,6 +20,7 @@ export type TrashRow = Database['public']['Functions']['trash_list']['Returns'][
 export const TRASH_KIND_LABEL: Record<string, string> = {
   case: 'Case',
   case_template: 'Case template', commendation: 'Commendation',
+  case_packet: 'Case packet', external_source: 'External source',
   report: 'Report', media: 'Media', evidence: 'Evidence item', case_task: 'Case task', case_message: 'Case message',
   case_intel_link: 'Case link (intel)', case_blocker: 'Case blocker', rico_case: 'RICO case', predicate_act: 'Predicate act',
   case_note: 'Case note', case_link: 'Related-case link',
@@ -47,8 +48,8 @@ export interface TrashGroup { id: TrashGroupId; label: string; kinds: readonly s
 export const TRASH_GROUPS: readonly TrashGroup[] = [
   { id: 'cases', label: 'Cases', kinds: ['case'] },
   { id: 'admin', label: 'Administration', kinds: ['case_template', 'commendation'] },
-  { id: 'material', label: 'Case material', kinds: ['report', 'media', 'evidence', 'case_task', 'case_message', 'case_blocker', 'rico_case', 'predicate_act', 'case_note'] },
-  { id: 'registry', label: 'Registry', kinds: ['person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker'] },
+  { id: 'material', label: 'Case material', kinds: ['report', 'media', 'evidence', 'case_task', 'case_message', 'case_blocker', 'rico_case', 'predicate_act', 'case_note', 'case_packet'] },
+  { id: 'registry', label: 'Registry', kinds: ['person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'external_source'] },
   { id: 'links', label: 'Links', kinds: ['case_intel_link', 'case_link', 'gang_member', 'gang_turf', 'person_place', 'person_vehicle', 'person_relationship', 'account_link'] },
 ]
 
@@ -99,6 +100,7 @@ const CASE_SECTION: Record<string, { tab: string; param?: 'report' | 'task' | 'e
   evidence: { tab: 'media', param: 'evidence' },
   media: { tab: 'media' },
   case_note: { tab: 'notes' },
+  case_packet: { tab: 'documents' },
   case_message: { tab: 'chat' },
   case_intel_link: { tab: 'intel' },
   case_blocker: { tab: 'overview' },
@@ -137,6 +139,7 @@ export function trashHref(row: Pick<TrashRow, 'kind' | 'id' | 'case_id'>): strin
   // Templates are managed from the New Case modal; commendations from Personnel.
   if (row.kind === 'case_template') return '/cases?new=1'
   if (row.kind === 'commendation') return '/personnel'
+  if (row.kind === 'external_source') return `/intelligence?source=${encodeURIComponent(row.id)}`
   const tool = REGISTRY_TOOL[row.kind]
   if (tool) {
     const p = new URLSearchParams({ tool: tool.tool })

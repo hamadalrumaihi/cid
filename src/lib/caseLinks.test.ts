@@ -6,12 +6,18 @@ describe('normalizeCaseTab — legacy tab mapping', () => {
     expect(normalizeCaseTab('evidence')).toBe('media')
   })
 
+  it('maps the packets / docs aliases to the Documents tab', () => {
+    expect(normalizeCaseTab('packets')).toBe('documents')
+    expect(normalizeCaseTab('docs')).toBe('documents')
+    expect(normalizeCaseTab('documents')).toBe('documents')
+  })
+
   it('keeps ?tab=notes on the Notes section (it exists again since Phase 3)', () => {
     expect(normalizeCaseTab('notes')).toBe('notes')
   })
 
   it('passes current tab ids through unchanged', () => {
-    for (const t of ['overview', 'people', 'vehicles', 'gangs', 'locations', 'media', 'intel', 'notes', 'activity', 'reports', 'tasks', 'legal', 'signoff', 'timeline']) {
+    for (const t of ['overview', 'people', 'vehicles', 'gangs', 'locations', 'media', 'documents', 'intel', 'notes', 'activity', 'reports', 'tasks', 'legal', 'signoff', 'timeline']) {
       expect(normalizeCaseTab(t)).toBe(t)
     }
   })

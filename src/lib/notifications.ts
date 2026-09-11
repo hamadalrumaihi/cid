@@ -84,15 +84,15 @@ export interface NotifCategoryMeta { label: string; hint: string }
  *  it); `informants` is portal-only by contract and `other` is never offered
  *  (always DM'd when a title exists). */
 export const NOTIF_CATEGORY_META: Record<string, NotifCategoryMeta> = {
-  assignments: { label: 'Assignments', hint: 'Tasks, blockers, cases and SIB cases assigned to you' },
+  assignments: { label: 'Assignments', hint: 'Tasks, blockers, cases, SIB cases and evidence custody assigned to you' },
   decisions: { label: 'Decisions', hint: 'Sign-offs, access, membership, SIB, restricted media, tracker and suggestion decisions' },
   legal: { label: 'Legal', hint: 'Legal requests, comments and instrument deadlines' },
   mentions: { label: 'Mentions', hint: 'Chat, note and announcement mentions' },
   escalations: { label: 'Escalations', hint: 'Work escalated to you and stale-case reminders' },
-  intel: { label: 'Intelligence', hint: 'Field intelligence assigned, questions and replies' },
-  reports: { label: 'Reports', hint: 'Report review, returns and finalizations' },
+  intel: { label: 'Intelligence', hint: 'Field intelligence assigned, questions, replies and external-source changes' },
+  reports: { label: 'Reports', hint: 'Report review, returns, finalizations, case packets and generated documents' },
   announcements: { label: 'Announcements', hint: 'Department-wide posts' },
-  security: { label: 'Security', hint: 'Portal access changes, audit and app errors' },
+  security: { label: 'Security', hint: 'Portal access changes, audit, app errors, evidence integrity and failed jobs' },
   informants: { label: 'Informants', hint: 'Confidential-source assignments, contacts, intelligence and requests (in-app only)' },
   other: { label: 'Other', hint: 'Everything else — always delivered' },
 }

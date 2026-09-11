@@ -109,6 +109,14 @@ export function caseTaskRow(overrides: Partial<Tables<'case_tasks'>> & Pick<Tabl
   }
 }
 
+/** Integrity / custody / derivative columns (2026-11 platform upgrade) — null until `evidence_register` runs. */
+export const MEDIA_INTEGRITY_DEFAULTS = {
+  byte_size: null, classification: null, collected_at: null, collected_by: null, current_custodian: null, derivative_service: null,
+  derivative_service_version: null, derivative_type: null, evidence_number: null, integrity_status: null, last_integrity_check: null,
+  location_collected: null, mime: null, original_filename: null, parent_media_id: null, parent_sha256: null, sealed_at: null, sealed_by: null,
+  sha256: null, source: null,
+} as const
+
 export function mediaRow(overrides: Partial<Tables<'media'>> = {}): Tables<'media'> {
   return {
     archived_at: null,
@@ -123,6 +131,7 @@ export function mediaRow(overrides: Partial<Tables<'media'>> = {}): Tables<'medi
     evidence_designated_by: null,
     evidence_ref: null,
     external_url: 'https://r2.fivemanage.com/mock/evidence-1.png',
+    ...MEDIA_INTEGRITY_DEFAULTS,
     featured: false,
     gang_id: null,
     id: mockId(),
@@ -1062,4 +1071,307 @@ export function ciEventRow(
   overrides: Partial<Tables<'ci_events'>> & Pick<Tables<'ci_events'>, 'id' | 'kind'>,
 ): Tables<'ci_events'> {
   return { at: mockTimestamp(), ci_id: null, user_id: null, ...overrides }
+}
+
+/* ── Platform upgrade (2026-11 — evidence, jobs, packets, documents, sources, search, health) ── */
+
+/** feature_flags — the seed keys ship false except the three that need no external service. */
+export function featureFlagRow(overrides: Partial<Tables<'feature_flags'>> & Pick<Tables<'feature_flags'>, 'key'>): Tables<'feature_flags'> {
+  return {
+    enabled: false,
+    note: null,
+    updated_at: mockTimestamp(),
+    updated_by: null,
+    ...overrides,
+  }
+}
+
+/** background_jobs — a queued row; `created_by` is the visibility key (creator or Owner). */
+export function backgroundJobRow(
+  overrides: Partial<Tables<'background_jobs'>> & Pick<Tables<'background_jobs'>, 'queue' | 'kind'>,
+): Tables<'background_jobs'> {
+  const id = overrides.id ?? mockId()
+  return {
+    args: {},
+    attempts: 0,
+    case_id: null,
+    claimed_at: null,
+    claimed_by: null,
+    created_at: mockTimestamp(),
+    created_by: null,
+    error: null,
+    finished_at: null,
+    id,
+    idempotency_key: `${overrides.kind}:${id}`,
+    lease_until: null,
+    max_attempts: 5,
+    priority: 100,
+    progress: {},
+    result: null,
+    run_after: mockTimestamp(),
+    started_at: null,
+    status: 'queued',
+    subject_id: null,
+    subject_kind: null,
+    updated_at: mockTimestamp(),
+    ...overrides,
+  }
+}
+
+let custodyEventSeq = 0
+/** evidence_custody_events — append-only, hash-chained; the builder stamps a deterministic hash. */
+export function evidenceCustodyEventRow(
+  overrides: Partial<Tables<'evidence_custody_events'>> & Pick<Tables<'evidence_custody_events'>, 'media_id' | 'event_type'>,
+): Tables<'evidence_custody_events'> {
+  custodyEventSeq += 1
+  return {
+    actor_id: null,
+    case_id: null,
+    event_hash: `\\x${custodyEventSeq.toString(16).padStart(64, '0')}`,
+    export_id: null,
+    id: custodyEventSeq,
+    job_id: null,
+    metadata: {},
+    new_custodian: null,
+    occurred_at: mockTimestamp(custodyEventSeq),
+    prev_hash: null,
+    previous_custodian: null,
+    reason: null,
+    ...overrides,
+  }
+}
+
+/** export_manifests — immutable; `manifest` is the canonical JSON the bundle's manifest.json carries. */
+export function exportManifestRow(overrides: Partial<Tables<'export_manifests'>> = {}): Tables<'export_manifests'> {
+  const id = overrides.id ?? mockId()
+  const bundle = overrides.bundle_id ?? mockId()
+  return {
+    bundle_id: bundle,
+    case_id: null,
+    classification: null,
+    created_at: mockTimestamp(),
+    created_by: null,
+    id,
+    kind: 'case_packet',
+    manifest: { manifest_version: 1, bundle_id: bundle, kind: 'case_packet', files: [], source_evidence_ids: [] },
+    manifest_sha256: `\\x${'0'.repeat(64)}`,
+    storage_path: `case/${overrides.case_id ?? mockId()}/${bundle}/manifest.json`,
+    ...overrides,
+  }
+}
+
+/** case_packets — a queued packet request (status moves queued → rendering → ready). */
+export function casePacketRow(
+  overrides: Partial<Tables<'case_packets'>> & Pick<Tables<'case_packets'>, 'case_id'>,
+): Tables<'case_packets'> {
+  return {
+    byte_size: null,
+    created_at: mockTimestamp(),
+    delete_batch: null,
+    delete_reason: null,
+    deleted_at: null,
+    deleted_by: null,
+    error: null,
+    finished_at: null,
+    id: mockId(),
+    job_id: null,
+    manifest_id: null,
+    options: {},
+    packet_type: 'full',
+    page_count: null,
+    requested_by: null,
+    sections: ['cover', 'overview', 'summary'],
+    sha256: null,
+    snapshot: null,
+    status: 'queued',
+    storage_path: null,
+    watermark: null,
+    ...overrides,
+  }
+}
+
+let documentPageSeq = 0
+/** document_pages — one extracted page of a media document (`tsv` is server-generated). */
+export function documentPageRow(
+  overrides: Partial<Tables<'document_pages'>> & Pick<Tables<'document_pages'>, 'media_id'>,
+): Tables<'document_pages'> {
+  documentPageSeq += 1
+  return {
+    id: documentPageSeq,
+    page_no: 1,
+    text: 'Mock extracted page text.',
+    tsv: null,
+    ...overrides,
+  }
+}
+
+/** document_extractions — one per media row (unique media_id). */
+export function documentExtractionRow(
+  overrides: Partial<Tables<'document_extractions'>> & Pick<Tables<'document_extractions'>, 'media_id'>,
+): Tables<'document_extractions'> {
+  return {
+    created_at: mockTimestamp(),
+    error: null,
+    id: mockId(),
+    page_count: null,
+    service: null,
+    service_version: null,
+    status: 'queued',
+    structure: null,
+    tables: null,
+    updated_at: mockTimestamp(),
+    ...overrides,
+  }
+}
+
+/** crawler_policy — the singleton (id = 1) with the migration's defaults. */
+export function crawlerPolicyRow(overrides: Partial<Tables<'crawler_policy'>> = {}): Tables<'crawler_policy'> {
+  return {
+    allow_domains: [],
+    block_domains: [],
+    id: 1,
+    max_bytes: 5_242_880,
+    max_depth: 1,
+    max_pages: 5,
+    rate_per_min: 30,
+    recheck_hours: 168,
+    timeout_ms: 20_000,
+    updated_at: mockTimestamp(),
+    updated_by: null,
+    ...overrides,
+  }
+}
+
+let sourceSeq = 0
+/** external_sources — a pending submission (`SRC-000001` numbers). */
+export function externalSourceRow(
+  overrides: Partial<Tables<'external_sources'>> & Pick<Tables<'external_sources'>, 'submitted_by'>,
+): Tables<'external_sources'> {
+  sourceSeq += 1
+  const url = overrides.url ?? `https://example.org/article-${sourceSeq}`
+  return {
+    analyst_notes: null,
+    author: null,
+    canonical_url: url,
+    case_id: null,
+    classification: 'unclassified',
+    content_type: null,
+    created_at: mockTimestamp(),
+    current_version_id: null,
+    delete_batch: null,
+    delete_reason: null,
+    deleted_at: null,
+    deleted_by: null,
+    domain: new URL(url).hostname,
+    fetch_error: null,
+    http_status: null,
+    id: mockId(),
+    last_checked_at: null,
+    published_at: null,
+    reliability: 'unknown',
+    retrieved_at: null,
+    source_number: `SRC-${String(sourceSeq).padStart(6, '0')}`,
+    status: 'pending',
+    title: null,
+    updated_at: mockTimestamp(),
+    url,
+    verification_status: 'unverified',
+    verified_at: null,
+    verified_by: null,
+    version_count: 0,
+    ...overrides,
+  }
+}
+
+/** external_source_versions — immutable snapshots (`tsv` is server-generated). */
+export function externalSourceVersionRow(
+  overrides: Partial<Tables<'external_source_versions'>> & Pick<Tables<'external_source_versions'>, 'source_id'>,
+): Tables<'external_source_versions'> {
+  return {
+    byte_size: 1024,
+    content_hash: `\\x${'1'.repeat(64)}`,
+    content_type: 'text/html',
+    diff_summary: null,
+    http_status: 200,
+    id: mockId(),
+    markdown: '# Mock page\n\nMock external source text.',
+    retrieved_at: mockTimestamp(),
+    retrieved_by: null,
+    service: 'basic-fetch',
+    service_version: '1',
+    snapshot_path: null,
+    text: 'Mock page. Mock external source text.',
+    title: 'Mock page',
+    tsv: null,
+    version_no: 1,
+    ...overrides,
+  }
+}
+
+/** external_source_links — source → registry record (never `ci`). */
+export function externalSourceLinkRow(
+  overrides: Partial<Tables<'external_source_links'>> & Pick<Tables<'external_source_links'>, 'source_id' | 'kind' | 'ref_id'>,
+): Tables<'external_source_links'> {
+  return {
+    created_at: mockTimestamp(),
+    created_by: null,
+    id: mockId(),
+    note: null,
+    ...overrides,
+  }
+}
+
+let indexQueueSeq = 0
+/** search_index_queue — service-role only; never visible to a client session. */
+export function searchIndexQueueRow(
+  overrides: Partial<Tables<'search_index_queue'>> & Pick<Tables<'search_index_queue'>, 'kind' | 'ref_id'>,
+): Tables<'search_index_queue'> {
+  indexQueueSeq += 1
+  return {
+    attempts: 0,
+    error: null,
+    id: indexQueueSeq,
+    indexed_at: null,
+    op: 'upsert',
+    page_no: null,
+    queued_at: mockTimestamp(),
+    ...overrides,
+  }
+}
+
+let chunkSeq = 0
+/** semantic_chunks — `embedding` is pgvector text (`[0.1,…]`) or null when no provider ran. */
+export function semanticChunkRow(
+  overrides: Partial<Tables<'semantic_chunks'>> & Pick<Tables<'semantic_chunks'>, 'source_kind' | 'source_id'>,
+): Tables<'semantic_chunks'> {
+  chunkSeq += 1
+  return {
+    case_id: null,
+    chunk_no: 0,
+    content: 'Mock chunk text.',
+    content_hash: `\\x${'2'.repeat(64)}`,
+    created_at: mockTimestamp(),
+    embedding: null,
+    id: chunkSeq,
+    media_id: null,
+    model: null,
+    page_no: null,
+    ...overrides,
+  }
+}
+
+let healthSeq = 0
+/** service_health_events — Owner-readable probe results; never a URL or credential in `detail`. */
+export function serviceHealthEventRow(
+  overrides: Partial<Tables<'service_health_events'>> & Pick<Tables<'service_health_events'>, 'service'>,
+): Tables<'service_health_events'> {
+  healthSeq += 1
+  return {
+    checked_at: mockTimestamp(),
+    detail: {},
+    id: healthSeq,
+    latency_ms: 12,
+    status: 'healthy',
+    ...overrides,
+  }
 }

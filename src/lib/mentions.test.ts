@@ -3,7 +3,7 @@
  *  "differs from record" marker and the REPLACE-semantics merge. */
 import { describe, expect, it } from 'vitest'
 import {
-  MENTION_RE, RESTRICTED_LABEL, detectEditedEntities, entityKey, markEdited, mentionEntityRows, mentionKey,
+  MENTION_KIND_TAG, MENTION_RE, RESTRICTED_LABEL, detectEditedEntities, entityKey, isMentionLinkKind, markEdited, mentionEntityRows, mentionKey,
   mentionToken, mentionsToText, mergeEntityItems, parseMentions, splitMentions, withMentionLabels, type EntityItem,
 } from './mentions'
 
@@ -25,6 +25,25 @@ describe('token grammar', () => {
   it('ignores brackets that are not tokens (links, media refs, unknown kinds, non-uuids)', () => {
     expect(parseMentions(`[media:${P}] [officer:${P}] [person:not-a-uuid] [Weapons](https://x.y) [person]`)).toEqual([])
     expect(MENTION_RE.test(`[account:${P}]`)).toBe(false)
+  })
+
+  it('accepts the platform-upgrade artefact kinds and maps them to the report_entities vocabulary', () => {
+    const md = `[evidence:${P}] [charge:${V}] [report:${P}] [legal:${V}] [source:${P}]`
+    expect(parseMentions(md).map((r) => r.kind)).toEqual(['evidence', 'charge', 'report', 'legal', 'source'])
+    expect(MENTION_KIND_TAG.evidence).toBe('EVIDENCE')
+    expect(isMentionLinkKind('evidence')).toBe(false)
+    expect(isMentionLinkKind('person')).toBe(true)
+    const labels = {
+      [mentionKey('evidence', P)]: 'Lease · EV-000004', [mentionKey('charge', V)]: '187 · Murder',
+      [mentionKey('report', P)]: 'Arrest Report', [mentionKey('legal', V)]: 'LR-26-0004 · warrant', [mentionKey('source', P)]: 'SRC-000001',
+    }
+    // evidence → media, legal → legal_request; report and source have no
+    // report_entities arm and are NOT derived (the RPC would refuse the set).
+    expect(mentionEntityRows(md, labels).map((r) => [r.kind, r.ref_id])).toEqual([['media', P], ['charge', V], ['legal_request', V]])
+    // Folding rows back uses the same mapping.
+    expect(withMentionLabels({}, [{ kind: 'media', ref_id: P, label: 'Lease · EV-000004' }, { kind: 'legal_request', ref_id: V, label: 'LR-26-0004' }]))
+      .toEqual({ [mentionKey('evidence', P)]: 'Lease · EV-000004', [mentionKey('legal', V)]: 'LR-26-0004' })
+    expect(mentionsToText(md, labels)).toBe('Lease · EV-000004 187 · Murder Arrest Report LR-26-0004 · warrant SRC-000001')
   })
 
   it('splitMentions keeps literal text and order', () => {
@@ -49,7 +68,7 @@ describe('entity derivation', () => {
     const labels = withMentionLabels({ [mentionKey('person', P)]: 'Live name' }, [
       { kind: 'person', ref_id: P, label: 'Snapshot name' },
       { kind: 'vehicle', ref_id: V, label: 'ABC123' },
-      { kind: 'evidence', ref_id: V, label: 'not a mention kind' },
+      { kind: 'officer', ref_id: V, label: 'not a mention kind' },
       { kind: 'gang', ref_id: null, label: 'no ref' },
     ])
     expect(labels).toEqual({ [mentionKey('person', P)]: 'Live name', [mentionKey('vehicle', V)]: 'ABC123' })

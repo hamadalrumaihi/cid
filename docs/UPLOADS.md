@@ -1,7 +1,30 @@
-# Uploads — Uppy pilot (Case Detail → Photos & Media)
+# Uploads — Supabase Storage (evidence) and the Uppy / FiveManage pilot
+
+> **Since the platform upgrade (migration `20261105120000`) Supabase Storage
+> is the default evidence host.** The case's *Evidence & Media* tab hashes
+> the file in the browser (`src/lib/hash.ts`, SHA-256 via Web Crypto, files
+> ≤ 100 MB), uploads it to the **private `case-evidence` bucket** at
+> `case/<case_id>/<media_id>/<file>` (`src/lib/evidence.ts`; the media row is
+> inserted first with `storage_path`, `type`, `mime`, `byte_size`,
+> `original_filename`, and the bucket's INSERT policy requires exactly that
+> row, owned by the uploader), then calls `evidence_register` — the EV
+> number, the custody ledger and the `evidence.verify` job follow. Reads mint
+> 300 s signed URLs after the row-level check; there is no UPDATE policy on
+> any bucket and no authenticated DELETE (replace = a new item). Four more
+> private buckets — `case-packets`, `case-documents`,
+> `external-source-snapshots`, `exports` — are written by the service role
+> only ([PLATFORM-UPGRADE.md §15](PLATFORM-UPGRADE.md)). FiveManage remains
+> the **fallback** (a video above the bucket limit, or
+> `NEXT_PUBLIC_EVIDENCE_HOST=fivemanage`); a FiveManage row can never be
+> registered as evidence because there are no bytes to hash. The offline
+> contract of the five buckets is `src/mocks/handlers/platform.ts`.
+
+The rest of this document describes the earlier Uppy pilot on the FiveManage
+transport, which the fallback path still uses.
+
 
 Phase 3 of the integration program: the **Add photos** modal on a case's
-Photos & Media tab now runs its file uploads through a headless
+Evidence & Media tab now runs its file uploads through a headless
 [Uppy](https://uppy.io) queue instead of a fire-and-forget `fetch` loop.
 This is the ONLY surface on the pilot — every other upload site
 (vault MediaView, case files, places, persons, gangs, profile avatar) still

@@ -112,3 +112,54 @@ describe('search section registry', () => {
     }
   })
 })
+
+/* ── Platform upgrade (§5.2 Search): headline rendering + the two FTS kinds ── */
+import { documentHitsFromRows, headlineText, sourceHitsFromRows, splitHeadline } from './search'
+
+describe('splitHeadline / headlineText', () => {
+  it('splits ts_headline output into text and bold segments — never HTML', () => {
+    expect(splitHeadline('the <b>dock</b> lease <b>2026</b>')).toEqual([
+      { text: 'the ', bold: false }, { text: 'dock', bold: true }, { text: ' lease ', bold: false }, { text: '2026', bold: true },
+    ])
+    // Any other tag-looking text is content, not markup.
+    expect(splitHeadline('<script>x</script> <b>y</b>')).toEqual([{ text: '<script>x</script> ', bold: false }, { text: 'y', bold: true }])
+    expect(splitHeadline('')).toEqual([])
+    expect(splitHeadline(null)).toEqual([])
+    expect(headlineText('  the <b>dock</b>\n lease ')).toBe('the dock lease')
+  })
+})
+
+describe('document / source hits', () => {
+  const C = '11111111-2222-4333-8444-555555555555'
+  const M = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+  it('document_search rows → "Case documents" hits with a page deep link and the evidence number', () => {
+    const [h] = documentHitsFromRows([{ media_id: M, case_id: C, title: 'Lease', evidence_number: 'EV-000004', page_no: 3, headline: 'the <b>dock</b>', rank: 0.4 }])
+    expect(h).toMatchObject({
+      kind: 'document_page', id: `${M}:3`, label: 'Lease · EV-000004', sublabel: 'Page 3 · the dock', headline: 'the <b>dock</b>', rank: 0.4,
+      href: `/cases?case=${C}&tab=documents&media=${M}&page=3`,
+    })
+    // No case → no href (the palette routes by kind); untitled → "Document".
+    const [n] = documentHitsFromRows([{ media_id: M, case_id: null, title: '', evidence_number: null, page_no: 1, headline: '', rank: 0 }])
+    expect(n.href).toBeUndefined()
+    expect(n.label).toBe('Document')
+    expect(n.sublabel).toBe('Page 1')
+    expect(documentHitsFromRows(Array.from({ length: 12 }, (_, i) => ({ media_id: M, case_id: C, title: 't', evidence_number: null, page_no: i, headline: '', rank: 0 })))).toHaveLength(8)
+  })
+
+  it('external_source_search rows → source hits: number + title, the domain, never a URL', () => {
+    const [h] = sourceHitsFromRows([{ source_id: 's1', source_number: 'SRC-000001', title: 'Port notice', domain: 'example.org', headline: '<b>dock</b> closed', rank: 0.3 }])
+    expect(h).toMatchObject({ kind: 'source', id: 's1', label: 'SRC-000001 · Port notice', sublabel: 'example.org · dock closed', href: '/intelligence?source=s1' })
+    expect(JSON.stringify(h)).not.toContain('http')
+    const [u] = sourceHitsFromRows([{ source_id: 's2', source_number: 'SRC-000002', title: null, domain: 'x.example', headline: '', rank: 0 }])
+    expect(u.label).toBe('SRC-000002')
+    expect(u.sublabel).toBe('x.example')
+  })
+
+  it('the section registry knows both kinds and orders them after documents', () => {
+    expect(SEARCH_KINDS.document_page.title).toBe('Case documents')
+    expect(SEARCH_KINDS.source.title).toBe('External sources')
+    const order = [...SEARCH_SECTION_ORDER]
+    expect(order.indexOf('document_page')).toBe(order.indexOf('document') + 1)
+    expect(order.indexOf('source')).toBe(order.indexOf('document_page') + 1)
+  })
+})

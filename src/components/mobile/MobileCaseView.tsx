@@ -42,6 +42,7 @@ import { MOBILE_CASE_SECTIONS, isCaseTab, isMobileCaseSection, mobileCaseHref, t
 import { DesktopOnlyCard, MOBILE_CASE_SELECT, OpenOnDesktop, type MobileCase } from './mobileShared'
 import { MobileActivity } from './MobileActivity'
 import { MobileEntities } from './MobileEntities'
+import { MobileDocuments } from './MobileDocuments'
 import { MobileEvidence } from './MobileEvidence'
 import { MobileNotes } from './MobileNotes'
 import { MobileOverview } from './MobileOverview'
@@ -147,6 +148,7 @@ export function MobileCaseView() {
         {section === 'gangs' && <MobileEntities c={c} kind="gang" canEdit={canEdit} />}
         {section === 'locations' && <MobileEntities c={c} kind="place" canEdit={canEdit} />}
         {section === 'media' && <MobileEvidence c={c} />}
+        {section === 'documents' && <MobileDocuments c={c} canEdit={canEdit} />}
         {section === 'reports' && <MobileReports c={c} canEdit={canEdit} viewerId={profile?.id ?? null} />}
         {section === 'activity' && <MobileActivity c={c} />}
         {!isMobileCaseSection(section) && (

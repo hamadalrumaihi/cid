@@ -82,6 +82,7 @@ export const SOFT_DELETE_KIND = {
   // Portal cleanup (20261104120000): the last two member-created tables that
   // hard-deleted now follow the one rule (DESIGN-SYSTEM.md "Deleting things").
   case_templates: 'case_template', commendations: 'commendation',
+  case_packets: 'case_packet', external_sources: 'external_source',
 } as const satisfies Partial<Record<TableName, string>>
 export type SoftDeleteTable = keyof typeof SOFT_DELETE_KIND
 /** Kinds whose soft_delete requires a reason (the parent records and the
@@ -267,6 +268,35 @@ export async function invokeFunction(name: string, body: unknown): Promise<{ err
     return { error: error ? { message: error.message } : null }
   } catch (e) {
     return { error: { message: e instanceof Error ? e.message : String(e) } }
+  }
+}
+
+/** Edge-function invoke that RETURNS the JSON body (the search-query /
+ *  semantic-query functions, platform upgrade §3). Never throws. `status`
+ *  carries the HTTP status when the function answered (a 503
+ *  `{code:'unavailable'}` means "service not configured — fall back"); the
+ *  body's `code` is lifted onto the error so adapters can branch on it. */
+export async function invokeFunctionJson<T = unknown>(
+  name: string,
+  body: unknown,
+): Promise<{ data: T | null; error: DbError | null; status: number | null }> {
+  try {
+    const { data, error } = await raw().functions.invoke(name, { body: body as Record<string, unknown> })
+    if (error) {
+      const ctx = (error as { context?: unknown }).context
+      const res = typeof Response !== 'undefined' && ctx instanceof Response ? ctx : null
+      let code: string | undefined
+      if (res) {
+        try {
+          const j = (await res.clone().json()) as { code?: unknown } | null
+          if (j && typeof j.code === 'string') code = j.code
+        } catch { /* non-JSON body */ }
+      }
+      return { data: null, error: { message: error.message, code }, status: res?.status ?? null }
+    }
+    return { data: (data ?? null) as T | null, error: null, status: 200 }
+  } catch (e) {
+    return { data: null, error: { message: e instanceof Error ? e.message : String(e) }, status: null }
   }
 }
 

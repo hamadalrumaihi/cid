@@ -8,6 +8,98 @@ the merged PRs that compose it.
 
 ## [Unreleased]
 
+### Platform upgrade
+
+One phase, one migration (`20261105120000_platform_upgrade`): the evidence
+system, background jobs, case packets and documents, external sources, the
+investigation graph, search tiers, feature flags, system health and
+telemetry — every auxiliary service optional and flagged, the portal fully
+working with none of them. Master document `docs/PLATFORM-UPGRADE.md` (audit,
+decision matrix for the 25 evaluated projects, architecture before / after,
+CI security per surface, inventory, deployment, rollback, feature matrix);
+authority `docs/AUTHORIZATION.md` §22; flows `docs/WORKFLOWS.md` §16–§18;
+operations `docs/OPERATIONS.md` §11; handbook ch. 24.
+
+- **Evidence** — Supabase Storage is the evidence host (private
+  `case-evidence` bucket, path-scoped RLS, 300 s signed URLs; FiveManage kept
+  as the fallback). Client SHA-256 at upload, `evidence_register` (EV-000001
+  series, integrity columns locked to the evidence service by
+  `media_protect_integrity`, `media` now versioned), the hash-chained,
+  append-only `evidence_custody_events` ledger (18 event types,
+  `evidence_chain_verify`), `evidence.verify` on register + a 30-day sweep
+  with `evidence_integrity_failure` fan-out, custody transfer / access log /
+  seal (flag `evidence_sealing`) / release, derivatives as child rows with
+  the parent's hash. Evidence & Media tab: INTEGRITY chip, detail sheet with
+  custody history, transfer dialog, derivatives, jobs and export history;
+  Timeline gains Custody / Packet / Source / Document lanes and filter chips.
+- **Background jobs** — `background_jobs` (10 queues, 10 kinds, idempotent
+  enqueue, `min(1h, 5s·2^attempts)` retries, 5-minute leases + reap, cancel
+  / retry, `background_jobs_stats`), the `jobs-runner` edge function
+  (`x-jobs-secret` ↔ `app_secrets.JOBS_SECRET`, lightweight kinds, 50 s
+  budget) and the optional BullMQ worker (`workers/`, `docker-compose.yml`
+  with Redis, Stirling PDF, Crawl4AI, Docling, Meilisearch). Results land as
+  notifications with deep links; `JobsTray` on the Documents tab.
+- **Case packets and documents** — `case_packet_request` snapshots under
+  the caller (restricted / sealed / CI excluded before the job exists),
+  server-rendered PDF with watermark + `manifest.json` + `manifest.sha256`
+  in `case-packets`, immutable `export_manifests`, `manifest_verify` (+
+  `scripts/verify-bundle.mjs`), audited downloads; evidence bundles;
+  `document_tool_request` (19 tools; 6 without Stirling), `document_pages` /
+  `document_extractions` (Docling, `unpdf` fallback), `document_search`. New
+  case tab **Documents** (Reports, Evidence Documents with page search,
+  Legal, Generated, Case Packets, Document Tools).
+- **External sources** — `external_sources` / `_versions` / `_links`,
+  `crawler_policy`, `SRC-000001` numbers, `external_source_submit` behind
+  `private.url_static_check` (mirrored byte-identically in
+  `src/lib/urlPolicy.ts`, `supabase/functions/_shared/urlPolicy.ts`,
+  `workers/src/urlPolicy.ts`), guarded fetch with per-hop DNS / redirect
+  checks, immutable versions with diff summaries, verify / link / unlink /
+  recrawl / update / search, daily recheck. Intelligence → **External
+  Sources** tab; sources on the case Intel tab and in the graph.
+- **Investigation graph** — INVOKER `graph_expand` (depth 1–3, ≤ 500 rows,
+  every node `perm_registry_visible`, no CI arm) rendered by Cytoscape
+  (`InvestigationGraph`: expand / collapse / focus / shortest path / kind
+  filters / saved views / PNG); `NetworkView` and the case Graph tab rebuilt
+  on it; `@xyflow/react` removed.
+- **Search** — palette groups *Case documents* and *External sources*;
+  `search_authorize` re-authorises Meilisearch candidates in Postgres (flag
+  `meilisearch`, `search-query` function); pgvector `semantic_chunks`,
+  `semantic_search`, `hybrid_search` (RRF; flag `semantic_search`,
+  `semantic-query` function); both functions run the RPCs as the caller and
+  answer 503 without a provider; the client adapter falls back to exact.
+- **Flags, health, telemetry** — `feature_flags` (ten keys, Owner
+  `feature_flag_set`, realtime, `NEXT_PUBLIC_ENABLE_<KEY>` override),
+  `service_health_events` + `system_health()` (Owner Console → System
+  Health with Retry / Cancel, flag toggles, crawler policy), lazy scrubbed
+  Sentry (`NEXT_PUBLIC_SENTRY_DSN`), `@vercel/otel` when
+  `OTEL_EXPORTER_OTLP_ENDPOINT` is set, Sentry + OTel in the worker; CSP
+  `connect-src` gains the Sentry ingest hosts.
+- **Editor** — Tiptap slash commands (`/person … /source`), `cidEntity`
+  blocks, tables, underline, links; mention kinds + evidence / charge /
+  report / legal / source.
+- **Notifications** — `case_packet_ready` / `_failed`,
+  `evidence_bundle_ready`, `evidence_integrity_failure` (security, high),
+  `evidence_custody_transfer`, `external_source_changed` / `_failed`,
+  `document_ready` / `_failed`, `background_job_failed`.
+- **Permissions** — `perm_dispatch` arms `case_packet` and
+  `external_source`; `soft_delete_table` / `trash_list` arms; 30
+  `permission_catalog` rows (740–849; `test_id` v192a–c); 27 audit
+  actions; five cron jobs (`background-jobs-kick`, `background-jobs-reap`,
+  `evidence-integrity-sweep`, `external-source-recheck`, `health-probe`).
+- **Tests** — `tests/rls/v192a` (evidence), `v192b` (packets / documents /
+  jobs), `v192c` (sources / graph / search + the CI proof across every new
+  surface, before and after retirement); `src/lib/urlPolicy.test.ts`,
+  `jobsModel.test.ts`, `hash.test.ts`, `manifest.test.ts`,
+  `graphModel.test.ts`, `flags.test.ts`, the adapter tests; MSW
+  `src/mocks/handlers/platform.ts` + fixture builders for the fourteen new
+  tables; e2e `evidence`, `packets`, `sources`, `graph`, `ci-visibility`.
+- **Decisions** — Stirling PDF, Crawl4AI, Cytoscape, BullMQ, Docling,
+  pgvector, Evidence-Seal concepts, Sentry, Redis added; Meilisearch and
+  OpenTelemetry partial; Loom / Veritio / OES / D-CIP / EditorCN / Coolify /
+  OpenHands reference only; OpenFGA (evaluated), Lexical, Retraced,
+  Unstructured, Browser Use, Dify, Langflow, Temporal, Maxun, Open WebUI
+  rejected — reasons in `docs/PLATFORM-UPGRADE.md` §3.
+
 ### Confidential Informant compartment
 
 A protected-source registry with its own access wall — **canAccessCI =
