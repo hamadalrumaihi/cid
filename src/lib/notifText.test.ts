@@ -124,3 +124,47 @@ describe('notification titles (P7-07)', () => {
     expect(notifHref(row('blocker_assigned', { case_id: 'c-1', blocker_id: 'b-1' }))).toBe('/cases?case=c-1&tab=overview')
   })
 })
+
+/* ── Platform upgrade (§2.10): the ten kinds, titles, deep links. ──────────── */
+import { PLATFORM_NOTIF_KINDS } from './notifText'
+
+describe('platform-upgrade notification kinds', () => {
+  const C = '11111111-2222-4333-8444-555555555555'
+  it('every kind is registered with a title and the contract category', () => {
+    const cats: Record<string, string> = {
+      case_packet_ready: 'reports', case_packet_failed: 'reports', evidence_bundle_ready: 'reports',
+      evidence_integrity_failure: 'security', evidence_custody_transfer: 'assignments',
+      external_source_changed: 'intel', external_source_failed: 'intel',
+      document_ready: 'reports', document_failed: 'reports', background_job_failed: 'security',
+    }
+    for (const [k, cat] of Object.entries(cats)) {
+      expect(PLATFORM_NOTIF_KINDS.has(k), k).toBe(true)
+      expect(NOTIF_REGISTRY[k]?.title, k).toBeTruthy()
+      expect(NOTIF_CATEGORY[k], k).toBe(cat)
+      expect(MUTABLE_NOTIF_TYPES.has(k), k).toBe(false)
+    }
+    expect(NOTIF_REGISTRY.evidence_integrity_failure.priority).toBe('high')
+  })
+
+  it('deep-links by id: packet → Documents (packet), evidence → Evidence & Media (media), source → Intelligence, document → Documents (media), job → System Health', () => {
+    expect(notifHref(row('case_packet_ready', { case_id: C, packet_id: 'p1' }))).toBe(`/cases?case=${C}&tab=documents&packet=p1`)
+    expect(notifHref(row('case_packet_failed', { case_id: C }))).toBe(`/cases?case=${C}&tab=documents`)
+    expect(notifHref(row('evidence_bundle_ready', { case_id: C, job_id: 'j1' }))).toBe(`/cases?case=${C}&tab=documents`)
+    expect(notifHref(row('evidence_integrity_failure', { case_id: C, media_id: 'm1' }))).toBe(`/cases?case=${C}&tab=media&media=m1`)
+    expect(notifHref(row('evidence_custody_transfer', { case_id: C, media_id: 'm1' }))).toBe(`/cases?case=${C}&tab=media&media=m1`)
+    expect(notifHref(row('external_source_changed', { source_id: 's 1' }))).toBe('/intelligence?source=s%201')
+    expect(notifHref(row('external_source_failed', {}))).toBe('/intelligence')
+    expect(notifHref(row('document_ready', { case_id: C, media_id: 'm1' }))).toBe(`/cases?case=${C}&tab=documents&media=m1`)
+    expect(notifHref(row('document_failed', { case_id: C, media_id: 'm1' }))).toBe(`/cases?case=${C}&tab=documents&media=m1`)
+    expect(notifHref(row('background_job_failed', { job_id: 'j1', kind: 'packet.render' }))).toBe('/owner?s=health')
+    // No case → no dead case link.
+    expect(notifHref(row('case_packet_ready', { packet_id: 'p1' }))).toBeNull()
+  })
+
+  it('shows the evidence number as the identifier line and the job kind on the sub line — never free text', () => {
+    const n = row('evidence_integrity_failure', { case_id: C, media_id: 'm1', evidence_number: 'EV-000004', reason: 'never', summary: 'never' })
+    expect(notifDetail(n)).toBe('EV-000004')
+    expect(notifSub(row('background_job_failed', { job_id: 'j1', kind: 'source.fetch' }))).toBe('Source fetch')
+    expect(notifSub(row('background_job_failed', { job_id: 'j1' }))).toBeNull()
+  })
+})

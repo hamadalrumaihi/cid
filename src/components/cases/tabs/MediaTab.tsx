@@ -1,23 +1,31 @@
 'use client'
 
-/** Photos & Media — the case's canonical visual record, backed by the `media`
- *  table (typed FK columns, category, featured, archived_at). Replaces the
- *  frozen Evidence tab: category pills filter INSIDE the tab, cards open a
- *  focus-trapped detail lightbox (same Modal engine as the vault), and "Add
- *  photos" runs the Uppy → FiveManage upload pilot (lazy-loaded queue with
- *  byte progress + per-file retry; multi-file, edit metadata after upload).
- *  Archive never deletes — archived_at only; hard
- *  delete stays command-only via the shared delete/undo path. Formal evidence
- *  (media_designate_evidence: uploader or Senior Detective+/Owner; audited,
- *  uploader identity untouched) lists in its own section above general
- *  uploads, carrying its EV reference and designation provenance. The three
- *  frozen legacy `evidence` rows render read-only at the bottom (writes are
- *  revoked server-side; custody UI is gone — the table never held a row). */
+/** Evidence & Media — the case's canonical evidence record, backed by the
+ *  `media` table (typed FK columns, category, featured, archived_at, and the
+ *  platform-upgrade evidence columns: sha256, evidence_number, integrity,
+ *  custody, lineage). Category pills filter INSIDE the tab; "Add evidence"
+ *  runs the Supabase Storage pipeline (hash → row → object →
+ *  evidence_register; FiveManage stays as the legacy/oversize fallback).
+ *
+ *  Designated evidence (a registered EV number, or the legacy
+ *  media_designate_evidence reference) lists first as EvidenceCards — number,
+ *  INTEGRITY badge, short SHA-256 with copy, last verified, and an overflow
+ *  menu (Verify / Transfer custody / Seal / Release) — and opens the
+ *  EvidenceDetailSheet (custody chain, derivatives, jobs, exports, related
+ *  records). General uploads keep the gallery + record list and the general
+ *  detail lightbox. Derivative rows (parent_media_id) never sit in the grid;
+ *  they show inside their parent's sheet. Storage-hosted bytes are reached
+ *  through 300 s signed URLs and every view / download is logged.
+ *
+ *  Archive never deletes — archived_at only; hard delete stays command-only
+ *  via the shared delete/undo path. The frozen legacy `evidence` rows render
+ *  read-only at the bottom (writes are revoked server-side). */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import type { Json, Tables } from '@/lib/database.types'
+import { ActionMenu } from '@/components/ui/ActionMenu'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import {
@@ -33,8 +41,13 @@ import { insert, list, rpc, update } from '@/lib/db'
 import { deleteRecord } from '@/lib/deleteRecord'
 import { caseLink } from '@/lib/caseLinks'
 import { CASE_MEDIA_CATEGORIES, caseMediaCategoryLabel, filterCaseMedia, legacyEvidenceRef } from '@/lib/caseMedia'
+import {
+  evidenceHost, evidenceNumberOf, isDerivative, isEvidenceRow, isStorageHosted, logEvidenceAccess, sha256HexOf,
+  useEvidenceSealingFlag, useMediaSrc, type UploadEvidenceResult,
+} from '@/lib/evidence'
 import { fmConfigured } from '@/lib/fivemanage'
-import { fmtDate, fmtDateTime, timeAgo } from '@/lib/format'
+import { copyText, fmtDate, fmtDateTime, timeAgo } from '@/lib/format'
+import { shortHash } from '@/lib/hash'
 import { reportTitle } from '@/lib/forms'
 import { parseFormValues } from '@/lib/jsonShapes'
 import { useAuth } from '@/lib/auth'
@@ -44,6 +57,10 @@ import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import type { UploadedFile } from '@/lib/uppyFivemanage'
+import { EvidenceDetailSheet, type RelatedRecord } from './evidence/EvidenceDetailSheet'
+import { evidenceMenuItems } from './evidence/evidenceActions'
+import { ExternalHostLine, IntegrityBadge } from './evidence/IntegrityBadge'
+import { TransferCustodyDialog } from './evidence/TransferCustodyDialog'
 import { mutateThen, type CaseRow, type EvidenceRow, type MediaRow } from './shared'
 
 const PAGE = 24
@@ -63,6 +80,8 @@ type GrantRow = Tables<'restricted_access_grants'>
 const grantIsLive = (g: GrantRow, nowMs: number) =>
   g.status === 'granted' && !g.revoked_at && new Date(g.expires_at).getTime() > nowMs
 
+/** Direct source for URL-shaped rows only — storage-hosted rows sign on
+ *  demand through useMediaSrc (components), never through this helper. */
 const mediaSrc = (m: MediaRow) => m.external_url || m.storage_path || ''
 const tagsOf = (m: MediaRow): Record<string, unknown> => parseFormValues(m.tags)
 const tagStr = (m: MediaRow, key: string): string | null => {
@@ -82,7 +101,12 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
   const [page, setPage] = useState(1)
   const [fetchLimit, setFetchLimit] = useState(FETCH_STEP)
   const [detailId, setDetailId] = useState<string | null>(null)
+  // The general media lightbox opened FROM the evidence sheet ("More media
+  // options…") — feature / archive / links / delete for a designated row.
+  const [optionsId, setOptionsId] = useState<string | null>(null)
+  const [transferId, setTransferId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const sealingEnabled = useEvidenceSealingFlag()
   // First-load gate: the gallery must not flash "No case photos yet" before
   // the initial fetch resolves, and a failed load must say so (BUG-027).
   const [loading, setLoading] = useState(true)
@@ -158,6 +182,16 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
   // highlight the referenced line (scroll once; focus never moves).
   const sp = useSearchParams()
   const evParam = sp.get('evidence')
+  // ?media= deep links (notifications, timeline, search) open the row's
+  // detail once the list has it — once per param value.
+  const mediaParam = sp.get('media')
+  const openedParam = useRef<string | null>(null)
+  useEffect(() => {
+    if (!mediaParam || openedParam.current === mediaParam) return
+    if (!rows.some((m) => m.id === mediaParam)) return
+    openedParam.current = mediaParam
+    queueMicrotask(() => setDetailId(mediaParam))
+  }, [mediaParam, rows])
   const legacyRefs = useRef<Record<string, HTMLElement | null>>({})
   const scrolledRef = useRef<string | null>(null)
   useEffect(() => {
@@ -217,12 +251,14 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
     void refreshGrants()
   }
 
-  const filtered = filterCaseMedia(rows, { category, showArchived })
-  // Evidence split: formally designated items (evidence_ref) separate from
-  // general uploads. The curated evidence set renders in full; pagination
-  // applies to the general remainder.
-  const evidenceRows = filtered.filter((m) => m.evidence_ref != null)
-  const generalRows = filtered.filter((m) => m.evidence_ref == null)
+  // Derivatives (previews, OCR text, redactions) never sit in the grid —
+  // they belong to their parent's sheet.
+  const filtered = filterCaseMedia(rows.filter((m) => !isDerivative(m)), { category, showArchived })
+  // Evidence split: designated items (a registered EV number or the legacy
+  // evidence_ref) separate from general uploads. The curated evidence set
+  // renders in full; pagination applies to the general remainder.
+  const evidenceRows = filtered.filter(isEvidenceRow)
+  const generalRows = filtered.filter((m) => !isEvidenceRow(m))
   const visibleGeneral = generalRows.slice(0, PAGE * page)
   const hasMore = generalRows.length > visibleGeneral.length || rows.length >= fetchLimit
   const loadMore = () => {
@@ -232,10 +268,21 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
   const pickCategory = (next: string) => { setCategory(next); setPage(1) }
 
   const detail = detailId ? rows.find((m) => m.id === detailId) ?? null : null
+  const options = optionsId ? rows.find((m) => m.id === optionsId) ?? null : null
+  const transfer = transferId ? rows.find((m) => m.id === transferId) ?? null : null
   const reportLabel = (id: string | null) => {
     if (!id) return null
     const r = reports.find((x) => x.id === id)
     return r ? reportTitle(r) : 'Report'
+  }
+  const relatedOf = (m: MediaRow): RelatedRecord[] => {
+    const out: RelatedRecord[] = []
+    if (m.person_id && names.persons.get(m.person_id)) out.push({ key: 'person', kind: 'person', id: m.person_id, label: names.persons.get(m.person_id)! })
+    if (m.vehicle_id) { const v = vehicles.find((x) => x.id === m.vehicle_id); if (v) out.push({ key: 'vehicle', kind: 'vehicle', id: v.id, label: v.plate }) }
+    if (m.gang_id && names.gangs.get(m.gang_id)) out.push({ key: 'gang', kind: 'gang', id: m.gang_id, label: names.gangs.get(m.gang_id)! })
+    if (m.place_id && names.places.get(m.place_id)) out.push({ key: 'place', kind: 'place', id: m.place_id, label: names.places.get(m.place_id)! })
+    if (m.narcotic_id && names.narcotics.get(m.narcotic_id)) out.push({ key: 'narcotic', kind: 'narcotic', id: m.narcotic_id, label: names.narcotics.get(m.narcotic_id)! })
+    return out
   }
 
   return (
@@ -262,7 +309,7 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
           >
             Archived
           </button>
-          {canEdit && <Button variant="primary" onClick={() => setAddOpen(true)}>Add photos</Button>}
+          {canEdit && <Button variant="primary" onClick={() => setAddOpen(true)}>Add evidence</Button>}
         </div>
       </div>
 
@@ -360,7 +407,23 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
               <h3 className="text-[13px] font-semibold text-white">
                 Evidence <span className="tabular-nums">({evidenceRows.length})</span>
               </h3>
-              <MediaGroup items={evidenceRows} names={names} vehicles={vehicles} reportLabel={reportLabel} onOpen={setDetailId} />
+              <ul className="grid list-none grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {evidenceRows.map((m) => (
+                  <li key={m.id} className="min-w-0">
+                    <EvidenceCard
+                      m={m}
+                      names={names}
+                      vehicles={vehicles}
+                      reportLabel={reportLabel}
+                      sealingEnabled={sealingEnabled}
+                      isCommand={isCommand}
+                      onOpen={() => setDetailId(m.id)}
+                      onTransfer={() => setTransferId(m.id)}
+                      onChanged={() => void refresh()}
+                    />
+                  </li>
+                ))}
+              </ul>
             </section>
           )}
           {visibleGeneral.length > 0 && (
@@ -386,9 +449,9 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
       ) : (
         <EmptyState
           icon={<PhotoIcon size={28} />}
-          title="No case photos yet"
-          hint={canEdit ? 'Add scene shots, documents, surveillance stills — anything visual the case relies on.' : 'No photos or media have been added to this case yet.'}
-          action={canEdit ? { label: 'Add photos', onClick: () => setAddOpen(true) } : undefined}
+          title="No evidence or media yet"
+          hint={canEdit ? 'Add scene shots, documents, recordings, surveillance stills — every upload is hashed and registered as evidence.' : 'No evidence or media has been added to this case yet.'}
+          action={canEdit ? { label: 'Add evidence', onClick: () => setAddOpen(true) } : undefined}
         />
       )}
 
@@ -418,9 +481,25 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
         </details>
       )}
 
-      {detail && (
-        <MediaDetailModal
+      {detail && (isEvidenceRow(detail) || isDerivative(detail)) && !options && (
+        <EvidenceDetailSheet
           m={detail}
+          caseId={c.id}
+          caseNumber={c.case_number}
+          parent={detail.parent_media_id ? rows.find((m) => m.id === detail.parent_media_id) ?? null : null}
+          canEdit={canEdit}
+          isCommand={isCommand}
+          related={relatedOf(detail)}
+          reportLabel={reportLabel}
+          onClose={() => setDetailId(null)}
+          onChanged={() => void refresh()}
+          onOpenMediaOptions={() => setOptionsId(detail.id)}
+          onOpenRow={(id) => { if (rows.some((m) => m.id === id)) setDetailId(id); else toast('That item is not visible to you.', 'warn') }}
+        />
+      )}
+      {((detail && !isEvidenceRow(detail) && !isDerivative(detail)) || options) && (
+        <MediaDetailModal
+          m={(options ?? detail)!}
           c={c}
           canEdit={canEdit}
           canDelete={canDelete}
@@ -428,10 +507,13 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
           names={names}
           vehicles={vehicles}
           reports={reports}
-          onClose={() => setDetailId(null)}
+          onClose={() => { if (options) setOptionsId(null); else setDetailId(null) }}
           onChanged={() => void refresh()}
-          onDeleted={() => { setDetailId(null); void refresh() }}
+          onDeleted={() => { setOptionsId(null); setDetailId(null); void refresh() }}
         />
+      )}
+      {transfer && (
+        <TransferCustodyDialog m={transfer} onClose={() => setTransferId(null)} onDone={() => { setTransferId(null); void refresh() }} />
       )}
       {addOpen && (
         <AddPhotosModal
@@ -525,9 +607,14 @@ const FILE_KIND_LABEL: Record<FileKind, string> = {
   image: 'Image', video: 'Video', audio: 'Audio', document: 'Document', link: 'Link',
 }
 
-/** UI file kind for the stroke icon set — media.type plus the same extension
- *  sniffing the detail player uses ('fivemanage' rows are the audio pilot). */
+/** UI file kind for the stroke icon set — the ingest MIME when captured,
+ *  else media.type plus the same extension sniffing the detail player uses
+ *  ('fivemanage' rows are the audio pilot). */
 function fileKind(m: MediaRow): FileKind {
+  const mime = (m.mime ?? '').toLowerCase()
+  if (mime.startsWith('video/')) return 'video'
+  if (mime.startsWith('audio/')) return 'audio'
+  if (mime.startsWith('image/')) return 'image'
   const src = mediaSrc(m)
   if (m.type === 'video' || /\.(mp4|webm|mov|m4v)($|\?)/i.test(src)) return 'video'
   if (m.type === 'fivemanage' || /\.(mp3|wav|ogg|m4a)($|\?)/i.test(src)) return 'audio'
@@ -536,9 +623,10 @@ function fileKind(m: MediaRow): FileKind {
   return 'link'
 }
 
-/** Gallery membership: an image row with a loadable-looking URL. Everything
- *  else (and images with no safe URL) drops to the record list. */
-const hasThumb = (m: MediaRow) => fileKind(m) === 'image' && !!safeUrl(mediaSrc(m))
+/** Gallery membership: an image row with a loadable-looking URL, or a
+ *  storage-hosted image (signed on demand). Everything else drops to the
+ *  record list. */
+const hasThumb = (m: MediaRow) => fileKind(m) === 'image' && (isStorageHosted(m) || !!safeUrl(mediaSrc(m)))
 
 function MediaGroup({ items, names, vehicles, reportLabel, onOpen }: {
   items: MediaRow[]
@@ -630,7 +718,8 @@ function MediaCard({ m, names, vehicles, reportLabel, onOpen }: {
   onOpen: () => void
 }) {
   const [imgFailed, setImgFailed] = useState(false)
-  const safe = safeUrl(mediaSrc(m))
+  const src = useMediaSrc(m)
+  const safe = safeUrl(src ?? '')
   const chips: { key: string; icon: React.ReactNode; label: string }[] = []
   if (m.vehicle_id) { const v = vehicles.find((x) => x.id === m.vehicle_id); if (v) chips.push({ key: 'vehicle', icon: <VehicleIcon size={11} />, label: v.plate }) }
   if (m.person_id && names.persons.get(m.person_id)) chips.push({ key: 'person', icon: <PersonIcon size={11} />, label: names.persons.get(m.person_id)! })
@@ -691,6 +780,114 @@ function MediaCard({ m, names, vehicles, reportLabel, onOpen }: {
   )
 }
 
+/** Registered evidence card — an <article> (not one big button): the
+ *  thumbnail + title area opens the sheet, the footer carries the hash copy
+ *  and the overflow menu, so no interactive control nests inside another. */
+function EvidenceCard({ m, names, vehicles, reportLabel, sealingEnabled, isCommand, onOpen, onTransfer, onChanged }: {
+  m: MediaRow
+  names: NameMaps
+  vehicles: VehicleLite[]
+  reportLabel: (id: string | null) => string | null
+  sealingEnabled: boolean
+  isCommand: boolean
+  onOpen: () => void
+  onTransfer: () => void
+  onChanged: () => void
+}) {
+  const [imgFailed, setImgFailed] = useState(false)
+  const src = useMediaSrc(m)
+  const safe = safeUrl(src ?? '')
+  const storage = isStorageHosted(m)
+  const sha = sha256HexOf(m)
+  const evNumber = evidenceNumberOf(m) ?? 'Evidence'
+  const linkedReport = reportLabel(m.report_id)
+  const chips: { key: string; icon: React.ReactNode; label: string }[] = []
+  if (m.vehicle_id) { const v = vehicles.find((x) => x.id === m.vehicle_id); if (v) chips.push({ key: 'vehicle', icon: <VehicleIcon size={11} />, label: v.plate }) }
+  if (m.person_id && names.persons.get(m.person_id)) chips.push({ key: 'person', icon: <PersonIcon size={11} />, label: names.persons.get(m.person_id)! })
+  if (m.gang_id && names.gangs.get(m.gang_id)) chips.push({ key: 'gang', icon: <GangIcon size={11} />, label: names.gangs.get(m.gang_id)! })
+  if (m.place_id && names.places.get(m.place_id)) chips.push({ key: 'place', icon: <PlaceIcon size={11} />, label: names.places.get(m.place_id)! })
+  if (m.narcotic_id && names.narcotics.get(m.narcotic_id)) chips.push({ key: 'narcotic', icon: <NarcoticIcon size={11} />, label: names.narcotics.get(m.narcotic_id)! })
+  const menu = evidenceMenuItems({ m, sealingEnabled, isCommand, onDetails: onOpen, onTransfer, onChanged })
+  return (
+    <article className={`flex h-full flex-col overflow-hidden rounded-lg border border-white/10 bg-ink-950/50 transition hover:border-white/20 ${m.archived_at ? 'opacity-70' : ''}`}>
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`Open ${evNumber} — ${m.title}`}
+        className="block w-full flex-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-400"
+      >
+        {fileKind(m) === 'image' && safe && !imgFailed ? (
+          // eslint-disable-next-line @next/next/no-img-element -- signed / external media URL
+          <img src={safe} alt="" loading="lazy" onError={() => setImgFailed(true)} className="h-32 w-full object-cover" />
+        ) : (
+          <span aria-hidden className="flex h-32 w-full items-center justify-center bg-ink-800 text-slate-500">
+            <FileTypeIcon type={fileKind(m)} size={28} />
+          </span>
+        )}
+        <span className="block p-3">
+          <span className="flex items-center gap-2">
+            <span className="font-mono text-xs font-semibold text-emerald-300">{evNumber}</span>
+            {storage ? <IntegrityBadge status={m.integrity_status} lastCheck={m.last_integrity_check} /> : null}
+          </span>
+          <span className="mt-1 block truncate text-sm font-semibold text-white">{m.title}</span>
+          <span className="mt-0.5 block truncate text-xs text-slate-400">
+            {caseMediaCategoryLabel(m.category)} · {fmtDate(m.created_at)}
+            {officerName(m.uploaded_by) ? ` · ${officerName(m.uploaded_by)}` : ''}
+          </span>
+          {!storage && <ExternalHostLine className="mt-1" />}
+          {(m.sealed_at || linkedReport || m.restricted || m.featured || m.archived_at) && (
+            <span className="mt-1.5 flex flex-wrap gap-1">
+              {m.sealed_at && <Badge tone="accent">Sealed</Badge>}
+              {linkedReport && <Badge tone="accent" title={linkedReport}>Report media</Badge>}
+              {m.restricted && <Badge tone="danger">Restricted</Badge>}
+              {m.featured && <Badge tone="warn">Featured</Badge>}
+              {m.archived_at && <Badge tone="neutral">Archived</Badge>}
+            </span>
+          )}
+          {chips.length > 0 && (
+            <span className="mt-1.5 flex flex-wrap gap-1">
+              {chips.map((chip) => (
+                <span key={chip.key} className="inline-flex items-center gap-1 rounded-full bg-white/5 px-1.5 py-0.5 text-[11px] text-slate-300">
+                  {chip.icon}
+                  {chip.label}
+                </span>
+              ))}
+            </span>
+          )}
+        </span>
+      </button>
+      <div className="flex items-center gap-2 border-t border-white/5 px-3 py-1.5">
+        {sha ? (
+          <>
+            <code translate="no" className="font-mono text-[11px] text-slate-400" title={sha}>{shortHash(sha)}</code>
+            <Button size="sm" variant="ghost" onClick={() => copyText(sha, 'SHA-256')} aria-label={`Copy SHA-256 of ${evNumber}`}>Copy</Button>
+          </>
+        ) : (
+          <span className="text-[11px] text-slate-500">{storage ? 'Not registered' : 'No hash'}</span>
+        )}
+        <span className="min-w-0 flex-1 truncate text-[11px] text-slate-500" title={m.last_integrity_check ? fmtDateTime(m.last_integrity_check) : undefined}>
+          {storage ? (m.last_integrity_check ? `Verified ${timeAgo(m.last_integrity_check)}` : 'Not yet verified') : ''}
+        </span>
+        <ActionMenu items={menu} label={`Actions for ${evNumber}`} />
+      </div>
+    </article>
+  )
+}
+
+/** Thumbnail in the "Added to the case" list — signs storage rows on demand. */
+function AddedThumb({ m }: { m: MediaRow }) {
+  const src = useMediaSrc(m)
+  const thumb = safeUrl(src ?? '')
+  return m.type === 'image' && thumb ? (
+    // eslint-disable-next-line @next/next/no-img-element -- signed / external media URL
+    <img src={thumb} alt={m.title} loading="lazy" className="h-16 w-16 flex-shrink-0 rounded-lg object-cover" />
+  ) : (
+    <span aria-hidden className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg bg-ink-800 text-slate-400">
+      <FileTypeIcon type={fileKind(m)} size={24} />
+    </span>
+  )
+}
+
 /* ── Detail lightbox ──────────────────────────────────────────────────────── */
 
 /** Short preview stand-in for items with nothing to render inline — the type
@@ -724,12 +921,12 @@ function MediaDetailModal({ m, c, canEdit, canDelete, holdActive, names, vehicle
   // Dirty-tracking baseline: advances on save so a successful save doesn't
   // keep the discard-confirm armed while the parent list refetches.
   const [saved, setSaved] = useState<{ title: string; category: string | null }>({ title: m.title, category: m.category })
-  // Audit every view of a restricted item (D6). Server de-dups per viewer/hour
-  // and quietly ignores non-restricted ids, so this is safe to fire on open.
-  useEffect(() => {
-    if (m.restricted) void rpc('log_restricted_view', { p_entity_type: 'media', p_entity: m.id })
-  }, [m.id, m.restricted])
-  const src = mediaSrc(m)
+  // Access trail: restricted rows keep the D6 restricted-access log (server
+  // de-dups per viewer/hour); registered evidence also gets a VIEWED custody
+  // event. Both are fire-and-forget and ignore non-qualifying ids.
+  useEffect(() => { logEvidenceAccess(m, 'viewed') }, [m.id, m.restricted, m.evidence_number]) // eslint-disable-line react-hooks/exhaustive-deps -- keyed on identity fields only
+  const signed = useMediaSrc(m)
+  const src = signed ?? ''
   const safe = safeUrl(src)
   const isVid = m.type === 'video' || /\.(mp4|webm|mov|m4v)($|\?)/i.test(src)
   const isAud = /\.(mp3|wav|ogg|m4a)($|\?)/i.test(src)
@@ -871,9 +1068,9 @@ function MediaDetailModal({ m, c, canEdit, canDelete, holdActive, names, vehicle
               href={safe}
               target="_blank"
               rel="noopener noreferrer"
-              // Opening the original is download-grade egress for a restricted
-              // item — audit it as such (fire-and-forget; server de-dups/hour).
-              onClick={() => { if (m.restricted) void rpc('log_restricted_view', { p_entity_type: 'media', p_entity: m.id, p_action: 'download' }) }}
+              // Opening the original is download-grade egress — log it as such
+              // (restricted trail + DOWNLOADED custody event; server de-dups).
+              onClick={() => logEvidenceAccess(m, 'downloaded')}
               className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-badge-200 hover:bg-white/5"
             >
               Open original ↗
@@ -920,17 +1117,15 @@ function MetaRow({ k, v, muted }: { k: string; v: string; muted?: boolean }) {
   )
 }
 
-/* ── Add photos (multi-file Uppy → FiveManage upload — pilot surface) ────────
- * ONE primary action: pick or drop files; each uploads to FiveManage through
- * the headless Uppy queue (MediaUploadPanel, dynamically imported so the
- * @uppy chunks load only when this modal opens) and lands as a media row
- * immediately after its host upload succeeds (current case, current user,
- * now, original filename as the title fallback + kept in
- * tags.source_filename). Host-first, insert-second — a failed insert leaves
- * the file "hosted, not saved" in the queue with an insert-only retry.
+/* ── Add evidence (multi-file upload) ───────────────────────────────────────
+ * ONE primary action: pick or drop files. The default host is Supabase
+ * Storage (MediaUploadPanel, dynamically imported): each file is hashed,
+ * saved as a media row, uploaded to the private bucket and registered as
+ * evidence (EV number, custody chain) before it appears in the "Added to the
+ * case" edit list. FiveManage remains for NEXT_PUBLIC_EVIDENCE_HOST=fivemanage
+ * and as the oversize fallback — host-first, insert-second, no hash.
  * Category/caption/links are edited AFTER upload — inline here per file, or
- * later from the detail view. Paste-a-URL fallback covers the
- * unconfigured-key case and external clips. */
+ * later from the detail view. Paste-a-URL covers external clips. */
 
 const MediaUploadPanel = dynamic(() => import('./MediaUploadPanel').then((m) => m.MediaUploadPanel), {
   ssr: false,
@@ -970,10 +1165,15 @@ function AddPhotosModal({ c, uploaderId, reports, vehicles, onClose }: {
     return res.data[0]
   }
 
-  // Phase 2 of the upload seam: the host upload already succeeded; insert the
-  // media row. Rethrow on failure so the queue row shows "hosted, not saved"
-  // (and its retry re-runs THIS insert without re-uploading) — the toast is
-  // the loud part, the row state is the honest part.
+  // Storage path: the panel already inserted + registered the row.
+  const handleRegistered = useCallback((r: UploadEvidenceResult) => {
+    setItems((xs) => [...xs, { row: r.row, caption: r.row.title, category: r.row.category ?? '', reportId: '', vehicleId: '', saved: false }])
+  }, [])
+
+  // FiveManage phase 2: the host upload already succeeded; insert the media
+  // row. Rethrow on failure so the queue row shows "hosted, not saved" (and
+  // its retry re-runs THIS insert without re-uploading) — the toast is the
+  // loud part, the row state is the honest part.
   const handleUploaded = async (f: UploadedFile) => {
     const type: MediaRow['type'] = f.kind === 'video' ? 'video' : f.kind === 'audio' ? 'fivemanage' : 'image'
     try {
@@ -1016,19 +1216,27 @@ function AddPhotosModal({ c, uploaderId, reports, vehicles, onClose }: {
     setItems((xs) => xs.map((x) => (x.row.id === item.row.id ? { ...x, saved: true } : x)))
   }
 
+  const uploadAvailable = evidenceHost() === 'supabase' || fmConfigured()
+
   return (
     <Modal open onClose={onClose} wide dirty={() => pending > 0 || failed > 0 || items.some((x) => !x.saved)}>
       <div className="p-5">
-        <ModalHeader title="Add photos" onClose={onClose} />
-        {fmConfigured() ? (
-          <MediaUploadPanel onUploaded={handleUploaded} onQueueChange={onQueueChange} />
+        <ModalHeader title="Add evidence" onClose={onClose} />
+        {uploadAvailable ? (
+          <MediaUploadPanel
+            caseId={c.id}
+            uploaderId={uploaderId}
+            onUploaded={handleUploaded}
+            onRegistered={handleRegistered}
+            onQueueChange={onQueueChange}
+          />
         ) : (
           <p className="rounded-lg bg-white/5 p-3 text-xs text-slate-400">
-            File upload is not configured (NEXT_PUBLIC_FIVEMANAGE_API_KEY) — paste a hosted URL below instead.
+            File upload is not configured (NEXT_PUBLIC_EVIDENCE_HOST=fivemanage without NEXT_PUBLIC_FIVEMANAGE_API_KEY) — paste a hosted URL below instead.
           </p>
         )}
 
-        <details className="mt-3" open={!fmConfigured()}>
+        <details className="mt-3" open={!uploadAvailable}>
           <summary className="cursor-pointer text-xs font-semibold text-slate-400 hover:text-slate-300">Or paste a hosted URL</summary>
           <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
             <Field label="Title">{(id) => <Input id={id} value={linkTitle} onChange={(e) => setLinkTitle(e.target.value)} placeholder="e.g. Dashcam still" />}</Field>
@@ -1041,18 +1249,15 @@ function AddPhotosModal({ c, uploaderId, reports, vehicles, onClose }: {
           <div className="mt-4 space-y-3">
             <h4 className="text-[13px] font-semibold text-white">Added to the case ({items.length})</h4>
             {items.map((item) => {
-              const thumb = safeUrl(mediaSrc(item.row))
               return (
                 <div key={item.row.id} className="flex gap-3 rounded-lg border border-white/10 bg-ink-950/50 p-3">
-                  {item.row.type === 'image' && thumb ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- external media URL
-                    <img src={thumb} alt={item.row.title} loading="lazy" className="h-16 w-16 flex-shrink-0 rounded-lg object-cover" />
-                  ) : (
-                    <span aria-hidden className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg bg-ink-800 text-slate-400">
-                      <FileTypeIcon type={fileKind(item.row)} size={24} />
-                    </span>
-                  )}
+                  <AddedThumb m={item.row} />
                   <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
+                    {item.row.evidence_number && (
+                      <p className="sm:col-span-2 text-xs text-slate-400">
+                        Registered as <span className="font-mono font-semibold text-emerald-300">{item.row.evidence_number}</span> · integrity verification queued
+                      </p>
+                    )}
                     <Field label="Caption">{(id) => <Input id={id} value={item.caption} onChange={(e) => setItem(item.row.id, { caption: e.target.value })} />}</Field>
                     <Field label="Category">
                       {(id) => (

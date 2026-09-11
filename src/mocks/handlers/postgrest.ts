@@ -32,6 +32,7 @@ import {
   stampFieldMessage, stampFieldSubmission, visibleIntelRows,
 } from './intel'
 import { visibleLegalRows } from './legal'
+import { visiblePlatformRows } from './platform'
 import { ensureReportTemplates, pinReportTemplateVersion, reportUpdateGuard, visibleReportRows } from './reports'
 
 /** Per-table read predicates the wall applies BEYOND the scenario switches
@@ -44,11 +45,13 @@ import { ensureReportTemplates, pinReportTemplateVersion, reportUpdateGuard, vis
  *  tables (the records, the shadow table, groups, notes, the thread) read
  *  through private.field_submission_readable (./intel.ts); the Phase 7
  *  action tables read for their viewer (state), the Owner (rules) or with
- *  the case's visibility (the escalation ledger, ./action.ts). Other tables
- *  read unfiltered. */
+ *  the case's visibility (the escalation ledger, ./action.ts); the
+ *  platform-upgrade tables (jobs, custody, packets, manifests, pages,
+ *  sources, chunks, health — ./platform.ts) read through their own walls.
+ *  Other tables read unfiltered. */
 function readable(table: MockTableName, rows: MockRow[]): MockRow[] {
   if (table === 'case_notes') return visibleCaseNotes(rows)
-  return visibleCiRows(table, visibleActionRows(table, visibleIntelRows(table, visibleReportRows(table, visibleLegalRows(table, rows)))))
+  return visiblePlatformRows(table, visibleCiRows(table, visibleActionRows(table, visibleIntelRows(table, visibleReportRows(table, visibleLegalRows(table, rows))))))
 }
 
 /** Tables whose rows the migrations SEED: an empty mock store answers like

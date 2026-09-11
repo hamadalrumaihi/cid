@@ -1,0 +1,160 @@
+# CID Portal — optional self-hosted service tier (worker + auxiliary services).
+#
+# Coolify can import this compose file as-is (Docker Compose resource; set the
+# variables from .env.docker.example in its Environment tab). The app itself
+# stays deployable on Vercel without ANY of this: Supabase (Postgres, Storage,
+# Auth, edge functions incl. jobs-runner) is the system of record and the
+# portal degrades gracefully when these services are absent.
+#
+# Everything here lives on one internal network with NO host ports. The worker
+# is the only container that holds Supabase credentials; the other services are
+# reached by their compose names. Uncomment the `ports` block at the bottom
+# only for local debugging.
+#
+#   cp .env.docker.example .env   # fill SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, MEILI_MASTER_KEY
+#   docker compose up -d --build
+#   docker compose up -d --build worker redis                 # worker + redis only (no aux services)
+
+name: cid-portal-services
+
+networks:
+  internal:
+    driver: bridge
+    internal: true        # no outbound route from the aux services
+  egress:
+    driver: bridge        # worker + crawl4ai need outbound HTTPS (Supabase, crawl targets)
+  crawl:
+    driver: bridge
+    internal: true        # worker <-> crawl4ai only: a crawled page's scripts run in the headless
+                          # browser and must never reach Stirling / Docling / Meilisearch / Redis
+
+volumes:
+  redis-data:
+  meili-data:
+  stirling-config:
+  docling-cache:
+
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  worker:
+    <<: *common
+    build:
+      context: ./workers
+      dockerfile: Dockerfile
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      WORKER_NAME: ${WORKER_NAME:-worker-compose}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      STIRLING_URL: ${STIRLING_URL:-http://stirling:8080}
+      STIRLING_API_KEY: ${STIRLING_API_KEY:-}
+      CRAWL4AI_URL: ${CRAWL4AI_URL:-http://crawl4ai:11235}
+      CRAWL4AI_API_TOKEN: ${CRAWL4AI_API_TOKEN:-}
+      DOCLING_URL: ${DOCLING_URL:-http://docling:5001}
+      DOCLING_API_KEY: ${DOCLING_API_KEY:-}
+      MEILI_URL: ${MEILI_URL:-http://meilisearch:7700}
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      EMBEDDINGS_API_KEY: ${EMBEDDINGS_API_KEY:-}
+      EMBEDDINGS_BASE_URL: ${EMBEDDINGS_BASE_URL:-}
+      EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      JOB_CONCURRENCY_PDF: ${JOB_CONCURRENCY_PDF:-1}
+      JOB_CONCURRENCY_CRAWLER: ${JOB_CONCURRENCY_CRAWLER:-2}
+      JOB_CONCURRENCY_DOCUMENTS: ${JOB_CONCURRENCY_DOCUMENTS:-1}
+      JOB_CONCURRENCY_EVIDENCE: ${JOB_CONCURRENCY_EVIDENCE:-2}
+      JOB_CONCURRENCY_EXPORTS: ${JOB_CONCURRENCY_EXPORTS:-1}
+      JOB_CONCURRENCY_SEARCH: ${JOB_CONCURRENCY_SEARCH:-1}
+      JOB_CONCURRENCY_EMBEDDINGS: ${JOB_CONCURRENCY_EMBEDDINGS:-1}
+      JOB_CONCURRENCY_HEALTH: ${JOB_CONCURRENCY_HEALTH:-1}
+      JOB_RATE_CRAWLER: ${JOB_RATE_CRAWLER:-30}
+    depends_on:
+      redis: { condition: service_healthy }
+    networks: [internal, crawl, egress]
+    read_only: true
+    tmpfs: ["/tmp"]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 1g
+
+  redis:
+    <<: *common
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    volumes: ["redis-data:/data"]
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    security_opt: ["no-new-privileges:true"]
+
+  stirling:
+    <<: *common
+    image: stirling/stirling-pdf:latest
+    environment:
+      DOCKER_ENABLE_SECURITY: "false"     # internal only; never expose without enabling security
+      LANGS: "en_GB"
+      SYSTEM_MAXFILESIZE: "100"
+      SYSTEM_SHOWUPDATE: "false"
+      SYSTEM_ENABLEANALYTICS: "false"
+    volumes: ["stirling-config:/configs"]
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/api/v1/info/status || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    mem_limit: 2g
+
+  crawl4ai:
+    <<: *common
+    image: unclecode/crawl4ai:latest
+    environment:
+      CRAWL4AI_API_TOKEN: ${CRAWL4AI_API_TOKEN:-}
+    shm_size: "1g"
+    networks: [crawl, egress]            # outbound HTTP to crawl targets + the worker; NOT on `internal` (see the crawl network)
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:11235/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    mem_limit: 2g
+
+  docling:
+    <<: *common
+    image: ghcr.io/docling-project/docling-serve:latest
+    environment:
+      DOCLING_SERVE_ENABLE_UI: "0"
+      DOCLING_SERVE_API_KEY: ${DOCLING_API_KEY:-}
+    volumes: ["docling-cache:/root/.cache"]
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5001/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+    mem_limit: 4g
+
+  meilisearch:
+    <<: *common
+    image: getmeili/meilisearch:v1.12
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      MEILI_ENV: production
+      MEILI_NO_ANALYTICS: "true"
+    volumes: ["meili-data:/meili_data"]
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:7700/health || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    mem_limit: 1g
+    # ports:                      # optional: local debugging only — never publish in production
+    #   - "127.0.0.1:7700:7700"

@@ -89,3 +89,6 @@ __pycache__/
 storybook-static/
 *storybook.log
 supabase/schema-dump.json
+
+# Docker compose template (no values)
+!.env.docker.example

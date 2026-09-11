@@ -240,8 +240,22 @@ Two additive migrations (see `CHANGELOG.md` 1.15.0 and
   reversal that leaves `audit_log` intact, appending `LEGAL_IMPORT_ROLLBACK`).
 
 ## Notes
-- **No Supabase Storage.** Media references are external URLs; there are no
-  buckets or storage policies.
+- **Supabase Storage (since the platform upgrade, `20261105120000`).** Five
+  private buckets — `case-evidence`, `case-packets`, `case-documents`,
+  `external-source-snapshots`, `exports` — with `storage.objects` policies
+  keyed on the path (`case/<case>/<media>/…`, `source/<id>/…`,
+  `export/<user>/…`) and the row-level helpers; no UPDATE policy anywhere, no
+  authenticated DELETE. Legacy media rows still reference external URLs. The
+  `field-evidence` bucket (2026-09-12) is unchanged. See
+  [`docs/PLATFORM-UPGRADE.md`](../docs/PLATFORM-UPGRADE.md) §15.
+- **Background jobs, the runner and the worker.** Every long operation is a
+  `background_jobs` row drained by the `jobs-runner` edge function
+  (`x-jobs-secret` ↔ `app_secrets.JOBS_SECRET`) and, optionally, the BullMQ
+  worker in `workers/`; the service-role RPCs (`job_claim` … `*_result`)
+  are never executable by `authenticated`. The three platform functions
+  (`jobs-runner`, `semantic-query`, `search-query`) share
+  `supabase/functions/_shared/`, whose files are byte-identical to their
+  copies under `workers/src/` (tests pin the identity).
 - **Report templates** are client-side constants (`FORM_SCHEMAS` /
   `REPORT_TEMPLATES` in `src/lib/forms.ts`); RICO predicate types are picked
   in the case RICO tab. The live RICO data lives in `rico_cases` +

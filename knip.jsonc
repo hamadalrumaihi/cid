@@ -14,7 +14,10 @@
     // the resolve.alias in .storybook/main.ts, which knip's import graph
     // can't follow. (The storybook plugin handles .storybook/* and *.stories.*
     // automatically.)
-    ".storybook/mocks/next-navigation.ts"
+    ".storybook/mocks/next-navigation.ts",
+    // Offline evidence-bundle / case-packet verifier: run by hand
+    // (`node scripts/verify-bundle.mjs <dir|zip>`), never imported.
+    "scripts/verify-bundle.mjs"
   ],
   "ignore": [
     // Generated TypeScript mirror of the live schema — exports exist for
@@ -25,7 +28,16 @@
     // Standalone city-developer handoff (docs/integration/CID-INTEGRATION-API.md):
     // self-contained contract types + Node mock, deliberately never imported
     // by the app — same "not app code" rationale as supabase/functions/**.
-    "integration-package/**"
+    "integration-package/**",
+    // Standalone Node worker package (own package.json/lockfile, deployed via
+    // docker-compose, never imported by the app) — same rationale as
+    // supabase/functions/**; it shares byte-identical modules with them.
+    "workers/**"
+  ],
+  "ignoreDependencies": [
+    // Type companion of cytoscape-fcose's own typings; cytoscape core is
+    // imported only inside the dynamically loaded GraphCanvas.
+    "@types/cytoscape"
   ],
   "ignoreBinaries": [
     "semgrep", // installed ad hoc in code-quality.yml (pip), not an npm bin

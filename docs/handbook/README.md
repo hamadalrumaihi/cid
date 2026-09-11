@@ -41,6 +41,7 @@ chapter stands alone and cross-links the rest.
 | 21 | [City Integration & Bridges](21-integration.md) | The dormant FiveM/MDT bridges, integration tables, shared case services |
 | 22 | [Versions, Trash and the scheduler](22-versions-trash.md) | Soft delete and the Trash (`trash_list`), record history and restore, the Owner's permanent-delete protocol, the pg_cron jobs |
 | 23 | [Confidential Informants](23-confidential-informants.md) | The CI compartment: `can_access_ci`, the fourteen RPC-only tables, capacity + requests + overrides, sanitize / release, the leak surfaces, `ci_events`, the case tab rule, the tests |
+| 24 | [Platform services](24-platform-services.md) | The services tier: evidence integrity + hash-chained custody, `background_jobs` + the runner + the optional worker, packets + manifests, documents, crawled external sources + the URL policy, the INVOKER graph, the three search tiers, flags + failure isolation, the mocks and tests |
 
 ## Appendices
 

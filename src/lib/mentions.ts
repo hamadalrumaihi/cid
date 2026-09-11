@@ -2,7 +2,9 @@
  *  decisions RB5 / RB6). Pure — no React, no db, no clock.
  *
  *  Token grammar: `[kind:id]` where kind is one of the EntityLink kinds
- *  (person | vehicle | gang | place | case | narcotic) and id is a UUID. The
+ *  (person | vehicle | gang | place | case | narcotic) or, since the platform
+ *  upgrade, a case artefact (evidence | charge | report | legal | source),
+ *  and id is a UUID. The
  *  narrative is stored as plain markdown with the tokens inline; the editor
  *  (ui/RichEditorInner) renders them as chips and serialises them back, the
  *  read-only renderer (lib/markdown) resolves them under RLS, and every
@@ -11,12 +13,51 @@
  *  the viewer cannot resolve renders as the literal "Restricted record". */
 import type { EntityKind } from '@/components/ui/EntityLink'
 
-export const MENTION_KINDS = ['person', 'vehicle', 'gang', 'place', 'case', 'narcotic'] as const
-export type MentionKind = (typeof MENTION_KINDS)[number]
-// The mention kinds ARE the EntityLink kinds — a compile-time pin so the
-// grammar can never name a kind EntityLink cannot deep-link.
-const _pin: readonly EntityKind[] = MENTION_KINDS
+/** The registry kinds — exactly the EntityLink kinds (the read-only renderer
+ *  deep-links these). */
+export const MENTION_LINK_KINDS = ['person', 'vehicle', 'gang', 'place', 'case', 'narcotic'] as const
+export type MentionLinkKind = (typeof MENTION_LINK_KINDS)[number]
+// The link kinds ARE the EntityLink kinds — a compile-time pin so the
+// grammar can never name a link kind EntityLink cannot deep-link.
+const _pin: readonly EntityKind[] = MENTION_LINK_KINDS
 void _pin
+
+/** Platform upgrade (report editor): case artefacts the slash menu inserts
+ *  as `cidEntity` blocks — evidence (a media row with an evidence number),
+ *  a penal charge (the catalog row's uuid), a case report, a legal request
+ *  and an external source. Same `[kind:id]` grammar; the read-only renderer
+ *  shows their resolved label as a chip (no EntityLink deep link yet). */
+export const MENTION_BLOCK_KINDS = ['evidence', 'charge', 'report', 'legal', 'source'] as const
+
+export const MENTION_KINDS = [...MENTION_LINK_KINDS, ...MENTION_BLOCK_KINDS] as const
+export type MentionKind = (typeof MENTION_KINDS)[number]
+
+export function isMentionLinkKind(v: unknown): v is MentionLinkKind {
+  return typeof v === 'string' && (MENTION_LINK_KINDS as readonly string[]).includes(v)
+}
+
+/** Upper-case tag the entity block renders — `[PERSON]`, `[EVIDENCE]` … */
+export const MENTION_KIND_TAG: Record<MentionKind, string> = {
+  person: 'PERSON', vehicle: 'VEHICLE', gang: 'GANG', place: 'PLACE', case: 'CASE', narcotic: 'NARCOTIC',
+  evidence: 'EVIDENCE', charge: 'CHARGE', report: 'REPORT', legal: 'LEGAL', source: 'SOURCE',
+}
+
+/** The `report_entities.kind` a mention row is written under (the table's
+ *  CHECK vocabulary: person | vehicle | gang | place | evidence | media |
+ *  officer | charge | legal_request | case | timeline_event). Evidence
+ *  mentions point at MEDIA rows (evidence numbers live on media), legal at
+ *  `legal_request`; narcotic, report and source have no arm and are simply
+ *  not derived — `report_entities_set` refuses an unknown kind for the
+ *  WHOLE set, so a kind without an arm must never reach it. */
+export const MENTION_ENTITY_KIND: Partial<Record<MentionKind, string>> = {
+  person: 'person', vehicle: 'vehicle', gang: 'gang', place: 'place', case: 'case',
+  evidence: 'media', charge: 'charge', legal: 'legal_request',
+}
+
+/** The inverse map for folding `report_entities` rows back into labels. */
+const ENTITY_MENTION_KIND: Record<string, MentionKind> = Object.fromEntries(
+  Object.entries(MENTION_ENTITY_KIND).map(([m, e]) => [e, m as MentionKind]),
+)
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 /** Global, case-insensitive; group 1 = kind, group 2 = id. Callers that
@@ -111,8 +152,11 @@ export function withMentionLabels(
 ): MentionLabels {
   const out: Record<string, string | null> = { ...labels }
   for (const it of items) {
-    if (!it.ref_id || !isMentionKind(it.kind) || !it.label) continue
-    const key = mentionKey(it.kind, it.ref_id)
+    // Rows are keyed by the report_entities kind (`media` → evidence,
+    // `legal_request` → legal); kinds with no mention arm contribute nothing.
+    const kind = ENTITY_MENTION_KIND[it.kind]
+    if (!it.ref_id || !kind || !it.label) continue
+    const key = mentionKey(kind, it.ref_id)
     if (!(key in out) || out[key] === null) out[key] = it.label
   }
   return out
@@ -125,8 +169,9 @@ export function withMentionLabels(
 export function mentionEntityRows(md: string | null | undefined, labels: MentionLabels): EntityItem[] {
   return parseMentions(md).flatMap((ref) => {
     const label = labels[mentionKey(ref.kind, ref.id)]
-    if (!label) return []
-    return [{ kind: ref.kind, ref_id: ref.id, role: 'mention', label, snapshot: { label }, edited: false }]
+    const kind = MENTION_ENTITY_KIND[ref.kind]
+    if (!label || !kind) return []
+    return [{ kind, ref_id: ref.id, role: 'mention', label, snapshot: { label }, edited: false }]
   })
 }
 

@@ -17757,7 +17757,7 @@ export type Database = {
         Returns: Json
       }
       case_packet_render_result: {
-        Args: { p_job: string; p_packet: string; p_storage_path: string; p_sha256: string; p_byte_size: number; p_page_count: number; p_manifest: Json }
+        Args: { p_job: string; p_packet: string; p_storage_path: string; p_sha256: string; p_byte_size: number; p_page_count: number; p_manifest: Json; p_manifest_sha256?: string | null }
         Returns: Json
       }
       case_packet_failed: {
@@ -17773,7 +17773,7 @@ export type Database = {
         Returns: Json
       }
       evidence_bundle_result: {
-        Args: { p_job: string; p_storage_path: string; p_sha256: string; p_byte_size: number; p_manifest: Json }
+        Args: { p_job: string; p_storage_path: string; p_sha256: string; p_byte_size: number; p_manifest: Json; p_manifest_sha256?: string | null }
         Returns: Json
       }
       document_tool_request: {
@@ -17905,6 +17905,18 @@ export type Database = {
       system_health: {
         Args: Record<PropertyKey, never>
         Returns: Json
+      }
+      graph_path: {
+        Args: { p_from_kind: string; p_from_id: string; p_to_kind: string; p_to_id: string; p_max_depth?: number }
+        Returns: {
+          step: number
+          node_kind: string
+          node_id: string
+          label: string
+          sublabel: string | null
+          edge_kind: string | null
+          edge_label: string | null
+        }[]
       }
     }
     Enums: {

@@ -101,7 +101,7 @@ SIB is a **separate workspace and authority**, not a CID category. An SIB accoun
 
 ### The header, everywhere
 
-- **Search everything…** — press **/** to focus, or **Ctrl-K / ⌘K** for the palette. One search reaches everything your access can see: cases, reports, case tasks, evidence, operations, legal requests, persons, **BOLOs**, gangs, places, vehicles, accounts, narcotics, ballistics, documents, penal charges, **intelligence submissions** and **division members**. Results come grouped by kind, each row tagged with what it is (typo-tolerant — a few letters or a plate fragment is enough). Opening a person, vehicle, gang or narcotics hit lands it as its own record tab in the Investigative Tools workspace; a task hit deep-links straight to its case's Tasks tab. The palette also runs commands: **Go to** any screen *your role can actually open* (Owner, Command and SIB surfaces are simply not listed otherwise), a permission-gated **New record** set, My active cases, Set/Clear LOA and Sign out. On a phone the palette opens full-screen.
+- **Search everything…** — press **/** to focus, or **Ctrl-K / ⌘K** for the palette. One search reaches everything your access can see: cases, reports, case tasks, evidence, operations, legal requests, persons, **BOLOs**, gangs, places, vehicles, accounts, narcotics, ballistics, documents, penal charges, **intelligence submissions**, **division members**, the **text inside case documents** (a page hit opens the document at that page) and **external sources**. When the division has switched on meaning-based search, a **Semantic** chip merges matches by meaning with the exact ones; if that service is unavailable the palette says so and shows exact matches. Results come grouped by kind, each row tagged with what it is (typo-tolerant — a few letters or a plate fragment is enough). Opening a person, vehicle, gang or narcotics hit lands it as its own record tab in the Investigative Tools workspace; a task hit deep-links straight to its case's Tasks tab. The palette also runs commands: **Go to** any screen *your role can actually open* (Owner, Command and SIB surfaces are simply not listed otherwise), a permission-gated **New record** set, My active cases, Set/Clear LOA and Sign out. On a phone the palette opens full-screen.
 - **+ Create** — one button for every record type you're allowed to create: case, person, vehicle, gang, place, account, indicator, operation and (for SIB agents) SIB investigation. It opens the exact same forms the individual screens use, from anywhere — a bottom sheet on your phone. Types your role can't create aren't shown.
 - **Bell** — notifications (see section B). **Access chip** — hover to see what your role allows. **Set LOA / Clear LOA**. **Sign out**.
 
@@ -175,7 +175,7 @@ The case detail groups its tabs into three areas. Each section pill carries a **
 - **Graph** — the case as a link chart. Suspects, vehicles, gangs, places, evidence and reports orbit the case, joined by labelled relationships. Drag to arrange (kept per case), click a node for details, dashed lines mark inferred connections.
 
 **Evidence & case record**
-- **Photos & Media** — the case's photographs in a gallery and its video, audio, documents and links as compact records, each with its evidence number, category, uploader, time, linked report and access state. Archived items stay out of the default view but are never lost.
+- **Evidence & Media** — the case's photographs in a gallery and its video, audio, documents and links as compact records, each with its evidence number, category, uploader, time, linked report and access state. Archived items stay out of the default view but are never lost.
 - **Charges** — the charge sheet. An authorized investigator adds a charge and it is **active immediately** — no internal command approval step. Filing with the court, conviction and dismissal are recorded by the court-side authorities, not by CID.
 - **RICO** — appears once enterprise tracking is enabled from the Brief (or when the case already carries RICO data).
 - **Reports** — investigative reports. See section I.
@@ -353,9 +353,10 @@ The registries — every tool in the **Investigative Tools** workspace (section 
 - **Accounts** — social-media and online accounts, handle history and ownership.
 - **Indicators** — burner phones, bank accounts, serials, aliases, addresses. The same value on two cases raises a **deconfliction alert** naming both; a case you can't access shows as restricted — coordinate through its bureau lead.
 - **Intelligence** — the intake queue (section F).
-- **Network** — gangs, members and properties as a navigable graph.
+- **Investigation Graph** (Network) — pick a person, vehicle, gang, place, narcotic or case and chart what links to it, one hop at a time (Depth 1–3), only records you can already see. Expand a node, focus on it, hide kinds, find the shortest path between two nodes, search inside the graph, save a view, export a PNG. The case's own **Graph** tab is the same chart rooted at the case.
 - **Narcotics** — drug processing and market analytics. **Ballistics** — weapon benches and component tracing. **M.O. Detector** — tactical profiling and cross-reference.
 - **Media Vault** — universal media-to-case intake. **Records** — live shared division records.
+- **External Sources** (Intelligence → External Sources) — submit a public web page (*+ Submit URL*, optionally against a case). The crawler service — never your browser — fetches it, snapshots it and stores an immutable **version** with its content hash; the source is numbered **SRC-000001** and stays **UNVERIFIED INTELLIGENCE** until an analyst uses *Verify…* (Verified / Disputed / Rejected + reliability). Pages are rechecked on a cadence; a changed page becomes a new version with a diff (Added / Removed / Modified) and the submitter is told. *Link to record…* attaches the source to a case, person, vehicle, gang, place, narcotic, evidence item or report you can see — it then shows on that record and in the graph. Local, private and metadata addresses are refused when you submit them.
 
 ### Working with linked records
 
@@ -402,9 +403,21 @@ An authorized investigator adds a charge from the frozen penal-code snapshot; it
 
 When the investigation is done, open **Sign-off** and submit. Routing is automatic — bureau lead → deputy director → director — and **LOA-aware**: an approver on leave is skipped, and the record shows who actually signed. You are notified at every step; returned cases land on **My Dashboard** — and in the Action Center's **Returned to you** lane — with the reviewer's note. Nobody approves their own submission.
 
-### The case packet
+### Evidence & Media
 
-**Case packet** exports the full record as a letterheaded, paginated **PDF** (or DOCX / Markdown), ready for court.
+The case's **Evidence & Media** tab is the evidence record. **Add evidence** uploads the file to the division's own private storage — your browser computes its **SHA-256** fingerprint first — and registers it: the item gets an **EV-000001** number, a custody ledger (COLLECTED → UPLOADED → REGISTERED) and an **INTEGRITY** chip that reads **UNVERIFIED** until the evidence service has re-hashed the stored file, then **VERIFIED** with the check time — or **INTEGRITY FAILURE** if the bytes no longer match, in which case the uploader, the custodian, the case lead and the portal owner are alerted at once. Items are re-verified every 30 days; *Verify* asks now. The original is never overwritten: previews, OCR text, redacted or converted copies are separate **derivatives** that record their parent and its hash.
+
+Open a card for the detail sheet: every field (number, hash with a copy button, size, type, collected by / when / where, custodian, classification), the **Custody history** with its hash-chain check, derivatives, related records, processing and export history. *Transfer custody…* hands the item to a colleague who can see the case (a reason is required; they are notified); viewing and downloading are logged to the ledger. A Senior Detective or the uploader may **seal** a verified item; command may **release** it. Older items hosted on the external media host still show and open as before — they simply carry no integrity chip, because there are no stored bytes to check.
+
+### Documents & Case Packets
+
+The **Documents** tab gathers the case's paper: Reports (with export), **Evidence Documents** (PDFs and files with their extraction status — **Search inside documents** finds text on any page and opens the document there), Legal Documents (the case's requests, read-only), Generated Documents (derivatives), **Case Packets** and **Document Tools**.
+
+**Generate Case Packet…** builds the court-ready PDF *on the server*: pick a type (Full, DOJ, Command brief, Disclosure, Custom), tick sections, add a watermark, and keep working — "Packet generation started" is immediate, the row goes Queued → Rendering → Ready, and you are notified. The packet includes only what **you** may see at that moment (restricted media without a fresh approval, sealed legal material and anything confidential are left out and counted), ships with a manifest of every file's fingerprint, and every download is logged. **Verify package** lets anyone holding the files — a prosecutor, a court — drop them in and confirm nothing was altered. **Document Tools** merge, split, rotate, number, watermark, compare and strip metadata from case documents (OCR, redaction, compression and more once the document service is switched on); every result is a new derivative. The **Processing jobs** tray shows what is running for the case.
+
+### The case packet (quick export)
+
+**Quick export (this browser)** still builds the full record as a letterheaded, paginated **PDF** (or DOCX / Markdown) on your machine — unmanifested, for a quick read. For court, use **Generate Case Packet…** above.
 
 ---
 

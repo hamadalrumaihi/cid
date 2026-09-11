@@ -14,7 +14,7 @@ Companion to [DEPLOYMENT.md](DEPLOYMENT.md) (shipping changes); the July
 | --- | --- | --- |
 | **Client errors** | Owner Console → Security & Audit → *Client errors* + a bell ping (throttled 1 / 15 min) | An uncaught exception in a member's browser. [`src/lib/errorReport.ts`](../src/lib/errorReport.ts) reports them to `client_errors`; owners are notified via a DB trigger. |
 | **Feedback inbox** | Owner Console → Feedback & Bugs | Members reporting problems in their words — the de-facto second alert channel. |
-| **DB health** | Owner Console → System Health | Round-trip time, live row counts, realtime activity. |
+| **DB health + services + jobs** | Owner Console → System Health | `system_health()` (Owner): a HEALTHY / DEGRADED / OFFLINE card per probed service (runner, Supabase, and any configured worker / Stirling / Crawl4AI / Docling / Meilisearch / embeddings), queue depth by queue, the oldest queued job's age, active workers, the last 20 cron runs and the last 20 failed jobs with Retry / Cancel; feature-flag toggles and the crawler policy live here too ([PLATFORM-UPGRADE.md §13](PLATFORM-UPGRADE.md)). A growing *oldest queued* with zero active workers means the runner is not being kicked — §11. |
 | **Security-test history** | Owner Console → Security & Audit | `security_test_runs` via the `owner_security_overview()` RPC: per-suite pass/fail/skip for recent RLS runs, live fixture health, leftover test-data counts. A run that stops reporting, or fixture health going red, is a signal in itself. |
 | **CI** | GitHub Actions | `verify` (4 gates + drift/schema checks) on every PR; `security-suites` when secrets are set. |
 | **Vercel** | Vercel dashboard | Build status, runtime logs, deployment history. |
@@ -47,6 +47,8 @@ Vercel runtime logs.
   [DEPLOYMENT.md §3](DEPLOYMENT.md) (types + snapshot +
   `MIGRATION-HISTORY.md` + `npm run check:schema`).
 - **Quarterly restore drill** — §5.
+- **Background jobs** — glance at Owner Console → System Health after a deploy: queue depth returns to zero within minutes when the runner is healthy; failed jobs are retried (`min(1h, 5s·2^attempts)`, five attempts) before they land in *failures* — the Owner may Retry or Cancel them there; `background_job_failed` (security, Owner only, one per kind per hour) pings the bell. Runbooks in §11.
+- **Evidence integrity** — an `evidence_integrity_failure` notification is an incident, not a bug report: §11.
 
 ## 3. Incident response — general procedure
 
@@ -255,6 +257,11 @@ to look when a sweep goes quiet.
 | `siu-reconcile-scan` | every 15 min | `private.siu_reconcile_scan()`: compares every CID-visible person / vehicle / gang / place against the SIB-hidden rows on their normalized keys (phone, name, alias, plate, org name, name+area) and queues late collisions (a record hidden AFTER its twin was created) into `siu_reconcile_queue`; `siu_reconcile` notifications to SIB agents, one per agent per hidden record per hour ([`20261016120000`](../supabase/migrations/20261016120000_siu_reconcile.sql)) |
 | `legal-sweep` | :35 hourly | `private.legal_reminder_sweep()` + `private.legal_expiry_sweep()` ([`20261027120000`](../supabase/migrations/20261027120000_legal_sweeps.sql)): stage age from `legal_requests.stage_entered_at` — > 48 h → `legal_nudge` to the responsible party (`nudged_at`, `LEGAL_REMINDED`), > 5 d → `legal_escalated` to the next authority + creator (`escalated_at`, `LEGAL_ESCALATED`), approved / partially approved and unissued > 7 d → `legal_unissued`, `expires_at` within 72 h → `legal_expiring`; issued warrants past `expires_at` → `fulfilment_status='expired'` + `legal_expired` + `LEGAL_EXPIRED` + `mdt_project('expired')`, subpoenas past `response_deadline` → `legal_deadline_passed`. Idempotent through `legal_request_reminders` (unique per request / kind / stage); a fixture-created request only ever notifies `is_test` recipients. **Manual run:** `select public.legal_sweep_run();` — Owner-only, returns the jsonb counts of both sweeps (anyone else gets `{ok:false, code:'denied'}`); use it after a cron gap rather than waiting for :35 |
 | `action-escalation-sweep` | :50 hourly | `private.action_escalation_job()` → `private.action_escalation_sweep()` ([`20261101120000`](../supabase/migrations/20261101120000_action_center.sql)): for every enabled `action_escalation_rules` row — `signoff` (default 72 h in `awaiting_*` → the next authority: Deputy Directors / Directors / the Owner by stage), `access_request` (48 h `pending` → the case bureau's Bureau Leads + Deputy Directors), `task_overdue` (48 h past `due` → the case lead, or the bureau's Bureau Leads when the lead is the assignee); `legal` is seeded disabled (the legal sweep escalates itself). One `action_escalations` row per (kind, source) — `action_escalated` + `ACTION_ESCALATED` only when the row is (re)opened, `resolved_at` once the source is decided / done / deleted (a sign-off stage advance resolves and later re-opens the row for the next authority), `notified` = the recipients actually written — so a repeated run is idempotent; recipients pass `private.user_can_access_case`; a case created by a test member only ever notifies test recipients. The RLS suite never runs this: it uses `rls_test_escalation_run(case)` (fixture caller, fixture case, one case). **Manual run:** `select public.action_escalation_run();` — Owner-only, returns `{signoff:{escalated,resolved}, access_request:{…}, task_overdue:{…}}` (anyone else gets `{ok:false, code:'denied'}`), audits `ACTION_ESCALATION_RUN`; use it after a cron gap rather than waiting for :50. **Tuning:** `select public.action_escalation_rule_set('task_overdue', 48, true);` (Owner-only; `ACTION_ESCALATION_RULE_SET`) — the rules are readable to the Owner in `action_escalation_rules` |
+| `background-jobs-kick` | every 2 min | `private.jobs_kick()`: `net.http_post` to the `jobs-runner` edge function with `x-jobs-secret` read from `app_secrets.JOBS_SECRET` at run time (a silent no-op when the key row or `pg_net` is missing). The same kick fires from `private.job_enqueue` on every request, so the cron is the safety net, not the trigger ([`20261105120000`](../supabase/migrations/20261105120000_platform_upgrade.sql)) |
+| `background-jobs-reap` | every 5 min | `private.background_jobs_reap_job()` → `private.job_reap()`: claimed / running jobs whose 5-minute lease has lapsed go back to `queued` (attempts unchanged) — a crashed runner or worker never holds a job; also prunes `service_health_events` older than 7 days |
+| `evidence-integrity-sweep` | 02:30 daily | `private.evidence_integrity_sweep_job()`: enqueues `evidence.verify` for up to 50 verified items whose `last_integrity_check` is older than 30 days |
+| `external-source-recheck` | 04:10 daily | enqueues `source.fetch` (max 100) for external sources whose `last_checked_at` is older than `crawler_policy.recheck_hours` (168 by default); an unchanged page only bumps `last_checked_at`, a changed one becomes a new version + `external_source_changed` |
+| `health-probe` | every 10 min | enqueues `health.probe` (key `probe:<epoch/600>`): the runner probes itself, Supabase and every configured service URL and writes `service_health_events` (never a URL or credential in `detail`) |
 | `ci-contact-sweep` | :40 hourly | `private.ci_sweep()` inside `job_begin('ci_contact_sweep')` / `job_end` ([`20261103120000`](../supabase/migrations/20261103120000_confidential_informants.sql)): every **active** confidential informant with `next_contact_at < now()` and no `ci_contact_overdue` notification in the last 24 h → `ci_contact_overdue {ci_id}` to its active handlers; every active CI with no contact for 30 days → the handlers and the supervising lead (`detail: 'silent_30d'`); `ci_event('overdue')` for realtime. Ids only, portal-only (never a Discord DM), fixture-suppressed. Owner re-run after a cron gap: `select public.ci_sweep_run();` (`{ok:false, code:'denied'}` for anyone else); the RLS suites drive one fixture CI through `rls_test_ci_sweep(p_ci)`. Nothing here reveals a source: the notification names the CI only by id and reaches only people who already hold access. |
 - The same rule extends to the append-only history tables the workflow RPCs
   write (`case_signoff_history`, membership/legal histories, `role_events`)
@@ -402,3 +409,95 @@ SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... FIVEMANAGE_API_KEY=... \
 Never commit the payload, report, workbook, photos, or privileged keys. Review
 the dry-run conflicts and errors before apply. Re-running the same payload is
 safe: existing records and media hashes are skipped.
+
+## 11. Background jobs, the runner and the worker
+
+The platform upgrade ([PLATFORM-UPGRADE.md](PLATFORM-UPGRADE.md)) moved every
+long operation — hashing, packet rendering, document tools, extraction,
+crawling, indexing, embeddings, health probes — into `public.background_jobs`
+rows (queued → claimed → running → succeeded | failed | cancelled). Two
+drains share the same four RPCs (`job_claim` / `job_heartbeat` /
+`job_complete` / `job_fail`, service role only):
+
+- **`jobs-runner`** (Supabase edge function, always present): kicked by
+  `private.jobs_kick()` on every enqueue and every 2 minutes; checks
+  `x-jobs-secret` against `app_secrets.JOBS_SECRET` before anything else;
+  claims up to 5 jobs per invocation from the kinds it implements
+  (`evidence.verify`, `evidence.derive` for images, `packet.render`,
+  `bundle.build`, `source.fetch` via the guarded basic fetch,
+  `document.extract` for PDF / text, `search.sync` when `MEILI_URL` is set,
+  `embeddings.generate` when `EMBEDDINGS_API_KEY` is set, `health.probe`),
+  50 s budget per job, never claims a kind it cannot run.
+- **`workers/`** (optional Node process, BullMQ, `docker-compose.yml`): the
+  full provider set (Stirling, Crawl4AI, Docling, Meilisearch, embeddings,
+  sharp derivatives); Postgres is the record, Redis only transport; without
+  Redis the same processors run in-process. Env in
+  [`workers/README.md`](../workers/README.md). It holds the service-role key —
+  it runs on a host you control, never on Vercel.
+
+**Secrets.** `JOBS_SECRET` lives in `app_secrets` (RLS deny-all) *and* as
+the `jobs-runner` function secret; the two must match. Rotate by updating
+both, then `select private.jobs_kick();` and check System Health → runner.
+Never commit a value.
+
+### Runbook — evidence integrity failure
+
+An `evidence_integrity_failure` notification (uploader, custodian, case
+lead, every Owner) means a re-hash of a stored object did not match the hash
+recorded at registration. The expected hash is never overwritten.
+
+1. Open the item (Evidence & Media → the card wears **INTEGRITY FAILURE**;
+   the sheet shows `{expected, actual}` on the INTEGRITY_FAILURE event and
+   the chain-verify result).
+2. `select public.evidence_chain_verify('<media id>');` — a broken custody
+   chain (`ok:false, first_bad_id`) is a database incident: export
+   `audit_log` and `evidence_custody_events` for the item before anything
+   else, then treat as §3.
+3. A sound chain with a bad hash means the **object** changed: Supabase →
+   Storage → `case-evidence` → the object's version history / logs
+   (service-role writes only — find the actor). Do not delete or re-upload:
+   the original is immutable; a corrected file is a **new** item.
+4. Record the outcome as a custody event through the RPCs (a RELEASED /
+   ARCHIVED with a reason by command), never a direct write (P0403 anyway).
+5. `select public.evidence_verify_request('<media id>');` re-runs the check
+   once the cause is known.
+
+### Runbook — stuck jobs
+
+Symptom: System Health shows `oldest_queued_seconds` growing, or a packet /
+source stays *Queued* / *Rendering*.
+
+1. Runner alive? System Health → *runner* card. OFFLINE → the function is
+   not deployed or the secret mismatches: `supabase functions deploy
+   jobs-runner --no-verify-jwt`, compare `app_secrets.JOBS_SECRET` with the
+   function secret, then `select private.jobs_kick();`.
+2. Kick gone quiet? `select * from public.scheduled_job_runs where job =
+   'background_jobs_kick' order by started_at desc limit 5;` — a `failed`
+   row names the `pg_net` error (the 2026-09-01 restore dropped `pg_net`
+   once before; `create extension if not exists pg_net;`).
+3. Leases: a job `running` with `lease_until` in the past is reaped every 5
+   minutes; to reap now, `select private.job_reap();`.
+4. Worker-only kinds (`pdf.tool` beyond pdf-lib, docx extraction,
+   `search.sync`, `embeddings.generate`) stay queued **by design** until a
+   worker runs — that is the failure-isolation table in
+   [PLATFORM-UPGRADE.md §13](PLATFORM-UPGRADE.md), not an incident. Cancel
+   them from System Health if the feature is not wanted.
+5. A job that failed five times is in *failures* with its error: fix the
+   cause, then **Retry** (Owner; `background_job_retry` resets attempts).
+   `background_job_failed` pings the Owner once per kind per hour.
+
+### Runbook — redeploy the functions
+
+```bash
+supabase functions deploy jobs-runner --no-verify-jwt   # shared secret, cron + enqueue caller
+supabase functions deploy semantic-query                # JWT-verified; 503 unavailable without EMBEDDINGS_API_KEY
+supabase functions deploy search-query                  # JWT-verified; 503 unavailable without MEILI_URL
+```
+
+After a deploy: System Health → runner HEALTHY within one probe (≤ 10 min,
+or `select private.jobs_kick();`), then register a test item as an
+`rls-test-*` account (`npm run test:rls -- tests/rls/v192a.test.ts`) and
+watch its `evidence.verify` job succeed or fail *cleanly* (a missing object
+fails with a message, never hangs). The two query functions run the search
+RPCs under the caller's JWT — a 503 from either only means the tier is not
+configured; the palette falls back to exact matches.

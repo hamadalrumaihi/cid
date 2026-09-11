@@ -269,9 +269,16 @@ More depth: [Handbook Ch. 9](handbook/09-auth.md).
   forgetting that is the classic "screen only refreshes on remount" bug
   ([Handbook Ch. 3, Block 5](handbook/03-architecture.md)).
 
-## 10. File uploads — FiveManage
+## 10. File uploads — Supabase Storage (evidence) and FiveManage (legacy)
 
-[`src/lib/fivemanage.ts`](../src/lib/fivemanage.ts) uploads photo/video/audio
+Since the platform upgrade the case's **Evidence & Media** tab uploads to the
+private `case-evidence` bucket (`case/<case>/<media>/<file>`, RLS on
+`storage.objects`, 300 s signed URLs) after hashing the file in the browser,
+then registers it through `evidence_register` — the integrity, custody and
+derivative story in [PLATFORM-UPGRADE.md §5–§6](PLATFORM-UPGRADE.md) and
+[UPLOADS.md](UPLOADS.md). Four more private buckets hold packets, generated
+documents, source snapshots and personal exports. FiveManage remains the
+legacy host: [`src/lib/fivemanage.ts`](../src/lib/fivemanage.ts) uploads photo/video/audio
 files **directly from the browser** to the FiveManage API and returns the
 hosted URL, which the Media Vault and Case Files views store in Postgres
 alongside their tags. The API token is public by design (referrer-bound on
@@ -280,7 +287,7 @@ disabled and the views fall back to paste-a-URL.
 
 ## 11. External integrations — Edge Functions
 
-Three Deno functions live in [`supabase/functions/`](../supabase/functions/)
+Six Deno functions live in [`supabase/functions/`](../supabase/functions/)
 (see [DEPLOYMENT.md](DEPLOYMENT.md) for how they ship):
 
 | Function | Trigger | What it does |
@@ -288,6 +295,9 @@ Three Deno functions live in [`supabase/functions/`](../supabase/functions/)
 | `discord-announce` | Browser invoke (JWT) after `publish_announcement()` | One rate-limited Discord DM sweep for a published announcement. Recipients are read back from the notifications the RPC already created, so Discord delivery can never disagree with the portal fan-out. Author-only; verifies the caller's JWT and active profile server-side. |
 | `discord-notify` | Browser invoke (JWT) | DMs a single member via the Discord bot. Verifies the caller is active and that a matching in-app notification was just created (no forgery). |
 | `sops-sync` | `pg_cron` schedule via `pg_net` | Pulls Google Docs from a shared Drive folder into `documents(folder='SOPs')`. Config comes from the `app_secrets` table (RLS deny-all to clients); idempotent upserts keyed by Drive file id. |
+| `jobs-runner` | `private.jobs_kick()` via `pg_net` on every enqueue + every 2 min | Checks `x-jobs-secret` against `app_secrets.JOBS_SECRET`, then claims up to five `background_jobs` (`job_claim`, service role) from the kinds it implements — evidence verify / derive, packet render, bundle build, source fetch (guarded), document extract (PDF / text), search sync, embeddings, health probe — with a 50 s budget each; kinds it cannot run are left for the optional worker. |
+| `semantic-query` | Browser invoke (JWT) when flag `semantic_search` is on | Embeds the query with the server-side provider key and calls `hybrid_search` **under the caller's JWT** — RLS applies; `503 unavailable` without a provider. |
+| `search-query` | Browser invoke (JWT) when flag `meilisearch` is on | Fetches Meilisearch candidates with the server-side key and re-authorises every hit through `search_authorize` **under the caller's JWT**; `503 unavailable` without `MEILI_URL`. |
 
 Both Discord functions use the service-role key **inside the function only**
 and require `DISCORD_BOT_TOKEN`; without it they no-op. The client
@@ -543,6 +553,26 @@ Center gains *CI contact due* / *CI requests* / *CI follow-ups* fetched only
 when involved. Tests: `tests/rls/v191a–c`, `src/mocks/handlers/ci.ts`,
 `tests/e2e/informants.spec.ts`.
 
+## 16b. The platform services tier
+
+The platform upgrade ([PLATFORM-UPGRADE.md](PLATFORM-UPGRADE.md), migration
+`20261105120000`) adds a **services tier that the portal does not depend
+on**. Everything long-running is a `background_jobs` row; the in-Supabase
+`jobs-runner` drains the lightweight kinds and an optional BullMQ worker
+(`workers/`, `docker-compose.yml` with Redis, Stirling PDF, Crawl4AI,
+Docling, Meilisearch) drains the rest. Evidence lives in private buckets
+with client-side SHA-256, a hash-chained custody ledger and immutable
+originals; packets and bundles ship with manifests; documents get page
+text, tools and search; external sources are crawled behind an SSRF policy
+into versioned snapshots; one INVOKER `graph_expand` feeds a Cytoscape graph;
+search is exact (FTS) → index (Meilisearch candidates re-authorised in
+Postgres) → semantic (pgvector) fused by RRF; feature flags gate every
+optional piece; `system_health()` reports it all to the Owner. Client code
+talks to adapters in `src/lib/services/` (pdf, documents, crawler, search,
+queues, telemetry) and never to a provider. The CI rule and the restricted /
+SIU / sealed exclusions are applied server-side before any document, index,
+chunk, node or notification exists ([AUTHORIZATION.md §22](AUTHORIZATION.md)).
+
 ## 17. Scheduler (pg_cron jobs)
 
 `20261004130000_scheduler_pg_cron` declares the scheduler in the repo:
@@ -551,8 +581,11 @@ when involved. Tests: `tests/rls/v191a–c`, `src/mocks/handlers/ci.ts`,
 The jobs — `sops-sync` (15 min, Drive → SOPs through pg_net),
 `audit-chain-verify` (daily), `record-versions-prune` (daily),
 `access-grant-expiry-sweep` (hourly), `siu-reconcile-scan` (15 min),
-`legal-sweep` (hourly), `action-escalation-sweep` (hourly) and
-`ci-contact-sweep` (hourly, :40 — overdue and silent sources) — each wrap a
+`legal-sweep` (hourly), `action-escalation-sweep` (hourly),
+`ci-contact-sweep` (hourly, :40 — overdue and silent sources), and since the
+platform upgrade `background-jobs-kick` (2 min), `background-jobs-reap`
+(5 min), `evidence-integrity-sweep` (daily), `external-source-recheck`
+(daily) and `health-probe` (10 min) — each wrap a
 `private.*` sweep, notify through the same test-actor-suppressing notifiers
 the RPCs use, and are idempotent so a manual re-run after a cron gap is
 safe. The Owner-only manual runners (`legal_sweep_run()`,
@@ -574,5 +607,6 @@ it lives in [OPERATIONS.md §6 "Scheduled jobs"](OPERATIONS.md).
 | Security model and residual risks | [Handbook Ch. 18](handbook/18-security.md), [archive/HARDENING.md](archive/HARDENING.md) |
 | Deploying and operating all of this | [DEPLOYMENT.md](DEPLOYMENT.md), [OPERATIONS.md](OPERATIONS.md) |
 | Who may do what, phase by phase (permission module, soft delete, versions, Trash, Action Center, the CI compartment) | [AUTHORIZATION.md §6–§21](AUTHORIZATION.md), [RLS.md](RLS.md) |
+| The platform services tier — evidence integrity + custody, packets + manifests, documents, external sources, the graph, search tiers, jobs, flags, health; the decision matrix and the feature matrix | [PLATFORM-UPGRADE.md](PLATFORM-UPGRADE.md), [AUTHORIZATION.md §22](AUTHORIZATION.md), [WORKFLOWS.md §16–§18](WORKFLOWS.md), [OPERATIONS.md §11](OPERATIONS.md), [Handbook Ch. 24](handbook/24-platform-services.md) |
 | Confidential informants — the compartment, capacity, sanitized release, what a case member sees | [AUTHORIZATION.md §21](AUTHORIZATION.md), [WORKFLOWS.md §15](WORKFLOWS.md), [USER-GUIDE.md §K](USER-GUIDE.md), [Handbook Ch. 23](handbook/23-confidential-informants.md) |
 | The Trash, history and the phone-first case route as a user sees them | [USER-GUIDE.md](USER-GUIDE.md), [WORKFLOWS.md §13–§14](WORKFLOWS.md), [Handbook Ch. 22](handbook/22-versions-trash.md) |

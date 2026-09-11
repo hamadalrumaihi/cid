@@ -8,12 +8,16 @@
  *  the time→x mapping, mirroring the heatmap's functional-setState wheel
  *  and drag pattern. */
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { TimelineGroup, TimelineLane } from '@/lib/timelineFilters'
 
 export interface BandEvent {
   at: string
   label: string
   sub?: string
-  type: 'opened' | 'followup' | 'evidence' | 'media' | 'report' | 'task' | 'signoff' | 'hold' | 'restricted'
+  type: TimelineLane
+  /** Filter group when it differs from the lane's default (surveillance
+   *  events ride the task lane but filter under Intelligence). */
+  group?: TimelineGroup
   /** Case deep link for the list row (band dots stay hover-only). */
   href?: string
   /** Grouped bulk-upload titles — the list row renders them expandable. */
@@ -25,11 +29,15 @@ const LANES: { type: BandEvent['type']; label: string; color: string }[] = [
   { type: 'followup', label: 'Follow-up', color: '#f59e0b' },
   { type: 'evidence', label: 'Evidence',  color: '#059669' },
   { type: 'media',    label: 'Media',     color: '#e879f9' },
+  { type: 'custody',  label: 'Custody',   color: '#34d399' },
   { type: 'report',   label: 'Reports',   color: '#8b5cf6' },
   { type: 'task',     label: 'Tasks',     color: '#22d3ee' },
   { type: 'signoff',  label: 'Sign-off',  color: '#fb7185' },
   { type: 'hold',     label: 'Legal hold', color: '#f43f5e' },
   { type: 'restricted', label: 'Restricted', color: '#f97316' },
+  { type: 'source',   label: 'Sources',   color: '#a3e635' },
+  { type: 'document', label: 'Documents', color: '#60a5fa' },
+  { type: 'packet',   label: 'Packets',   color: '#c084fc' },
 ]
 
 const W = 900          // fixed viewBox width — zoom never rescales the SVG

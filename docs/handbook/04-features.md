@@ -16,7 +16,7 @@ Owner-only.
    wizard) → `CaseModal`: template chips prefill fields + a task
    checklist; `insert('cases')` with `case_number = BUREAU-digits`;
    checklist rows → `insert('case_tasks')`.
-2. **Work it** — `CaseDetail`'s 12 tabs (Overview, Graph, Photos & Media,
+2. **Work it** — `CaseDetail`'s 12 tabs (Overview, Graph, Evidence & Media,
    Intel & Notes, Charges, RICO — conditional, shown when the case has
    tracker data or the viewer enables tracking, Reports, Tasks, Legal,
    Sign-off, Chat, Timeline) each fetch and write their own case-scoped

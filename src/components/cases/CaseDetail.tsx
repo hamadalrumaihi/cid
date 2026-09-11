@@ -48,6 +48,8 @@ import { ResponsibleBureauModal } from './ResponsibleBureauModal'
 import { CaseSectionSwitcher } from './CaseSectionSwitcher'
 import { OverviewTab } from './tabs/OverviewTab'
 import { MediaTab } from './tabs/MediaTab'
+import { DocumentsTab } from './tabs/DocumentsTab'
+import { useDocumentsCount } from './tabs/documents/useDocumentsCount'
 import type { BlockerRow } from './tabs/CaseBlockersPanel'
 import { ChargesTab } from './tabs/ChargesTab'
 import { RicoTab } from './tabs/RicoTab'
@@ -303,6 +305,9 @@ export function CaseDetail({ id, onBack, onChanged, embedded = false, section, o
   }
   // Case-scoped channels (P3-08): only THIS case's rows move these counters.
   const vM = useCaseTableVersion('media', id)
+  // Documents tab pill (live packets + document media) — its own tiny hook so
+  // the workflow snapshot stays untouched; null until known (never folds early).
+  const documentsCount = useDocumentsCount(id)
   const vR = useCaseTableVersion('reports', id)
   const vT = useCaseTableVersion('case_tasks', id)
   const vL = useCaseTableVersion('legal_requests', id)
@@ -549,6 +554,7 @@ export function CaseDetail({ id, onBack, onChanged, embedded = false, section, o
     label: TAB_LABELS[t],
     count:
       t === 'media' ? mediaCount ?? undefined
+      : t === 'documents' ? documentsCount ?? undefined
       : t === 'reports' ? wf?.reports.length
       : t === 'tasks' ? openTasks ?? undefined
       : t === 'charges' ? chargesCount
@@ -740,6 +746,7 @@ export function CaseDetail({ id, onBack, onChanged, embedded = false, section, o
             {t === 'notes' && <NotesSection c={c} canEdit={canEdit && !c.archived_at} />}
             {t === 'activity' && <ActivitySection c={c} />}
             {t === 'media' && <MediaTab c={c} canEdit={canEdit} canDelete={canDelete} holdActive={!!hold} />}
+            {t === 'documents' && <DocumentsTab c={c} canEdit={canEdit} />}
             {t === 'intel' && <IntelTab c={c} canEdit={canEdit && !c.archived_at} />}
             {t === 'ci' && <CiIntelligenceTab caseId={c.id} />}
             {t === 'surveillance' && <SurveillanceTab c={c} />}

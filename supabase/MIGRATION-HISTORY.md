@@ -1187,6 +1187,136 @@ the Owner sees deleted rows, the Trash labels them and restore works. This
 retires the last two hard-delete paths in the portal (`docs/DESIGN-SYSTEM.md`
 "Deleting things").
 
+## Platform upgrade — evidence, jobs, documents, sources, graph, search (2026-09-10, applied)
+
+Contract: the "master open-source investigation platform upgrade" request of
+2026-09-10 (38 sections) — integrate the best-fit open-source tools behind
+service adapters while Supabase stays the system of record and RLS the
+authority. `20261105120000_platform_upgrade.sql` was applied live in FIVE
+consecutive parts (`platform_upgrade_core`, `platform_upgrade_evidence`,
+`platform_upgrade_documents`, `platform_upgrade_sources_graph_search`,
+`platform_upgrade_plumbing`; the repo file is the five concatenated in
+application order, each delimited by `-- ===== PART n =====`) and verified in
+one rolled-back transaction (171 checks, all passed) before the repo files
+were committed.
+
+**What it adds.** Extension `vector` (schema `extensions`). Fourteen tables —
+`feature_flags` (ten keys, `advanced_graph` / `evidence_sealing` /
+`advanced_editor` seeded on), `background_jobs` (ten queues, idempotent
+`(kind, idempotency_key)`, leases, `min(1h, 5s·2^attempts)` backoff),
+`service_health_events`, `evidence_custody_events` (append-only, SHA-256
+hash chain over `private.custody_canonical`, `custody_chain_stamp` /
+`custody_chain_block` triggers, 18 event types), `export_manifests`
+(immutable), `case_packets` (soft-deletable kind `case_packet`),
+`document_pages` (tsv) / `document_extractions`, `crawler_policy`
+(singleton), `external_sources` (`SRC-000001`, soft-deletable kind
+`external_source`) / `external_source_versions` (immutable, tsv) /
+`external_source_links`, `search_index_queue`, `semantic_chunks`
+(`vector(1536)`, HNSW cosine). `media` gains twenty integrity columns
+(`sha256`, `byte_size`, `mime`, `original_filename`, `evidence_number` —
+unique `EV-000001` series from `private.evidence_number_seq` —
+`classification`, `integrity_status`, `last_integrity_check`,
+`current_custodian`, `source`, `collected_by` / `collected_at` /
+`location_collected`, `parent_media_id` / `derivative_type` /
+`derivative_service` / `derivative_service_version` / `parent_sha256`,
+`sealed_at` / `sealed_by`), the `private.media_protect_integrity` trigger
+(clients can never write an integrity column; `storage_path` is frozen once
+registered) and field history through `record_versions`. Five private
+storage buckets (`case-evidence` 100 MB, `case-packets` 200 MB,
+`case-documents` 100 MB, `external-source-snapshots` 50 MB, `exports`
+500 MB) with case-scoped object policies and no authenticated UPDATE /
+DELETE. 32 authenticated SECURITY DEFINER / INVOKER RPCs (`feature_flag_set`,
+`background_job_cancel` / `_retry` / `background_jobs_stats`,
+`system_health`, `evidence_register` / `_verify_request` /
+`_custody_transfer` / `_access_log` / `_chain_verify` / `_seal` /
+`_release`, `manifest_verify`, `case_packet_request` / `_access_log`,
+`evidence_bundle_request`, `document_extract_request` /
+`document_tool_request` / `document_search`, `crawler_policy_set`,
+`external_source_submit` / `_recrawl` / `_verify` / `_link` / `_unlink` /
+`_update` / `_search`, `graph_expand` / `graph_path`, `search_authorize`,
+`semantic_search` / `hybrid_search`) and 14 service-role-only RPCs
+(`job_claim` / `_heartbeat` / `_complete` / `_fail`, `evidence_verify_result`,
+`evidence_derivative_register`, `case_packet_render_result` / `_failed`,
+`evidence_bundle_result`, `document_extract_result` / `_failed`,
+`external_source_ingest` / `_failed`, `semantic_chunks_replace`), each
+guarded by `private.is_service_caller()`. Helpers: `private.job_enqueue`,
+`jobs_kick` (pg_net → the `jobs-runner` edge function with
+`app_secrets.JOBS_SECRET`), `job_reap`, `url_static_check` (the SSRF policy,
+mirrored byte-identically in three TypeScript copies),
+`case_packet_snapshot` (built under the caller's rights — restricted media
+only with an approval, sealed legal excluded, never CI),
+`external_source_visible`, `graph_node` / `graph_neighbors` (no CI arm).
+Plumbing re-emitted whole with the new arms: `private.soft_delete_table` /
+`soft_delete_state` / `trash_case_expr` / `perm_registry_visible` /
+`perm_dispatch` / `permanent_delete_record_label` (`packet:<type>`,
+`source:SRC-…`), `public.soft_delete` (a case cascades to its packets) /
+`restore_record` / `trash_list` / `case_timeline` (custody / packet / source /
+document lanes) / `case_audit_feed` (`case_packets`, `external_sources`
+kids) / `notification_resolve`, `private.action_notify` (dedupe key adds
+media / packet / job ids) / `action_key_class`; `rls_test_cleanup` spliced
+for the new tables. Ten notification kinds, 27 audit actions, five cron jobs
+(`background-jobs-kick` `*/2`, `background-jobs-reap` `*/5`, `health-probe`
+`*/10`, `evidence-integrity-sweep` `30 2 * * *`, `external-source-recheck`
+`10 4 * * *`), realtime on `feature_flags` / `background_jobs` /
+`evidence_custody_events` / `case_packets`, `permission_catalog` rows
+740–849 (30 rows, `test_id` v192a–c). Edge functions deployed the same day:
+`jobs-runner` (verify_jwt off; `x-jobs-secret`), `semantic-query` and
+`search-query` (caller JWT). `app_secrets.JOBS_SECRET` was generated inside
+the database and never read back.
+
+Verified at apply time (rolled back, 171 checks): a member reads all ten
+flags and cannot set one; the Owner's `feature_flag_set` is audited; enqueue
+is idempotent; the service role claims, heartbeats, completes and fails jobs
+(retryable → re-queued with backoff, `needs_worker` → parked one hour without
+counting the attempt, terminal → Owner notified), reap recovers an expired
+lease, a member cannot claim; `evidence_register` numbers `EV-…`, chains
+COLLECTED → UPLOADED → REGISTERED and enqueues verify / derive / extract; a
+second register, a direct `sha256` or `storage_path` update and a
+FiveManage-hosted row are refused; access log folds repeat views; a matching
+verify result marks VERIFIED, a mismatch marks INTEGRITY FAILURE with the
+expected hash unchanged, an audit row and fan-out to the uploader and every
+Owner; seal needs the flag and the uploader, release needs command; custody
+transfer needs a reason and notifies ids only; the ledger refuses UPDATE /
+DELETE even to the admin role and still verifies; a packet snapshot includes
+registered items, excludes restricted media without approval, lists suspects
+and never carries a CI key; the render result stores the manifest whose
+hash equals the SHA-256 of its text, writes PACKET_INCLUDED + EXPORTED and
+notifies; `manifest_verify` returns verified / missing / unexpected /
+hash_mismatch / modified and checks `manifest.json` against the stored hash;
+document extraction stores pages, enqueues search / embeddings and
+`document_search` never finds another bureau's document; every SSRF class
+(localhost, loopback, RFC1918, link-local metadata, `[::1]`, `file:`,
+`ftp:`, userinfo, `.local`, `metadata.google.internal`, decimal IP,
+`javascript:`, a policy-blocked domain) is refused; sources submit / ingest /
+version / diff / notify / verify / link / unlink / search; `graph_expand`
+reaches evidence and sources at depth 2 and `graph_path` finds person → gang;
+after a Director designates the person a source, a detective outside the
+compartment sees no CI node, number, alias or informant edge in the graph,
+document search, source search, `search_authorize`, semantic / hybrid
+search, Trash, the timeline, a packet snapshot or a notification label;
+`system_health` and retry are Owner-only; a member sees only their own jobs
+and can cancel a queued one once; packets and sources soft-delete with the
+right labels, hide, restore, and a stranger's delete is `denied`.
+
+**Security-review follow-up** (applied as `platform_upgrade_review_fixes`,
+folded into the repo file as PART 6): a case packet is the requester's —
+`case_packets_sel`, the `case_packets_read` bucket policy,
+`case_packet_access_log` and the `case_packet` read / download dispatch arms
+answer for the requester, command or the Owner on a readable case, because
+the snapshot / PDF was assembled under the requester's rights and must not
+reach a lower-privileged reader of the same case; `document_extract_request`,
+`document_tool_request`, the `('extract', 'document')` arm and the
+`case_evidence_write` bucket policy bind every path to
+`case/<case_id>/<media_id>/…` (an unregistered row's path is client-chosen);
+`private.is_service_caller` fails closed for a session without a JWT unless
+it is neither the API login role nor an assumed app role; `private.jobs_kick`
+gives the runner request a 60 s timeout instead of pg_net's 5 s default.
+Verified rolled back: a same-bureau detective who can read the case sees
+zero rows of another member's packet and `can('read', 'case_packet')` is
+false, while the Director sees it; a media row pointing at another case's
+folder is refused by extraction and by the document tools (`bad_request`); an
+assumed `authenticated` role without claims is not the service.
+
 | Version (live) | Name | Repo file |
 |---|---|---|
 | applied via MCP (`entity_normalization`, `entity_normalization_phone_fix`) | entity_normalization | `20261014120000_entity_normalization.sql` |
@@ -1211,6 +1341,7 @@ retires the last two hard-delete paths in the portal (`docs/DESIGN-SYSTEM.md`
 | applied via MCP (`trash_list`, `trash_list_review_fixes`) | trash_list | `20261102120000_trash_list.sql` |
 | applied via MCP (`confidential_informants`, `confidential_informants_rpcs`, `confidential_informants_plumbing`, `confidential_informants_review_fixes`) | confidential_informants | `20261103120000_confidential_informants.sql` |
 | applied via MCP (`soft_delete_templates_commendations`) | soft_delete_templates_commendations | `20261104120000_soft_delete_templates_commendations.sql` |
+| applied via MCP (`platform_upgrade_core`, `platform_upgrade_evidence`, `platform_upgrade_documents`, `platform_upgrade_sources_graph_search`, `platform_upgrade_plumbing`) | platform_upgrade | `20261105120000_platform_upgrade.sql` |
 | applied via MCP (`record_versions`) | record_versions | `20261011120000_record_versions.sql` |
 | applied via MCP (`case_access_grant_expiry`) | case_access_grant_expiry | `20261012120000_case_access_grant_expiry.sql` |
 | applied via MCP (`permanent_delete_record`, `permanent_delete_record_preview_fix`) | permanent_delete_record | `20261013120000_permanent_delete_record.sql` |

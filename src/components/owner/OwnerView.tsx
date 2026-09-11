@@ -48,6 +48,7 @@ import {
 import { ADMIN_AUDIT_ACTIONS, adminActionLabel, ledgerReferenceCount } from './ownerQueue'
 import { SecurityTestingSection } from './SecurityTestingSection'
 import { PermanentDeletionSection } from './PermanentDeletionSection'
+import { SystemHealthSection } from './SystemHealthSection'
 
 type FeedbackRow = Tables<'feedback'>
 type MetaRow = Tables<'feedback_meta'>
@@ -60,7 +61,7 @@ const SECTIONS: { id: string; label: string; sub: string }[] = [
   { id: 'feedback', label: 'Feedback & Bugs', sub: 'The owner inbox — triage, catalog, resolve' },
   { id: 'deletion', label: 'Permanent Deletion', sub: 'Irreversible member erasure + the deletion ledger' },
   { id: 'security', label: 'Security & Audit', sub: 'Live RLS suite results, client errors & the audit log' },
-  { id: 'system', label: 'System Health', sub: 'DB round-trip, environment, realtime & live table counts' },
+  { id: 'system', label: 'System Health', sub: 'Services, queues, jobs, feature flags, crawler policy, environment & live counts' },
   { id: 'reference', label: 'Handbook & Reference', sub: 'Deep links into the Developer Handbook + the dependency explorer' },
 ]
 
@@ -886,6 +887,11 @@ function SystemSection() {
 
   return (
     <div className="space-y-4">
+      {/* Platform upgrade (§2.9): server-reported service health, queues,
+          jobs, feature flags and the crawler policy. The client-side
+          signals below it are unchanged. */}
+      <SystemHealthSection />
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <HealthCard label="Database" ok={h?.db?.ok ?? null} detail={h?.db ? `${h.db.ms} ms round-trip` : 'checking…'} />
         <HealthCard label="Authentication" ok={!!session} detail={session ? 'session active, auto-refreshing' : 'no session'} />

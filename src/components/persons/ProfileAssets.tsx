@@ -10,6 +10,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { insert, list, remove, update } from '@/lib/db'
 import { searchPlaceHits, searchVehicleHits } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
+import { useMediaSrc } from '@/lib/evidence'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { fmtDate } from '@/lib/format'
 import { safeUrl } from '@/lib/safeUrl'
@@ -495,39 +496,53 @@ export function PersonMediaSection({ person, media, canEdit, onAdd, onOpen, onRe
         <EmptyState title="No media" hint={canEdit ? 'Add a photo or link imagery to this person.' : undefined} />
       ) : (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-          {media.map((m) => {
-            const src = safeUrl(m.external_url || m.storage_path || '')
-            const isImage = !!src && m.type !== 'document' && m.type !== 'video'
-            const isMugshot = !!src && !!mugshot && src === mugshot
-            return (
-              <div key={m.id} className={`overflow-hidden rounded-lg border bg-ink-850 ${isMugshot ? 'border-badge-500/60' : 'border-white/5'}`}>
-                <button onClick={() => onOpen(m)} className="block w-full text-left" title={`Open ${m.title || 'media'}`}>
-                  {isImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- external media CDN
-                    <img src={src} alt={m.title || 'Media item'} className="h-28 w-full object-cover transition hover:opacity-90" />
-                  ) : (
-                    <div className="grid h-28 w-full place-items-center text-slate-500" aria-hidden><FileTypeIcon type={m.type ?? 'document'} size={28} /></div>
-                  )}
-                </button>
-                <div className="flex items-center justify-between gap-1 px-1.5 py-1">
-                  <span className="min-w-0 truncate text-[11px] text-slate-400">
-                    {isMugshot && <Badge tone="accent" className="mr-1" title="Current mugshot">Mugshot</Badge>}
-                    {m.title || m.kind || 'Media'}
-                  </span>
-                  <span className="flex flex-shrink-0 items-center gap-1.5">
-                    {m.case_id && <EntityLink kind="case" id={m.case_id} label="Case" title="Source case" className="!px-1.5" />}
-                    {canEdit && isImage && !isMugshot && (
-                      <button onClick={() => void setMugshot(m)} className="text-[11px] font-semibold text-blue-300 hover:text-blue-200" title="Use this image as the mugshot">
-                        Set mugshot
-                      </button>
-                    )}
-                  </span>
-                </div>
-              </div>
-            )
-          })}
+          {media.map((m) => (
+            <PersonMediaTile key={m.id} m={m} mugshot={mugshot} canEdit={canEdit} onOpen={() => onOpen(m)} onSetMugshot={() => void setMugshot(m)} />
+          ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/** One tile — storage-hosted rows sign on demand (useMediaSrc, 300 s cached);
+ *  legacy external rows are direct. "Set mugshot" stays URL-based and so
+ *  only offers itself for rows with a stable (external) URL. */
+function PersonMediaTile({ m, mugshot, canEdit, onOpen, onSetMugshot }: {
+  m: MediaRow
+  mugshot: string | null
+  canEdit: boolean
+  onOpen: () => void
+  onSetMugshot: () => void
+}) {
+  const src = safeUrl(useMediaSrc(m) ?? '')
+  const isImage = !!src && m.type !== 'document' && m.type !== 'video'
+  const isMugshot = !!src && !!mugshot && src === mugshot
+  const stableUrl = !!m.external_url
+  return (
+    <div className={`overflow-hidden rounded-lg border bg-ink-850 ${isMugshot ? 'border-badge-500/60' : 'border-white/5'}`}>
+      <button onClick={onOpen} className="block w-full text-left" title={`Open ${m.title || 'media'}`}>
+        {isImage ? (
+          // eslint-disable-next-line @next/next/no-img-element -- signed / external media URL
+          <img src={src} alt={m.title || 'Media item'} className="h-28 w-full object-cover transition hover:opacity-90" />
+        ) : (
+          <div className="grid h-28 w-full place-items-center text-slate-500" aria-hidden><FileTypeIcon type={m.type ?? 'document'} size={28} /></div>
+        )}
+      </button>
+      <div className="flex items-center justify-between gap-1 px-1.5 py-1">
+        <span className="min-w-0 truncate text-[11px] text-slate-400">
+          {isMugshot && <Badge tone="accent" className="mr-1" title="Current mugshot">Mugshot</Badge>}
+          {m.title || m.kind || 'Media'}
+        </span>
+        <span className="flex flex-shrink-0 items-center gap-1.5">
+          {m.case_id && <EntityLink kind="case" id={m.case_id} label="Case" title="Source case" className="!px-1.5" />}
+          {canEdit && isImage && !isMugshot && stableUrl && (
+            <button onClick={onSetMugshot} className="text-[11px] font-semibold text-blue-300 hover:text-blue-200" title="Use this image as the mugshot">
+              Set mugshot
+            </button>
+          )}
+        </span>
+      </div>
     </div>
   )
 }

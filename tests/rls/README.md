@@ -490,6 +490,120 @@ follows.
   empty case, random])` → `[]` for bcb, exactly `[{case, n}]` for lsb and
   the lead.
 
+### Platform upgrade (`tests/rls/v192a` … `v192c`)
+
+The platform upgrade (migration `20261105120000_platform_upgrade`, applied
+live as `platform_upgrade`; design in
+[`docs/PLATFORM-UPGRADE.md`](../../docs/PLATFORM-UPGRADE.md), authority in
+[`docs/AUTHORIZATION.md` §22](../../docs/AUTHORIZATION.md)): evidence
+integrity + custody, background jobs, case packets + manifests, document
+extraction / tools / search, external sources behind an SSRF policy, the
+INVOKER investigation graph, search authorisation, feature flags and system
+health. CID fixtures only — **lsb** (the MCB detective: uploader, requester,
+submitter), **bcb** (the SCB detective — the other bureau, and THE PLAIN
+DETECTIVE of the CI proof), **lead** (the MCB Bureau Lead — command,
+inserts the restricted media row, designates the CI), **owner** (optional —
+`audit_log`, every job, the Owner-only RPCs' positive path), **inactive**
+(optional — deny-by-default). Cases, media rows (client-chosen ids so the
+bucket path `case/<case>/<media>/<file>` can name them — **no object is ever
+uploaded**; the runner's verify job failing on a missing object is the
+runner's business), persons, gangs and sources are inserted by lsb with
+`[rls-test] v192x <tag>` titles; `rls_test_cleanup` is spliced for
+`background_jobs`, `evidence_custody_events`, `export_manifests`,
+`case_packets`, `document_pages`, `document_extractions`,
+`external_source_links`, `external_source_versions`, `external_sources`,
+`semantic_chunks` and `search_index_queue`. Authority refusals are asserted
+as `error.code === 'P0403'`; validation refusals as `{ok:false, code}`
+(`bad_state`, `bad_url`, `bad_request`). Where the live runner may have
+already claimed a job, a test accepts every status a row can legitimately
+reach and never a grant denial.
+
+- **v192a** (evidence): #1 `evidence_register` → `EV-000000` series number,
+  COLLECTED → UPLOADED → REGISTERED with `prev_hash` chaining, an
+  `evidence.verify` job, `EVIDENCE_REGISTERED` (Owner); #2 a second register
+  is `bad_state`; #3 a legacy external-hosted row is `bad_state`, a non-hex
+  hash refused; #4 a direct UPDATE of `sha256` / `integrity_status` /
+  `evidence_number` / `current_custodian` / `sealed_at` / `parent_media_id`
+  → P0403 with the row unchanged (an ordinary column still edits); #5
+  custody events: UPDATE / DELETE → P0403, INSERT → 42501; #6
+  `evidence_custody_transfer` custodian → the lead (TRANSFERRED with
+  previous / new custodian, `evidence_custody_transfer` ids only), the other
+  bureau's reader of the JTF item P0403, the uploader transfers back; #7
+  `evidence_access_log` VIEWED deduped per actor within 10 min, DOWNLOADED
+  always, an unknown action refused; #8 `evidence_chain_verify` ok; #9
+  `evidence_seal` refused while unverified, `evidence_release` P0403 for a
+  detective; #10 bcb reads no custody event of the MCB item, every RPC
+  P0403 with the same wording for a hidden and a random id; #11
+  `background_jobs` private to the creator (bcb and the lead read zero
+  rows), `job_claim` / `_complete` / `_heartbeat` / `_fail` refused, direct
+  writes refused, cancel by an outsider P0403, retry / stats P0403; the
+  Owner reads every job + `background_jobs_stats`; #12 the inactive fixture.
+- **v192b** (packets, documents): #1 `case_packet_request(doj)` → a queued
+  packet with the preset sections, a `packet.render` job on `pdf`,
+  `CASE_PACKET_REQUESTED`; unknown type / empty custom / unknown section
+  refused; #2 the snapshot excludes the lead's RESTRICTED photo (path and
+  title absent, `excluded.restricted_media ≥ 1`), carries the registered
+  items by number, has no CI-shaped key; #3 bcb: request P0403, zero packet
+  rows, access log P0403 (same wording as a random id), zero job rows; #4
+  the requester and the lead log a download, `CASE_PACKET_DOWNLOADED`
+  (Owner); #5 `manifest_verify` on an unknown id is `missing` or P0403,
+  `export_manifests` INSERT 42501, bcb reads no manifest; #6
+  `document_search` empty-safe for both, `document_pages` /
+  `document_extractions` zero rows for bcb and INSERT 42501,
+  `hybrid_search` empty-safe; #7 `document_tool_request`: unknown tool /
+  another case's media / empty → `bad_request`, bcb P0403, `page_numbers`
+  → a `pdf.tool` job with ids-only args, `DOCUMENT_TOOL_REQUESTED`; #8
+  `document_extract_request` → `document.extract` + a `queued` extraction
+  row, nothing for bcb; #9 `evidence_bundle_request`: another case's item /
+  empty / the restricted item → `bad_request`, bcb P0403, the case's items →
+  `bundle.build` on `exports`; #10 every new table refuses direct writes,
+  `soft_delete('case_packet')` by the requester (refused for bcb) → gone for
+  the lead, in `trash_list('case_packet')` with a label that names no
+  restricted title, `restore_record` brings it back.
+- **v192c** (sources, graph, search, the CI proof): #1
+  `external_source_submit(https://example.org/…)` → `SRC-000000`, a
+  `pending` row, a `source.fetch` job on `crawler`; a second source pinned
+  to the MCB case; bcb refused for that case; #2 twenty-three blocked URLs
+  (localhost, 127/8 incl. `127.1`, 10/8, 172.16/12, 192.168/16, link-local
+  + `169.254.169.254`, CGNAT + `100.100.100.200`, 0/8,
+  `metadata.google.internal`, `.internal`, `.local`, `::1`, `fe80::`,
+  `fd00::`, `::ffff:127.0.0.1`, `file:`, `ftp:`, `data:`, `javascript:`,
+  userinfo, no scheme) and a 2100-char URL → `bad_url` / `bad_request`,
+  nothing inserted; #3 the pinned source invisible to bcb (zero rows, P0403
+  with the same wording for a random id on verify / recrawl / update), the
+  case-less source visible to everyone, edit is the submitter's or
+  command's, moving it onto a hidden case refused; #4
+  `external_source_verify` sets status + reliability (bad values
+  `bad_request`); #5 `external_source_link`: a hidden target refused, an
+  unknown id refused, kind `ci` `bad_*`, a person link reads back for the
+  submitter, idempotent on repeat, a case link readable by bcb through both
+  walls, INSERT 42501, unlink P0403 for bcb and ok for the submitter; #6
+  versions and sources refuse every direct write, bcb reads no version of
+  the pinned source; #7 `external_source_search` empty-safe, `crawler_policy`
+  never client-writable; #8 `graph_expand('person')`: the root at depth 0,
+  the case edge (`involved_in` / `suspect_in`), the gang edge (`member_of`),
+  depth 9 → ≤ 3, limit 100000 → ≤ 500, `p_kinds` filters neighbours only,
+  the MCB case absent for bcb, a hidden / random root → empty, a `ci` kind
+  → empty or refused, the inactive fixture refused or empty; **#9 the CI
+  proof** — the lead designates the person (linked to the JTF case both
+  detectives read, member of a gang) via `ci_create` with the lead as
+  primary; for bcb *and* lsb: `graph_expand` from the person and from the
+  case has no `ci` node kind / no CI edge kind / no CI number / no CI id,
+  `document_search` / `external_source_search` / `hybrid_search` of the CI
+  number return nothing, `search_authorize` strips a forged `{kind:'ci'}`
+  hit, `search_all` names no CI and the person hit carries no CI text,
+  `case_packet_request(full)` produces a snapshot without the number or the
+  id, `trash_list()` names no CI, `ci_get` is null, the `persons` row has no
+  CI column; a source link to the person says nothing; then the lead retires
+  the CI and every answer is unchanged, the graph edges still there; #10
+  `system_health` / `feature_flag_set` / `crawler_policy_set` /
+  `background_jobs_stats` → P0403 for the detectives and the lead; the ten
+  `feature_flags` rows readable, never client-writable (UPDATE nothing /
+  INSERT 42501); `service_health_events` / `search_index_queue` /
+  `semantic_chunks` zero rows; the Owner reads `system_health`, re-sets
+  `advanced_graph` to its current value (`FEATURE_FLAG_SET` audited, nothing
+  changed), an unknown key refused, an unknown policy key refused.
+
 ### DOJ legal review (v1.13.0 — `tests/rls/legal.test.ts`; historical model)
 
 37 assertions covering the DOJ Legal Review System (see

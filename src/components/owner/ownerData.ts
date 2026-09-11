@@ -22,6 +22,12 @@ export const ENV_VARS: EnvVarDoc[] = [
   { name: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', purpose: 'Publishable client key (public by design; RLS is the boundary)', required: true, usedIn: 'src/lib/supabase.ts', ifMissing: 'Setup gate; auth failures if wrong' },
   { name: 'NEXT_PUBLIC_FIVEMANAGE_API_KEY', purpose: 'Media upload key (referrer-bound)', required: false, usedIn: 'src/lib/fivemanage.ts', ifMissing: 'Uploads disabled; views show a config banner + paste-URL fallback' },
   { name: 'NEXT_PUBLIC_FIVEMANAGE_BASE_URL', purpose: 'FiveManage API host', required: false, usedIn: 'src/lib/fivemanage.ts', ifMissing: 'Uploads fail' },
+  // Platform upgrade — every one optional; the portal runs with all unset.
+  { name: 'NEXT_PUBLIC_SENTRY_DSN', purpose: 'Sentry browser DSN — the SDK loads lazily only when set; events are scrubbed before leaving the browser', required: false, usedIn: 'src/lib/errorReport.ts → src/lib/services/telemetry', ifMissing: 'No Sentry; client_errors stays the record' },
+  { name: 'NEXT_PUBLIC_SENTRY_ENV', purpose: 'Environment name stamped on Sentry events (production / preview / development)', required: false, usedIn: 'src/lib/services/telemetry/sentry.ts', ifMissing: 'Events carry no environment' },
+  { name: 'OTEL_EXPORTER_OTLP_ENDPOINT', purpose: 'OpenTelemetry collector endpoint (server side only)', required: false, usedIn: 'src/instrumentation.ts', ifMissing: 'No traces are exported' },
+  { name: 'NEXT_PUBLIC_EVIDENCE_HOST', purpose: 'Evidence upload path: supabase (private bucket + SHA-256 + evidence_register) or fivemanage (legacy host)', required: false, usedIn: 'src/lib/evidence.ts', ifMissing: 'Defaults to supabase' },
+  { name: 'NEXT_PUBLIC_ENABLE_<FLAG>', purpose: 'Per-flag build-time override (on / off) over the feature_flags row — STIRLING_PDF, CRAWL4AI, DOCUMENT_PROCESSING, ADVANCED_GRAPH, MEILISEARCH, SEMANTIC_SEARCH, EVIDENCE_SEALING, OPENFGA, ADVANCED_EDITOR, AI_ASSISTANT', required: false, usedIn: 'src/lib/flags.ts', ifMissing: 'The feature_flags row decides' },
 ]
 
 /* ---- feedback catalog vocabulary ----------------------------------------- */

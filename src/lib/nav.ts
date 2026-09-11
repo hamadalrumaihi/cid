@@ -56,7 +56,7 @@ export const TOOL_META: Record<(typeof TOOL_TABS)[number] | 'tools', PageMeta> =
   modus:      { title: 'M.O. Detector', sub: 'Tactical profiling & cross-reference' },
   gangs:      { title: 'Gangs & Turf', sub: 'Organizations, ranks, properties & territory' },
   places:     { title: 'Criminal Places', sub: 'Locations & production processes' },
-  network:    { title: 'Relationship Network', sub: 'Gangs, members & properties as a navigable graph' },
+  network:    { title: 'Investigation Graph', sub: 'What links a person, vehicle, gang, place, narcotic or case — one hop at a time' },
   records:    { title: 'CID Records', sub: 'Live shared division records' },
   vehicles:   { title: 'Vehicle Registry', sub: 'Plates, owners & cross-case matches' },
   indicators: { title: 'Indicators Registry', sub: 'Phones, accounts, serials, aliases & addresses — deconflicted across cases' },

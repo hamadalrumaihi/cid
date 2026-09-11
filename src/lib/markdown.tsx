@@ -8,7 +8,7 @@
  *  the short-ALL-CAPS / colon-terminated heading heuristic. */
 import type { ReactNode } from 'react'
 import { EntityLink } from '@/components/ui/EntityLink'
-import { MENTION_RE, RESTRICTED_LABEL, isMentionKind, mentionKey, type MentionLabels } from './mentions'
+import { MENTION_RE, RESTRICTED_LABEL, isMentionKind, isMentionLinkKind, mentionKey, type MentionLabels } from './mentions'
 
 /** Mention resolution for the read-only render (P5-05): the label map the
  *  caller resolved under RLS (lib/mentionResolve). A key present with `null`
@@ -22,7 +22,13 @@ function mentionNode(kind: string, id: string, labels: MentionLabels, key: numbe
   if (!isMentionKind(kind)) return null
   const k = mentionKey(kind, id)
   const label = labels[k]
-  if (typeof label === 'string' && label) return <EntityLink key={key} kind={kind} id={id} label={label} />
+  // Registry kinds deep-link; the platform-upgrade artefact kinds (evidence,
+  // charge, report, legal, source) render their resolved label as a chip.
+  if (typeof label === 'string' && label) {
+    return isMentionLinkKind(kind)
+      ? <EntityLink key={key} kind={kind} id={id} label={label} />
+      : <span key={key} className="inline-flex max-w-full items-center rounded border border-white/10 bg-white/5 px-1.5 py-0.5 align-baseline text-xs font-medium text-slate-200">{label}</span>
+  }
   if (label === null) return <span key={key} className="text-slate-400">{RESTRICTED_LABEL}</span>
   return <span key={key} className="text-slate-400" aria-busy="true">Resolving record…</span>
 }

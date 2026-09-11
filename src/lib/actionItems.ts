@@ -28,8 +28,8 @@ import { caseLink } from './caseLinks'
 import type { Database, Tables } from './database.types'
 import { deadlineInfo } from './deadlines'
 import { activeDeadline, dispositionFor, humanize, type LegalViewer } from './legalWorkflow'
-import { notifDetail, notifHref, notifSub, notifTitle } from './notifText'
-import { parseNotifPayload } from './schemas'
+import { PLATFORM_NOTIF_KINDS, notifDetail, notifHref, notifSub, notifTitle } from './notifText'
+import { parseNotifPayload, type NotifPayload } from './schemas'
 import { signoffLabel } from './signoff'
 import { canAuthorizeSurveillance } from './surveillanceModel'
 
@@ -578,6 +578,11 @@ export const NUDGE = {
   /** Phase 7 (#375): cases.priority carried onto every item on the case. */
   priorityCritical: 100,
   priorityHigh: 50,
+  /** Platform upgrade (§2.10): an integrity failure is critical (needs_action
+   *  300 + 100 ≥ 400); a "ready" ping is normal work, not low-band noise
+   *  (informational 0 + 100). Failures sit on needs_action alone (high). */
+  integrityFailure: 100,
+  platformReady: 100,
 } as const
 
 /** cases.priority → urgency lift (unknown / null → 0). */
@@ -740,9 +745,70 @@ function semanticKey(n: AcNotif): string | null {
   return null
 }
 
-/* ---- the builder ------------------------------------------------------------ */
+/* ---- platform-upgrade kinds (§2.10) → queue items --------------------------- */
 
 type Draft = Omit<ActionItem, 'urgencyScore' | 'priority'> & { nudge: number }
+type DraftInput = Pick<Draft, 'id' | 'sourceType' | 'sourceId' | 'title' | 'status' | 'deepLink' | 'dedupeKey'> & Partial<Draft>
+
+const idField = (p: NotifPayload, key: string): string | null => {
+  const v = (p as Record<string, unknown>)[key]
+  return typeof v === 'string' && v ? v : null
+}
+
+/** One ranked item per platform notification: packets, bundles and
+ *  generated documents (ready → normal, failed → high), evidence integrity
+ *  (critical) and custody (high), external sources (changed → normal,
+ *  failed → high), and the Owner's job-failure ping (high, an owner signal).
+ *  Dedupe keys follow `action_item_state`'s grammar
+ *  (`^[a-z_]+:[A-Za-z0-9_:.@-]+$`) and name the SUBJECT — a second ping
+ *  about the same packet / media / source folds into the first item — with
+ *  the notification id as the fallback when the payload carries no id.
+ *  Deep links come from notifText (one place spells them). */
+export function platformNotifItem(n: AcNotif, p: NotifPayload, isCommand: boolean): DraftInput | null {
+  if (!PLATFORM_NOTIF_KINDS.has(n.type)) return null
+  const mediaId = idField(p, 'media_id')
+  const packetId = idField(p, 'packet_id')
+  const sourceId = idField(p, 'source_id')
+  const jobId = idField(p, 'job_id')
+  const key = (prefix: string, id: string | null): string => (id ? `${prefix}:${id}` : `notif:${n.id}`)
+  const base: DraftInput = {
+    id: `notif:${n.id}`, sourceType: 'other', sourceId: n.id,
+    title: notifTitle(n), summary: notifSub(n) || notifDetail(n) || '',
+    reason: 'Unread notification', status: 'informational',
+    createdAt: n.created_at, updatedAt: n.created_at,
+    caseId: p.case_id ?? null, caseNumber: p.case_number ?? null,
+    deepLink: notifHref(n, { command: isCommand }) ?? '/inbox',
+    actionLabel: 'Mark read', canAct: true, isPersonalItem: true,
+    sourceMetadata: { notificationIds: [n.id], media_id: mediaId, packet_id: packetId, source_id: sourceId, job_id: jobId },
+    dedupeKey: `notif:${n.id}`,
+  }
+  switch (n.type) {
+    case 'evidence_integrity_failure':
+      return { ...base, status: 'needs_action', reason: 'Integrity check failed — the stored hash no longer matches', dedupeKey: key('evidence_integrity', mediaId), nudge: NUDGE.integrityFailure, isWaitingOnCurrentUser: true }
+    case 'evidence_custody_transfer':
+      return { ...base, status: 'needs_action', reason: 'Custody transferred to you', dedupeKey: key('custody', mediaId), isWaitingOnCurrentUser: true }
+    case 'case_packet_ready':
+      return { ...base, reason: 'Packet rendered — download it from the Documents tab', dedupeKey: key('packet', packetId), nudge: NUDGE.platformReady }
+    case 'case_packet_failed':
+      return { ...base, status: 'needs_action', reason: 'Packet generation failed — request it again', dedupeKey: key('packet_failed', packetId) }
+    case 'evidence_bundle_ready':
+      return { ...base, reason: 'Evidence bundle built — download it from the Documents tab', dedupeKey: key('bundle', jobId), nudge: NUDGE.platformReady }
+    case 'external_source_changed':
+      return { ...base, reason: 'The source content changed since the last fetch — review the diff', dedupeKey: key('source', sourceId), nudge: NUDGE.platformReady }
+    case 'external_source_failed':
+      return { ...base, status: 'needs_action', reason: 'The source could not be fetched', dedupeKey: key('source_failed', sourceId) }
+    case 'document_ready':
+      return { ...base, reason: 'Document processed', dedupeKey: key('document', mediaId), nudge: NUDGE.platformReady }
+    case 'document_failed':
+      return { ...base, status: 'needs_action', reason: 'Document processing failed', dedupeKey: key('document_failed', mediaId) }
+    case 'background_job_failed':
+      return { ...base, sourceType: 'owner_signal', status: 'needs_action', reason: 'A background job exhausted its retries', dedupeKey: key('job', jobId), isPersonalItem: false, isCommandItem: true }
+    default:
+      return null
+  }
+}
+
+/* ---- the builder ------------------------------------------------------------ */
 
 export function buildActionItems(s: ActionSources): ActionQueue {
   const profile = { id: s.me, role: s.role, division: s.division, is_owner: s.isOwner ?? false }
@@ -753,9 +819,7 @@ export function buildActionItems(s: ActionSources): ActionQueue {
   /** dedupeKey (plus semantic aliases) → emitted draft, for notif suppression. */
   const index = new Map<string, Draft>()
 
-  const add = (
-    d: Pick<Draft, 'id' | 'sourceType' | 'sourceId' | 'title' | 'status' | 'deepLink' | 'dedupeKey'> & Partial<Draft>,
-  ): Draft | null => {
+  const add = (d: DraftInput): Draft | null => {
     if (index.has(d.dedupeKey)) return null
     const full: Draft = {
       summary: '', reason: '', dueAt: null, createdAt: nowIso, updatedAt: nowIso,
@@ -2142,6 +2206,20 @@ export function buildActionItems(s: ActionSources): ActionQueue {
       continue
     }
     const p = parseNotifPayload(n.payload)
+    // Platform-upgrade kinds (§2.10): subject-keyed items with their own
+    // status band; a repeat ping about the same subject folds its id into
+    // the first item exactly like the structural suppression above.
+    const platform = platformNotifItem(n, p, s.isCommand)
+    if (platform) {
+      const dup = index.get(platform.dedupeKey)
+      if (dup) {
+        suppressedCount++
+        const prev = dup.sourceMetadata.notificationIds
+        const ids = Array.isArray(prev) ? (prev as string[]) : []
+        dup.sourceMetadata = { ...dup.sourceMetadata, notificationIds: [...ids, n.id] }
+      } else add(platform)
+      continue
+    }
     const sourceType: ActionSourceType =
       n.type === 'chat_mention' || n.type === 'mention' ? 'mention'
         : n.type === 'case_handover' ? 'handover'

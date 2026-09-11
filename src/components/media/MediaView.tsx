@@ -15,6 +15,7 @@ import { uiConfirm } from '@/components/ui/dialog'
 import { FileTypeIcon, GangIcon, IndicatorIcon, PersonIcon, PhotoIcon, PlaceIcon, RadioIcon, TrashIcon } from '@/components/shell/icons'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { useMediaSrc } from '@/lib/evidence'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
@@ -31,7 +32,6 @@ interface GangOption { id: string; name: string }
 const PRESET_TAGS = ['Mugshot', 'Scene', 'Weapon', 'Surveillance', 'Document', 'Vehicle', 'Evidence']
 const inputCls = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500'
 
-const mediaSrc = (m: MediaRow) => m.external_url || m.storage_path || ''
 const tagsOf = (m: MediaRow): Record<string, unknown> => parseFormValues(m.tags)
 const labelsOf = (m: MediaRow): string[] => parseStringArray(tagsOf(m).labels)
 const parseTags = (s: string) => [...new Set(s.split(',').map((x) => x.trim()).filter(Boolean))]
@@ -205,7 +205,8 @@ function MediaCard({ m, canEdit, caseNum, gangName, onOpen, onCase, onForward, o
   onDelete?: () => void
 }) {
   const [imgFailed, setImgFailed] = useState(false)
-  const src = mediaSrc(m)
+  // Storage-hosted rows sign on demand (300 s, cached); external rows are direct.
+  const src = useMediaSrc(m) ?? ''
   const safe = safeUrl(src)
   return (
     <Card pad="none" className="overflow-hidden">
@@ -241,7 +242,7 @@ function MediaCard({ m, canEdit, caseNum, gangName, onOpen, onCase, onForward, o
 }
 
 function Lightbox({ m, caseNum, gangName, onClose }: { m: MediaRow; caseNum: (id: string | null) => string | null; gangName: (id: string | null) => string | null; onClose: () => void }) {
-  const src = mediaSrc(m)
+  const src = useMediaSrc(m) ?? ''
   const safe = safeUrl(src)
   const isVid = m.type === 'video' || /\.(mp4|webm|mov|m4v)($|\?)/i.test(src)
   // media_type enum has no 'audio' member — detect by extension only.

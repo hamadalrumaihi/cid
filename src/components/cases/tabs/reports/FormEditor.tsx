@@ -121,7 +121,7 @@ export function FormEditor({ template, schema, caseId, reportId, values, onChang
         </div>
         {rich && (
           <div role="group" aria-labelledby={`${taId}-label`} className="mt-2">
-            <RichEditor id={taId} value={String(values[s.key] ?? '')} onChange={(md: string) => set(s.key, md)} minHeight="10rem" mentions={mentions} />
+            <RichEditor id={taId} value={String(values[s.key] ?? '')} onChange={(md: string) => set(s.key, md)} minHeight="10rem" mentions={mentions} caseId={caseId} />
           </div>
         )}
         {s.mediaPick && pool && pool.media.length > 0 && <select aria-label={`Add attachment reference to ${s.label}`} value="" onChange={(e) => { const m = pool.media.find((x) => x.id === e.target.value); if (!m) return; /* Id-bearing token — render/export resolve the CURRENT title/url, so renames never orphan the reference. Legacy "title — url" lines keep rendering as plain text. */ const line = mediaRefLine(m.id, m.title || m.type || 'Attachment'); if (m.report_id && m.report_id !== reportId) toast('Already attached to another report — added as a text reference only.', 'info'); const cur = String(values[s.key] ?? '').trimEnd(); set(s.key, cur ? `${cur}\n${line}` : line) }} className="mt-2 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Add from case attachments…</option>{pool.media.map((m) => <option key={m.id} value={m.id}>{m.title || m.type || 'Attachment'}</option>)}</select>}
