@@ -3,7 +3,8 @@
 /** Sidebar — brand head, permissions notice, capability-gated Dashboards
  *  leaves (useCapabilities), the nav categories (the Owner category only for
  *  the portal owner; the `informants` leaf only for accounts the CI
- *  compartment involves) + standalone Feedback/Concern leaves, appearance/
+ *  compartment involves) + standalone Guides/Feedback/Concern leaves,
+ *  appearance/
  *  collapse controls, officer card. Collapse uses the body.nav-collapsed class
  *  contract from globals.css. */
 import { useSyncExternalStore } from 'react'
@@ -244,6 +245,18 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
             </button>
           )
         })}
+        {/* Guides — a top-level destination, not a category and not a tab
+            inside another page. The library at /guides is the only guide
+            entry in the navigation; individual guides open from it. */}
+        {!inSiu && <button
+          data-label="Guides"
+          onClick={() => go(() => navigate('guides'))}
+          title="Reference documents for the division"
+          className={navItemCls(activeTab === 'guides')}
+        >
+          <span className="nav-icon flex-shrink-0 text-slate-400 group-hover:text-slate-200"><CategoryIcon cat="guides" /></span>
+          <span className="nav-label">Guides</span>
+        </button>}
         {!inSiu && <button
           data-label="Feedback"
           onClick={() => go(() => navigate('feedback'))}

@@ -1454,6 +1454,7 @@ another record's folder, and an unregistered media id under the right one.
 | applied via MCP (`soft_delete_templates_commendations`) | soft_delete_templates_commendations | `20261104120000_soft_delete_templates_commendations.sql` |
 | applied via MCP (`platform_upgrade_core`, `platform_upgrade_evidence`, `platform_upgrade_documents`, `platform_upgrade_sources_graph_search`, `platform_upgrade_plumbing`, `platform_upgrade_review_fixes`) | platform_upgrade | `20261105120000_platform_upgrade.sql` |
 | applied via MCP (`org_associations_core`, `org_registry_media`, `org_associations_plumbing`, `org_associations_registry_label_grant`, `org_associations_perm_dispatch`, `org_associations_rls_test_cleanup`, `org_associations_review_fixes`) | org_associations_registry_intel | `20261106120000_org_associations_registry_intel.sql` |
+| applied via MCP (`guide_library_core`, `guide_library_rpcs`, `guide_library_plumbing`, `guide_library_storage_catalog_seed`, `guide_library_rls_test_cleanup`) | guide_library | `20261107120000_guide_library.sql` |
 | applied via MCP (`record_versions`) | record_versions | `20261011120000_record_versions.sql` |
 | applied via MCP (`case_access_grant_expiry`) | case_access_grant_expiry | `20261012120000_case_access_grant_expiry.sql` |
 | applied via MCP (`permanent_delete_record`, `permanent_delete_record_preview_fix`) | permanent_delete_record | `20261013120000_permanent_delete_record.sql` |

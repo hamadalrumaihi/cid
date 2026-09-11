@@ -27,9 +27,8 @@ export const ConcernView = lazy('concern', () => import('@/components/concern/Co
 export const RicoView = lazy('rico', () => import('@/components/rico/RicoView').then((m) => m.RicoView))
 export const HeatmapView = lazy('heatmap', () => import('@/components/heatmap/HeatmapView').then((m) => m.HeatmapView))
 export const DevDocsView = lazy('devdocs', () => import('@/components/devdocs/DevDocsView').then((m) => m.DevDocsView))
-// UNDERGRND SIM guide (/undergrnd) — long-tail reference content: a big,
+// UNDERGRND System Guide (/undergrnd) — long-tail reference content: a big,
 // rarely-opened static document that must not ride in the shared page chunk.
-export const UndergrndView = lazy('undergrnd', () => import('@/components/undergrnd/UndergrndView').then((m) => m.UndergrndView))
 export const OwnerView = lazy('owner', () => import('@/components/owner/OwnerView').then((m) => m.OwnerView))
 // The Trash (Phase 8) — visited rarely; the permanent-delete flow it can open
 // is Owner-only, so neither belongs in the shared chunk.

@@ -76,7 +76,20 @@ Five categories (a bottom bar on your phone). Click a category to jump to its fi
 | **Reference** | Penal Code, SOPs & Library, User Guide |
 | **Oversight** | Calendar, Shift Reports, Audit Log |
 
+Below the categories sit three destinations of their own: **Guides**, **Feedback** and **Report a Concern**.
+
 The Developer Handbook (Reference) and the Audit Log's full history are owner-level surfaces — most members will not see them.
+
+### Guides
+
+**Guides** is the division's library of reference documents — how something works, rather than a record of something that happened. Open it and you get every guide you can read, with a search box, category filters (Systems, Equipment, Jobs, Organizations, Locations, General), the pinned guides first, and anything you have bookmarked.
+
+- **Each guide has its own address.** Open one and the URL is \`/guides/<name>\` — so you can bookmark it, or send it to another member and know they land on the same page.
+- **Finding your way inside one.** A guide is one continuous document, not a set of tabs. On a wide screen the section list sits beside it and follows you as you scroll; on a phone, tap **Sections**. There is also a search box that filters the guide down to the sections that mention what you typed.
+- **Bookmarks are yours.** Bookmarking a guide puts it in your own list. Nobody else sees it — not command, not the Owner.
+- **Drafts.** Command staff can write a guide before anyone reads it. A draft is invisible to everyone else until it is published, and unpublishing hides it again straight away.
+
+Assume nothing on a guide is live: a guide describes a system, it does not read one. Where a guide shows figures — a leaderboard, someone's totals — they are **recorded reference information**, written down at a point in time, and are labelled as such.
 
 ### The Investigative Tools workspace
 

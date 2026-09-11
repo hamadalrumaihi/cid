@@ -28,7 +28,7 @@ import { LegalView } from '@/components/legal/LegalView'
 // (components/tools/toolRegistry); their routes below redirect into /workspace.
 import {
   AuditView, InformantsView, ConcernView, DevDocsView, FeedbackView, HeatmapView,
-  OwnerView, ReportTemplatesView, RicoView, SiuView, TrashView, UndergrndView, WorkspaceView,
+  OwnerView, ReportTemplatesView, RicoView, SiuView, TrashView, WorkspaceView,
 } from './lazyViews'
 
 /** One route per leaf tab, statically prerendered via generateStaticParams.
@@ -36,7 +36,13 @@ import {
  *  PAGE_META — each renders a redirect below. */
 
 export function generateStaticParams() {
-  return [...Object.keys(PAGE_META), ...LEGACY_REDIRECT_TABS].map((tab) => ({ tab }))
+  // 'guides' is a REAL route segment of its own (app/(app)/guides) — the Guide
+  // Library and /guides/<slug>. It keeps a PAGE_META entry so the shell header,
+  // the search palette and useNav know it, but prerendering it here too would
+  // produce two pages resolving to /guides and fail the build.
+  return [...Object.keys(PAGE_META), ...LEGACY_REDIRECT_TABS]
+    .filter((tab) => tab !== 'guides')
+    .map((tab) => ({ tab }))
 }
 
 export default async function TabPage({ params }: { params: Promise<{ tab: string }> }) {
@@ -51,6 +57,10 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
   // the query string (`?preset=`, `?f=`, `?s=`) rides along.
   if (tab === 'action') return <LegacyRedirect to="/inbox" />
   if (tab === 'command') return <LegacyRedirect to="/command-center" />
+  // The UNDERGRND guide moved into the Guide Library. The old address stays
+  // routable so every bookmark and cross-link resolves, and there is exactly
+  // ONE copy of the guide — at /guides/undergrnd.
+  if (tab === 'undergrnd') return <LegacyRedirect to="/guides/undergrnd" />
   // Legacy Intelligence tool routes → the unified workspace. The routes stay
   // prerendered and valid (deep links, bookmarks, notifications, case
   // cross-links); a tiny client shim maps their query params onto
@@ -217,15 +227,6 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="guide" />}>
         <GuideView />
-      </Suspense>
-    )
-  }
-  // Reference content, same standing as /guide — static, no fetches, no CID
-  // data; lazy so the long document stays out of the shared page chunk.
-  if (tab === 'undergrnd') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="undergrnd" />}>
-        <UndergrndView />
       </Suspense>
     )
   }

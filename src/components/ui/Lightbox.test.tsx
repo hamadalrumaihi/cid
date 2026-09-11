@@ -44,7 +44,7 @@ function Harness({ caption }: { caption?: string }) {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <button type="button" data-trigger onClick={() => setOpen(true)}>Open screenshot</button>
+      <button type="button" data-trigger onClick={() => setOpen(true)}>Open image</button>
       <Lightbox
         open={open}
         onClose={() => setOpen(false)}
@@ -103,23 +103,78 @@ describe('Lightbox', () => {
   it('closes from the close button', async () => {
     const { el, cleanup } = await mount(<Harness />)
     await act(async () => { (el.querySelector('[data-trigger]') as HTMLElement).click() })
-    const close = dialog()!.querySelector('button[aria-label="Close screenshot"]') as HTMLElement
+    const close = dialog()!.querySelector('button[aria-label="Close image"]') as HTMLElement
     expect(close).not.toBeNull()
     await act(async () => { close.click() })
     expect(dialog()).toBeNull()
     await cleanup()
   })
 
-  it('keeps Tab inside the dialog', async () => {
+  it('moves focus into the dialog and keeps Tab inside it', async () => {
     const { el, cleanup } = await mount(<Harness />)
     await act(async () => { (el.querySelector('[data-trigger]') as HTMLElement).click() })
     const d = dialog()!
-    // The close button is the only focusable node, so Tab wraps onto itself
-    // rather than escaping to the page behind.
-    await press('Tab')
+    // Opening moves focus to the first enabled control, so Tab can never start
+    // outside the trap.
     expect(d.contains(document.activeElement)).toBe(true)
+    // Tab off the last control wraps to the first rather than escaping to the
+    // page behind. (happy-dom does not move focus for Tab itself; the wrap is
+    // the handler's own work, which is the part worth pinning.)
+    const focusable = Array.from(d.querySelectorAll<HTMLElement>('button:not([disabled])'))
+    expect(focusable.length).toBeGreaterThan(1)
+    focusable[focusable.length - 1].focus()
     await press('Tab')
-    expect(d.contains(document.activeElement)).toBe(true)
+    expect(document.activeElement).toBe(focusable[0])
+    focusable[0].focus()
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }))
+    })
+    expect(document.activeElement).toBe(focusable[focusable.length - 1])
+    await cleanup()
+  })
+
+  it('opens fitted, zooms in and out within bounds, and refits on reopen', async () => {
+    const { el, cleanup } = await mount(<Harness />)
+    const open = async () => act(async () => { (el.querySelector('[data-trigger]') as HTMLElement).click() })
+    await open()
+    const pct = () => dialog()!.querySelector('[aria-live="polite"]')!.textContent
+    const zoomIn = () => dialog()!.querySelector('button[aria-label="Zoom in"]') as HTMLButtonElement
+    const zoomOut = () => dialog()!.querySelector('button[aria-label="Zoom out"]') as HTMLButtonElement
+
+    // 1x fits the viewport, so zooming out is refused at the floor.
+    expect(pct()).toBe('100%')
+    expect(zoomOut().disabled).toBe(true)
+
+    await act(async () => { zoomIn().click() })
+    expect(pct()).toBe('150%')
+    expect(zoomOut().disabled).toBe(false)
+    await act(async () => { zoomOut().click() })
+    expect(pct()).toBe('100%')
+
+    // The ceiling holds however many times it is pressed.
+    for (let i = 0; i < 12; i++) await act(async () => { zoomIn().click() })
+    expect(pct()).toBe('400%')
+    expect(zoomIn().disabled).toBe(true)
+
+    // Reopening the same image starts fitted again, not where it was left.
+    await press('Escape')
+    await open()
+    expect(pct()).toBe('100%')
+    await cleanup()
+  })
+
+  it('zooms from the keyboard and resets with 0', async () => {
+    const { el, cleanup } = await mount(<Harness />)
+    await act(async () => { (el.querySelector('[data-trigger]') as HTMLElement).click() })
+    const pct = () => dialog()!.querySelector('[aria-live="polite"]')!.textContent
+    await press('+')
+    expect(pct()).toBe('150%')
+    await press('+')
+    expect(pct()).toBe('200%')
+    await press('-')
+    expect(pct()).toBe('150%')
+    await press('0')
+    expect(pct()).toBe('100%')
     await cleanup()
   })
 })

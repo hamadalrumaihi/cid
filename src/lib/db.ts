@@ -86,6 +86,9 @@ export const SOFT_DELETE_KIND = {
   // Organization associations (20261106120000): the reviewable registry link
   // withdraws to the Trash like any other member-created row.
   entity_associations: 'entity_association',
+  // Guide library (20261107120000): a guide deletes to the Trash and an
+  // editor restores it; only the Owner destroys one.
+  guides: 'guide',
 } as const satisfies Partial<Record<TableName, string>>
 export type SoftDeleteTable = keyof typeof SOFT_DELETE_KIND
 /** Kinds whose soft_delete requires a reason (the parent records and the
@@ -94,6 +97,9 @@ export type SoftDeleteTable = keyof typeof SOFT_DELETE_KIND
 export const REASON_REQUIRED: ReadonlySet<string> = new Set([
   'person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker',
   'case', 'report', 'media', 'evidence', 'rico_case',
+  // Deleting reference material the division reads is a decision worth a
+  // sentence — public.soft_delete refuses a guide without one.
+  'guide',
 ])
 const softKindOf = (table: string): string | null => (SOFT_DELETE_KIND as Record<string, string>)[table] ?? null
 

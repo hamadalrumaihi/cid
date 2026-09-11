@@ -11,8 +11,8 @@ import { TOOL_TABS } from './toolsModel'
  *  old deep link still resolves (the [tab] page redirects unknown slugs to
  *  /inbox, which would silently eat bookmarks). */
 describe('nav — legacy redirect routes', () => {
-  it('the retired ids are exactly action, command, tools, the 14 tool routes and reports', () => {
-    expect([...LEGACY_REDIRECT_TABS]).toEqual(['action', 'command', 'tools', ...TOOL_TABS, 'reports'])
+  it('the retired ids are exactly action, command, tools, the 14 tool routes, reports and undergrnd', () => {
+    expect([...LEGACY_REDIRECT_TABS]).toEqual(['action', 'command', 'tools', ...TOOL_TABS, 'reports', 'undergrnd'])
   })
 
   it('legacy ids are routable (isValidTab) but carry NO page metadata', () => {
@@ -51,6 +51,9 @@ describe('nav — legacy redirect routes', () => {
     expect(TAB_CATEGORY.reports).toBe('cases')
     expect(TAB_CATEGORY.action).toBe('command')
     expect(TAB_CATEGORY.command).toBeNull()
+    // /undergrnd redirects into the Guide Library, which is a destination of
+    // its own rather than a member of any category.
+    expect(TAB_CATEGORY.undergrnd).toBeNull()
     for (const t of TOOL_TABS) expect(TAB_CATEGORY[t], `TAB_CATEGORY['${t}']`).toBe('cases')
   })
 })
@@ -63,7 +66,7 @@ describe('nav — categories', () => {
     expect(NAV_CATEGORIES.map((c) => [c.id, c.label, c.tabs])).toEqual([
       ['command', 'Command', ['inbox', 'dashboard', 'analytics', 'announce', 'heatmap', 'personnel']],
       ['cases', 'Investigations', ['cases', 'operations', 'legal', 'intelligence', 'informants', 'registries', 'rico', 'case-files']],
-      ['reference', 'Reference', ['penal', 'sops', 'guide', 'undergrnd']],
+      ['reference', 'Reference', ['penal', 'sops', 'guide']],
       ['oversight', 'Oversight', ['calendar', 'shifts', 'trash']],
       ['owner', 'Owner', ['owner', 'audit', 'devdocs', 'report-templates']],
     ])
@@ -110,6 +113,22 @@ describe('nav — categories', () => {
     expect(unit).toEqual({ id: 'siu-unit', label: 'Bureau', tabs: ['siu'] })
     expect(rest.map((c) => c.tabs)).toEqual(NAV_CATEGORIES.map((c) => c.tabs))
     expect(rest.map((c) => c.label)).toEqual(NAV_CATEGORIES.map((c) => c.label))
+  })
+
+  it('Guides is a top-level destination, not a category and not a tab inside another page', () => {
+    expect(isValidTab('guides')).toBe(true)
+    expect(PAGE_META.guides.title).toBe('Guides')
+    expect(TAB_LABEL.guides).toBe('Guides')
+    expect(TAB_CATEGORY.guides).toBeNull()
+    // It is nobody's category member — in CID or in SIU.
+    for (const c of [...NAV_CATEGORIES, ...SIU_NAV_CATEGORIES]) {
+      expect(c.tabs, `category '${c.id}'`).not.toContain('guides')
+    }
+    // And the guide that used to be a Reference tab is gone from the nav: it
+    // lives at /guides/undergrnd now, with exactly one copy.
+    expect(NAV_CATEGORIES.flatMap((c) => c.tabs)).not.toContain('undergrnd')
+    expect(SIU_NAV_CATEGORIES.flatMap((c) => c.tabs)).not.toContain('undergrnd')
+    expect('undergrnd' in PAGE_META).toBe(false)
   })
 
   it('command-center stays a standalone (per-user-gated) leaf, not a category tab', () => {
@@ -170,7 +189,7 @@ describe('nav — general invariants', () => {
   })
 
   it('standalone surfaces belong to NO category (null → no strip highlight, no Subtabs)', () => {
-    for (const t of ['profile', 'command-center', 'concern', 'siu', 'feedback']) {
+    for (const t of ['profile', 'command-center', 'concern', 'siu', 'feedback', 'guides']) {
       expect(TAB_CATEGORY[t], `TAB_CATEGORY['${t}']`).toBeNull()
     }
   })

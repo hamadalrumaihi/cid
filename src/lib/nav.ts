@@ -105,11 +105,14 @@ export const PAGE_META: Record<string, PageMeta> = {
   profile:    { title: 'My Profile', sub: 'Your account, appearance and notification settings' },
   'command-center': { title: 'Command Center', sub: 'Command administration — personnel, membership review, promotions, chain of command, trackers & raid comp' },
   guide:      { title: 'User Guide', sub: 'How to sign in, navigate & work a case — new member orientation' },
-  // In-city criminal-systems reference (Reference category, member-visible
-  // like /guide and /sops): static content, no fetches, no CID data — the
-  // source's own rule keeps public UNDERGRND rankings and CID intelligence
-  // records apart.
-  undergrnd:  { title: 'UNDERGRND SIM — Complete System Guide', sub: 'In-city criminal contracts, BJCOIN, Quartermaster gear, daily board, milestones & rankings' },
+  // The Guide Library (20261107120000). Its own top-level destination, not a
+  // tab inside another page: reference documents are read, sent and bookmarked,
+  // and burying them in a working screen is how they stop being read. `/guides`
+  // is a REAL route segment (app/(app)/guides), so it is deliberately excluded
+  // from the [tab] route's generateStaticParams — see that file. Individual
+  // guides open from the library at /guides/<slug>; only the library itself
+  // appears in the navigation.
+  guides:     { title: 'Guides', sub: 'Reference documents for the division — systems, equipment, jobs, organizations & locations' },
   calendar:   { title: 'Division Calendar', sub: 'Follow-ups, task deadlines & shift weeks at a glance' },
   // Special Investigations Bureau — a SEPARATE investigative authority, not a CID
   // category. It is deliberately absent from NAV_CATEGORIES: the sidebar
@@ -139,8 +142,11 @@ export const PAGE_META: Record<string, PageMeta> = {
  *   · action  → /inbox (the Action Center; query preserved)
  *   · command → /command-center (the Division Overview folded into it)
  *   · tools + the 14 tool ids → /workspace?tool=… (ToolTabRedirect)
- *   · reports → /cases (authoring lives in the case-detail Reports tab) */
-export const LEGACY_REDIRECT_TABS: readonly string[] = ['action', 'command', 'tools', ...TOOL_TABS, 'reports']
+ *   · reports → /cases (authoring lives in the case-detail Reports tab)
+ *   · undergrnd → /guides/undergrnd (the UNDERGRND guide moved into the
+ *     Guide Library; there is exactly one copy of it and this is the door to
+ *     the new address) */
+export const LEGACY_REDIRECT_TABS: readonly string[] = ['action', 'command', 'tools', ...TOOL_TABS, 'reports', 'undergrnd']
 
 export interface NavCategory {
   id: string
@@ -157,7 +163,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
   // tool; `informants` renders only for accounts the CI compartment involves
   // (Sidebar/Subtabs/BottomNav read useCiContext — RLS is the real wall).
   { id: 'cases',     label: 'Investigations', tabs: ['cases', 'operations', 'legal', 'intelligence', 'informants', 'registries', 'rico', 'case-files'] },
-  { id: 'reference', label: 'Reference',      tabs: ['penal', 'sops', 'guide', 'undergrnd'] },
+  { id: 'reference', label: 'Reference',      tabs: ['penal', 'sops', 'guide'] },
   { id: 'oversight', label: 'Oversight',      tabs: ['calendar', 'shifts', 'trash'] },
   // Owner-only: the shell renders this category only when the signed-in
   // member is the portal owner (the views and RLS self-gate regardless).
@@ -203,7 +209,7 @@ export const SIU_NAV_CATEGORIES: NavCategory[] = [
   { id: 'siu-unit',      label: 'Bureau',         tabs: ['siu'] },
   { id: 'siu-command',   label: 'Command',        tabs: ['inbox', 'dashboard', 'analytics', 'announce', 'heatmap', 'personnel'] },
   { id: 'siu-cases',     label: 'Investigations', tabs: ['cases', 'operations', 'legal', 'intelligence', 'informants', 'registries', 'rico', 'case-files'] },
-  { id: 'siu-ref',       label: 'Reference',      tabs: ['penal', 'sops', 'guide', 'undergrnd'] },
+  { id: 'siu-ref',       label: 'Reference',      tabs: ['penal', 'sops', 'guide'] },
   { id: 'siu-oversight', label: 'Oversight',      tabs: ['calendar', 'shifts', 'trash'] },
   { id: 'siu-owner',     label: 'Owner',          tabs: ['owner', 'audit', 'devdocs', 'report-templates'] },
 ]
@@ -224,7 +230,7 @@ export const TAB_LABEL: Record<string, string> = {
   // toolLabel) read these; the routes themselves are legacy redirects.
   persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', accounts: 'Accounts', indicators: 'Indicators', 'field-review': 'Intelligence',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
-  media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide', undergrnd: 'UNDERGRND SIM', devdocs: 'Developer Handbook',
+  media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide', guides: 'Guides', devdocs: 'Developer Handbook',
   tools: 'Investigative Tools', workspace: 'Workspace',
   calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', trash: 'Trash', owner: 'Owner Console', profile: 'My Profile', 'command-center': 'Command Center', siu: 'Special Investigations Bureau',
   informants: 'Informants',
@@ -259,6 +265,10 @@ export const TAB_CATEGORY: Record<string, string | null> = {
   concern: null,
   siu: null,
   feedback: null,
+  // The Guide Library is a top-level destination of its own — no category
+  // button lights for it, and the retired /undergrnd address redirects into it.
+  guides: null,
+  undergrnd: null,
 }
 export const CAT_DEFAULT: Record<string, string> = {}
 for (const t of TOOL_TABS) TAB_CATEGORY[t] = 'cases'
