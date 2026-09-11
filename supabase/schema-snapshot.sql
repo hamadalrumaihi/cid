@@ -2504,6 +2504,67 @@ alter table public.gangs add constraint gangs_source_submission_id_fkey FOREIGN 
 alter table public.gangs add constraint gangs_pkey PRIMARY KEY (id);
 alter table public.gangs enable row level security;
 
+create table public.guide_bookmarks (
+  guide_id uuid not null,
+  user_id uuid not null,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.guide_bookmarks add constraint guide_bookmarks_guide_id_fkey FOREIGN KEY (guide_id) REFERENCES guides(id) ON DELETE CASCADE;
+alter table public.guide_bookmarks add constraint guide_bookmarks_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+alter table public.guide_bookmarks add constraint guide_bookmarks_pkey PRIMARY KEY (guide_id, user_id);
+alter table public.guide_bookmarks enable row level security;
+
+create table public.guide_media (
+  id uuid not null default gen_random_uuid(),
+  guide_id uuid not null,
+  section text,
+  sort_order integer not null default 0,
+  storage_path text not null,
+  alt text not null,
+  caption text,
+  mime text,
+  byte_size bigint,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.guide_media add constraint guide_media_alt_present CHECK ((btrim(alt) <> ''::text));
+alter table public.guide_media add constraint guide_media_byte_size CHECK (((byte_size IS NULL) OR ((byte_size > 0) AND (byte_size <= 10485760))));
+alter table public.guide_media add constraint guide_media_mime CHECK (((mime IS NULL) OR (mime = ANY (ARRAY['image/png'::text, 'image/jpeg'::text, 'image/webp'::text, 'image/gif'::text]))));
+alter table public.guide_media add constraint guide_media_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.guide_media add constraint guide_media_guide_id_fkey FOREIGN KEY (guide_id) REFERENCES guides(id) ON DELETE CASCADE;
+alter table public.guide_media add constraint guide_media_pkey PRIMARY KEY (id);
+alter table public.guide_media enable row level security;
+
+create table public.guides (
+  id uuid not null default gen_random_uuid(),
+  slug text not null,
+  title text not null,
+  summary text,
+  category text not null default 'general'::text,
+  status text not null default 'draft'::text,
+  body_key text not null,
+  pinned boolean not null default false,
+  published_at timestamp with time zone,
+  created_by uuid default auth.uid(),
+  updated_by uuid,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
+  delete_batch uuid
+);
+alter table public.guides add constraint guides_category_check CHECK ((category = ANY (ARRAY['systems'::text, 'equipment'::text, 'jobs'::text, 'organizations'::text, 'locations'::text, 'general'::text])));
+alter table public.guides add constraint guides_published_has_date CHECK (((status <> 'published'::text) OR (published_at IS NOT NULL)));
+alter table public.guides add constraint guides_slug_shape CHECK ((slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text));
+alter table public.guides add constraint guides_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text])));
+alter table public.guides add constraint guides_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.guides add constraint guides_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.guides add constraint guides_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.guides add constraint guides_pkey PRIMARY KEY (id);
+alter table public.guides enable row level security;
+
 create table public.indicators (
   id uuid not null default gen_random_uuid(),
   case_id uuid not null,
@@ -6020,6 +6081,19 @@ CREATE INDEX gangs_lead_detective_id_fkey_idx ON public.gangs USING btree (lead_
 CREATE INDEX gangs_name_trgm ON public.gangs USING gin (name gin_trgm_ops);
 CREATE INDEX gangs_notes_trgm ON public.gangs USING gin (notes gin_trgm_ops);
 CREATE INDEX gangs_reviewed_by_fkey_idx ON public.gangs USING btree (reviewed_by);
+CREATE INDEX guide_bookmarks_user_idx ON public.guide_bookmarks USING btree (user_id);
+CREATE INDEX guide_media_created_by_idx ON public.guide_media USING btree (created_by);
+CREATE INDEX guide_media_guide_idx ON public.guide_media USING btree (guide_id, section, sort_order);
+CREATE INDEX guides_category_idx ON public.guides USING btree (category) WHERE (deleted_at IS NULL);
+CREATE INDEX guides_created_by_idx ON public.guides USING btree (created_by);
+CREATE INDEX guides_delete_batch_idx ON public.guides USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
+CREATE INDEX guides_deleted_at_idx ON public.guides USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+CREATE INDEX guides_deleted_by_idx ON public.guides USING btree (deleted_by);
+CREATE INDEX guides_pinned_idx ON public.guides USING btree (pinned) WHERE (pinned AND (deleted_at IS NULL));
+CREATE UNIQUE INDEX guides_slug_key ON public.guides USING btree (slug) WHERE (deleted_at IS NULL);
+CREATE INDEX guides_status_idx ON public.guides USING btree (status) WHERE (deleted_at IS NULL);
+CREATE INDEX guides_updated_by_idx ON public.guides USING btree (updated_by);
+CREATE INDEX guides_updated_idx ON public.guides USING btree (updated_at DESC) WHERE (deleted_at IS NULL);
 CREATE INDEX indicators_case_idx ON public.indicators USING btree (case_id);
 CREATE INDEX indicators_created_by_fkey_idx ON public.indicators USING btree (created_by);
 CREATE INDEX indicators_delete_batch_idx ON public.indicators USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
@@ -15977,6 +16051,282 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.guide_bookmark_toggle(p_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_on boolean;
+begin
+  if v_uid is null or not private.is_active() then
+    perform private.perm_raise('bookmark', 'guide', p_id, 'not_active', 'not an active member');
+  end if;
+  if not exists (select 1 from public.guides g where g.id = p_id and g.deleted_at is null
+                   and (g.status = 'published' or private.can_edit_guides())) then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'guide not found');
+  end if;
+  delete from public.guide_bookmarks where guide_id = p_id and user_id = v_uid;
+  if found then
+    v_on := false;
+  else
+    insert into public.guide_bookmarks (guide_id, user_id) values (p_id, v_uid);
+    v_on := true;
+  end if;
+  return jsonb_build_object('ok', true, 'id', p_id, 'bookmarked', v_on);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_media_attach(p_guide uuid, p_alt text, p_filename text, p_section text DEFAULT NULL::text, p_caption text DEFAULT NULL::text, p_mime text DEFAULT NULL::text, p_byte_size bigint DEFAULT NULL::bigint)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_id uuid := gen_random_uuid();
+  v_alt text := left(nullif(btrim(coalesce(p_alt, '')), ''), 300);
+  v_caption text := left(nullif(btrim(coalesce(p_caption, '')), ''), 300);
+  v_section text := nullif(btrim(coalesce(p_section, '')), '');
+  v_mime text := lower(nullif(btrim(coalesce(p_mime, '')), ''));
+  v_name text := left(regexp_replace(lower(btrim(coalesce(p_filename, ''))), '[^a-z0-9._-]+', '-', 'g'), 120);
+  v_next integer; v_path text; g public.guides;
+begin
+  if v_uid is null or not private.can_edit_guides() then
+    perform private.perm_raise('attach', 'guide_media', p_guide, 'no_edit_authority', 'you may not add images to guides');
+  end if;
+  select * into g from public.guides where id = p_guide and deleted_at is null;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'guide not found');
+  end if;
+  if v_alt is null then
+    return jsonb_build_object('ok', false, 'code', 'alt_required', 'message', 'describe what the image shows');
+  end if;
+  if v_mime is null or v_mime not in ('image/png', 'image/jpeg', 'image/webp', 'image/gif') then
+    return jsonb_build_object('ok', false, 'code', 'bad_type', 'message', 'a guide image is a PNG, JPEG, WebP or GIF');
+  end if;
+  if p_byte_size is null or p_byte_size <= 0 or p_byte_size > 10485760 then
+    return jsonb_build_object('ok', false, 'code', 'too_large', 'message', 'a guide image is at most 10 MB');
+  end if;
+  v_name := nullif(btrim(v_name, '-.'), '');
+  if v_name is null then v_name := 'image'; end if;
+  select coalesce(max(sort_order), -1) + 1 into v_next
+    from public.guide_media m where m.guide_id = p_guide and m.section is not distinct from v_section;
+  v_path := p_guide::text || '/' || v_id::text || '/' || v_name;
+
+  insert into public.guide_media (id, guide_id, section, sort_order, storage_path, alt, caption, mime, byte_size, created_by)
+  values (v_id, p_guide, v_section, v_next, v_path, v_alt, v_caption, v_mime, p_byte_size, v_uid);
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'GUIDE_MEDIA_ATTACHED', 'guide_media', v_id,
+          jsonb_build_object('guide_id', p_guide, 'slug', g.slug, 'section', v_section,
+                             'alt', v_alt, 'caption', v_caption, 'storage_path', v_path));
+  return jsonb_build_object('ok', true, 'media_id', v_id, 'storage_path', v_path,
+                            'bucket', 'guides', 'sort_order', v_next);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_media_remove(p_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); m public.guide_media;
+begin
+  if v_uid is null or not private.can_edit_guides() then
+    perform private.perm_raise('delete', 'guide_media', p_id, 'no_edit_authority', 'you may not remove guide images');
+  end if;
+  delete from public.guide_media where id = p_id returning * into m;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'image not found');
+  end if;
+  delete from storage.objects o where o.bucket_id = 'guides' and o.name = m.storage_path;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'GUIDE_MEDIA_REMOVED', 'guide_media', m.id,
+          jsonb_build_object('guide_id', m.guide_id, 'section', m.section, 'alt', m.alt,
+                             'caption', m.caption, 'storage_path', m.storage_path));
+  return jsonb_build_object('ok', true, 'id', m.id, 'guide_id', m.guide_id);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_media_reorder(p_guide uuid, p_ids uuid[], p_section text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_section text := nullif(btrim(coalesce(p_section, '')), '');
+  v_n integer := 0; i integer;
+begin
+  if v_uid is null or not private.can_edit_guides() then
+    perform private.perm_raise('edit', 'guide_media', p_guide, 'no_edit_authority', 'you may not reorder guide images');
+  end if;
+  if p_ids is null or cardinality(p_ids) = 0 then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'no images were named');
+  end if;
+  for i in 1 .. cardinality(p_ids) loop
+    update public.guide_media set sort_order = i - 1
+     where id = p_ids[i] and guide_id = p_guide and section is not distinct from v_section;
+    if found then v_n := v_n + 1; end if;
+  end loop;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'GUIDE_MEDIA_REORDERED', 'guides', p_guide,
+          jsonb_build_object('section', v_section, 'order', to_jsonb(p_ids), 'moved', v_n));
+  return jsonb_build_object('ok', true, 'guide_id', p_guide, 'moved', v_n);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_media_update(p_id uuid, p_alt text DEFAULT NULL::text, p_caption text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_alt text := left(nullif(btrim(coalesce(p_alt, '')), ''), 300);
+  v_caption text := left(nullif(btrim(coalesce(p_caption, '')), ''), 300);
+  m public.guide_media;
+begin
+  if v_uid is null or not private.can_edit_guides() then
+    perform private.perm_raise('edit', 'guide_media', p_id, 'no_edit_authority', 'you may not edit guide images');
+  end if;
+  if p_alt is not null and v_alt is null then
+    return jsonb_build_object('ok', false, 'code', 'alt_required', 'message', 'describe what the image shows');
+  end if;
+  update public.guide_media
+     set alt = coalesce(v_alt, alt),
+         caption = case when p_caption is null then caption else v_caption end
+   where id = p_id returning * into m;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'image not found');
+  end if;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'GUIDE_MEDIA_UPDATED', 'guide_media', m.id,
+          jsonb_build_object('guide_id', m.guide_id, 'section', m.section, 'alt', m.alt, 'caption', m.caption));
+  return jsonb_build_object('ok', true, 'id', m.id);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_publish(p_id uuid, p_published boolean DEFAULT true)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_want text; g public.guides;
+begin
+  if v_uid is null or not private.can_edit_guides() then
+    perform private.perm_raise('publish', 'guide', p_id, 'no_edit_authority', 'you may not publish guides');
+  end if;
+  v_want := case when coalesce(p_published, true) then 'published' else 'draft' end;
+  select * into g from public.guides where id = p_id and deleted_at is null for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'guide not found');
+  end if;
+  if g.status = v_want then
+    return jsonb_build_object('ok', true, 'id', g.id, 'status', g.status, 'unchanged', true);
+  end if;
+  update public.guides
+     set status = v_want,
+         published_at = case when v_want = 'published' then coalesce(published_at, now()) else published_at end,
+         updated_by = v_uid
+   where id = p_id returning * into g;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, case when v_want = 'published' then 'GUIDE_PUBLISHED' else 'GUIDE_UNPUBLISHED' end,
+          'guides', g.id, jsonb_build_object('slug', g.slug, 'title', g.title, 'status', g.status));
+  return jsonb_build_object('ok', true, 'id', g.id, 'status', g.status);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_set_pinned(p_id uuid, p_pinned boolean DEFAULT true)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); g public.guides;
+begin
+  if v_uid is null or not private.can_edit_guides() then
+    perform private.perm_raise('pin', 'guide', p_id, 'no_edit_authority', 'you may not pin guides');
+  end if;
+  update public.guides set pinned = coalesce(p_pinned, true), updated_by = v_uid
+   where id = p_id and deleted_at is null returning * into g;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'guide not found');
+  end if;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'GUIDE_PINNED', 'guides', g.id, jsonb_build_object('slug', g.slug, 'pinned', g.pinned));
+  return jsonb_build_object('ok', true, 'id', g.id, 'pinned', g.pinned);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_upsert(p_id uuid DEFAULT NULL::uuid, p_slug text DEFAULT NULL::text, p_title text DEFAULT NULL::text, p_summary text DEFAULT NULL::text, p_category text DEFAULT NULL::text, p_body_key text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_slug text := lower(nullif(btrim(coalesce(p_slug, '')), ''));
+  v_title text := left(nullif(btrim(coalesce(p_title, '')), ''), 200);
+  v_summary text := left(nullif(btrim(coalesce(p_summary, '')), ''), 500);
+  v_category text := lower(nullif(btrim(coalesce(p_category, '')), ''));
+  v_body text := nullif(btrim(coalesce(p_body_key, '')), '');
+  g public.guides;
+begin
+  if v_uid is null or not private.can_edit_guides() then
+    perform private.perm_raise('edit', 'guide', p_id, 'no_edit_authority', 'you may not edit guides');
+  end if;
+  if p_id is null and (v_slug is null or v_title is null or v_body is null) then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'a new guide needs an address, a title and a body key');
+  end if;
+  if v_slug is not null and v_slug !~ '^[a-z0-9]+(-[a-z0-9]+)*$' then
+    return jsonb_build_object('ok', false, 'code', 'bad_slug', 'message', 'an address is lowercase words joined by hyphens');
+  end if;
+  if v_category is not null and v_category not in ('systems', 'equipment', 'jobs', 'organizations', 'locations', 'general') then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'unknown category');
+  end if;
+  if v_slug is not null and exists (select 1 from public.guides x
+                                     where x.slug = v_slug and x.deleted_at is null
+                                       and (p_id is null or x.id <> p_id)) then
+    return jsonb_build_object('ok', false, 'code', 'slug_taken', 'message', 'another guide already lives at that address');
+  end if;
+
+  if p_id is null then
+    insert into public.guides (slug, title, summary, category, body_key, created_by, updated_by)
+    values (v_slug, v_title, v_summary, coalesce(v_category, 'general'), v_body, v_uid, v_uid)
+    returning * into g;
+    insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+    values (v_uid, 'GUIDE_CREATED', 'guides', g.id,
+            jsonb_build_object('slug', g.slug, 'title', g.title, 'category', g.category, 'body_key', g.body_key));
+  else
+    select * into g from public.guides where id = p_id and deleted_at is null for update;
+    if not found then
+      return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'guide not found');
+    end if;
+    update public.guides set
+      slug = coalesce(v_slug, slug),
+      title = coalesce(v_title, title),
+      -- An explicitly blank summary clears it; omitting the argument leaves it.
+      summary = case when p_summary is null then summary else v_summary end,
+      category = coalesce(v_category, category),
+      body_key = coalesce(v_body, body_key),
+      updated_by = v_uid
+     where id = p_id returning * into g;
+    insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+    values (v_uid, 'GUIDE_UPDATED', 'guides', g.id,
+            jsonb_build_object('slug', g.slug, 'title', g.title, 'category', g.category, 'body_key', g.body_key));
+  end if;
+  return jsonb_build_object('ok', true, 'id', g.id, 'slug', g.slug, 'status', g.status);
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.has_restricted_packet_approval(p_case uuid)
  RETURNS boolean
  LANGUAGE sql
@@ -22105,6 +22455,11 @@ begin
   delete from public.entity_update_suggestions where proposed_by = any(ids) or decided_by = any(ids);
   delete from public.entity_field_observations where recorded_by = any(ids) or case_id = any(case_ids);
   delete from public.entity_merges where actor_id = any(ids) or reversed_by = any(ids);
+  -- Guide library (20261107120000): guides a fixture authored (guide_media
+  -- and guide_bookmarks cascade), and bookmarks a fixture left on a real one.
+  delete from public.guide_bookmarks where user_id = any(ids);
+  delete from public.guides where created_by = any(ids) or updated_by = any(ids) or deleted_by = any(ids);
+
   delete from public.entity_associations
    where created_by = any(ids) or decided_by = any(ids) or deleted_by = any(ids)
       or subject_id in (select id from public.persons where created_by = any(ids)
@@ -26320,7 +26675,7 @@ begin
     perform private.perm_deny('soft_delete', v_kind, p_id, 'not_permitted');
     return jsonb_build_object('ok', false, 'code', 'denied', 'message', 'you may not delete this record');
   end if;
-  if v_reason is null and v_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'case', 'report', 'media', 'evidence', 'rico_case', 'ci') then
+  if v_reason is null and v_kind in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'case', 'report', 'media', 'evidence', 'rico_case', 'ci', 'guide') then
     return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'a reason is required to delete this record');
   end if;
   select * into st from private.soft_delete_state(v_kind, p_id);
@@ -27394,7 +27749,9 @@ declare
                           'predicate_act', 'case_note', 'case_link', 'ci', 'ci_intelligence', 'ci_contact', 'ci_payment',
                           'case_template', 'commendation', 'case_packet', 'external_source',
                           -- NEW (20261106120000)
-                          'entity_association'];
+                          'entity_association',
+                          -- NEW (20261107120000)
+                          'guide'];
   v_limit integer := greatest(1, least(coalesce(p_limit, 300), 500));
   v_owner boolean := private.is_owner();
   k text; t text; v_case text; v_extra text; v_sql text := '';
@@ -29118,6 +29475,16 @@ AS $function$
           and p_folder not in ('SOPs', 'Resources', 'Personnel', 'Gang Intel')
           and coalesce(p_class, 'internal') = 'internal')
   end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.can_edit_guides()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.is_active() and (private.is_command() or private.is_owner())
 $function$
 ;
 
@@ -32800,6 +33167,19 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.guide_readable(p_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select exists (select 1 from public.guides g
+                  where g.id = p_id and g.deleted_at is null
+                    and private.is_active()
+                    and (g.status = 'published' or private.can_edit_guides()))
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.handle_new_user()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -34889,6 +35269,24 @@ AS $function$
       when 'verify' then exists (select 1 from public.export_manifests x where x.id = p_id and private.is_active()
                                     and ((x.case_id is not null and private.can_read_case(x.case_id)) or x.created_by = (select auth.uid())))
       else false end
+    -- NEW (20261107120000): guides. Reference content, not a record: a guide
+    -- has no SIU dimension, no case and no per-row wall — published or draft,
+    -- and the one editor authority, is the whole of it.
+    when p_kind = 'guide' then (
+      select case p_action
+        when 'read'    then st.p_exists and (st.p_deleted_at is null or private.is_owner())
+                              and private.is_active()
+                              and exists (select 1 from public.guides g where g.id = p_id
+                                           and (g.status = 'published' or private.can_edit_guides()))
+        when 'create'  then private.can_edit_guides()
+        when 'edit'    then st.p_exists and st.p_deleted_at is null and private.can_edit_guides()
+        when 'publish' then st.p_exists and st.p_deleted_at is null and private.can_edit_guides()
+        when 'soft_delete' then st.p_exists and st.p_deleted_at is null and private.can_edit_guides()
+        when 'delete'      then st.p_exists and st.p_deleted_at is null and private.can_edit_guides()
+        when 'restore'     then st.p_exists and st.p_deleted_at is not null and private.can_edit_guides()
+        when 'permanent_delete' then private.is_owner() and st.p_exists and st.p_deleted_at is not null
+        else false end
+      from private.soft_delete_state('guide', p_id) st)
     -- NEW (20261106120000): entity_associations. Not part of the generic
     -- registry arm below, because its visibility is the AND of two registry
     -- records rather than one, and because amending or withdrawing it is the
@@ -35283,7 +35681,7 @@ begin
   select coalesce(array_agg(x), '{}') into v_paths from jsonb_array_elements_text(v_assets -> 'storage_objects') x;
   if cardinality(v_paths) > 0 then
     begin
-      delete from storage.objects o where o.bucket_id in ('field-evidence', 'case-evidence') and o.name = any (v_paths);
+      delete from storage.objects o where o.bucket_id in ('field-evidence', 'case-evidence', 'guides') and o.name = any (v_paths);
     exception when others then
       v_storage_ok := false;
       update public.deleted_record_ledger
@@ -35330,7 +35728,7 @@ CREATE OR REPLACE FUNCTION private.permanent_delete_record_assets(p_table text, 
  STABLE SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare v_batch uuid; v_paths jsonb; v_urls jsonb; v_cols text[]; v_where text;
+declare v_batch uuid; v_paths jsonb; v_urls jsonb; v_cols text[]; v_where text; v_guide jsonb;
 begin
   execute format('select delete_batch from public.%I where id = $1', p_table) into v_batch using p_id;
   select coalesce(array_agg(a.attname::text), '{}') into v_cols
@@ -35349,6 +35747,13 @@ begin
                          coalesce(jsonb_agg(distinct m.external_url) filter (where m.external_url is not null), ''[]''::jsonb)
                     from public.media m where (%s) and (m.storage_path is not null or m.external_url is not null)', v_where)
     into v_paths, v_urls using p_id;
+  -- NEW (20261107120000): guide imagery is in its own table and its own
+  -- bucket. Without this the objects would outlive the guide they illustrate.
+  if p_table = 'guides' then
+    select coalesce(jsonb_agg(distinct gm.storage_path), '[]'::jsonb) into v_guide
+      from public.guide_media gm where gm.guide_id = p_id;
+    v_paths := coalesce(v_paths, '[]'::jsonb) || coalesce(v_guide, '[]'::jsonb);
+  end if;
   return jsonb_build_object('storage_objects', coalesce(v_paths, '[]'::jsonb) - 'null',
                             'external_assets', coalesce(v_urls, '[]'::jsonb));
 end $function$
@@ -37041,6 +37446,8 @@ AS $function$
     when 'external_source' then 'external_sources'
     -- NEW (20261106120000): the reviewable organization/registry link.
     when 'entity_association' then 'entity_associations'
+    -- NEW (20261107120000): a guide in the library.
+    when 'guide' then 'guides'
   end
 $function$
 ;
@@ -37857,6 +38264,11 @@ CREATE TRIGGER gangs_siu_reconcile AFTER INSERT OR UPDATE OF name ON public.gang
 CREATE TRIGGER gangs_touch BEFORE UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER gangs_version AFTER UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER gangs_visibility_forget AFTER DELETE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.siu_visibility_forget('gang');
+CREATE TRIGGER guide_media_audit AFTER INSERT OR DELETE OR UPDATE ON public.guide_media FOR EACH ROW EXECUTE FUNCTION private.audit_detail();
+CREATE TRIGGER guide_media_touch BEFORE UPDATE ON public.guide_media FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER guides_audit AFTER INSERT OR DELETE OR UPDATE ON public.guides FOR EACH ROW EXECUTE FUNCTION private.audit_detail();
+CREATE TRIGGER guides_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.guides FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
+CREATE TRIGGER guides_touch BEFORE UPDATE ON public.guides FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER indicators_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.indicators FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER integration_sources_touch BEFORE UPDATE ON public.integration_sources FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER intel_groups_audit AFTER INSERT OR DELETE OR UPDATE ON public.intel_groups FOR EACH ROW EXECUTE FUNCTION private.audit();
@@ -38915,6 +39327,20 @@ create policy gangs_upd on public.gangs
   as permissive for update to authenticated
   using (((private.is_live(deleted_at) OR private.is_owner()) AND (private.is_active() AND (NOT private.siu_hidden('gang'::text, id)))))
   with check (((private.is_live(deleted_at) OR private.is_owner()) AND (private.is_active() AND (NOT private.siu_hidden('gang'::text, id)))));
+
+create policy guide_bookmarks_sel on public.guide_bookmarks
+  as permissive for select to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy guide_media_sel on public.guide_media
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM guides g
+  WHERE ((g.id = guide_media.guide_id) AND (g.deleted_at IS NULL) AND private.is_active() AND ((g.status = 'published'::text) OR private.can_edit_guides())))));
+
+create policy guides_sel on public.guides
+  as permissive for select to authenticated
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.is_active() AND ((status = 'published'::text) OR private.can_edit_guides())));
 
 create policy indicators_ins on public.indicators
   as permissive for insert to authenticated
@@ -40357,6 +40783,9 @@ create policy wl_sel on public.watchlist
 --   gang_ranks -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   gang_turf -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   gangs -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   guide_bookmarks -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   guide_media -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   guides -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   indicators -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   integration_events -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   integration_sources -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -40642,6 +41071,7 @@ create policy wl_sel on public.watchlist
 --   private.can_delete_case_file(p_case_number text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   private.can_edit_document(p_class text, p_owner uuid, p_folder text): default (PUBLIC)
 --   private.can_edit_document_for_bureau(p_class text, p_owner uuid, p_folder text, p_bureau bureau): {postgres=X/postgres,authenticated=X/postgres}
+--   private.can_edit_guides(): {postgres=X/postgres,authenticated=X/postgres}
 --   private.can_edit_legal_draft(p_request uuid, p_user uuid): {postgres=X/postgres,authenticated=X/postgres}
 --   private.can_edit_narcotics_intel(): {postgres=X/postgres,authenticated=X/postgres}
 --   private.can_fulfil_legal(p_request uuid, p_user uuid): default (PUBLIC)
@@ -40785,6 +41215,7 @@ create policy wl_sel on public.watchlist
 --   private.guard_profile(): {=X/postgres,postgres=X/postgres,authenticated=X/postgres}
 --   private.guard_surveillance_event(): default (PUBLIC)
 --   private.guard_surveillance_observation(): default (PUBLIC)
+--   private.guide_readable(p_id uuid): {postgres=X/postgres,authenticated=X/postgres}
 --   private.handle_new_user(): {=X/postgres,postgres=X/postgres,authenticated=X/postgres}
 --   private.has_full_ci_access(p_user uuid): {postgres=X/postgres,authenticated=X/postgres}
 --   private.has_joint_access(cid uuid): default (PUBLIC)
@@ -41203,6 +41634,14 @@ create policy wl_sel on public.watchlist
 --   public.gang_member_update(p_member uuid, p_rank text, p_callsign text, p_status text, p_confidence text, p_note text, p_case uuid, p_joined_at date, p_left_at date, p_mark_reviewed boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.graph_expand(p_kind text, p_id uuid, p_depth integer, p_kinds text[], p_limit integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.graph_path(p_from_kind text, p_from_id uuid, p_to_kind text, p_to_id uuid, p_max_depth integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_bookmark_toggle(p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_media_attach(p_guide uuid, p_alt text, p_filename text, p_section text, p_caption text, p_mime text, p_byte_size bigint): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_media_remove(p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_media_reorder(p_guide uuid, p_ids uuid[], p_section text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_media_update(p_id uuid, p_alt text, p_caption text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_publish(p_id uuid, p_published boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_set_pinned(p_id uuid, p_pinned boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_upsert(p_id uuid, p_slug text, p_title text, p_summary text, p_category text, p_body_key text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.has_restricted_packet_approval(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.hybrid_search(p_q text, p_embedding vector, p_limit integer, p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.import_legal_warrant(p_case uuid, p_subtype text, p_title text, p_priority text, p_form jsonb, p_narrative text, p_person uuid, p_classification text, p_source_submitted_at timestamp with time zone, p_source_submitter uuid, p_import_key text, p_exhibits jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}

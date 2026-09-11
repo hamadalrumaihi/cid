@@ -16,7 +16,7 @@ import { workspaceCaseHref } from './workspace/model'
 
 export type TrashRow = Database['public']['Functions']['trash_list']['Returns'][number]
 
-/** Human label per soft-delete kind (the 29 kinds `trash_list` walks). */
+/** Human label per soft-delete kind (the kinds `trash_list` walks). */
 export const TRASH_KIND_LABEL: Record<string, string> = {
   case: 'Case',
   case_template: 'Case template', commendation: 'Commendation',
@@ -29,6 +29,7 @@ export const TRASH_KIND_LABEL: Record<string, string> = {
   gang_member: 'Gang member', gang_turf: 'Gang turf', person_place: 'Person–place link',
   person_vehicle: 'Person–vehicle link', person_relationship: 'Person relationship', account_link: 'Account link',
   entity_association: 'Association',
+  guide: 'Guide',
 }
 
 /** Kind → label, degrading to a readable form of the kind for anything the
@@ -48,7 +49,7 @@ export interface TrashGroup { id: TrashGroupId; label: string; kinds: readonly s
  *  to exactly one; unknown kinds fall into Registry. */
 export const TRASH_GROUPS: readonly TrashGroup[] = [
   { id: 'cases', label: 'Cases', kinds: ['case'] },
-  { id: 'admin', label: 'Administration', kinds: ['case_template', 'commendation'] },
+  { id: 'admin', label: 'Administration', kinds: ['case_template', 'commendation', 'guide'] },
   { id: 'material', label: 'Case material', kinds: ['report', 'media', 'evidence', 'case_task', 'case_message', 'case_blocker', 'rico_case', 'predicate_act', 'case_note', 'case_packet'] },
   { id: 'registry', label: 'Registry', kinds: ['person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker', 'external_source'] },
   { id: 'links', label: 'Links', kinds: ['case_intel_link', 'case_link', 'gang_member', 'gang_turf', 'person_place', 'person_vehicle', 'person_relationship', 'account_link', 'entity_association'] },

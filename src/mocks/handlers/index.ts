@@ -3,7 +3,8 @@
  *  evidence routes (explicit /rest/v1/rpc/<fn> per function) before the
  *  generic rpc catch-all so they win the match; rpc before the postgrest catch-all so /rest/v1/rpc/:fn
  *  never resolves as a table named "rpc"; the legal, report, intel and
- *  action write-refusals (Phase 4 / 5 / 6 / 7 RPC-only tables → 42501)
+ *  action write-refusals (Phase 4 / 5 / 6 / 7 RPC-only tables → 42501, and
+ *  the three guide-library tables with them)
  *  before the catch-all so a direct INSERT / UPDATE / DELETE never reaches
  *  the store. */
 import { actionHandlers } from './action'
@@ -12,6 +13,7 @@ import { authHandlers } from './auth'
 import { ciHandlers } from './ci'
 import { documentHandlers } from './documents'
 import { fivemanageHandlers } from './fivemanage'
+import { guideHandlers } from './guides'
 import { intelHandlers } from './intel'
 import { legalHandlers } from './legal'
 import { platformHandlers } from './platform'
@@ -27,6 +29,7 @@ export const handlers = [
   ...ciHandlers,
   ...platformHandlers,
   ...associationHandlers,
+  ...guideHandlers,
   ...documentHandlers,
   ...rpcHandlers,
   ...legalHandlers,

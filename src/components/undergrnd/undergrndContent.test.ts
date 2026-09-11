@@ -11,9 +11,9 @@
  *  it). */
 import { describe, expect, it } from 'vitest'
 import {
-  CONTRACT_LINES, GEAR, GUIDE_IMAGES, MK2_LEVEL, MK2_REQUIREMENT_TEXT,
+  CONTRACT_LINES, GEAR, MK2_LEVEL, MK2_REQUIREMENT_TEXT,
   RECORDED_BOARD, RECORDED_LEADERBOARD, RECORDED_MILESTONES, RECORDED_POSITION,
-  RECORDED_RAP_SHEET, SECTIONS, coverImage, imagesForSection, lineLockedText,
+  RECORDED_RAP_SHEET, SECTIONS, lineLockedText,
   matchSections, milestoneProgress, quickRefContracts, quickRefGear, quickRefRequirements,
 } from './undergrndContent'
 
@@ -203,25 +203,6 @@ describe('quick reference — condensed, never retyped', () => {
     const reqs = quickRefRequirements()
     expect(reqs).toHaveLength(CONTRACT_LINES.length + 1)
     expect(reqs.at(-1)?.value).toBe(MK2_REQUIREMENT_TEXT)
-  })
-})
-
-describe('the guide needs no imagery', () => {
-  it('ships with none, and asks for none', () => {
-    expect(GUIDE_IMAGES).toEqual([])
-    expect(coverImage()).toBeNull()
-    for (const s of SECTIONS) expect(imagesForSection(s.id)).toEqual([])
-  })
-
-  it('sorts a section’s images by editor order when they exist', () => {
-    const imgs = [
-      { id: 'b', section: 'u-gear', order: 2, src: '/b.png', alt: 'b' },
-      { id: 'a', section: 'u-gear', order: 1, src: '/a.png', alt: 'a' },
-      { id: 'cover', section: null, order: 0, src: '/c.png', alt: 'c' },
-    ]
-    expect(imagesForSection('u-gear', imgs).map((i) => i.id)).toEqual(['a', 'b'])
-    expect(coverImage(imgs)?.id).toBe('cover')
-    expect(imagesForSection('u-board', imgs)).toEqual([])
   })
 })
 

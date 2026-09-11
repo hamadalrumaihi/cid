@@ -6743,6 +6743,181 @@ export type Database = {
           },
         ]
       }
+      guide_bookmarks: {
+        Row: {
+          created_at: string
+          guide_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          guide_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          guide_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_bookmarks_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "guides"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guide_bookmarks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guide_media: {
+        Row: {
+          alt: string
+          byte_size: number | null
+          caption: string | null
+          created_at: string
+          created_by: string | null
+          guide_id: string
+          id: string
+          mime: string | null
+          section: string | null
+          sort_order: number
+          storage_path: string
+          updated_at: string
+        }
+        Insert: {
+          alt: string
+          byte_size?: number | null
+          caption?: string | null
+          created_at?: string
+          created_by?: string | null
+          guide_id: string
+          id?: string
+          mime?: string | null
+          section?: string | null
+          sort_order?: number
+          storage_path: string
+          updated_at?: string
+        }
+        Update: {
+          alt?: string
+          byte_size?: number | null
+          caption?: string | null
+          created_at?: string
+          created_by?: string | null
+          guide_id?: string
+          id?: string
+          mime?: string | null
+          section?: string | null
+          sort_order?: number
+          storage_path?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_media_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guide_media_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "guides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guides: {
+        Row: {
+          body_key: string
+          category: string
+          created_at: string
+          created_by: string | null
+          delete_batch: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          id: string
+          pinned: boolean
+          published_at: string | null
+          slug: string
+          status: string
+          summary: string | null
+          title: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          body_key: string
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          pinned?: boolean
+          published_at?: string | null
+          slug: string
+          status?: string
+          summary?: string | null
+          title: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          body_key?: string
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          delete_batch?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          pinned?: boolean
+          published_at?: string | null
+          slug?: string
+          status?: string
+          summary?: string | null
+          title?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guides_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guides_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guides_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       indicators: {
         Row: {
           case_id: string
@@ -18053,6 +18228,38 @@ export type Database = {
       }
       registry_media_attach: {
         Args: { p_kind: string; p_entity_id: string; p_title: string; p_filename: string; p_mime?: string | null; p_byte_size?: number | null; p_category?: string | null; p_caption?: string | null }
+        Returns: Json
+      }
+      guide_upsert: {
+        Args: { p_id?: string | null; p_slug?: string | null; p_title?: string | null; p_summary?: string | null; p_category?: string | null; p_body_key?: string | null }
+        Returns: Json
+      }
+      guide_publish: {
+        Args: { p_id: string; p_published?: boolean }
+        Returns: Json
+      }
+      guide_set_pinned: {
+        Args: { p_id: string; p_pinned?: boolean }
+        Returns: Json
+      }
+      guide_bookmark_toggle: {
+        Args: { p_id: string }
+        Returns: Json
+      }
+      guide_media_attach: {
+        Args: { p_guide: string; p_alt: string; p_filename: string; p_section?: string | null; p_caption?: string | null; p_mime?: string | null; p_byte_size?: number | null }
+        Returns: Json
+      }
+      guide_media_update: {
+        Args: { p_id: string; p_alt?: string | null; p_caption?: string | null }
+        Returns: Json
+      }
+      guide_media_reorder: {
+        Args: { p_guide: string; p_ids: string[]; p_section?: string | null }
+        Returns: Json
+      }
+      guide_media_remove: {
+        Args: { p_id: string }
         Returns: Json
       }
     }

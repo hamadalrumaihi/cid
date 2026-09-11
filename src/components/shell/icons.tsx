@@ -38,6 +38,10 @@ export const CategoryIcon = ({ cat, size }: { cat: string; size?: number }) => {
       return <T size={size}><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5H6.5A2.5 2.5 0 0 0 4 21z" /><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20" /></T>
     case 'oversight':
       return <T size={size}><path d="M12 3.5l7.5 2.8v5.4c0 4.2-3 7.3-7.5 8.8-4.5-1.5-7.5-4.6-7.5-8.8V6.3z" /><path d="M9 12l2 2 4-4" /></T>
+    case 'guides':
+      // An open book — the library, not a single document (the Reference
+      // category's closed book stays as it is).
+      return <T size={size}><path d="M12 6.5C10.5 5.2 8.6 4.5 6 4.5H3.5v13H6c2.6 0 4.5.7 6 2 1.5-1.3 3.4-2 6-2h2.5v-13H18c-2.6 0-4.5.7-6 2z" /><path d="M12 6.5v13" /></T>
     case 'feedback':
       return <T size={size}><path d="M20.5 12a8.5 8.5 0 1 0-3.3 6.7l3.3 1.3-1-3.4a8.4 8.4 0 0 0 1-4.6z" /></T>
     case 'concern':

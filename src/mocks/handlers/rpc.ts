@@ -13,6 +13,7 @@ import { CASE_PREFIX, PERMANENT_BUREAUS } from '@/lib/roles'
 import { supabaseBaseUrl } from '../env'
 import { getDenial, getRows, getRpcOverride, getSession, mockId, seedRows, type MockTableName } from '../store'
 import { ASSOCIATION_RPCS, AssociationRpcError } from './associations'
+import { GUIDE_RPCS, GuideRpcError } from './guides'
 import { CASE_WORKSPACE_RPCS } from './caseWorkspace'
 import { ENTITY_RPCS } from './entity'
 import { INTEL_RPCS, IntelRpcError } from './intel'
@@ -88,10 +89,11 @@ export const SOFT_DELETE_TABLE: Record<string, MockTableName> = {
   case_template: 'case_templates', commendation: 'commendations',
   case_packet: 'case_packets', external_source: 'external_sources',
   entity_association: 'entity_associations',
+  guide: 'guides',
 }
 const SOFT_DELETE_REASON_REQUIRED = new Set([
   'person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'narcotic', 'operation', 'tracker',
-  'case', 'report', 'media', 'evidence', 'rico_case',
+  'case', 'report', 'media', 'evidence', 'rico_case', 'guide',
 ])
 
 function softDelete(args: Record<string, unknown>): Fns['soft_delete']['Returns'] {
@@ -229,6 +231,16 @@ export const rpcHandlers = [
             return HttpResponse.json(ASSOCIATION_RPCS[fn](args) as Parameters<typeof HttpResponse.json>[0])
           } catch (e) {
             if (e instanceof AssociationRpcError) return postgrestError(400, e.code, e.message)
+            throw e
+          }
+        }
+        // The Guide Library (20261107120000) — see ./guides.ts. Same two
+        // refusal shapes: P0403 for authority, {ok:false, code} for validation.
+        if (fn in GUIDE_RPCS) {
+          try {
+            return HttpResponse.json(GUIDE_RPCS[fn](args) as Parameters<typeof HttpResponse.json>[0])
+          } catch (e) {
+            if (e instanceof GuideRpcError) return postgrestError(400, e.code, e.message)
             throw e
           }
         }

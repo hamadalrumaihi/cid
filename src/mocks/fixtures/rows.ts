@@ -1375,3 +1375,55 @@ export function serviceHealthEventRow(
     ...overrides,
   }
 }
+
+/* ---- guide library (20261107120000) -------------------------------------- */
+
+/** A library entry. Defaults to a PUBLISHED guide because that is what a
+ *  reader sees; pass `status: 'draft'` (and leave `published_at` null) for the
+ *  editors-only case. `body_key` names the typed content module that renders
+ *  the prose — the database never holds it. */
+export function guideRow(overrides: Partial<Tables<'guides'>> = {}): Tables<'guides'> {
+  const at = mockTimestamp()
+  return {
+    id: mockId(),
+    slug: 'undergrnd',
+    title: 'UNDERGRND System Guide',
+    summary: 'Contracts, equipment, daily objectives, milestones and recorded progression information.',
+    category: 'systems',
+    status: 'published',
+    body_key: 'undergrnd',
+    pinned: false,
+    published_at: at,
+    created_by: null,
+    updated_by: null,
+    created_at: at,
+    updated_at: at,
+    deleted_at: null,
+    deleted_by: null,
+    delete_reason: null,
+    delete_batch: null,
+    ...overrides,
+  }
+}
+
+/** One optional image on a guide. `section` is a section id, or null for the
+ *  cover. A guide with no rows here renders no imagery and no placeholder. */
+export function guideMediaRow(
+  overrides: Partial<Tables<'guide_media'>> & Pick<Tables<'guide_media'>, 'guide_id'>,
+): Tables<'guide_media'> {
+  const id = overrides.id ?? mockId()
+  return {
+    id,
+    section: null,
+    sort_order: 0,
+    storage_path: `${overrides.guide_id}/${id}/image.png`,
+    alt: 'A photograph illustrating the section',
+    caption: null,
+    mime: 'image/png',
+    byte_size: 4096,
+    created_by: null,
+    created_at: mockTimestamp(),
+    updated_at: mockTimestamp(),
+    ...overrides,
+  }
+}

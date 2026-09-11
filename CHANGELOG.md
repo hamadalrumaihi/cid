@@ -8,6 +8,62 @@ the merged PRs that compose it.
 
 ## [Unreleased]
 
+### The Guide Library
+
+Guides get a permanent home of their own. One migration
+(`20261107120000_guide_library`), one new top-level destination, and the
+UNDERGRND guide corrected and moved into it — with exactly one copy of it in
+the portal.
+
+- **A guide is reference content.** It reads no portal record, writes none, and
+  nothing on it is live. That single idea decides the shape: the **library**
+  lives in the database (which guides exist, their title, address, summary and
+  category, whether they are published, who pinned or bookmarked them), while
+  the **written content** stays a typed module in the repository. Guide prose
+  is code-reviewed — it changes through a pull request with the diff visible,
+  not through a form — so there is no body column to edit and none to sanitise.
+- **Its own destination, not a tab.** *Guides* is a top-level entry in the
+  sidebar. `/guides` is the library — search, category filters (Systems,
+  Equipment, Jobs, Organizations, Locations, General), pinned guides, recently
+  updated, your own bookmarks, published and draft states, last-updated dates,
+  optional cover images, and the empty, loading and error states. Each guide
+  opens at `/guides/<slug>`, which is what makes a guide something one member
+  can send to another. The sections **inside** a guide are anchors, not portal
+  tabs: the document is continuous, with a sticky contents rail on a wide
+  screen and a section sheet on a narrow one, so Ctrl-F still works.
+- **The UNDERGRND guide, corrected.** Built from the portal's own components,
+  it needs no uploaded screenshots and shows no missing-image placeholders. It
+  carries no author, rank, source type or confidence field — a guide is
+  reference material, and attributing it to a person invites reading it as a
+  personal claim. Eight sections: Overview, Line Buy-Ins, Quartermaster Gear,
+  Today's Board, Milestones, Rap Sheet, Leaderboard and Quick Reference. Every
+  figure is transcribed from the supplied material and nothing is invented;
+  recorded progress is labelled as recorded reference information throughout,
+  and the Claim controls are rendered disabled — they are part of the reading,
+  not a way to collect anything. Quick Reference is *derived* from the sections
+  above rather than retyped, so the two can never disagree.
+- **Moved, not copied.** `/undergrnd` redirects to `/guides/undergrnd` (the old
+  address stays routable, so every bookmark and cross-link resolves) and the
+  old Reference tab is gone. There is one copy.
+- **Permissions.** Every active member reads every published guide; a draft is
+  visible only to the people who may edit guides (command and the Owner), which
+  is what makes drafting safe. Bookmarks are private to one person — not to
+  command and not to the Owner — and are deliberately not audited. A guide
+  deletes to the Trash with a reason and an editor restores it; only the Owner
+  destroys one. Every write is a definer RPC; the three tables take no client
+  INSERT, UPDATE or DELETE at all.
+- **Images are optional, always.** A guide with no imagery renders no imagery
+  and no placeholder — no empty frame, no *View image* action. Editors may add,
+  caption, reorder and remove images later; removing every one of them changes
+  nothing else on the page, because written content and imagery are separate by
+  construction. Uploads go to a private `guides` bucket bound to the row that
+  reserved them, alternative text is required, and every media change is
+  recorded in the audit log.
+
+Authority `docs/AUTHORIZATION.md` §24; migration notes
+`supabase/MIGRATION-HISTORY.md`.
+
+
 ### Gang & Organization Registry — associations and visual intelligence
 
 One migration (`20261106120000_org_associations_registry_intel`) closing two
@@ -45,13 +101,10 @@ gaps the 2026-09-11 registry intake ran into, plus the intake itself.
   Association at Pending Investigation. Duplicates were checked against
   normalized names and aliases before insertion and the records were not
   merged.
-- **UNDERGRND SIM — Complete System Guide** — a new reference page
-  documenting the in-city UNDERGRND SIM job network: the ten-step flow and its
-  three currencies, the five contract lines and their buy-ins, the six
-  quartermaster items, Today's Board, the eleven milestone categories, the
-  Rap Sheet, the leaderboard and its privacy rule, a recommended progression,
-  an organization-use panel and an eleven-question FAQ. Confirmed information
-  and screenshot examples are marked apart throughout.
+- **UNDERGRND System Guide** — a reference page covering the contract lines
+  and their buy-ins, the quartermaster items, Today's Board, the milestone
+  categories, the Rap Sheet and the leaderboard. Corrected and rehomed in the
+  Guide Library below.
 
 Authority `docs/AUTHORIZATION.md` §23; RLS `docs/RLS.md` §7 (`v193a`);
 migration notes `supabase/MIGRATION-HISTORY.md`.

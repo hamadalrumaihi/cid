@@ -24,11 +24,6 @@
  *  fmtDate never shifts it across a timezone boundary. */
 export const LAST_UPDATED = '2026-09-11T00:00:00'
 
-export const PAGE_TITLE = 'UNDERGRND System Guide'
-
-export const PAGE_SUMMARY =
-  'Contracts, equipment, daily objectives, milestones and recorded progression information.'
-
 /** Said once, at the top, and relied on everywhere else: this page is a
  *  reference document. It has no connection to the system it describes. */
 export const REFERENCE_NOTE =
@@ -316,40 +311,6 @@ export function quickRefRequirements(): QuickRefRow[] {
     ...CONTRACT_LINES.map((l) => ({ id: `req-${l.id}`, label: l.name, value: lineLockedText(l.level) })),
     { id: 'req-mk2', label: 'Underground SIM Mk.II', value: MK2_REQUIREMENT_TEXT },
   ]
-}
-
-/* ---- optional media ------------------------------------------------------ */
-
-/** Optional imagery. The guide is complete without it: when a slot is empty
- *  the view renders NOTHING for it — no placeholder, no broken frame, no
- *  "image pending" copy — and the View image action does not appear.
- *
- *  `section` is a SECTIONS id, or null for the guide's cover. `order` decides
- *  the sequence within a section so an editor can reorder without touching
- *  written content. Written content and imagery are separate by construction:
- *  removing every image here changes nothing else on the page. */
-export interface GuideImage {
-  id: string
-  section: string | null
-  order: number
-  /** Path under public/, or a signed URL supplied at render time. */
-  src: string
-  alt: string
-  caption?: string
-}
-
-/** Ships empty. Populated later from the guide's media records. */
-export const GUIDE_IMAGES: GuideImage[] = []
-
-export function coverImage(images: readonly GuideImage[] = GUIDE_IMAGES): GuideImage | null {
-  return images.find((i) => i.section === null) ?? null
-}
-
-export function imagesForSection(
-  section: string,
-  images: readonly GuideImage[] = GUIDE_IMAGES,
-): GuideImage[] {
-  return images.filter((i) => i.section === section).sort((a, b) => a.order - b.order)
 }
 
 /* ---- in-guide search ----------------------------------------------------- */
