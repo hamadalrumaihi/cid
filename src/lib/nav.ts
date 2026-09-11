@@ -109,7 +109,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   // like /guide and /sops): static content, no fetches, no CID data — the
   // source's own rule keeps public UNDERGRND rankings and CID intelligence
   // records apart.
-  undergrnd:  { title: 'UNDERGRND SIM — Complete System Guide', sub: 'In-city criminal contracts, BJCOIN, Quartermaster gear, daily board, milestones & rankings' },
+  undergrnd:  { title: 'UNDERGRND System Guide', sub: 'Contracts, equipment, daily objectives, milestones & recorded progression information' },
   calendar:   { title: 'Division Calendar', sub: 'Follow-ups, task deadlines & shift weeks at a glance' },
   // Special Investigations Bureau — a SEPARATE investigative authority, not a CID
   // category. It is deliberately absent from NAV_CATEGORIES: the sidebar
@@ -224,7 +224,7 @@ export const TAB_LABEL: Record<string, string> = {
   // toolLabel) read these; the routes themselves are legacy redirects.
   persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', accounts: 'Accounts', indicators: 'Indicators', 'field-review': 'Intelligence',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
-  media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide', undergrnd: 'UNDERGRND SIM', devdocs: 'Developer Handbook',
+  media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide', undergrnd: 'UNDERGRND', devdocs: 'Developer Handbook',
   tools: 'Investigative Tools', workspace: 'Workspace',
   calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', trash: 'Trash', owner: 'Owner Console', profile: 'My Profile', 'command-center': 'Command Center', siu: 'Special Investigations Bureau',
   informants: 'Informants',

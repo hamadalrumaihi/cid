@@ -220,8 +220,8 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
       </Suspense>
     )
   }
-  // Reference content, same standing as /guide — static, no fetches, no CID
-  // data; lazy so the long document stays out of the shared page chunk.
+  // Reference content, same standing as /guide — static, no fetches, no portal
+  // records read; lazy so the long document stays out of the shared page chunk.
   if (tab === 'undergrnd') {
     return (
       <Suspense fallback={<ViewPlaceholder tab="undergrnd" />}>
