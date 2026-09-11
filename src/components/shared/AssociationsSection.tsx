@@ -146,12 +146,11 @@ function AmendForm({ row, onDone, onCancel }: { row: AssociationRow; onDone: () 
   const [confidence, setConfidence] = useState(row.confidence ?? '')
   const [sourceType, setSourceType] = useState(row.source_type ?? '')
   const [firstObserved, setFirstObserved] = useState(row.first_observed ?? '')
-  const [lastConfirmed, setLastConfirmed] = useState(row.last_confirmed ?? '')
   const [busy, setBusy] = useState(false)
 
   const save = async () => {
     const patch = amendPatch(row, {
-      note, confidence, source_type: sourceType, first_observed: firstObserved, last_confirmed: lastConfirmed,
+      note, confidence, source_type: sourceType, first_observed: firstObserved,
     })
     if (!patch) { onCancel(); return }
     setBusy(true)
@@ -183,9 +182,6 @@ function AmendForm({ row, onDone, onCancel }: { row: AssociationRow; onDone: () 
         </Field>
         <Field label="First observed">
           {(id) => <Input id={id} type="date" value={firstObserved} onChange={(e) => setFirstObserved(e.target.value)} />}
-        </Field>
-        <Field label="Last confirmed">
-          {(id) => <Input id={id} type="date" value={lastConfirmed} onChange={(e) => setLastConfirmed(e.target.value)} />}
         </Field>
       </div>
       <Field label="Note">

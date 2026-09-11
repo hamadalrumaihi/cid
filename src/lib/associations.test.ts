@@ -69,7 +69,8 @@ describe('vocabulary — every CHECK value has a label', () => {
   })
 
   it('the amendable field list is exactly what entity_association_update accepts', () => {
-    expect([...AMENDABLE_FIELDS]).toEqual(['note', 'confidence', 'source_type', 'first_observed', 'last_confirmed'])
+    // last_confirmed is written only by a decision and is deliberately absent.
+    expect([...AMENDABLE_FIELDS]).toEqual(['note', 'confidence', 'source_type', 'first_observed'])
   })
 
   it('labels humanize a value the client does not know, and blanks read as —', () => {
@@ -134,12 +135,14 @@ describe('amendPatch', () => {
   it('returns null when nothing changed — an empty patch is a bad_request', () => {
     expect(amendPatch(base, { note: 'Both sets of colours', source_type: 'visual_intelligence' })).toBeNull()
     expect(amendPatch(base, {})).toBeNull()
-    // An untouched null field stays untouched.
-    expect(amendPatch(base, { last_confirmed: '' })).toBeNull()
+    // Re-sending a field's existing value is not a change.
+    expect(amendPatch(base, { first_observed: '2026-08-01' })).toBeNull()
   })
 
   it('never emits a key outside AMENDABLE_FIELDS', () => {
-    const patch = amendPatch(base, { note: 'New note', confidence: 'confirmed', source_type: 'informant', first_observed: '2026-08-02', last_confirmed: '2026-09-01' })
+    const patch = amendPatch(base, { note: 'New note', confidence: 'confirmed', source_type: 'informant', first_observed: '2026-08-02' })
     expect(Object.keys(patch ?? {}).every((k) => (AMENDABLE_FIELDS as readonly string[]).includes(k))).toBe(true)
+    // last_confirmed is a decision artefact: the amendment path must not carry it.
+    expect((AMENDABLE_FIELDS as readonly string[]).includes('last_confirmed')).toBe(false)
   })
 })

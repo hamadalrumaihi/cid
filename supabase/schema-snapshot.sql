@@ -5907,15 +5907,7 @@ CREATE INDEX entity_associations_decided_by_idx ON public.entity_associations US
 CREATE INDEX entity_associations_delete_batch_idx ON public.entity_associations USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
 CREATE INDEX entity_associations_deleted_at_idx ON public.entity_associations USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX entity_associations_object_idx ON public.entity_associations USING btree (object_kind, object_id) WHERE (deleted_at IS NULL);
-CREATE UNIQUE INDEX entity_associations_pair_key ON public.entity_associations USING btree (subject_kind, object_kind, (
-CASE
-    WHEN (subject_kind = object_kind) THEN LEAST(subject_id, object_id)
-    ELSE subject_id
-END), (
-CASE
-    WHEN (subject_kind = object_kind) THEN GREATEST(subject_id, object_id)
-    ELSE object_id
-END), association) WHERE (deleted_at IS NULL);
+CREATE UNIQUE INDEX entity_associations_pair_key ON public.entity_associations USING btree (LEAST(((subject_kind || ':'::text) || (subject_id)::text), ((object_kind || ':'::text) || (object_id)::text)), GREATEST(((subject_kind || ':'::text) || (subject_id)::text), ((object_kind || ':'::text) || (object_id)::text)), association) WHERE (deleted_at IS NULL);
 CREATE INDEX entity_associations_status_idx ON public.entity_associations USING btree (status) WHERE (deleted_at IS NULL);
 CREATE INDEX entity_associations_subject_idx ON public.entity_associations USING btree (subject_kind, subject_id) WHERE (deleted_at IS NULL);
 CREATE INDEX entity_field_observations_case_idx ON public.entity_field_observations USING btree (case_id);
@@ -11753,13 +11745,11 @@ AS $function$
 declare v_uid uuid := (select auth.uid()); v_id uuid; v_existing public.entity_associations;
         v_note text := nullif(btrim(coalesce(p_note, '')), '');
         v_kinds text[] := array['gang', 'person', 'place', 'vehicle', 'narcotic', 'account', 'indicator'];
+        v_a text; v_b text;
 begin
   if v_uid is null or not private.is_active() then
     perform private.perm_raise('create', 'entity_association', null, 'denied', 'not an active member');
   end if;
-  -- Validate the vocabularies HERE rather than letting the CHECK constraints
-  -- raise: a 23514 is a stack trace to the client, and the house contract is
-  -- that a bad value comes back as {ok:false}.
   if not (p_subject_kind = any (v_kinds)) or not (p_object_kind = any (v_kinds)) then
     return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown record kind');
   end if;
@@ -11779,9 +11769,6 @@ begin
   end if;
   if not private.perm_registry_visible(p_subject_kind, p_subject_id)
      or not private.perm_registry_visible(p_object_kind, p_object_id)
-     -- perm_registry_visible answers "may the caller see it", and for the
-     -- SIU-walled kinds it never reads the table — so an id that names nothing
-     -- would pass. An association must join two records that exist.
      or not private.registry_exists(p_subject_kind, p_subject_id)
      or not private.registry_exists(p_object_kind, p_object_id) then
     perform private.perm_raise('create', 'entity_association', p_subject_id, 'not_found', 'record not found');
@@ -11790,10 +11777,15 @@ begin
     return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'a record cannot be associated with itself');
   end if;
 
+  -- The same canonical key the unique index uses, so the lookup and the
+  -- constraint can never disagree — and a reversed pair is found whatever the
+  -- kinds are.
+  v_a := least(p_subject_kind || ':' || p_subject_id::text, p_object_kind || ':' || p_object_id::text);
+  v_b := greatest(p_subject_kind || ':' || p_subject_id::text, p_object_kind || ':' || p_object_id::text);
   select * into v_existing from public.entity_associations
    where deleted_at is null and association = p_association
-     and ((subject_kind = p_subject_kind and subject_id = p_subject_id and object_kind = p_object_kind and object_id = p_object_id)
-          or (p_subject_kind = p_object_kind and subject_kind = p_object_kind and subject_id = p_object_id and object_kind = p_subject_kind and object_id = p_subject_id))
+     and least(subject_kind || ':' || subject_id::text, object_kind || ':' || object_id::text) = v_a
+     and greatest(subject_kind || ':' || subject_id::text, object_kind || ':' || object_id::text) = v_b
    limit 1;
   if found then
     return jsonb_build_object('ok', true, 'id', v_existing.id, 'created', false, 'status', v_existing.status,
@@ -11840,15 +11832,16 @@ begin
   if p_confidence is not null and p_confidence not in ('confirmed', 'probable', 'possible', 'unverified', 'disproven') then
     return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown confidence');
   end if;
-  if p_status in ('confirmed', 'rejected') and v_note is null then
-    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'confirming or rejecting an association needs a reason');
+  if p_status <> 'pending_investigation' and v_note is null then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'ruling on an association needs a reason');
   end if;
 
   update public.entity_associations
      set status = p_status,
          association = coalesce(p_association, association),
          confidence = coalesce(p_confidence, confidence),
-         decision_note = v_note,
+         -- the three decision columns move together, in both directions
+         decision_note = case when p_status = 'pending_investigation' then null else v_note end,
          decided_by = case when p_status = 'pending_investigation' then null else v_uid end,
          decided_at = case when p_status = 'pending_investigation' then null else now() end,
          last_confirmed = case when p_status = 'confirmed' then current_date else last_confirmed end
@@ -11871,15 +11864,19 @@ CREATE OR REPLACE FUNCTION public.entity_association_update(p_id uuid, p_patch j
  SET search_path TO ''
 AS $function$
 declare v_uid uuid := (select auth.uid()); a public.entity_associations; v_keys text[];
-        v_conf text; v_src text; v_first date; v_last date;
+        v_conf text; v_src text; v_first date;
 begin
   a := private.association_for('edit', p_id);
   if not (a.created_by = v_uid or private.is_command() or private.is_owner()) then
     perform private.perm_raise('edit', 'entity_association', p_id, 'denied', 'only the author or command may amend this association');
   end if;
   select array_agg(k) into v_keys from jsonb_object_keys(coalesce(p_patch, '{}'::jsonb)) k;
-  if v_keys is null or not (v_keys <@ array['note', 'confidence', 'source_type', 'first_observed', 'last_confirmed']) then
-    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'only note, confidence, source_type, first_observed and last_confirmed may be amended');
+  if v_keys is null or not (v_keys <@ array['note', 'confidence', 'source_type', 'first_observed']) then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'only note, confidence, source_type and first_observed may be amended');
+  end if;
+  if (p_patch ? 'confidence') and a.status <> 'pending_investigation' then
+    return jsonb_build_object('ok', false, 'code', 'decided',
+      'message', 'this association has been ruled on; change its confidence through a decision, not an amendment');
   end if;
   v_conf := case when p_patch ? 'confidence' then p_patch ->> 'confidence' else a.confidence end;
   v_src := case when p_patch ? 'source_type' then p_patch ->> 'source_type' else a.source_type end;
@@ -11891,18 +11888,15 @@ begin
        'document', 'digital', 'interview', 'open_source', 'other') then
     return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown source type');
   end if;
-  -- A malformed date would raise 22007 out of the UPDATE; catch it here so the
-  -- caller gets the house refusal shape instead.
   begin
     v_first := case when p_patch ? 'first_observed' then (p_patch ->> 'first_observed')::date else a.first_observed end;
-    v_last := case when p_patch ? 'last_confirmed' then (p_patch ->> 'last_confirmed')::date else a.last_confirmed end;
   exception when others then
     return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'a date must be YYYY-MM-DD');
   end;
 
   update public.entity_associations
      set note = case when p_patch ? 'note' then nullif(btrim(coalesce(p_patch ->> 'note', '')), '') else note end,
-         confidence = v_conf, source_type = v_src, first_observed = v_first, last_confirmed = v_last
+         confidence = v_conf, source_type = v_src, first_observed = v_first
    where id = p_id;
   insert into public.audit_log (actor_id, action, entity, entity_id, detail)
   values (v_uid, 'ENTITY_ASSOCIATION_UPDATED', 'entity_associations', p_id, jsonb_build_object('fields', to_jsonb(v_keys)));
@@ -28030,6 +28024,44 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.assoc_repoint(p_kind text, p_from uuid, p_to uuid)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare n integer := 0; m integer := 0;
+begin
+  if p_kind is null or p_from is null or p_to is null or p_from = p_to then return 0; end if;
+  -- Drop the rows that would become self-associations, or that would collide
+  -- with one the survivor already has, BEFORE repointing the rest.
+  delete from public.entity_associations a
+   where ((a.subject_kind = p_kind and a.subject_id = p_from and a.object_kind = p_kind and a.object_id = p_to)
+       or (a.object_kind = p_kind and a.object_id = p_from and a.subject_kind = p_kind and a.subject_id = p_to));
+  get diagnostics n = row_count;
+  delete from public.entity_associations a
+   where a.deleted_at is null
+     and ((a.subject_kind = p_kind and a.subject_id = p_from) or (a.object_kind = p_kind and a.object_id = p_from))
+     and exists (
+       select 1 from public.entity_associations b
+        where b.deleted_at is null and b.id <> a.id and b.association = a.association
+          and least(b.subject_kind || ':' || b.subject_id::text, b.object_kind || ':' || b.object_id::text)
+              = least(case when a.subject_kind = p_kind and a.subject_id = p_from then p_kind || ':' || p_to::text else a.subject_kind || ':' || a.subject_id::text end,
+                      case when a.object_kind = p_kind and a.object_id = p_from then p_kind || ':' || p_to::text else a.object_kind || ':' || a.object_id::text end)
+          and greatest(b.subject_kind || ':' || b.subject_id::text, b.object_kind || ':' || b.object_id::text)
+              = greatest(case when a.subject_kind = p_kind and a.subject_id = p_from then p_kind || ':' || p_to::text else a.subject_kind || ':' || a.subject_id::text end,
+                      case when a.object_kind = p_kind and a.object_id = p_from then p_kind || ':' || p_to::text else a.object_kind || ':' || a.object_id::text end));
+  get diagnostics m = row_count;
+  n := n + m;
+  update public.entity_associations
+     set subject_id = case when subject_kind = p_kind and subject_id = p_from then p_to else subject_id end,
+         object_id = case when object_kind = p_kind and object_id = p_from then p_to else object_id end
+   where (subject_kind = p_kind and subject_id = p_from) or (object_kind = p_kind and object_id = p_from);
+  get diagnostics m = row_count;
+  return n + m;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.assoc_visible(p_id uuid)
  RETURNS boolean
  LANGUAGE sql
@@ -28041,7 +28073,10 @@ AS $function$
      where a.id = p_id
        and private.is_active()
        and private.perm_registry_visible(a.subject_kind, a.subject_id)
-       and private.perm_registry_visible(a.object_kind, a.object_id))
+       and private.perm_registry_visible(a.object_kind, a.object_id)
+       and (private.is_owner()
+            or (private.registry_exists(a.subject_kind, a.subject_id)
+                and private.registry_exists(a.object_kind, a.object_id))))
 $function$
 ;
 
@@ -31160,12 +31195,16 @@ begin
 
     if not p_dry then
       if p_kind = 'person' then
+        perform private.assoc_repoint(p_kind, v_victim, p_survivor);
         update public.persons set lifecycle = 'merged', merged_into = p_survivor, bolo = false, gang_id = null where id = v_victim;
       elsif p_kind = 'account' then
+        perform private.assoc_repoint(p_kind, v_victim, p_survivor);
         update public.accounts set lifecycle = 'merged', merged_into = p_survivor where id = v_victim;
       elsif p_kind = 'narcotic' then
+        perform private.assoc_repoint(p_kind, v_victim, p_survivor);
         update public.narcotics set status = 'merged', merged_into = p_survivor where id = v_victim;
       else
+        perform private.assoc_repoint(p_kind, v_victim, p_survivor);
         execute format('update public.%I set merged_into = $1, deleted_at = $2, deleted_by = $3, delete_reason = $4, delete_batch = $5 where id = $6', v_table)
           using p_survivor, v_now, v_uid, left('merged into ' || private.entity_merge_label(p_kind, p_survivor), 500), p_merge_id, v_victim;
       end if;
@@ -34270,6 +34309,18 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.media_narcotic_blocked(p_narcotic uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select p_narcotic is not null
+     and exists (select 1 from public.narcotics n where n.id = p_narcotic and n.restricted)
+     and not private.can_edit_narcotics_intel()
+$function$
+;
+
 CREATE OR REPLACE FUNCTION private.media_protect_integrity()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -34850,7 +34901,7 @@ AS $function$
         when 'edit'   then st.p_exists and st.p_deleted_at is null and private.assoc_visible(p_id) and private.assoc_author_or_command(p_id)
         when 'soft_delete' then st.p_exists and st.p_deleted_at is null and private.assoc_visible(p_id) and private.assoc_author_or_command(p_id)
         when 'delete'      then st.p_exists and st.p_deleted_at is null and private.assoc_visible(p_id) and private.assoc_author_or_command(p_id)
-        when 'restore'     then st.p_exists and st.p_deleted_at is not null and private.assoc_author_or_command(p_id)
+        when 'restore'     then st.p_exists and st.p_deleted_at is not null and private.assoc_visible(p_id) and private.assoc_author_or_command(p_id)
         when 'permanent_delete' then private.is_owner() and st.p_exists and st.p_deleted_at is not null
         else false end
       from private.soft_delete_state('entity_association', p_id) st)
@@ -34986,7 +35037,17 @@ AS $function$
     when 'account_link' then exists (select 1 from public.account_links l where l.id = p_id and private.is_active() and not private.siu_blocked('account', l.account_id, 'accounts') and not private.siu_blocked('person', l.person_id, 'accounts'))
     when 'case' then exists (select 1 from public.cases c where c.id = p_id and private.can_delete() and private.can_access_case_row(c.bureau, c.lead_detective_id, c.created_by, c.id))
     when 'report' then (select (private.can_delete_case_child(r.case_id) and private.case_writable(r.case_id)) and not private.case_has_active_hold(r.case_id) from public.reports r where r.id = p_id)
-    when 'media' then exists (select 1 from public.media m where m.id = p_id and (private.can_delete_case_child(m.case_id) and private.case_writable(m.case_id)) and (m.case_id is null or not private.case_has_active_hold(m.case_id)) and not private.siu_blocked('gang', m.gang_id, 'media') and not private.siu_blocked('person', m.person_id, 'media') and not private.siu_blocked('place', m.place_id, 'media') and not private.siu_blocked('vehicle', m.vehicle_id, 'media'))
+    -- NEW (20261106120000 PART 6): a caseless registry intelligence photograph
+    -- belongs to its uploader and to command, the same authority that may amend
+    -- or withdraw the association it illustrates. Case-hosted media is unchanged.
+    when 'media' then exists (select 1 from public.media m where m.id = p_id
+        and (case when m.case_id is null and m.kind = 'registry_intel'
+                  then (m.uploaded_by = (select auth.uid()) or private.is_command() or private.is_owner())
+                  else private.can_delete_case_child(m.case_id) and private.case_writable(m.case_id) end)
+        and (m.case_id is null or not private.case_has_active_hold(m.case_id))
+        and not private.media_narcotic_blocked(m.narcotic_id)
+        and not private.siu_blocked('gang', m.gang_id, 'media') and not private.siu_blocked('person', m.person_id, 'media')
+        and not private.siu_blocked('place', m.place_id, 'media') and not private.siu_blocked('vehicle', m.vehicle_id, 'media'))
     when 'evidence' then (select (private.can_delete_case_child(e.case_id) and private.case_writable(e.case_id)) from public.evidence e where e.id = p_id)
     when 'case_task' then (select ((private.can_delete_case_child(t.case_id) and private.case_writable(t.case_id)) or t.created_by = (select auth.uid())) and not private.case_has_active_hold(t.case_id) from public.case_tasks t where t.id = p_id)
     when 'case_message' then (select (m.author_id = (select auth.uid()) or private.is_command()) and private.can_access_case(m.case_id) from public.case_messages m where m.id = p_id)
@@ -35062,7 +35123,7 @@ AS $function$
     when 'account_link' then exists (select 1 from public.account_links l where l.id = p_id and private.is_active() and not private.siu_blocked('account', l.account_id, 'accounts') and not private.siu_blocked('person', l.person_id, 'accounts'))
     when 'case' then exists (select 1 from public.cases c where c.id = p_id and private.can_read_case_row(c.bureau, c.lead_detective_id, c.created_by, c.id))
     when 'report' then (select private.can_read_case(r.case_id) from public.reports r where r.id = p_id)
-    when 'media' then exists (select 1 from public.media m where m.id = p_id and private.is_active() and (m.case_id is null or private.can_read_case(m.case_id)) and (not m.restricted or private.can_edit_narcotics_intel() or private.has_media_break_glass(m.case_id, (select auth.uid()))) and not private.siu_blocked('gang', m.gang_id, 'media') and not private.siu_blocked('person', m.person_id, 'media') and not private.siu_blocked('place', m.place_id, 'media') and not private.siu_blocked('vehicle', m.vehicle_id, 'media'))
+    when 'media' then exists (select 1 from public.media m where m.id = p_id and private.is_active() and (m.case_id is null or private.can_read_case(m.case_id)) and (not m.restricted or private.can_edit_narcotics_intel() or private.has_media_break_glass(m.case_id, (select auth.uid()))) and not private.media_narcotic_blocked(m.narcotic_id) and not private.siu_blocked('gang', m.gang_id, 'media') and not private.siu_blocked('person', m.person_id, 'media') and not private.siu_blocked('place', m.place_id, 'media') and not private.siu_blocked('vehicle', m.vehicle_id, 'media'))
     when 'evidence' then (select private.can_read_case(e.case_id) from public.evidence e where e.id = p_id)
     when 'case_task' then (select private.can_read_case(t.case_id) from public.case_tasks t where t.id = p_id)
     when 'case_message' then (select private.can_access_case(m.case_id) from public.case_messages m where m.id = p_id)
@@ -35222,7 +35283,7 @@ begin
   select coalesce(array_agg(x), '{}') into v_paths from jsonb_array_elements_text(v_assets -> 'storage_objects') x;
   if cardinality(v_paths) > 0 then
     begin
-      delete from storage.objects o where o.bucket_id = 'field-evidence' and o.name = any (v_paths);
+      delete from storage.objects o where o.bucket_id in ('field-evidence', 'case-evidence') and o.name = any (v_paths);
     exception when others then
       v_storage_ok := false;
       update public.deleted_record_ledger
@@ -35371,6 +35432,25 @@ begin
     end if;
   end loop;
 
+  -- NEW (20261106120000 PART 6): entity_associations points at a registry
+  -- record polymorphically, so the FK walk above cannot see it. Count it here so
+  -- the Owner sees it in the preview, not only in the ledger afterwards.
+  declare v_assoc_kind text; v_assoc bigint;
+  begin
+    v_assoc_kind := case p_table
+      when 'gangs' then 'gang' when 'persons' then 'person' when 'places' then 'place'
+      when 'vehicles' then 'vehicle' when 'narcotics' then 'narcotic'
+      when 'accounts' then 'account' when 'indicators' then 'indicator' end;
+    if v_assoc_kind is not null then
+      select count(*) into v_assoc from public.entity_associations a
+       where (a.subject_kind = v_assoc_kind and a.subject_id = p_id)
+          or (a.object_kind = v_assoc_kind and a.object_id = p_id);
+      if v_assoc > 0 then
+        v_out := jsonb_set(v_out, array['destroyed', 'entity_associations'], to_jsonb(v_assoc));
+      end if;
+    end if;
+  end;
+
   select st.p_case into v_case from private.soft_delete_state(
     case p_table when 'cases' then 'case' when 'reports' then 'report' when 'media' then 'media'
                  when 'evidence' then 'evidence' when 'case_tasks' then 'case_task'
@@ -35510,6 +35590,9 @@ AS $function$
 declare v text;
 begin
   if p_id is null or not private.perm_registry_visible(p_kind, p_id) then return null; end if;
+  -- A soft-deleted record is out of the *_sel policies; naming it here would
+  -- leak its existence and its name through the association list.
+  if not private.registry_exists(p_kind, p_id) and not private.is_owner() then return null; end if;
   case p_kind
     when 'gang'      then select g.name into v from public.gangs g where g.id = p_id;
     when 'person'    then select p.name into v from public.persons p where p.id = p_id;
@@ -38450,7 +38533,7 @@ create policy documents_versions_sel on public.documents_versions
 
 create policy entity_associations_sel on public.entity_associations
   as permissive for select to authenticated
-  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.is_active() AND private.perm_registry_visible(subject_kind, subject_id) AND private.perm_registry_visible(object_kind, object_id)));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.is_active() AND private.perm_registry_visible(subject_kind, subject_id) AND private.perm_registry_visible(object_kind, object_id) AND (private.is_owner() OR (private.registry_exists(subject_kind, subject_id) AND private.registry_exists(object_kind, object_id)))));
 
 create policy entity_field_observations_del on public.entity_field_observations
   as permissive for delete to authenticated
@@ -38979,12 +39062,12 @@ create policy media_ins on public.media
 
 create policy media_sel on public.media
   as permissive for select to authenticated
-  using (((private.is_live(deleted_at) OR private.is_owner()) AND (private.is_active() AND ((case_id IS NULL) OR private.can_read_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel() OR private.has_media_break_glass(case_id, ( SELECT auth.uid() AS uid))) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text)))));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.is_active() AND ((case_id IS NULL) OR private.can_read_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel() OR private.has_media_break_glass(case_id, ( SELECT auth.uid() AS uid))) AND (NOT private.media_narcotic_blocked(narcotic_id)) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text))));
 
 create policy media_upd on public.media
   as permissive for update to authenticated
-  using (((private.is_live(deleted_at) OR private.is_owner()) AND (private.is_active() AND ((case_id IS NULL) OR private.case_writable(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text)))))
-  with check (((private.is_live(deleted_at) OR private.is_owner()) AND (private.is_active() AND ((case_id IS NULL) OR private.case_writable(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text)))));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.is_active() AND ((case_id IS NULL) OR private.case_writable(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel()) AND (NOT private.media_narcotic_blocked(narcotic_id)) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text))))
+  with check (((private.is_live(deleted_at) OR private.is_owner()) AND private.is_active() AND ((case_id IS NULL) OR private.case_writable(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel()) AND (NOT private.media_narcotic_blocked(narcotic_id)) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text))));
 
 create policy member_transfers_sel on public.member_transfers
   as permissive for select to authenticated
@@ -40504,6 +40587,7 @@ create policy wl_sel on public.watchlist
 --   private.announcement_recipients(p_audience text, p_mentions jsonb, p_author uuid): default (PUBLIC)
 --   private.assert_fresh_session(): default (PUBLIC)
 --   private.assoc_author_or_command(p_id uuid): {postgres=X/postgres}
+--   private.assoc_repoint(p_kind text, p_from uuid, p_to uuid): {postgres=X/postgres}
 --   private.assoc_visible(p_id uuid): {postgres=X/postgres}
 --   private.association_for(p_action text, p_id uuid): {postgres=X/postgres}
 --   private.audit(): {=X/postgres,postgres=X/postgres,authenticated=X/postgres}
@@ -40773,6 +40857,7 @@ create policy wl_sel on public.watchlist
 --   private.manifest_build(p_kind text, p_bundle uuid, p_case uuid, p_by uuid, p_classification text, p_files jsonb, p_source_evidence_ids jsonb, p_extra jsonb): {postgres=X/postgres}
 --   private.manifest_sha256(p_manifest jsonb): {postgres=X/postgres}
 --   private.mdt_project(p_request uuid, p_status text): default (PUBLIC)
+--   private.media_narcotic_blocked(p_narcotic uuid): {postgres=X/postgres,authenticated=X/postgres}
 --   private.media_protect_integrity(): {postgres=X/postgres}
 --   private.mr_history(p_request uuid, p_action text, p_from text, p_to text, p_note text, p_internal boolean): default (PUBLIC)
 --   private.next_evidence_number(): {postgres=X/postgres}
@@ -40818,7 +40903,7 @@ create policy wl_sel on public.watchlist
 --   private.prosecutor_bureaus_of(p_user uuid): {postgres=X/postgres,authenticated=X/postgres}
 --   private.record_versions_prune(p_keep integer, p_age interval): {postgres=X/postgres}
 --   private.record_versions_prune_job(): {postgres=X/postgres}
---   private.registry_exists(p_kind text, p_id uuid): {postgres=X/postgres}
+--   private.registry_exists(p_kind text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres}
 --   private.registry_label(p_kind text, p_id uuid): {postgres=X/postgres,authenticated=X/postgres}
 --   private.report_denied(p_action text, p_report uuid, p_reason text, p_message text): {postgres=X/postgres}
 --   private.report_key_list(p_list jsonb, p_keys text[], p_what text): {postgres=X/postgres}

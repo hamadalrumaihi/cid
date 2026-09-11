@@ -64,7 +64,7 @@ export const ASSOCIATION_CLAIMS = [
 export const ASSOCIATION_STATUSES = ['pending_investigation', 'confirmed', 'rejected', 'historical'] as const
 export const REGISTRY_MEDIA_KINDS = ['gang', 'person', 'place', 'vehicle', 'narcotic'] as const
 /** `entity_association_update`'s allowed patch keys. */
-export const ASSOCIATION_PATCH_KEYS = ['note', 'confidence', 'source_type', 'first_observed', 'last_confirmed'] as const
+export const ASSOCIATION_PATCH_KEYS = ['note', 'confidence', 'source_type', 'first_observed'] as const
 
 export const ASSOCIATION_MESSAGES = {
   notActive: 'not an active member',
@@ -74,7 +74,8 @@ export const ASSOCIATION_MESSAGES = {
   duplicate: 'this association is already recorded',
   needsReason: 'confirming or rejecting an association needs a reason',
   badStatus: 'unknown status',
-  badPatch: 'only note, confidence, source_type, first_observed and last_confirmed may be amended',
+  badPatch: 'only note, confidence, source_type and first_observed may be amended',
+  decided: 'this association has been ruled on; change its confidence through a decision, not an amendment',
   authorOnly: 'only the author or command may amend this association',
   unknownKind: 'unknown record kind',
   titleRequired: 'a title is required',

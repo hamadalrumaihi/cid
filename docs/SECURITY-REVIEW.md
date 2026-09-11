@@ -64,3 +64,44 @@ What happened: a production command user, exercising legitimate roster authority
 - **Lessons encoded**: fixture state is now restorable by the suites themselves via the tightly-gated `rls_test_reset_member()` (caller AND target must be fixtures — [`20260718020000_officer_transfers.sql`](../supabase/migrations/20260718020000_officer_transfers.sql)); the fixture-hiding phase (§4) will remove the temptation; and the `RUNBOOK` note stands — the `rls-test-*` roster entries are intentional, rotate their passwords rather than removing them ([OPERATIONS.md](OPERATIONS.md)).
 
 **Reviewer takeaway**: audit coverage is the detection layer for privileged human actions — when you touch a privileged RPC, verify it writes an audit row, because the one that didn't is the one we couldn't see.
+
+## Organization associations and registry media (`20261106120000`, 2026-09-11)
+
+An independent review of PARTS 1–5 found nine defects. Seven are fixed in PART 6
+and pinned by `tests/rls/v193b.test.ts`; two are recorded here as accepted, with
+the reasoning.
+
+**Fixed (PART 6).** The `perm_dispatch` `restore` arm omitted the visibility
+predicate, and that arm is the *whole* wall for this kind — `trash_list` is
+SECURITY DEFINER, admits rows on `perm_dispatch('restore', …)` alone, and
+`trash_case_expr` has no arm for an association — so a Bureau Lead with no SIU
+standing could read a withdrawn association naming an SIU-hidden gang out of the
+Trash, complete with its claim, the officer who withdrew it and their stated
+reason, and could then restore it. PART 5's restricted-narcotics fix was a
+snapshot copied at attach time rather than a live predicate, so a substance
+restricted *after* a photograph was attached left that photograph readable by
+every active member. The pair was canonical only within a kind, so a rejected
+cross-kind claim could be re-litigated by flipping the argument order.
+`perm_registry_visible` has no `deleted_at` term, so an association could name —
+and `registry_label` could resolve the name of — a trashed or merged-away
+record. Merging did not repoint associations. A registry photograph could be
+deleted by nobody, not even the Owner, because the media delete arm required a
+case and every registry row is caseless. `confidence` and `last_confirmed` were
+amendable after a ruling, letting an author attribute a strengthened claim to
+the officer who decided.
+
+**Accepted — `entity_association_create`'s `p_first_observed date`.** PostgREST
+coerces a declared `date` parameter before the function body runs, so a
+malformed value surfaces as SQLSTATE 22007 rather than the house
+`{ok:false, code:'bad_value'}`. Changing the parameter to `text` would change
+the RPC signature for a single caller that is a typed date input, so the
+coercion is left in place. The same applies to `registry_media_attach`'s
+`p_byte_size bigint`. Neither is a disclosure: the error names the input, not
+any record.
+
+**Accepted — no separation of duties on a decision.** `private.association_for`
+authorises `decide` on "active and both endpoints visible", so the member who
+recorded an observation may also confirm it. This matches the catalog row
+(`member: ✓`) and the requester's model, in which any investigator who can see
+both records may rule. It is called out here so that if the portal ever wants a
+second pair of eyes on a confirmation, this is the function to change.

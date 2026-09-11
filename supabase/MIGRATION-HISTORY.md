@@ -1320,7 +1320,7 @@ assumed `authenticated` role without claims is not the service.
 
 ## Organization associations and registry intelligence media
 
-`20261106120000_org_associations_registry_intel.sql`, applied live in five
+`20261106120000_org_associations_registry_intel.sql`, applied live in six
 parts (`org_associations_core`, `org_registry_media`,
 `org_associations_plumbing`, `org_associations_rls_test_cleanup`,
 `org_associations_review_fixes`) plus two follow-ups the verification pass
@@ -1393,8 +1393,32 @@ have been readable by every active member — the same leak `20260804010000`
 closed for the imported sale screenshots. `registry_media_attach` now mirrors
 the substance's own restriction onto the media row.
 
-Verified live in two rolled-back transactions: 35 checks, then 10 more for the
-review fixes. The pair is
+**What an independent security review found (PART 6).** Nine defects across
+PARTS 1-5; seven fixed here, two accepted and recorded in
+`docs/SECURITY-REVIEW.md`. The worst was the `perm_dispatch` `restore` arm: it
+omitted `private.assoc_visible`, and for this kind that arm is the whole wall,
+because `trash_list` is SECURITY DEFINER, admits rows on
+`perm_dispatch('restore', ...)` alone, and `trash_case_expr` has no arm for an
+association. A Bureau Lead with no SIU standing could read a withdrawn
+association naming an SIU-hidden gang out of the Trash -- its claim, its label,
+the officer who withdrew it and their reason -- and restore it, writing to a row
+they cannot read. Next worst: PART 5's restricted-narcotics fix was a snapshot
+copied at attach time, not a live predicate, so a substance restricted *after* a
+photograph was attached left that photograph readable by every active member;
+the block is now `private.media_narcotic_blocked`, evaluated on every read. Also
+fixed: the pair was canonical only within a kind, so a rejected cross-kind claim
+could be re-litigated by flipping the argument order; visibility had no liveness
+term, so an association could name a trashed record and `registry_label` would
+resolve its name; merging did not repoint associations, leaving one naming a
+record that is gone or associated with itself; a registry photograph could be
+deleted by nobody, not even the Owner, because the media delete arm required a
+case; and `confidence` and `last_confirmed` were amendable after a ruling,
+letting an author attribute a strengthened claim to the officer who decided.
+
+Verified live in three rolled-back transactions: 35 checks, then 10 for the
+PART 5 review fixes, then 11 for PART 6 -- the last run as a plain detective
+rather than the Owner, since the liveness rule deliberately exempts the Owner
+and an Owner actor cannot observe it. The pair is
 canonical in both directions; a self-association is refused; confirming or
 rejecting without a reason is refused; a confirmation records who, when and
 the corrected claim, and reopening clears the trail; the Trash round trip

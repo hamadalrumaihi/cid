@@ -69,7 +69,8 @@ describe('associations — vocabulary', () => {
     expect(ASSOCIATION_CLAIMS).toHaveLength(14)
     expect(ASSOCIATION_STATUSES).toEqual(['pending_investigation', 'confirmed', 'rejected', 'historical'])
     expect(REGISTRY_MEDIA_KINDS).toHaveLength(5)
-    expect([...ASSOCIATION_PATCH_KEYS]).toEqual(['note', 'confidence', 'source_type', 'first_observed', 'last_confirmed'])
+    // mirrors the server: last_confirmed is a decision artefact, not amendable.
+    expect([...ASSOCIATION_PATCH_KEYS]).toEqual(['note', 'confidence', 'source_type', 'first_observed'])
     expect(ASSOCIATION_RPC_ONLY_TABLES).toEqual(['entity_associations'])
     // Three routes per refused verb: POST / PATCH / DELETE.
     expect(associationHandlers).toHaveLength(3)

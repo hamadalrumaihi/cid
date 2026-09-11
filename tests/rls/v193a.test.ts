@@ -51,15 +51,23 @@
  *     and a photograph may not hang on one: `perm_registry_visible` answers
  *     "may the caller see it" and, for the SIU-walled kinds, never reads the
  *     table, so `private.registry_exists` is the half that was missing;
- *   · #13 (PART 5) every vocabulary and every date is refused in the RPC as
+ *   · #13 (PART 5) every vocabulary is refused in the RPC as
  *     `{ok:false, code:'bad_value'}` — an unknown kind, claim, confidence or
- *     source type must not escape as a CHECK violation (23514), and a
- *     malformed date must not escape as a date-parse error (22007).
+ *     source type must not escape as a CHECK violation (23514) — and a
+ *     malformed date in an `entity_association_update` patch must not escape as
+ *     a date-parse error (22007). NOTE: `entity_association_create` declares
+ *     `p_first_observed date`, so PostgREST coerces it BEFORE the body runs and
+ *     a malformed value there still surfaces as 22007. That is a known
+ *     limitation, recorded in docs/SECURITY-REVIEW.md, not something this suite
+ *     can assert away.
  *
- *  The storage policies themselves (registry_media_write binding the object
- *  to its own media row and its own record) are not exercised here — an
- *  object upload needs bytes and a live bucket; they were verified live in a
- *  rolled-back transaction when the migration was applied.
+ *  Two things this suite deliberately does NOT prove, because its fixtures are
+ *  all visible to every actor: the "both endpoints visible" rule behind
+ *  `entity_associations_sel`, and the PART 6 security fixes. Those live in
+ *  `v193b`, which uses an endpoint the reader genuinely cannot see. The storage
+ *  policies are exercised by neither — an object upload needs real bytes and a
+ *  live bucket — and were verified live in a rolled-back transaction when the
+ *  migration was applied.
  *
  *  Fixtures: two gangs and one place created by lsb, all stamped `[rls-test]`.
  *  `rls_test_cleanup` (spliced by 20261106120000 PART 4) sweeps the
@@ -354,6 +362,19 @@ describe.skipIf(!enabled)('v1.93a — an association is an observation until an 
     // Either style of refusal is acceptable; silently minting an EV number is not.
     if (r.error) expect(r.error.code).toBe('P0403')
     else expect(r.data as Json).toMatchObject({ ok: false })
+    // The caseless refusal fires first, so on its own this proves little. Point
+    // the row at a real case and the PATH guard — the one that actually keeps
+    // registry intelligence out of the EV series — is what refuses.
+    const c = await lsb.from('cases').insert({ case_number: `V193A-${tag}`, title: `${stamp} case`, bureau: 'major_crimes', lead_detective_id: ids.lsb }).select('id').single()
+    expect(c.error, c.error?.message).toBeNull()
+    const moved = await lsb.from('media').update({ case_id: c.data!.id }).eq('id', mediaId)
+    expect(moved.error, moved.error?.message).toBeNull()
+    const r2 = await lsb.rpc('evidence_register', {
+      p_media: mediaId, p_sha256: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+      p_byte_size: 3, p_mime: 'image/png', p_original_filename: 'alpha-tag.png',
+    })
+    if (r2.error) expect(r2.error.code).toBe('P0403')
+    else expect(r2.data as Json, 'the registry/ path is refused by the EV path guard').toMatchObject({ ok: false })
     const m = await lsb.from('media').select('evidence_number, integrity_status').eq('id', mediaId).single()
     expect(m.error, m.error?.message).toBeNull()
     expect(m.data!.evidence_number).toBeNull()
@@ -374,6 +395,21 @@ describe.skipIf(!enabled)('v1.93a — an association is an observation until an 
       p_subject_kind: 'gang', p_subject_id: ghost, p_object_kind: 'place', p_object_id: place, p_association: 'observed_at',
     })
     await expectP0403(lsb, 'registry_media_attach', { p_kind: 'gang', p_entity_id: ghost, p_title: 'x', p_filename: 'x.png' })
+
+    // The refusal for "does not exist" and the refusal for "exists but you may
+    // not see it" must be the same sentence — otherwise the error itself is an
+    // existence oracle. A soft-deleted gang is the cheapest hidden id to hand.
+    const hidden = await lsb.from('gangs').insert({ name: `${stamp} hidden`, classification: 'cartel' }).select('id').single()
+    expect(hidden.error, hidden.error?.message).toBeNull()
+    const hiddenId = hidden.data!.id as string
+    await jsonRpc(lsb, 'soft_delete', { p_kind: 'gang', p_id: hiddenId, p_reason: `${stamp} hidden` })
+    const forGhost = await expectP0403(lsb, 'entity_association_create', {
+      p_subject_kind: 'gang', p_subject_id: gangA, p_object_kind: 'gang', p_object_id: ghost, p_association: 'alliance',
+    })
+    const forHidden = await expectP0403(lsb, 'entity_association_create', {
+      p_subject_kind: 'gang', p_subject_id: gangA, p_object_kind: 'gang', p_object_id: hiddenId, p_association: 'alliance',
+    })
+    expect(forHidden, 'a hidden id and a random id must refuse identically').toBe(forGhost)
     const stray = await lsb.from('entity_associations').select('id').or(`subject_id.eq.${ghost},object_id.eq.${ghost}`)
     expect(stray.error, stray.error?.message).toBeNull()
     expect(stray.data).toHaveLength(0)

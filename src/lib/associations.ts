@@ -122,7 +122,13 @@ export const ASSOCIATION_SOURCE_LABEL: Record<AssociationSourceType, string> = {
 }
 
 /** The only keys `entity_association_update` accepts. */
-export const AMENDABLE_FIELDS = ['note', 'confidence', 'source_type', 'first_observed', 'last_confirmed'] as const
+/** What an amendment may touch. `last_confirmed` is NOT here: it is written
+ *  only by a decision, and letting the author set it would put a confirmation
+ *  date on a row nobody confirmed. `confidence` is amendable only while the
+ *  row is still pending — once someone has ruled, raising the confidence
+ *  would attribute the stronger claim to the officer who decided, who never
+ *  made it. The RPC refuses both regardless of what this list says. */
+export const AMENDABLE_FIELDS = ['note', 'confidence', 'source_type', 'first_observed'] as const
 export type AmendableField = (typeof AMENDABLE_FIELDS)[number]
 
 /* ── Rows ───────────────────────────────────────────────────────────────── */
