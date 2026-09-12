@@ -11,7 +11,7 @@ tiers, feature flags and system health. This chapter is the developer's map.
 The design and the decisions are in [`docs/PLATFORM-UPGRADE.md`](../PLATFORM-UPGRADE.md),
 the authority rules in [`docs/AUTHORIZATION.md` §22](../AUTHORIZATION.md),
 the member's view in [`docs/WORKFLOWS.md` §16–§18](../WORKFLOWS.md) and
-[`docs/USER-GUIDE.md`](../USER-GUIDE.md), operations in
+the Portal User Guide (`/guides/user-guide`), operations in
 [`docs/OPERATIONS.md` §11](../OPERATIONS.md).
 
 ## 24.1 The one rule, restated

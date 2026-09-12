@@ -28,6 +28,7 @@ import type { Json, Tables } from '@/lib/database.types'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { GuideHelpLink } from '@/components/guides/GuideHelpLink'
 import {
   FileTypeIcon, GangIcon, LockIcon, NarcoticIcon, PersonIcon, PhotoIcon, PlaceIcon, StarIcon, VehicleIcon,
 } from '@/components/shell/icons'
@@ -309,6 +310,11 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
           >
             Archived
           </button>
+          <GuideHelpLink
+            slug="reports-evidence"
+            anchor="evidence"
+            title="Open the Reports and Evidence Guide at Evidence and media"
+          />
           {canEdit && <Button variant="primary" onClick={() => setAddOpen(true)}>Add evidence</Button>}
         </div>
       </div>

@@ -2514,6 +2514,45 @@ alter table public.guide_bookmarks add constraint guide_bookmarks_user_id_fkey F
 alter table public.guide_bookmarks add constraint guide_bookmarks_pkey PRIMARY KEY (guide_id, user_id);
 alter table public.guide_bookmarks enable row level security;
 
+create table public.guide_categories (
+  slug text not null,
+  label text not null,
+  description text,
+  sort_order integer not null default 100,
+  active boolean not null default true,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.guide_categories add constraint guide_categories_label_present CHECK ((btrim(label) <> ''::text));
+alter table public.guide_categories add constraint guide_categories_slug_shape CHECK ((slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text));
+alter table public.guide_categories add constraint guide_categories_pkey PRIMARY KEY (slug);
+alter table public.guide_categories enable row level security;
+
+create table public.guide_feedback (
+  id uuid not null default gen_random_uuid(),
+  guide_id uuid not null,
+  anchor text,
+  kind text not null default 'helpful'::text,
+  rating text,
+  comment text,
+  status text not null default 'new'::text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  resolved_by uuid,
+  resolved_at timestamp with time zone,
+  resolution_note text,
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.guide_feedback add constraint guide_feedback_helpful_has_rating CHECK (((kind <> 'helpful'::text) OR (rating IS NOT NULL)));
+alter table public.guide_feedback add constraint guide_feedback_kind_check CHECK ((kind = ANY (ARRAY['helpful'::text, 'broken_link'::text, 'outdated'::text, 'suggestion'::text])));
+alter table public.guide_feedback add constraint guide_feedback_rating_check CHECK (((rating IS NULL) OR (rating = ANY (ARRAY['yes'::text, 'partly'::text, 'no'::text]))));
+alter table public.guide_feedback add constraint guide_feedback_status_check CHECK ((status = ANY (ARRAY['new'::text, 'reviewing'::text, 'resolved'::text, 'declined'::text])));
+alter table public.guide_feedback add constraint guide_feedback_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.guide_feedback add constraint guide_feedback_guide_id_fkey FOREIGN KEY (guide_id) REFERENCES guides(id) ON DELETE CASCADE;
+alter table public.guide_feedback add constraint guide_feedback_resolved_by_fkey FOREIGN KEY (resolved_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.guide_feedback add constraint guide_feedback_pkey PRIMARY KEY (id);
+alter table public.guide_feedback enable row level security;
+
 create table public.guide_media (
   id uuid not null default gen_random_uuid(),
   guide_id uuid not null,
@@ -2536,6 +2575,66 @@ alter table public.guide_media add constraint guide_media_guide_id_fkey FOREIGN 
 alter table public.guide_media add constraint guide_media_pkey PRIMARY KEY (id);
 alter table public.guide_media enable row level security;
 
+create table public.guide_progress (
+  guide_id uuid not null,
+  user_id uuid not null,
+  last_anchor text,
+  last_viewed_at timestamp with time zone not null default now(),
+  seen_updated_at timestamp with time zone,
+  completed_at timestamp with time zone,
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.guide_progress add constraint guide_progress_guide_id_fkey FOREIGN KEY (guide_id) REFERENCES guides(id) ON DELETE CASCADE;
+alter table public.guide_progress add constraint guide_progress_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+alter table public.guide_progress add constraint guide_progress_pkey PRIMARY KEY (guide_id, user_id);
+alter table public.guide_progress enable row level security;
+
+create table public.guide_revisions (
+  id uuid not null default gen_random_uuid(),
+  guide_id uuid not null,
+  revision_no integer not null,
+  snapshot jsonb not null,
+  summary text,
+  created_by uuid,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.guide_revisions add constraint guide_revisions_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.guide_revisions add constraint guide_revisions_guide_id_fkey FOREIGN KEY (guide_id) REFERENCES guides(id) ON DELETE CASCADE;
+alter table public.guide_revisions add constraint guide_revisions_pkey PRIMARY KEY (id);
+alter table public.guide_revisions add constraint guide_revisions_no_unique UNIQUE (guide_id, revision_no);
+alter table public.guide_revisions enable row level security;
+
+create table public.guide_search_index (
+  id uuid not null default gen_random_uuid(),
+  guide_id uuid not null,
+  anchor text not null,
+  heading text not null,
+  sort_order integer not null default 0,
+  terms text not null default ''::text,
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.guide_search_index add constraint guide_search_index_guide_id_fkey FOREIGN KEY (guide_id) REFERENCES guides(id) ON DELETE CASCADE;
+alter table public.guide_search_index add constraint guide_search_index_pkey PRIMARY KEY (id);
+alter table public.guide_search_index add constraint guide_search_index_anchor_unique UNIQUE (guide_id, anchor);
+alter table public.guide_search_index enable row level security;
+
+create table public.guide_sections (
+  id uuid not null default gen_random_uuid(),
+  guide_id uuid not null,
+  anchor text not null,
+  heading text not null,
+  body text not null default ''::text,
+  sort_order integer not null default 0,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.guide_sections add constraint guide_sections_anchor_shape CHECK ((anchor ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text));
+alter table public.guide_sections add constraint guide_sections_heading_present CHECK ((btrim(heading) <> ''::text));
+alter table public.guide_sections add constraint guide_sections_guide_id_fkey FOREIGN KEY (guide_id) REFERENCES guides(id) ON DELETE CASCADE;
+alter table public.guide_sections add constraint guide_sections_pkey PRIMARY KEY (id);
+alter table public.guide_sections add constraint guide_sections_anchor_unique UNIQUE (guide_id, anchor);
+alter table public.guide_sections enable row level security;
+
 create table public.guides (
   id uuid not null default gen_random_uuid(),
   slug text not null,
@@ -2553,14 +2652,36 @@ create table public.guides (
   deleted_at timestamp with time zone,
   deleted_by uuid,
   delete_reason text,
-  delete_batch uuid
+  delete_batch uuid,
+  audience text not null default 'all'::text,
+  custom_roles text[] not null default '{}'::text[],
+  tags text[] not null default '{}'::text[],
+  keywords text,
+  body_kind text not null default 'module'::text,
+  read_minutes integer,
+  view_count bigint not null default 0,
+  content_owner uuid,
+  last_reviewed_at timestamp with time zone,
+  next_review_at timestamp with time zone,
+  archived_at timestamp with time zone,
+  archived_by uuid,
+  publication_note text,
+  outdated_at timestamp with time zone,
+  outdated_by uuid,
+  outdated_reason text
 );
-alter table public.guides add constraint guides_category_check CHECK ((category = ANY (ARRAY['systems'::text, 'equipment'::text, 'jobs'::text, 'organizations'::text, 'locations'::text, 'general'::text])));
+alter table public.guides add constraint guides_audience_check CHECK ((audience = ANY (ARRAY['all'::text, 'investigative'::text, 'command'::text, 'doj'::text, 'sib'::text, 'ci_handlers'::text, 'owner'::text, 'custom'::text])));
+alter table public.guides add constraint guides_body_kind_check CHECK ((body_kind = ANY (ARRAY['module'::text, 'sections'::text])));
 alter table public.guides add constraint guides_published_has_date CHECK (((status <> 'published'::text) OR (published_at IS NOT NULL)));
+alter table public.guides add constraint guides_read_minutes_check CHECK (((read_minutes IS NULL) OR ((read_minutes > 0) AND (read_minutes <= 600))));
 alter table public.guides add constraint guides_slug_shape CHECK ((slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text));
 alter table public.guides add constraint guides_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text])));
+alter table public.guides add constraint guides_archived_by_fkey FOREIGN KEY (archived_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.guides add constraint guides_category_fkey FOREIGN KEY (category) REFERENCES guide_categories(slug) ON UPDATE CASCADE;
+alter table public.guides add constraint guides_content_owner_fkey FOREIGN KEY (content_owner) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.guides add constraint guides_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.guides add constraint guides_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.guides add constraint guides_outdated_by_fkey FOREIGN KEY (outdated_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.guides add constraint guides_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.guides add constraint guides_pkey PRIMARY KEY (id);
 alter table public.guides enable row level security;
@@ -6082,16 +6203,33 @@ CREATE INDEX gangs_name_trgm ON public.gangs USING gin (name gin_trgm_ops);
 CREATE INDEX gangs_notes_trgm ON public.gangs USING gin (notes gin_trgm_ops);
 CREATE INDEX gangs_reviewed_by_fkey_idx ON public.gangs USING btree (reviewed_by);
 CREATE INDEX guide_bookmarks_user_idx ON public.guide_bookmarks USING btree (user_id);
+CREATE INDEX guide_categories_order_idx ON public.guide_categories USING btree (sort_order, slug);
+CREATE INDEX guide_feedback_created_by_idx ON public.guide_feedback USING btree (created_by);
+CREATE INDEX guide_feedback_guide_idx ON public.guide_feedback USING btree (guide_id, created_at DESC);
+CREATE INDEX guide_feedback_queue_idx ON public.guide_feedback USING btree (status, created_at DESC);
+CREATE INDEX guide_feedback_resolved_by_idx ON public.guide_feedback USING btree (resolved_by);
 CREATE INDEX guide_media_created_by_idx ON public.guide_media USING btree (created_by);
 CREATE INDEX guide_media_guide_idx ON public.guide_media USING btree (guide_id, section, sort_order);
+CREATE INDEX guide_progress_user_idx ON public.guide_progress USING btree (user_id, last_viewed_at DESC);
+CREATE INDEX guide_revisions_created_by_idx ON public.guide_revisions USING btree (created_by);
+CREATE INDEX guide_revisions_guide_idx ON public.guide_revisions USING btree (guide_id, revision_no DESC);
+CREATE INDEX guide_search_index_guide_idx ON public.guide_search_index USING btree (guide_id, sort_order);
+CREATE INDEX guide_search_index_terms_idx ON public.guide_search_index USING gin (to_tsvector('english'::regconfig, ((heading || ' '::text) || terms)));
+CREATE INDEX guide_sections_order_idx ON public.guide_sections USING btree (guide_id, sort_order);
+CREATE INDEX guides_archived_by_idx ON public.guides USING btree (archived_by);
+CREATE INDEX guides_archived_idx ON public.guides USING btree (archived_at) WHERE (archived_at IS NOT NULL);
+CREATE INDEX guides_audience_idx ON public.guides USING btree (audience) WHERE (deleted_at IS NULL);
 CREATE INDEX guides_category_idx ON public.guides USING btree (category) WHERE (deleted_at IS NULL);
+CREATE INDEX guides_content_owner_idx ON public.guides USING btree (content_owner);
 CREATE INDEX guides_created_by_idx ON public.guides USING btree (created_by);
 CREATE INDEX guides_delete_batch_idx ON public.guides USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);
 CREATE INDEX guides_deleted_at_idx ON public.guides USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX guides_deleted_by_idx ON public.guides USING btree (deleted_by);
+CREATE INDEX guides_outdated_by_idx ON public.guides USING btree (outdated_by);
 CREATE INDEX guides_pinned_idx ON public.guides USING btree (pinned) WHERE (pinned AND (deleted_at IS NULL));
 CREATE UNIQUE INDEX guides_slug_key ON public.guides USING btree (slug) WHERE (deleted_at IS NULL);
 CREATE INDEX guides_status_idx ON public.guides USING btree (status) WHERE (deleted_at IS NULL);
+CREATE INDEX guides_tags_idx ON public.guides USING gin (tags);
 CREATE INDEX guides_updated_by_idx ON public.guides USING btree (updated_by);
 CREATE INDEX guides_updated_idx ON public.guides USING btree (updated_at DESC) WHERE (deleted_at IS NULL);
 CREATE INDEX indicators_case_idx ON public.indicators USING btree (case_id);
@@ -16051,6 +16189,35 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.guide_archive(p_id uuid, p_archived boolean DEFAULT true, p_reason text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_on boolean := coalesce(p_archived, true); g public.guides;
+begin
+  if v_uid is null or not private.can_edit_guides() then
+    perform private.perm_raise('archive', 'guide', p_id, 'no_edit_authority', 'you may not archive guides');
+  end if;
+  if v_on and nullif(btrim(coalesce(p_reason, '')), '') is null then
+    return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'say why it is being archived');
+  end if;
+  update public.guides
+     set archived_at = case when v_on then coalesce(archived_at, now()) end,
+         archived_by = case when v_on then v_uid end,
+         updated_by = v_uid
+   where id = p_id and deleted_at is null returning * into g;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'guide not found');
+  end if;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, case when v_on then 'GUIDE_ARCHIVED' else 'GUIDE_RESTORED' end, 'guides', g.id,
+          jsonb_build_object('slug', g.slug, 'title', g.title, 'reason', nullif(btrim(coalesce(p_reason, '')), '')));
+  return jsonb_build_object('ok', true, 'id', g.id, 'archived', v_on);
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.guide_bookmark_toggle(p_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -16074,6 +16241,235 @@ begin
     v_on := true;
   end if;
   return jsonb_build_object('ok', true, 'id', p_id, 'bookmarked', v_on);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_category_upsert(p_slug text, p_label text DEFAULT NULL::text, p_description text DEFAULT NULL::text, p_sort_order integer DEFAULT NULL::integer, p_active boolean DEFAULT NULL::boolean)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_slug text := lower(nullif(btrim(coalesce(p_slug, '')), ''));
+  v_label text := left(nullif(btrim(coalesce(p_label, '')), ''), 80);
+  c public.guide_categories;
+begin
+  if v_uid is null or not private.can_edit_guides() then
+    perform private.perm_raise('manage', 'guide_category', null, 'no_edit_authority', 'you may not manage guide categories');
+  end if;
+  if v_slug is null or v_slug !~ '^[a-z0-9]+(-[a-z0-9]+)*$' then
+    return jsonb_build_object('ok', false, 'code', 'bad_slug', 'message', 'a category address is lowercase words joined by hyphens');
+  end if;
+  select * into c from public.guide_categories where slug = v_slug;
+  if not found and v_label is null then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'a new category needs a name');
+  end if;
+  insert into public.guide_categories (slug, label, description, sort_order, active)
+  values (v_slug, coalesce(v_label, v_slug), nullif(btrim(coalesce(p_description, '')), ''),
+          coalesce(p_sort_order, 100), coalesce(p_active, true))
+  on conflict (slug) do update
+    set label = coalesce(excluded.label, public.guide_categories.label),
+        description = case when p_description is null then public.guide_categories.description else excluded.description end,
+        sort_order = coalesce(p_sort_order, public.guide_categories.sort_order),
+        active = coalesce(p_active, public.guide_categories.active)
+  returning * into c;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'GUIDE_CATEGORY_SAVED', 'guide_categories', null,
+          jsonb_build_object('slug', c.slug, 'label', c.label, 'active', c.active, 'sort_order', c.sort_order));
+  return jsonb_build_object('ok', true, 'slug', c.slug, 'label', c.label, 'active', c.active);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_duplicate(p_id uuid, p_slug text, p_title text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_slug text := lower(nullif(btrim(coalesce(p_slug, '')), ''));
+  src public.guides; g public.guides;
+begin
+  if v_uid is null or not private.can_edit_guides() then
+    perform private.perm_raise('create', 'guide', p_id, 'no_edit_authority', 'you may not create guides');
+  end if;
+  if v_slug is null or v_slug !~ '^[a-z0-9]+(-[a-z0-9]+)*$' then
+    return jsonb_build_object('ok', false, 'code', 'bad_slug', 'message', 'an address is lowercase words joined by hyphens');
+  end if;
+  if exists (select 1 from public.guides x where x.slug = v_slug and x.deleted_at is null) then
+    return jsonb_build_object('ok', false, 'code', 'slug_taken', 'message', 'another guide already lives at that address');
+  end if;
+  select * into src from public.guides where id = p_id and deleted_at is null;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'guide not found');
+  end if;
+  insert into public.guides (slug, title, summary, category, body_key, body_kind, audience, custom_roles,
+                             tags, keywords, read_minutes, content_owner, created_by, updated_by)
+  values (v_slug, coalesce(left(nullif(btrim(coalesce(p_title, '')), ''), 200), src.title || ' (copy)'),
+          src.summary, src.category, src.body_key, src.body_kind, src.audience, src.custom_roles,
+          src.tags, src.keywords, src.read_minutes, v_uid, v_uid, v_uid)
+  returning * into g;
+  insert into public.guide_sections (guide_id, anchor, heading, body, sort_order)
+  select g.id, s.anchor, s.heading, s.body, s.sort_order
+    from public.guide_sections s where s.guide_id = src.id;
+  perform private.guide_revision_save(g.id, 'Duplicated from ' || src.slug);
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'GUIDE_CREATED', 'guides', g.id,
+          jsonb_build_object('slug', g.slug, 'title', g.title, 'duplicated_from', src.slug));
+  return jsonb_build_object('ok', true, 'id', g.id, 'slug', g.slug, 'status', g.status);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_feedback_resolve(p_id uuid, p_status text, p_note text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_status text := lower(nullif(btrim(coalesce(p_status, '')), ''));
+  f public.guide_feedback;
+begin
+  if v_uid is null or not private.can_edit_guides() then
+    perform private.perm_raise('resolve', 'guide_feedback', p_id, 'no_edit_authority', 'you may not work the guide feedback queue');
+  end if;
+  if v_status not in ('new', 'reviewing', 'resolved', 'declined') then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown status');
+  end if;
+  update public.guide_feedback
+     set status = v_status,
+         resolution_note = coalesce(left(nullif(btrim(coalesce(p_note, '')), ''), 1000), resolution_note),
+         resolved_by = case when v_status in ('resolved', 'declined') then v_uid end,
+         resolved_at = case when v_status in ('resolved', 'declined') then now() end
+   where id = p_id returning * into f;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'feedback not found');
+  end if;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'GUIDE_FEEDBACK_RESOLVED', 'guide_feedback', f.id,
+          jsonb_build_object('guide_id', f.guide_id, 'kind', f.kind, 'status', f.status));
+  return jsonb_build_object('ok', true, 'id', f.id, 'status', f.status);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_feedback_submit(p_id uuid, p_kind text DEFAULT 'helpful'::text, p_rating text DEFAULT NULL::text, p_comment text DEFAULT NULL::text, p_anchor text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_kind text := lower(nullif(btrim(coalesce(p_kind, '')), ''));
+  v_rating text := lower(nullif(btrim(coalesce(p_rating, '')), ''));
+  v_comment text := left(nullif(btrim(coalesce(p_comment, '')), ''), 2000);
+  v_id uuid;
+begin
+  if v_uid is null or not private.is_active() then
+    perform private.perm_raise('feedback', 'guide', p_id, 'not_active', 'not an active member');
+  end if;
+  if not private.guide_readable(p_id) then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'guide not found');
+  end if;
+  v_kind := coalesce(v_kind, 'helpful');
+  if v_kind not in ('helpful', 'broken_link', 'outdated', 'suggestion') then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown feedback kind');
+  end if;
+  if v_kind = 'helpful' then
+    if v_rating is null or v_rating not in ('yes', 'partly', 'no') then
+      return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'answer yes, partly or no');
+    end if;
+  else
+    v_rating := null;
+    if v_comment is null then
+      return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'say what is wrong');
+    end if;
+  end if;
+  insert into public.guide_feedback (guide_id, anchor, kind, rating, comment, created_by)
+  values (p_id, nullif(btrim(coalesce(p_anchor, '')), ''), v_kind, v_rating, v_comment, v_uid)
+  returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id, 'kind', v_kind);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_mark_complete(p_id uuid, p_complete boolean DEFAULT true)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_on boolean := coalesce(p_complete, true);
+begin
+  if v_uid is null or not private.is_active() then
+    perform private.perm_raise('read', 'guide', p_id, 'not_active', 'not an active member');
+  end if;
+  if not private.guide_readable(p_id) then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'guide not found');
+  end if;
+  insert into public.guide_progress (guide_id, user_id, completed_at)
+  values (p_id, v_uid, case when v_on then now() end)
+  on conflict (guide_id, user_id) do update
+    set completed_at = case when v_on then coalesce(public.guide_progress.completed_at, now()) end;
+  return jsonb_build_object('ok', true, 'id', p_id, 'completed', v_on);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_mark_outdated(p_id uuid, p_reason text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_reason text := left(nullif(btrim(coalesce(p_reason, '')), ''), 500); g public.guides;
+begin
+  if v_uid is null or not private.is_active() then
+    perform private.perm_raise('flag', 'guide', p_id, 'not_active', 'not an active member');
+  end if;
+  if not private.guide_readable(p_id) then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'guide not found');
+  end if;
+  if v_reason is null then
+    return jsonb_build_object('ok', false, 'code', 'reason_required', 'message', 'say what no longer matches');
+  end if;
+  update public.guides set outdated_at = now(), outdated_by = v_uid, outdated_reason = v_reason
+   where id = p_id returning * into g;
+  insert into public.guide_feedback (guide_id, kind, comment, created_by)
+  values (p_id, 'outdated', v_reason, v_uid);
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'GUIDE_MARKED_OUTDATED', 'guides', g.id,
+          jsonb_build_object('slug', g.slug, 'reason', v_reason));
+  return jsonb_build_object('ok', true, 'id', g.id);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_mark_reviewed(p_id uuid, p_next_review_at timestamp with time zone DEFAULT NULL::timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); g public.guides;
+begin
+  if v_uid is null or not private.can_edit_guides() then
+    perform private.perm_raise('edit', 'guide', p_id, 'no_edit_authority', 'you may not review guides');
+  end if;
+  update public.guides
+     set last_reviewed_at = now(),
+         next_review_at = coalesce(p_next_review_at, next_review_at),
+         outdated_at = null, outdated_by = null, outdated_reason = null,
+         updated_by = v_uid
+   where id = p_id and deleted_at is null returning * into g;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'guide not found');
+  end if;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'GUIDE_REVIEWED', 'guides', g.id,
+          jsonb_build_object('slug', g.slug, 'next_review_at', g.next_review_at));
+  return jsonb_build_object('ok', true, 'id', g.id, 'last_reviewed_at', g.last_reviewed_at);
 end $function$
 ;
 
@@ -16212,13 +16608,13 @@ begin
 end $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.guide_publish(p_id uuid, p_published boolean DEFAULT true)
+CREATE OR REPLACE FUNCTION public.guide_publish(p_id uuid, p_published boolean DEFAULT true, p_note text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare v_uid uuid := (select auth.uid()); v_want text; g public.guides;
+declare v_uid uuid := (select auth.uid()); v_want text; v_rev integer; g public.guides;
 begin
   if v_uid is null or not private.can_edit_guides() then
     perform private.perm_raise('publish', 'guide', p_id, 'no_edit_authority', 'you may not publish guides');
@@ -16228,18 +16624,199 @@ begin
   if not found then
     return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'guide not found');
   end if;
+  if v_want = 'published' and g.body_kind = 'sections'
+     and not exists (select 1 from public.guide_sections s where s.guide_id = p_id) then
+    -- An empty guide is worse than no guide: it looks like an answer.
+    return jsonb_build_object('ok', false, 'code', 'empty', 'message', 'write at least one section before publishing');
+  end if;
   if g.status = v_want then
     return jsonb_build_object('ok', true, 'id', g.id, 'status', g.status, 'unchanged', true);
   end if;
+  -- Every publication records what the guide said at that moment.
+  v_rev := private.guide_revision_save(p_id, coalesce(nullif(btrim(coalesce(p_note, '')), ''),
+                                                      case when v_want = 'published' then 'Published' else 'Unpublished' end));
   update public.guides
      set status = v_want,
          published_at = case when v_want = 'published' then coalesce(published_at, now()) else published_at end,
+         publication_note = case when v_want = 'published' then nullif(btrim(coalesce(p_note, '')), '') else publication_note end,
+         last_reviewed_at = case when v_want = 'published' then now() else last_reviewed_at end,
+         outdated_at = case when v_want = 'published' then null else outdated_at end,
+         outdated_by = case when v_want = 'published' then null else outdated_by end,
+         outdated_reason = case when v_want = 'published' then null else outdated_reason end,
          updated_by = v_uid
    where id = p_id returning * into g;
   insert into public.audit_log (actor_id, action, entity, entity_id, detail)
   values (v_uid, case when v_want = 'published' then 'GUIDE_PUBLISHED' else 'GUIDE_UNPUBLISHED' end,
-          'guides', g.id, jsonb_build_object('slug', g.slug, 'title', g.title, 'status', g.status));
-  return jsonb_build_object('ok', true, 'id', g.id, 'status', g.status);
+          'guides', g.id, jsonb_build_object('slug', g.slug, 'title', g.title, 'status', g.status,
+                                             'audience', g.audience, 'revision', v_rev, 'note', g.publication_note));
+  return jsonb_build_object('ok', true, 'id', g.id, 'status', g.status, 'revision', v_rev);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_revision_restore(p_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  r public.guide_revisions; snap jsonb; gj jsonb; v_new integer;
+begin
+  if v_uid is null or not private.can_edit_guides() then
+    perform private.perm_raise('restore', 'guide_revision', p_id, 'no_edit_authority', 'you may not edit guides');
+  end if;
+  select * into r from public.guide_revisions where id = p_id;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'revision not found');
+  end if;
+  v_new := private.guide_revision_save(r.guide_id, 'Before restoring revision ' || r.revision_no);
+  snap := r.snapshot;
+  gj := snap -> 'guide';
+  update public.guides set
+    title = coalesce(gj ->> 'title', title),
+    summary = gj ->> 'summary',
+    category = coalesce(gj ->> 'category', category),
+    body_key = coalesce(gj ->> 'body_key', body_key),
+    body_kind = coalesce(gj ->> 'body_kind', body_kind),
+    audience = coalesce(gj ->> 'audience', audience),
+    keywords = gj ->> 'keywords',
+    read_minutes = nullif(gj ->> 'read_minutes', '')::integer,
+    updated_by = v_uid
+   where id = r.guide_id;
+  -- Sections are replaced wholesale: a revision is a picture of the guide, not
+  -- a patch, so a half-applied restore is not a state this can produce.
+  delete from public.guide_sections where guide_id = r.guide_id;
+  insert into public.guide_sections (id, guide_id, anchor, heading, body, sort_order)
+  select coalesce(nullif(s ->> 'id', '')::uuid, gen_random_uuid()), r.guide_id,
+         s ->> 'anchor', s ->> 'heading', coalesce(s ->> 'body', ''),
+         coalesce(nullif(s ->> 'sort_order', '')::integer, 0)
+    from jsonb_array_elements(coalesce(snap -> 'sections', '[]'::jsonb)) s;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'GUIDE_REVISION_RESTORED', 'guides', r.guide_id,
+          jsonb_build_object('revision_no', r.revision_no, 'saved_as', v_new));
+  return jsonb_build_object('ok', true, 'guide_id', r.guide_id, 'restored', r.revision_no, 'saved_as', v_new);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_section_remove(p_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); s public.guide_sections;
+begin
+  if v_uid is null or not private.can_edit_guides() then
+    perform private.perm_raise('delete', 'guide_section', p_id, 'no_edit_authority', 'you may not edit guides');
+  end if;
+  -- The revision is taken BEFORE the section goes, so the restore point
+  -- actually contains it.
+  select * into s from public.guide_sections where id = p_id;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'section not found');
+  end if;
+  perform private.guide_revision_save(s.guide_id, 'Before removing section: ' || s.heading);
+  delete from public.guide_sections where id = p_id;
+  update public.guides set updated_by = v_uid, updated_at = now() where id = s.guide_id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'GUIDE_SECTION_REMOVED', 'guide_sections', s.id,
+          jsonb_build_object('guide_id', s.guide_id, 'anchor', s.anchor, 'heading', s.heading));
+  return jsonb_build_object('ok', true, 'id', s.id, 'guide_id', s.guide_id);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_section_upsert(p_guide uuid, p_id uuid DEFAULT NULL::uuid, p_heading text DEFAULT NULL::text, p_body text DEFAULT NULL::text, p_anchor text DEFAULT NULL::text, p_expected_updated_at timestamp with time zone DEFAULT NULL::timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_heading text := left(nullif(btrim(coalesce(p_heading, '')), ''), 160);
+  v_anchor text := lower(nullif(btrim(coalesce(p_anchor, '')), ''));
+  v_next integer; s public.guide_sections; g public.guides;
+begin
+  if v_uid is null or not private.can_edit_guides() then
+    perform private.perm_raise('edit', 'guide_section', p_guide, 'no_edit_authority', 'you may not edit guides');
+  end if;
+  select * into g from public.guides where id = p_guide and deleted_at is null;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'guide not found');
+  end if;
+  if g.body_kind <> 'sections' then
+    return jsonb_build_object('ok', false, 'code', 'bad_request',
+                              'message', 'this guide''s text lives in the repository — edit it there');
+  end if;
+
+  if p_id is null then
+    if v_heading is null then
+      return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'a section needs a heading');
+    end if;
+    v_anchor := coalesce(v_anchor,
+      nullif(btrim(regexp_replace(lower(v_heading), '[^a-z0-9]+', '-', 'g'), '-'), ''));
+    if v_anchor is null or v_anchor !~ '^[a-z0-9]+(-[a-z0-9]+)*$' then
+      return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'that heading cannot become a section link — give one');
+    end if;
+    if exists (select 1 from public.guide_sections x where x.guide_id = p_guide and x.anchor = v_anchor) then
+      return jsonb_build_object('ok', false, 'code', 'anchor_taken', 'message', 'a section already uses that link');
+    end if;
+    select coalesce(max(sort_order), -1) + 1 into v_next from public.guide_sections where guide_id = p_guide;
+    insert into public.guide_sections (guide_id, anchor, heading, body, sort_order)
+    values (p_guide, v_anchor, v_heading, coalesce(p_body, ''), v_next)
+    returning * into s;
+  else
+    select * into s from public.guide_sections where id = p_id and guide_id = p_guide for update;
+    if not found then
+      return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'section not found');
+    end if;
+    if p_expected_updated_at is not null and s.updated_at <> p_expected_updated_at then
+      return jsonb_build_object('ok', false, 'code', 'conflict',
+                                'message', 'someone else saved this section while you were editing',
+                                'updated_at', s.updated_at);
+    end if;
+    if v_anchor is not null and v_anchor <> s.anchor
+       and exists (select 1 from public.guide_sections x where x.guide_id = p_guide and x.anchor = v_anchor) then
+      return jsonb_build_object('ok', false, 'code', 'anchor_taken', 'message', 'a section already uses that link');
+    end if;
+    update public.guide_sections
+       set heading = coalesce(v_heading, heading),
+           body = case when p_body is null then body else p_body end,
+           anchor = coalesce(v_anchor, anchor)
+     where id = p_id returning * into s;
+  end if;
+
+  update public.guides set updated_by = v_uid, updated_at = now() where id = p_guide;
+  return jsonb_build_object('ok', true, 'id', s.id, 'anchor', s.anchor,
+                            'sort_order', s.sort_order, 'updated_at', s.updated_at);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_sections_reorder(p_guide uuid, p_ids uuid[])
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_n integer := 0; i integer;
+begin
+  if v_uid is null or not private.can_edit_guides() then
+    perform private.perm_raise('edit', 'guide_section', p_guide, 'no_edit_authority', 'you may not edit guides');
+  end if;
+  if p_ids is null or cardinality(p_ids) = 0 then
+    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'no sections were named');
+  end if;
+  for i in 1 .. cardinality(p_ids) loop
+    update public.guide_sections set sort_order = i - 1
+     where id = p_ids[i] and guide_id = p_guide;
+    if found then v_n := v_n + 1; end if;
+  end loop;
+  update public.guides set updated_by = v_uid, updated_at = now() where id = p_guide;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'GUIDE_SECTIONS_REORDERED', 'guides', p_guide,
+          jsonb_build_object('order', to_jsonb(p_ids), 'moved', v_n));
+  return jsonb_build_object('ok', true, 'guide_id', p_guide, 'moved', v_n);
 end $function$
 ;
 
@@ -16265,7 +16842,7 @@ begin
 end $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.guide_upsert(p_id uuid DEFAULT NULL::uuid, p_slug text DEFAULT NULL::text, p_title text DEFAULT NULL::text, p_summary text DEFAULT NULL::text, p_category text DEFAULT NULL::text, p_body_key text DEFAULT NULL::text)
+CREATE OR REPLACE FUNCTION public.guide_upsert(p_id uuid DEFAULT NULL::uuid, p_slug text DEFAULT NULL::text, p_title text DEFAULT NULL::text, p_summary text DEFAULT NULL::text, p_category text DEFAULT NULL::text, p_body_key text DEFAULT NULL::text, p_audience text DEFAULT NULL::text, p_custom_roles text[] DEFAULT NULL::text[], p_tags text[] DEFAULT NULL::text[], p_keywords text DEFAULT NULL::text, p_body_kind text DEFAULT NULL::text, p_read_minutes integer DEFAULT NULL::integer, p_content_owner uuid DEFAULT NULL::uuid, p_next_review_at timestamp with time zone DEFAULT NULL::timestamp with time zone, p_expected_updated_at timestamp with time zone DEFAULT NULL::timestamp with time zone)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -16278,19 +16855,27 @@ declare
   v_summary text := left(nullif(btrim(coalesce(p_summary, '')), ''), 500);
   v_category text := lower(nullif(btrim(coalesce(p_category, '')), ''));
   v_body text := nullif(btrim(coalesce(p_body_key, '')), '');
+  v_audience text := lower(nullif(btrim(coalesce(p_audience, '')), ''));
+  v_kind text := lower(nullif(btrim(coalesce(p_body_kind, '')), ''));
   g public.guides;
 begin
   if v_uid is null or not private.can_edit_guides() then
     perform private.perm_raise('edit', 'guide', p_id, 'no_edit_authority', 'you may not edit guides');
   end if;
-  if p_id is null and (v_slug is null or v_title is null or v_body is null) then
-    return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'a new guide needs an address, a title and a body key');
-  end if;
   if v_slug is not null and v_slug !~ '^[a-z0-9]+(-[a-z0-9]+)*$' then
     return jsonb_build_object('ok', false, 'code', 'bad_slug', 'message', 'an address is lowercase words joined by hyphens');
   end if;
-  if v_category is not null and v_category not in ('systems', 'equipment', 'jobs', 'organizations', 'locations', 'general') then
+  if v_category is not null and not exists (select 1 from public.guide_categories where slug = v_category) then
     return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'unknown category');
+  end if;
+  if v_audience is not null and v_audience not in ('all', 'investigative', 'command', 'doj', 'sib', 'ci_handlers', 'owner', 'custom') then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown audience');
+  end if;
+  if v_kind is not null and v_kind not in ('module', 'sections') then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'unknown body kind');
+  end if;
+  if p_read_minutes is not null and (p_read_minutes <= 0 or p_read_minutes > 600) then
+    return jsonb_build_object('ok', false, 'code', 'bad_value', 'message', 'a reading time is between 1 and 600 minutes');
   end if;
   if v_slug is not null and exists (select 1 from public.guides x
                                      where x.slug = v_slug and x.deleted_at is null
@@ -16299,32 +16884,119 @@ begin
   end if;
 
   if p_id is null then
-    insert into public.guides (slug, title, summary, category, body_key, created_by, updated_by)
-    values (v_slug, v_title, v_summary, coalesce(v_category, 'general'), v_body, v_uid, v_uid)
+    -- A 'module' guide is rendered from a code-reviewed module, so it needs a
+    -- body key; a 'sections' guide is written here and does not.
+    v_kind := coalesce(v_kind, 'sections');
+    if v_slug is null or v_title is null or (v_kind = 'module' and v_body is null) then
+      return jsonb_build_object('ok', false, 'code', 'bad_request', 'message', 'a new guide needs an address, a title and — for a module guide — a body key');
+    end if;
+    insert into public.guides (slug, title, summary, category, body_key, body_kind, audience,
+                               custom_roles, tags, keywords, read_minutes, content_owner,
+                               next_review_at, created_by, updated_by)
+    values (v_slug, v_title, v_summary, coalesce(v_category, 'portal'), coalesce(v_body, v_slug),
+            v_kind, coalesce(v_audience, 'all'), coalesce(p_custom_roles, '{}'), coalesce(p_tags, '{}'),
+            nullif(btrim(coalesce(p_keywords, '')), ''), p_read_minutes,
+            coalesce(p_content_owner, v_uid), p_next_review_at, v_uid, v_uid)
     returning * into g;
+    perform private.guide_revision_save(g.id, 'Created');
     insert into public.audit_log (actor_id, action, entity, entity_id, detail)
     values (v_uid, 'GUIDE_CREATED', 'guides', g.id,
-            jsonb_build_object('slug', g.slug, 'title', g.title, 'category', g.category, 'body_key', g.body_key));
-  else
-    select * into g from public.guides where id = p_id and deleted_at is null for update;
-    if not found then
-      return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'guide not found');
-    end if;
-    update public.guides set
-      slug = coalesce(v_slug, slug),
-      title = coalesce(v_title, title),
-      -- An explicitly blank summary clears it; omitting the argument leaves it.
-      summary = case when p_summary is null then summary else v_summary end,
-      category = coalesce(v_category, category),
-      body_key = coalesce(v_body, body_key),
-      updated_by = v_uid
-     where id = p_id returning * into g;
-    insert into public.audit_log (actor_id, action, entity, entity_id, detail)
-    values (v_uid, 'GUIDE_UPDATED', 'guides', g.id,
-            jsonb_build_object('slug', g.slug, 'title', g.title, 'category', g.category, 'body_key', g.body_key));
+            jsonb_build_object('slug', g.slug, 'title', g.title, 'category', g.category,
+                               'audience', g.audience, 'body_kind', g.body_kind));
+    return jsonb_build_object('ok', true, 'id', g.id, 'slug', g.slug, 'status', g.status, 'updated_at', g.updated_at);
   end if;
-  return jsonb_build_object('ok', true, 'id', g.id, 'slug', g.slug, 'status', g.status);
+
+  select * into g from public.guides where id = p_id and deleted_at is null for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'guide not found');
+  end if;
+  -- The conflict check: somebody else saved since this editor last read it.
+  if p_expected_updated_at is not null and g.updated_at <> p_expected_updated_at then
+    return jsonb_build_object('ok', false, 'code', 'conflict',
+                              'message', 'someone else saved this guide while you were editing',
+                              'updated_at', g.updated_at, 'updated_by', g.updated_by);
+  end if;
+  update public.guides set
+    slug = coalesce(v_slug, slug),
+    title = coalesce(v_title, title),
+    summary = case when p_summary is null then summary else v_summary end,
+    category = coalesce(v_category, category),
+    body_key = coalesce(v_body, body_key),
+    body_kind = coalesce(v_kind, body_kind),
+    audience = coalesce(v_audience, audience),
+    custom_roles = coalesce(p_custom_roles, custom_roles),
+    tags = coalesce(p_tags, tags),
+    keywords = case when p_keywords is null then keywords else nullif(btrim(p_keywords), '') end,
+    read_minutes = case when p_read_minutes is null then read_minutes else p_read_minutes end,
+    content_owner = coalesce(p_content_owner, content_owner),
+    next_review_at = case when p_next_review_at is null then next_review_at else p_next_review_at end,
+    updated_by = v_uid
+   where id = p_id returning * into g;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'GUIDE_UPDATED', 'guides', g.id,
+          jsonb_build_object('slug', g.slug, 'title', g.title, 'category', g.category,
+                             'audience', g.audience, 'body_kind', g.body_kind));
+  return jsonb_build_object('ok', true, 'id', g.id, 'slug', g.slug, 'status', g.status, 'updated_at', g.updated_at);
 end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guide_view(p_id uuid, p_anchor text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_anchor text := nullif(btrim(coalesce(p_anchor, '')), ''); v_updated timestamptz;
+begin
+  if v_uid is null or not private.is_active() then
+    perform private.perm_raise('read', 'guide', p_id, 'not_active', 'not an active member');
+  end if;
+  select updated_at into v_updated from public.guides g where g.id = p_id and private.guide_readable(p_id);
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'not_found', 'message', 'guide not found');
+  end if;
+  update public.guides set view_count = view_count + 1 where id = p_id;
+  insert into public.guide_progress (guide_id, user_id, last_anchor, last_viewed_at, seen_updated_at)
+  values (p_id, v_uid, v_anchor, now(), v_updated)
+  on conflict (guide_id, user_id) do update
+    set last_anchor = coalesce(excluded.last_anchor, public.guide_progress.last_anchor),
+        last_viewed_at = now(),
+        seen_updated_at = excluded.seen_updated_at;
+  return jsonb_build_object('ok', true, 'id', p_id);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.guides_search(p_query text, p_limit integer DEFAULT 20)
+ RETURNS TABLE(guide_id uuid, slug text, title text, summary text, category text, anchor text, heading text, snippet text, rank real)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  with q as (select btrim(coalesce(p_query, '')) as raw),
+  hits as (
+    select g.id, g.slug, g.title, g.summary, g.category,
+           i.anchor, i.heading,
+           -- A window of the section's text around the match, for the result row.
+           case when position(lower((select raw from q)) in lower(i.terms)) > 0
+                then substring(i.terms from greatest(1, position(lower((select raw from q)) in lower(i.terms)) - 60) for 200)
+                else left(i.terms, 160) end as snippet,
+           (case when lower(g.title) like '%' || lower((select raw from q)) || '%' then 3.0 else 0 end
+            + case when lower(i.heading) like '%' || lower((select raw from q)) || '%' then 2.0 else 0 end
+            + case when lower(coalesce(g.summary, '')) like '%' || lower((select raw from q)) || '%' then 1.0 else 0 end
+            + case when lower(i.terms) like '%' || lower((select raw from q)) || '%' then 1.0 else 0 end
+            + case when lower(coalesce(g.keywords, '')) like '%' || lower((select raw from q)) || '%' then 1.0 else 0 end
+            + case when exists (select 1 from unnest(g.tags) t where lower(t) like '%' || lower((select raw from q)) || '%') then 1.0 else 0 end
+           )::real as rank
+      from public.guides g
+      join public.guide_search_index i on i.guide_id = g.id
+     where (select raw from q) <> ''
+  )
+  select h.id, h.slug, h.title, h.summary, h.category, h.anchor, h.heading, h.snippet, h.rank
+    from hits h
+   where h.rank > 0
+   order by h.rank desc, h.title, h.anchor
+   limit greatest(1, least(coalesce(p_limit, 20), 100))
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION public.has_restricted_packet_approval(p_case uuid)
@@ -22458,6 +23130,10 @@ begin
   -- Guide library (20261107120000): guides a fixture authored (guide_media
   -- and guide_bookmarks cascade), and bookmarks a fixture left on a real one.
   delete from public.guide_bookmarks where user_id = any(ids);
+  -- Guide library v2 (20261108120000): a fixture's reading position and its
+  -- feedback on a REAL guide do not cascade from anything it authored.
+  delete from public.guide_progress where user_id = any(ids);
+  delete from public.guide_feedback where created_by = any(ids) or resolved_by = any(ids);
   delete from public.guides where created_by = any(ids) or updated_by = any(ids) or deleted_by = any(ids);
 
   delete from public.entity_associations
@@ -33167,6 +33843,51 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.guide_audience_ok(p_audience text, p_custom_roles text[])
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select private.is_active() and case coalesce(p_audience, 'all')
+    when 'all' then true
+    when 'investigative' then true
+    when 'command' then private.is_command() or private.is_owner()
+    when 'doj' then private.is_owner()
+       or private.justice_role_of((select auth.uid())) is not null
+    when 'sib' then private.siu_standing() is not null
+    when 'ci_handlers' then private.ci_is_handler() or private.has_full_ci_access()
+    when 'owner' then private.is_owner()
+    when 'custom' then private.is_owner()
+       or coalesce((select p.role::text = any (coalesce(p_custom_roles, '{}'))
+                      from public.profiles p where p.id = (select auth.uid())), false)
+    else false end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.guide_category_audit()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (
+    (select auth.uid()),
+    tg_op,
+    tg_table_name,
+    null,
+    case tg_op
+      when 'DELETE' then jsonb_build_object('slug', old.slug, 'old', to_jsonb(old))
+      when 'INSERT' then jsonb_build_object('slug', new.slug, 'new', to_jsonb(new))
+      else jsonb_build_object('slug', new.slug, 'old', to_jsonb(old), 'new', to_jsonb(new))
+    end
+  );
+  return null;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.guide_readable(p_id uuid)
  RETURNS boolean
  LANGUAGE sql
@@ -33175,8 +33896,61 @@ CREATE OR REPLACE FUNCTION private.guide_readable(p_id uuid)
 AS $function$
   select exists (select 1 from public.guides g
                   where g.id = p_id and g.deleted_at is null
-                    and private.is_active()
-                    and (g.status = 'published' or private.can_edit_guides()))
+                    and private.guide_audience_ok(g.audience, g.custom_roles)
+                    and (private.can_edit_guides() or (g.status = 'published' and g.archived_at is null)))
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.guide_revision_save(p_id uuid, p_summary text)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_no integer;
+begin
+  select coalesce(max(revision_no), 0) + 1 into v_no from public.guide_revisions where guide_id = p_id;
+  insert into public.guide_revisions (guide_id, revision_no, snapshot, summary, created_by)
+  values (p_id, v_no, private.guide_snapshot(p_id),
+          left(nullif(btrim(coalesce(p_summary, '')), ''), 500), (select auth.uid()));
+  return v_no;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.guide_section_index()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  if tg_op = 'DELETE' then
+    delete from public.guide_search_index where guide_id = old.guide_id and anchor = old.anchor;
+    return old;
+  end if;
+  if tg_op = 'UPDATE' and old.anchor is distinct from new.anchor then
+    delete from public.guide_search_index where guide_id = old.guide_id and anchor = old.anchor;
+  end if;
+  insert into public.guide_search_index (guide_id, anchor, heading, sort_order, terms)
+  values (new.guide_id, new.anchor, new.heading, new.sort_order,
+          regexp_replace(coalesce(new.body, ''), '[#*`>|_\[\]()-]+', ' ', 'g'))
+  on conflict (guide_id, anchor) do update
+    set heading = excluded.heading, sort_order = excluded.sort_order,
+        terms = excluded.terms, updated_at = now();
+  return new;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.guide_snapshot(p_id uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select jsonb_build_object(
+    'guide', (select to_jsonb(g) - 'view_count' from public.guides g where g.id = p_id),
+    'sections', coalesce((select jsonb_agg(to_jsonb(s) order by s.sort_order, s.anchor)
+                            from public.guide_sections s where s.guide_id = p_id), '[]'::jsonb))
 $function$
 ;
 
@@ -38264,8 +39038,15 @@ CREATE TRIGGER gangs_siu_reconcile AFTER INSERT OR UPDATE OF name ON public.gang
 CREATE TRIGGER gangs_touch BEFORE UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER gangs_version AFTER UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.version_row();
 CREATE TRIGGER gangs_visibility_forget AFTER DELETE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.siu_visibility_forget('gang');
+CREATE TRIGGER guide_categories_audit AFTER INSERT OR DELETE OR UPDATE ON public.guide_categories FOR EACH ROW EXECUTE FUNCTION private.guide_category_audit();
+CREATE TRIGGER guide_categories_touch BEFORE UPDATE ON public.guide_categories FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER guide_feedback_touch BEFORE UPDATE ON public.guide_feedback FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER guide_media_audit AFTER INSERT OR DELETE OR UPDATE ON public.guide_media FOR EACH ROW EXECUTE FUNCTION private.audit_detail();
 CREATE TRIGGER guide_media_touch BEFORE UPDATE ON public.guide_media FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER guide_progress_touch BEFORE UPDATE ON public.guide_progress FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER guide_sections_audit AFTER INSERT OR DELETE OR UPDATE ON public.guide_sections FOR EACH ROW EXECUTE FUNCTION private.audit_detail();
+CREATE TRIGGER guide_sections_index AFTER INSERT OR DELETE OR UPDATE ON public.guide_sections FOR EACH ROW EXECUTE FUNCTION private.guide_section_index();
+CREATE TRIGGER guide_sections_touch BEFORE UPDATE ON public.guide_sections FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER guides_audit AFTER INSERT OR DELETE OR UPDATE ON public.guides FOR EACH ROW EXECUTE FUNCTION private.audit_detail();
 CREATE TRIGGER guides_block_direct_soft_delete BEFORE INSERT OR UPDATE ON public.guides FOR EACH ROW EXECUTE FUNCTION private.block_direct_soft_delete();
 CREATE TRIGGER guides_touch BEFORE UPDATE ON public.guides FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -39332,15 +40113,39 @@ create policy guide_bookmarks_sel on public.guide_bookmarks
   as permissive for select to authenticated
   using ((user_id = ( SELECT auth.uid() AS uid)));
 
+create policy guide_categories_sel on public.guide_categories
+  as permissive for select to authenticated
+  using (private.is_active());
+
+create policy guide_feedback_sel on public.guide_feedback
+  as permissive for select to authenticated
+  using ((private.is_active() AND ((created_by = ( SELECT auth.uid() AS uid)) OR (private.can_edit_guides() AND private.guide_readable(guide_id)))));
+
 create policy guide_media_sel on public.guide_media
   as permissive for select to authenticated
   using ((EXISTS ( SELECT 1
    FROM guides g
-  WHERE ((g.id = guide_media.guide_id) AND (g.deleted_at IS NULL) AND private.is_active() AND ((g.status = 'published'::text) OR private.can_edit_guides())))));
+  WHERE ((g.id = guide_media.guide_id) AND (g.deleted_at IS NULL) AND private.guide_audience_ok(g.audience, g.custom_roles) AND (private.can_edit_guides() OR ((g.status = 'published'::text) AND (g.archived_at IS NULL)))))));
+
+create policy guide_progress_sel on public.guide_progress
+  as permissive for select to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy guide_revisions_sel on public.guide_revisions
+  as permissive for select to authenticated
+  using ((private.can_edit_guides() AND private.guide_readable(guide_id)));
+
+create policy guide_search_index_sel on public.guide_search_index
+  as permissive for select to authenticated
+  using (private.guide_readable(guide_id));
+
+create policy guide_sections_sel on public.guide_sections
+  as permissive for select to authenticated
+  using (private.guide_readable(guide_id));
 
 create policy guides_sel on public.guides
   as permissive for select to authenticated
-  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.is_active() AND ((status = 'published'::text) OR private.can_edit_guides())));
+  using (((private.is_live(deleted_at) OR private.is_owner()) AND private.is_active() AND private.guide_audience_ok(audience, custom_roles) AND (private.can_edit_guides() OR ((status = 'published'::text) AND (archived_at IS NULL)))));
 
 create policy indicators_ins on public.indicators
   as permissive for insert to authenticated
@@ -40784,7 +41589,13 @@ create policy wl_sel on public.watchlist
 --   gang_turf -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   gangs -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   guide_bookmarks -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   guide_categories -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   guide_feedback -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   guide_media -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   guide_progress -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   guide_revisions -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   guide_search_index -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   guide_sections -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   guides -> authenticated: SELECT | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   indicators -> authenticated: INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   integration_events -> authenticated: DELETE, INSERT, SELECT, UPDATE | service_role: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -41215,7 +42026,12 @@ create policy wl_sel on public.watchlist
 --   private.guard_profile(): {=X/postgres,postgres=X/postgres,authenticated=X/postgres}
 --   private.guard_surveillance_event(): default (PUBLIC)
 --   private.guard_surveillance_observation(): default (PUBLIC)
+--   private.guide_audience_ok(p_audience text, p_custom_roles text[]): {postgres=X/postgres,authenticated=X/postgres}
+--   private.guide_category_audit(): {postgres=X/postgres}
 --   private.guide_readable(p_id uuid): {postgres=X/postgres,authenticated=X/postgres}
+--   private.guide_revision_save(p_id uuid, p_summary text): {postgres=X/postgres}
+--   private.guide_section_index(): default (PUBLIC)
+--   private.guide_snapshot(p_id uuid): {postgres=X/postgres}
 --   private.handle_new_user(): {=X/postgres,postgres=X/postgres,authenticated=X/postgres}
 --   private.has_full_ci_access(p_user uuid): {postgres=X/postgres,authenticated=X/postgres}
 --   private.has_joint_access(cid uuid): default (PUBLIC)
@@ -41634,14 +42450,28 @@ create policy wl_sel on public.watchlist
 --   public.gang_member_update(p_member uuid, p_rank text, p_callsign text, p_status text, p_confidence text, p_note text, p_case uuid, p_joined_at date, p_left_at date, p_mark_reviewed boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.graph_expand(p_kind text, p_id uuid, p_depth integer, p_kinds text[], p_limit integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.graph_path(p_from_kind text, p_from_id uuid, p_to_kind text, p_to_id uuid, p_max_depth integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_archive(p_id uuid, p_archived boolean, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.guide_bookmark_toggle(p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_category_upsert(p_slug text, p_label text, p_description text, p_sort_order integer, p_active boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_duplicate(p_id uuid, p_slug text, p_title text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_feedback_resolve(p_id uuid, p_status text, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_feedback_submit(p_id uuid, p_kind text, p_rating text, p_comment text, p_anchor text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_mark_complete(p_id uuid, p_complete boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_mark_outdated(p_id uuid, p_reason text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_mark_reviewed(p_id uuid, p_next_review_at timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.guide_media_attach(p_guide uuid, p_alt text, p_filename text, p_section text, p_caption text, p_mime text, p_byte_size bigint): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.guide_media_remove(p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.guide_media_reorder(p_guide uuid, p_ids uuid[], p_section text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.guide_media_update(p_id uuid, p_alt text, p_caption text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
---   public.guide_publish(p_id uuid, p_published boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_publish(p_id uuid, p_published boolean, p_note text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_revision_restore(p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_section_remove(p_id uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_section_upsert(p_guide uuid, p_id uuid, p_heading text, p_body text, p_anchor text, p_expected_updated_at timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_sections_reorder(p_guide uuid, p_ids uuid[]): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.guide_set_pinned(p_id uuid, p_pinned boolean): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
---   public.guide_upsert(p_id uuid, p_slug text, p_title text, p_summary text, p_category text, p_body_key text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_upsert(p_id uuid, p_slug text, p_title text, p_summary text, p_category text, p_body_key text, p_audience text, p_custom_roles text[], p_tags text[], p_keywords text, p_body_kind text, p_read_minutes integer, p_content_owner uuid, p_next_review_at timestamp with time zone, p_expected_updated_at timestamp with time zone): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guide_view(p_id uuid, p_anchor text): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   public.guides_search(p_query text, p_limit integer): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.has_restricted_packet_approval(p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.hybrid_search(p_q text, p_embedding vector, p_limit integer, p_case uuid): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   public.import_legal_warrant(p_case uuid, p_subtype text, p_title text, p_priority text, p_form jsonb, p_narrative text, p_person uuid, p_classification text, p_source_submitted_at timestamp with time zone, p_source_submitter uuid, p_import_key text, p_exhibits jsonb): {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}

@@ -9,7 +9,7 @@ nor CI command must not be able to tell that it exists. This chapter is the
 developer's map. The authority rules are in
 [`docs/AUTHORIZATION.md` §21](../AUTHORIZATION.md), the member's view in
 [`docs/WORKFLOWS.md` §15](../WORKFLOWS.md) and
-[`docs/USER-GUIDE.md` §K](../USER-GUIDE.md).
+the Portal User Guide (`/guides/user-guide`).
 
 ## 23.1 The one rule
 

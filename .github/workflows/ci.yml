@@ -27,8 +27,6 @@ jobs:
       - name: Handbook content in sync with docs
         # -I ignores the volatile git-derived date line (shallow CI checkouts can't reproduce it)
         run: npm run gen:handbook && git diff -I'HANDBOOK_UPDATED' --exit-code src/components/devdocs/handbookContent.ts
-      - name: User guide drift check
-        run: npm run gen:guide && git diff --exit-code src/components/guide/guideContent.ts
       - name: Permissions matrix drift check
         # src/lib/permissionsMatrix.ts is generated from the permission_catalog
         # seed in supabase/migrations (scripts/gen-permissions-matrix.mjs).

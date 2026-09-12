@@ -42,6 +42,7 @@ import { jointReasonText, type CaseJointInfo } from '@/lib/opsJoint'
 import { gatherCasePacket, packetDocx, packetMarkdown, packetPdfSpec, type PacketData } from '@/lib/packet'
 import { toast } from '@/lib/toast'
 import { StaleBadge } from './StaleBadge'
+import { GuideHelpLink } from '@/components/guides/GuideHelpLink'
 import { JointCaseModal } from './JointCaseModal'
 import { GeneratePacketDialog } from './tabs/documents/GeneratePacketDialog'
 import type { AssignmentRow, CaseRow } from './tabs/shared'
@@ -295,6 +296,7 @@ export function CaseCommandHeader({
         {primary && (primaryGo
           ? <Button variant="primary" size="sm" className="min-h-[44px] sm:min-h-9" onClick={primaryGo} title={primary.detail}>{primary.label}</Button>
           : <span className="rounded-lg bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-300" title={primary.detail}>{primary.label}</span>)}
+        <GuideHelpLink slug="case-management" title="Open the Case Management Guide" />
         <ActionMenu items={items} label="More case actions" buttonClassName="h-11 px-3 sm:h-9" />
       </div>
 

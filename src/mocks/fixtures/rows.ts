@@ -1393,6 +1393,22 @@ export function guideRow(overrides: Partial<Tables<'guides'>> = {}): Tables<'gui
     status: 'published',
     body_key: 'undergrnd',
     pinned: false,
+    audience: 'all',
+    custom_roles: [],
+    tags: [],
+    keywords: null,
+    body_kind: 'module',
+    read_minutes: null,
+    view_count: 0,
+    content_owner: null,
+    last_reviewed_at: null,
+    next_review_at: null,
+    archived_at: null,
+    archived_by: null,
+    publication_note: null,
+    outdated_at: null,
+    outdated_by: null,
+    outdated_reason: null,
     published_at: at,
     created_by: null,
     updated_by: null,
@@ -1402,6 +1418,55 @@ export function guideRow(overrides: Partial<Tables<'guides'>> = {}): Tables<'gui
     deleted_by: null,
     delete_reason: null,
     delete_batch: null,
+    ...overrides,
+  }
+}
+
+/** One category in the library's vocabulary. Categories are rows, not a
+ *  CHECK constraint: an administrator adds one without a deploy. */
+export function guideCategoryRow(
+  overrides: Partial<Tables<'guide_categories'>> & Pick<Tables<'guide_categories'>, 'slug'>,
+): Tables<'guide_categories'> {
+  return {
+    label: overrides.slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+    description: null,
+    sort_order: 10,
+    active: true,
+    created_at: mockTimestamp(),
+    updated_at: mockTimestamp(),
+    ...overrides,
+  }
+}
+
+/** One anchor section of a guide written in the editor. A guide whose prose
+ *  lives in a code-reviewed module has no rows here. */
+export function guideSectionRow(
+  overrides: Partial<Tables<'guide_sections'>> & Pick<Tables<'guide_sections'>, 'guide_id'>,
+): Tables<'guide_sections'> {
+  return {
+    id: mockId(),
+    anchor: 'getting-started',
+    heading: 'Getting started',
+    body: 'What this section explains.',
+    sort_order: 0,
+    created_at: mockTimestamp(),
+    updated_at: mockTimestamp(),
+    ...overrides,
+  }
+}
+
+/** One searchable section. The server maintains these rows from the guide's
+ *  own sections; the mock takes them as given. */
+export function guideSearchIndexRow(
+  overrides: Partial<Tables<'guide_search_index'>> & Pick<Tables<'guide_search_index'>, 'guide_id'>,
+): Tables<'guide_search_index'> {
+  return {
+    id: mockId(),
+    anchor: 'getting-started',
+    heading: 'Getting started',
+    terms: 'Getting started What this section explains.',
+    sort_order: 0,
+    updated_at: mockTimestamp(),
     ...overrides,
   }
 }

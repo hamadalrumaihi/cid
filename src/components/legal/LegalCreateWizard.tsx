@@ -65,6 +65,7 @@ import { uiConfirm } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { EmptyState, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { GuideHelpLink } from '@/components/guides/GuideHelpLink'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { RelatedGuidance } from '@/components/sops/RelatedGuidance'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
@@ -933,7 +934,16 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
         subtitle={isEdit && row
           ? `${row.request_number} — ${row.title}`
           : 'A guided draft — requirements are checked before submission.'}
-        actions={<Button onClick={onCancel}>Cancel</Button>}
+        actions={(
+          <>
+            <GuideHelpLink
+              slug="legal-requests"
+              label="View guide"
+              title="Open the Legal Requests Guide"
+            />
+            <Button onClick={onCancel}>Cancel</Button>
+          </>
+        )}
       />
 
       {/* Warrant and subpoena guidance, if any has been written and linked to

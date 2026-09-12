@@ -29,8 +29,9 @@
 - Never auto-retry a mutation.
 - Never rename `Store` keys or nav slugs casually — they're contracts
   (legacy app, deep links).
-- Never edit `guideContent.ts` by hand (generated) or let it drift from
-  `docs/USER-GUIDE.md`.
+- A guide's prose has exactly one copy: its module in
+  `src/components/guides/docs/`. Never mirror it into the database, and never
+  rename a section anchor — links into a guide are permanent.
 - Never "clean up" the deferred-effect pattern, Modal's ref-routing, or a
   sequence guard because it looks redundant — each fixes a real bug.
 

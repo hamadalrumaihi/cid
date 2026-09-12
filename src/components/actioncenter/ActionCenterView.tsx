@@ -46,6 +46,7 @@ import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { GuideHelpLink } from '@/components/guides/GuideHelpLink'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { CheckIcon } from '@/components/shell/icons'
 import { AccessDecisionModal, type AccessTarget } from './AccessDecisionModal'
@@ -622,6 +623,10 @@ export function ActionCenterView() {
               {lastRefreshed ? `Updated ${timeAgo(lastRefreshed)}` : refreshing ? 'Refreshing…' : null}
             </span>
             <Button variant="secondary" onAction={refresh}>Refresh</Button>
+            <GuideHelpLink
+              slug="action-center"
+              title="Open the Action Center Guide"
+            />
           </>
         }
       />

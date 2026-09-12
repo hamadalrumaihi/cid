@@ -13,7 +13,7 @@ export {
   featureFlagRow, backgroundJobRow, evidenceCustodyEventRow, exportManifestRow, casePacketRow, documentPageRow, documentExtractionRow,
   crawlerPolicyRow, externalSourceRow, externalSourceVersionRow, externalSourceLinkRow, searchIndexQueueRow, semanticChunkRow,
   serviceHealthEventRow,
-  guideRow, guideMediaRow,
+  guideRow, guideMediaRow, guideCategoryRow, guideSectionRow, guideSearchIndexRow,
 } from './rows'
 export {
   emptyCase, populatedCase, archivedCase, legalHoldCase, restrictedMediaCase,

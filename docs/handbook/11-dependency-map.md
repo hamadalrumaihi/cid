@@ -53,4 +53,4 @@ User clicks "Save" in a modal
 - `lib/forms` ← CaseDetail, BoloView, CaseGraphTab, dossier, packet
 - `shared/RecordSearchPicker` ← ~23 files (the one "attach a record"
   contract) · `lib/entitySearch` ← ~14 components (its loaders)
-- `guideContent.ts` ← **generated from** `docs/USER-GUIDE.md`
+- `src/components/guides/docs/*.ts` ← the guides' prose; `guides.body_key` joins a library row to one

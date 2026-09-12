@@ -9,7 +9,7 @@ two weeks:
   *Why first*: "the database is the authority" reframes everything; skip
   it and every view looks over-engineered.
 - [ ] **2. Use the app as a user** — the in-app guide (Reference → User
-  Guide) or `docs/USER-GUIDE.md`. *Why*: you can't debug flows you've
+  Guides → Portal User Guide). *Why*: you can't debug flows you've
   never run.
 - [ ] **3. The three foundation files** — `lib/supabase.ts` → `lib/db.ts`
   → `lib/auth.tsx` (~450 lines total). *Why*: after these, every view's

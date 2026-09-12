@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useToolNav } from '@/components/tools/useToolNav'
+import { GuideHelpLink } from '@/components/guides/GuideHelpLink'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -471,6 +472,11 @@ function ReportDetail({ r, c, viewer, writable, canEdit, canDelete, holdActive, 
           {WARRANT_TPLS[r.template] && canEdit && <select aria-label="Set warrant status" value={status} onChange={(e) => void setWarrant(e.target.value)} className="rounded-lg border border-white/10 bg-ink-900 px-2 py-1.5 text-xs font-bold text-white">{['draft', 'signed', 'executed', 'returned'].map((o) => <option key={o} value={o}>{o}</option>)}</select>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <GuideHelpLink
+            slug="reports-evidence"
+            anchor="drafting"
+            title="Open the Reports and Evidence Guide at Drafting a report"
+          />
           {r.template === 'arrest_warrant' && r.finalized && canEdit && (
             <Button size="sm" variant="warn" onClick={() => void submitForLegalReview()} disabled={legalBusy}>
               <ScaleIcon size={14} /> Submit for Legal Review
