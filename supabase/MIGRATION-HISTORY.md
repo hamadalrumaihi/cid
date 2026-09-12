@@ -1456,6 +1456,7 @@ another record's folder, and an unregistered media id under the right one.
 | applied via MCP (`org_associations_core`, `org_registry_media`, `org_associations_plumbing`, `org_associations_registry_label_grant`, `org_associations_perm_dispatch`, `org_associations_rls_test_cleanup`, `org_associations_review_fixes`) | org_associations_registry_intel | `20261106120000_org_associations_registry_intel.sql` |
 | applied via MCP (`guide_library_core`, `guide_library_rpcs`, `guide_library_plumbing`, `guide_library_storage_catalog_seed`, `guide_library_rls_test_cleanup`) | guide_library | `20261107120000_guide_library.sql` |
 | applied via MCP (`guide_library_v2_categories_audience`, `guide_library_v2_sections_progress`, `guide_library_v2_search_reader_rpcs`, `guide_library_v2_editor_rpcs`, `guide_library_v2_section_rpcs`, `guide_library_v2_catalog`, `guide_library_v2_library_rows`, `guide_library_v2_rls_test_cleanup`) | guide_library_v2 | `20261108120000_guide_library_v2.sql` |
+| applied via MCP (`guide_vanilla_unicorn_system_record`) | guide_vanilla_unicorn | `20261109120000_guide_vanilla_unicorn.sql` |
 | applied via MCP (`record_versions`) | record_versions | `20261011120000_record_versions.sql` |
 | applied via MCP (`case_access_grant_expiry`) | case_access_grant_expiry | `20261012120000_case_access_grant_expiry.sql` |
 | applied via MCP (`permanent_delete_record`, `permanent_delete_record_preview_fix`) | permanent_delete_record | `20261013120000_permanent_delete_record.sql` |
