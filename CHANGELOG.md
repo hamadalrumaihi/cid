@@ -8,6 +8,37 @@ the merged PRs that compose it.
 
 ## [Unreleased]
 
+### Guide Library audit — Accounts and Indicators coverage, and a real `check:guides`
+
+- **Accounts and Indicators were buried.** The portal has both as registries of
+  their own, but the Entities and Organizations guide folded them into one
+  line inside “Aliases and Identifiers”. There is now a dedicated **Accounts**
+  section (platforms, automatic handle history, category and state, the three
+  independent descriptors, the suspected → probable → confirmed ownership
+  ladder with confirmation reserved to command, observation history, and the
+  reason-required command merge that leaves a tombstone), and the identifier
+  section is now **“Indicators, Aliases and Identifiers”** — covering all seven
+  indicator kinds, server-side normalization, the cross-case deconfliction
+  alert, the restricted-case stub, Cross-ref, and the non-blocking
+  already-logged notice. Written from `AccountsView` and `IndicatorsView`;
+  nothing invented. **The `aliases` anchor is unchanged**, so every existing
+  link still lands.
+- The Portal User Guide's registry section is renamed to **“People, Vehicles,
+  Organizations, Places, Accounts, Indicators and Narcotics”**, with a
+  paragraph and link hint that name both.
+- **`npm run check:guides` now exists.** The registry's comments had promised
+  it since the library shipped; it was never written. It checks what nothing at
+  runtime enforces: every registered guide has a body and sections, anchors are
+  unique and URL-shaped, the contents rail is derived from the document itself,
+  a blank query matches everything and a nonsense one nothing, every section is
+  reachable by a word from its own heading, search hits point at real sections,
+  and — in both directions — the registry and the migration seeds name the same
+  body keys. Verified against deliberately introduced drift, not just on green.
+- `AGENTS.md` and `CONTRIBUTING.md` still told contributors to edit
+  `docs/USER-GUIDE.md` and run `npm run gen:guide` — both removed with the
+  dual-copy system. Corrected to the guide modules and `check:guides`, with the
+  permanent-anchor rule stated where a contributor will meet it.
+
 ### Vanilla Unicorn Money Laundering System — system intelligence
 
 A new record in the Guide Library's **Systems** category
@@ -36,8 +67,10 @@ Special Agent.
   recorded as what the interface displayed at the starting standing, not as
   constants — and as system capability, never as something processed.
 - **The access requirement is the system's, not a person's**: 75 crypto,
-  sourced through UNDERGRND, with the record explicitly declining to claim it
-  unlocks every branch, because that was not confirmed.
+  sourced through UNDERGRND. Since confirmed as **one-time and permanent** —
+  access does not lapse or need renewing — and the record says so, while
+  keeping the distinction that permanent access is not open access: the three
+  gated branches are still earned through standing and perks.
 - **A displayed-name collision is flagged, not resolved.** “The Floor” appears
   as an operation branch gated by House Rules at reputation 2 and as an
   interface section gated by Floor Manager at reputation 6. Both readings are

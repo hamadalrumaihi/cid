@@ -7,6 +7,11 @@
  *
  *  Two handling rules shape the content and are worth stating once:
  *
+ *  · ACCESS IS PERMANENT; BRANCHES ARE NOT INCLUDED. The 75-crypto payment is
+ *    a one-time purchase and does not lapse — confirmed after this record was
+ *    first written. It buys the back office and the Manager channel; the three
+ *    gated branches are still earned through standing and perks.
+ *
  *  · FIGURES ARE OBSERVED, NOT UNIVERSAL. Rates, caps and turnarounds are
  *    what the interface displayed at the starting standing. They move with
  *    progression, and they can change when the system itself changes, so they
@@ -77,17 +82,22 @@ export const VANILLA_UNICORN_DOC: GuideDoc = {
           rows: [
             { label: 'Initial payment', value: '75 crypto' },
             { label: 'Currency source', value: 'Obtained through the UNDERGRND system' },
+            { label: 'Nature of the payment', value: 'One-time and permanent — access does not lapse or need renewing' },
             { label: 'Recorded as', value: 'A requirement of the system, not a personal transaction' },
           ],
         },
         {
           kind: 'p',
-          text: 'The operation requires an initial payment of **75 crypto** before the back office becomes available. The crypto itself is obtained through the UNDERGRND system, which makes that system the practical prerequisite for this one — see Related Systems.',
+          text: 'The operation requires a payment of **75 crypto** before the back office becomes available. The crypto itself is obtained through the UNDERGRND system, which makes that system the practical prerequisite for this one — see Related Systems.',
+        },
+        {
+          kind: 'p',
+          text: 'The payment is **one-time and permanent**: it is a purchase of access rather than a subscription, and access does not expire, lapse or require renewal afterwards.',
         },
         {
           kind: 'note',
           tone: 'warn',
-          text: 'What the 75-crypto payment opens has **not** been confirmed beyond initial access. It should not be described as permanently unlocking every branch: the four operation branches each carry their own gate perk and reputation requirement, and those were observed separately.',
+          text: 'Permanent **access** is not the same as open access. What the payment buys is the back office and the Manager channel; the other three operation branches each remain behind their own gate perk and reputation requirement, which are earned separately and are not included in the 75 crypto.',
         },
       ],
     },

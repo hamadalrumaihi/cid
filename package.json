@@ -20,6 +20,7 @@
     "gen:handbook": "node scripts/generate-handbook.mjs",
     "check:schema": "node scripts/check-schema-sync.mjs",
     "check:dead": "knip",
+    "check:guides": "vitest run src/components/guides/guideRegistry.test.tsx",
     "check:submit": "node scripts/check-submit-buttons.mjs",
     "check:freshness": "node scripts/check-snapshot-freshness.mjs",
     "check:realtime": "node scripts/check-realtime.mjs",
