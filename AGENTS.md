@@ -40,8 +40,10 @@ route — `src/app/(app)/[tab]/page.tsx` — renders every screen from
   Opt-in live suites (dedicated test accounts): `npm run test:rls`,
   `npm run test:e2e` — see `docs/TESTING.md`.
 - **Docs are part of the change**: `docs/handbook/` + `npm run gen:handbook`
-  for contract changes; `docs/USER-GUIDE.md` + `npm run gen:guide` for
-  member-facing changes. CI fails on generated-content drift.
+  for contract changes; for member-facing changes, the guide it belongs to
+  under `src/components/guides/docs/` (the Guide Library at `/guides` — a
+  guide's prose has exactly one copy, its module) plus `npm run check:guides`.
+  CI fails on generated-content drift.
 - **Never** commit a `service_role` key, rewrite audit/history tables, or
   push to `main` directly.
 

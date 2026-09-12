@@ -228,8 +228,8 @@ export const USER_GUIDE_DOC: GuideDoc = {
 
     {
       anchor: 'registries',
-      heading: 'People, Vehicles, Organizations, Places and Narcotics',
-      blurb: 'One shared, deconflicted dataset — and the links that give it value.',
+      heading: 'People, Vehicles, Organizations, Places, Accounts, Indicators and Narcotics',
+      blurb: 'One shared, deconflicted dataset — the records, the identifiers, and the links that give both value.',
       blocks: [
         {
           kind: 'p',
@@ -240,8 +240,12 @@ export const USER_GUIDE_DOC: GuideDoc = {
           text: 'Registries are relationship-first: a record’s value is who and what it is connected to. Every relationship can be **edited** rather than recreated — change its confidence or note, or mark it Current, Historical or Disputed as the picture develops.',
         },
         {
+          kind: 'p',
+          text: '**Accounts** and **Indicators** are registries of their own, not fields on somebody else’s record. Accounts hold online accounts with their handle history and who operates them; Indicators hold the hard values — phones, emails, account identifiers, serials, aliases and addresses — logged per case and matched across all of them, so the same value surfacing on two cases raises a deconfliction alert.',
+        },
+        {
           kind: 'links',
-          items: [{ to: '/guides/entities-organizations', label: 'Entities and Organizations Guide', hint: 'linking, duplicates, merging, confirmed and unconfirmed relationships' }],
+          items: [{ to: '/guides/entities-organizations', label: 'Entities and Organizations Guide', hint: 'people, vehicles, organizations, places, narcotics, accounts and indicators — linking, duplicates, merging, deconfliction and confirmed relationships' }],
         },
       ],
     },

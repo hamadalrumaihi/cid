@@ -103,18 +103,95 @@ export const ENTITIES_DOC: GuideDoc = {
     },
 
     {
-      anchor: 'aliases',
-      heading: 'Aliases and Identifiers',
-      blurb: 'The values that tie records together across cases.',
+      // New in the Accounts/Indicators coverage pass. Placed after the other
+      // registries and before the identifier section, because an account is a
+      // record you open and work, where an indicator is a value you log.
+      anchor: 'accounts',
+      heading: 'Accounts',
+      blurb: 'Social-media and online accounts, their handles, and who operates them.',
       blocks: [
+        {
+          kind: 'p',
+          text: 'The **Accounts** registry holds online accounts as records in their own right — each with a platform, a current handle, an optional immutable platform id, a category and a state. The platforms are the in-world ones: **Birdy** and **InstaPic**.',
+        },
         {
           kind: 'ul',
           items: [
-            '**Indicators** hold burner phones, bank accounts, serials, aliases and addresses.',
-            'The same indicator value appearing on two cases raises a **deconfliction alert** naming both. A case you cannot access shows as restricted — coordinate through its bureau lead rather than trying another route in.',
-            '**Accounts** hold social-media and online accounts with their handle history and ownership, and list their surveillance history.',
-            'Aliases belong on the record they describe. An alias typed only into a narrative cannot deconflict against anything.',
+            '**Handle history is automatic.** Change the handle on an account and the previous one is kept with the date it was observed, so a handle someone has since abandoned still finds the account.',
+            '**Category** says what kind of account it is — person, shared, gang or business. Most are person-operated, so only the other three are chipped.',
+            '**State** records what the platform shows: active, suspended or deleted.',
+            'Three independent descriptors can be set on an account and are shown as chips: **operator unknown**, **impersonation** and **compromised**. They are not exclusive — an account can carry more than one.',
           ],
+        },
+        {
+          kind: 'p',
+          text: '**Ownership is a link, not a field.** An account links to a person, gang, business, case, vehicle or place, and each link carries its own confidence.',
+        },
+        {
+          kind: 'table',
+          caption: 'Ownership confidence on an account link.',
+          head: ['Confidence', 'What it means', 'Who can set it'],
+          rows: [
+            ['Suspected', 'A working assumption', 'Any active member'],
+            ['Probable', 'Supported, not settled', 'Any active member'],
+            ['Confirmed', 'Established', 'Command (Bureau Lead and above)'],
+          ],
+        },
+        {
+          kind: 'ul',
+          items: [
+            'Every account carries an **observation history**, so what was seen and when stays attached to the record.',
+            'Linking an account to a **case** uses the same link mechanism as the other subjects — the account stays one registry record rather than being copied onto the case.',
+            '**Duplicates merge, they do not vanish.** Command picks a survivor and the duplicates fold into it: links, handle history and case links repoint, the survivor’s own values win, blanks are filled from the first duplicate that has one, and the three descriptor flags are OR-ed together. A **reason is required**. A merged account becomes a tombstone and leaves the registry.',
+          ],
+        },
+        {
+          kind: 'note',
+          text: 'Confirming ownership and merging duplicates are **command actions**. The server enforces both; the buttons are only the visible half.',
+        },
+      ],
+    },
+
+    {
+      // Anchor deliberately unchanged: links into this section predate the
+      // rename and have to keep working. The heading leads with Indicators
+      // because that is the registry the section is mostly about.
+      anchor: 'aliases',
+      heading: 'Indicators, Aliases and Identifiers',
+      blurb: 'The hard values that tie records together across cases.',
+      blocks: [
+        {
+          kind: 'p',
+          text: 'The **Indicators** registry holds hard identifiers, each logged against a case. Every active member sees every value — that is what makes deconfliction work — while the case behind a value follows the usual access rules.',
+        },
+        {
+          kind: 'table',
+          caption: 'The indicator kinds the registry accepts.',
+          head: ['Kind', 'Typical value'],
+          rows: [
+            ['Phone', 'A number, including a burner'],
+            ['Email', 'An address'],
+            ['Account', 'An account identifier'],
+            ['Serial', 'A serial number'],
+            ['Alias', 'A name somebody uses'],
+            ['Address', 'A street address'],
+            ['Other', 'Anything the list above does not cover'],
+          ],
+        },
+        {
+          kind: 'ul',
+          items: [
+            '**Matching runs on the server’s own normalized value**, not on what you typed — phone numbers through the portal’s phone normalizer, everything else trimmed and lowercased. Two people entering the same number differently still match.',
+            '**The same value on two cases raises a deconfliction alert** naming both. The alert is the point of the registry.',
+            '**A case you cannot open shows as a restricted stub** — you learn that the value is live somewhere else without learning whose case it is. Coordinate through its bureau lead rather than looking for another way in.',
+            '**Cross-ref** on a row shows where else the value appears, across both indicators and report mentions, and respects the same access rules.',
+            'While you are logging a value, the portal checks whether it is **already recorded elsewhere** and says so before you save. It is a notice, not a block: logging it again is often exactly right, and it is what raises the alert.',
+            'An alias belongs on the record it describes, and as an indicator if it should deconflict. An alias typed only into a narrative cannot match anything.',
+          ],
+        },
+        {
+          kind: 'note',
+          text: 'Log the value once per case rather than copying it between records. The registry links by matching, so a second copy adds noise rather than reach.',
         },
       ],
     },

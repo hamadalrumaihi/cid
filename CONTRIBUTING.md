@@ -28,6 +28,7 @@ Preview deployments build with the Vercel **Preview** env scope
    write failure.
 3. **Gate** before pushing:
    `npm run typecheck && npm run lint && npm test && npm run build`
+   (Guide changes: `npm run check:guides`.)
    (Two further suites are **opt-in** because they talk to the live project
    with dedicated test accounts: `npm run test:rls` — the RLS/RPC
    security-wall tests — and `npm run test:e2e` — the Playwright smoke test.
@@ -61,8 +62,13 @@ versioned entry when they ship together.
 
 - Contract changes → `docs/handbook/` + `npm run gen:handbook`
   (CI fails on drift).
-- Member-facing changes → `docs/USER-GUIDE.md` + regenerate
-  `src/components/guide/guideContent.ts`.
+- Member-facing changes → the relevant guide module under
+  `src/components/guides/docs/` (the Guide Library at `/guides`), then
+  `npm run check:guides`. A guide's prose has exactly one copy — the module —
+  and a section's **anchor is permanent**: rename a heading freely, never an
+  anchor, because links into a guide have to keep working. Adding a guide
+  also needs its library row seeded in a migration; `check:guides` fails if
+  the registry and the seeds disagree.
 - Owner-facing operational changes → `src/components/owner/ownerData.ts`.
 - New or changed permission actions → a `permission_catalog` seed row in the
   migration + `npm run gen:permissions` (CI fails on drift).

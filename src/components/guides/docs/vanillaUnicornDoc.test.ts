@@ -85,8 +85,18 @@ describe('access requirement', () => {
     expect(s).toMatch(/not a personal transaction/i)
   })
 
-  it('does not claim the payment permanently unlocks every branch', () => {
-    expect(text('access-requirement')).toMatch(/has \*\*not\*\* been confirmed|not.{0,40}confirmed/i)
+  it('records the payment as one-time and permanent — confirmed after first writing', () => {
+    const s = text('access-requirement')
+    expect(s).toMatch(/one-time and permanent/i)
+    expect(s).toMatch(/does not (expire|lapse)/i)
+  })
+
+  it('still does not claim the payment unlocks every branch', () => {
+    // Permanent access and open access are different claims. The three gated
+    // branches are earned, and the record has to keep saying so.
+    const s = text('access-requirement')
+    expect(s).toMatch(/not the same as open access/i)
+    expect(s).toMatch(/gate perk and reputation requirement/i)
     expect(lower).not.toMatch(/unlocks (all|every) branch(es)?\b(?!.*not)/)
   })
 })
