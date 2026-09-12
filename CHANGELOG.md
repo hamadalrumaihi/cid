@@ -8,6 +8,46 @@ the merged PRs that compose it.
 
 ## [Unreleased]
 
+### Vanilla Unicorn Money Laundering System — system intelligence
+
+A new record in the Guide Library's **Systems** category
+(`20261109120000_guide_vanilla_unicorn`), documenting how the Vanilla Unicorn
+back office laundering system is structured. Submitted by Tom Wood, X-2
+Special Agent.
+
+- **A system record, not a case.** No case number, no incident, no
+  transaction, no suspect, no charge, no legal request, and no amount
+  attributed to anyone. Tom Wood is recorded as the *submitter*; no case
+  investigator is assigned, because there is no case.
+- **Eleven sections**: System Overview, Access Requirement, Standing and
+  Progression, Moving Money, Operation Branches, Unlock Requirements, Perk
+  Tree, System Actors / NPC References, Related Systems, Optional Supporting
+  Media, Audit History.
+- **Names the system displays are not people.** A manager, dancers and floor
+  actors are recorded as **NPC references** — content inside the record, with
+  the six specified fields and *Confirmed NPC: Unknown* — and are deliberately
+  not entity rows. That is what keeps them out of the People Registry, person
+  and global search, suspect lists, warrants, charges, subpoenas, organization
+  rosters and relationship graphs: not a filter that could be forgotten, but a
+  storage choice that cannot leak. Promoting one stays a separate, authorized,
+  manual act on separate evidence.
+- **Observed values carry their conditions.** The 52% / 48% split, the $35,000
+  parcel cap, the ~1h30m turnaround and the $210,000 daily capacity are
+  recorded as what the interface displayed at the starting standing, not as
+  constants — and as system capability, never as something processed.
+- **The access requirement is the system's, not a person's**: 75 crypto,
+  sourced through UNDERGRND, with the record explicitly declining to claim it
+  unlocks every branch, because that was not confirmed.
+- **A displayed-name collision is flagged, not resolved.** “The Floor” appears
+  as an operation branch gated by House Rules at reputation 2 and as an
+  interface section gated by Floor Manager at reputation 6. Both readings are
+  recorded as displayed, with the gate perk and reputation named as the
+  reliable identifiers.
+- Pinned by `src/components/guides/docs/vanillaUnicornDoc.test.ts`, which
+  fails if a later edit introduces a case number, asserts a suspect or charge
+  rather than ruling one out, invents a perk price or percentage, or repeats
+  an NPC name outside its own section.
+
 ### The guide system
 
 The guides were corrected, moved into one library, and joined by the five
