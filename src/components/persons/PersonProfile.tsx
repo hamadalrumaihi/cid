@@ -49,7 +49,6 @@ import type { TimelineEntry } from '@/components/ui/WorkflowTimeline'
 import { uiConfirm } from '@/components/ui/dialog'
 import { useToolNav } from '@/components/tools/useToolNav'
 import { humanize } from '@/components/gangs/gangIntel'
-import { GangPhotoLightbox } from '@/components/gangs/gangModals'
 import {
   PERSON_REVIEW_DAYS, classificationLabel, isPersonStale, legalStatusOf, personQualityWarnings,
   placeRoleLabel, relationshipLabel, vehicleRoleLabel,
@@ -66,6 +65,7 @@ import {
   PersonIntelligenceSummary, SummaryEditorModal, type QualityWarningView,
 } from './ProfileSections'
 import { RecordProvenance } from '@/components/shared/RecordProvenance'
+import { RegistryMediaLightbox } from '@/components/shared/RegistryMedia'
 import { AttachPersonModal, CasesSection, LinkAssociateModal, RelationshipsSection } from './ProfileRelations'
 import {
   AddPersonMediaModal, LinkPersonPlaceModal, LinkVehicleModal, PersonMediaSection, PersonPlacesSection, PersonVehiclesSection,
@@ -586,7 +586,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
           }}
         />
       )}
-      {lightbox && <GangPhotoLightbox media={lightbox} onClose={() => setLightbox(null)} />}
+      {lightbox && <RegistryMediaLightbox media={lightbox} onClose={() => setLightbox(null)} />}
 
       {exportOpen && p && (
         <Modal open onClose={() => setExportOpen(false)}>

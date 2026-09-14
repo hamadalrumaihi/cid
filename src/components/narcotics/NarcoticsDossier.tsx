@@ -20,6 +20,7 @@ import { statusTint } from '@/lib/tint'
 import { toast } from '@/lib/toast'
 import { useNow } from '@/lib/useNow'
 import { RecordProvenance } from '@/components/shared/RecordProvenance'
+import { RegistryMediaLightbox } from '@/components/shared/RegistryMedia'
 import { CheckIcon, NarcoticIcon, PhotoIcon, SwapIcon } from '@/components/shell/icons'
 import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Badge } from '@/components/ui/Badge'
@@ -30,7 +31,6 @@ import { ConfidenceBadge, ProvenanceBadge, StaleIntelBadge } from '@/components/
 import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { Notice, ErrorNotice } from '@/components/ui/Notice'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
-import { GangPhotoLightbox } from '@/components/gangs/gangModals'
 import { useToolNav } from '@/components/tools/useToolNav'
 import {
   NARCOTIC_REVIEW_DAYS, buildNarcoticActivity, categoryLabel, isNarcoticStale, sectionFromParam,
@@ -372,7 +372,7 @@ export function NarcoticsDossier({ drugId, onClose }: { drugId: string; onClose:
       {resolveOpen && n && (
         <NarcoticResolveModal narcotic={n} onClose={() => setResolveOpen(false)} onResolved={() => { setResolveOpen(false); void loadCore() }} />
       )}
-      {lightbox && <GangPhotoLightbox media={lightbox} onClose={() => setLightbox(null)} />}
+      {lightbox && <RegistryMediaLightbox media={lightbox} onClose={() => setLightbox(null)} />}
     </section>
   )
 }

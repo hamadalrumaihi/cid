@@ -13,13 +13,12 @@ import { list, remove } from '@/lib/db'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { copyText } from '@/lib/format'
-import { useMediaSrc } from '@/lib/evidence'
 import { officerName } from '@/lib/profiles'
 import { REGISTRY_MEDIA_KIND, registryMediaCaption } from '@/lib/registryMedia'
 import { parseIntelSummary } from '@/lib/jsonShapes'
 import { statusTint, threatTint } from '@/lib/tint'
 import {
-  ArchiveIcon, DocumentIcon, GangIcon, MapIcon, NarcoticIcon, NetworkIcon, PlaceIcon, ReceiptIcon, TrashIcon, UndoIcon, VehicleIcon, VideoIcon,
+  ArchiveIcon, DocumentIcon, GangIcon, MapIcon, NarcoticIcon, NetworkIcon, PlaceIcon, ReceiptIcon, TrashIcon, UndoIcon, VehicleIcon,
 } from '@/components/shell/icons'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { GuideHelpLink } from '@/components/guides/GuideHelpLink'
@@ -40,6 +39,7 @@ import { AssociationsSection } from '@/components/shared/AssociationsSection'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
 import { RecordHistory } from '@/components/shared/RecordHistory'
 import { RecordProvenance } from '@/components/shared/RecordProvenance'
+import { RegistryMediaLightbox, RegistryMediaThumb } from '@/components/shared/RegistryMedia'
 import { LinkEditPopover } from '@/components/shared/LinkEditPopover'
 import { PinButton } from '@/components/shared/PinButton'
 import { RecordPeekButton } from '@/components/shared/RecordPeekButton'
@@ -49,7 +49,7 @@ import { useNow } from '@/lib/useNow'
 import { pushRecent } from '@/lib/recents'
 import { RosterSection } from './gangRoster'
 import { GangAccountsPanel, GangNarcoticsPanel } from './gangLinkPanels'
-import { MemberModal, TurfModal, LinkPlaceModal, AddGangPhotoModal, GangPhotoLightbox, AttachGangModal } from './gangModals'
+import { MemberModal, TurfModal, LinkPlaceModal, AddGangPhotoModal, AttachGangModal } from './gangModals'
 import {
   DEFAULT_REVIEW_DAYS, SUMMARY_SECTIONS, TURF_STATUSES, humanize, isGangStale, parseColors, rankTier, turfLastKnown,
 } from './gangIntel'
@@ -377,15 +377,6 @@ function CasesSection({ links, cases, indirect, canEdit, onAttach, onUnlink }: {
 /** One thumbnail. A registry attachment lives in the PRIVATE bucket, so its
  *  `storage_path` is a path and not a URL — useMediaSrc signs it (300 s,
  *  cached) exactly as the lightbox does; a legacy external row is direct. */
-function MediaThumb({ media }: { media: MediaRow }) {
-  const src = safeUrl(useMediaSrc(media) ?? '')
-  if (src && media.type !== 'document') {
-    // eslint-disable-next-line @next/next/no-img-element -- signed storage / external media URL
-    return <img src={src} alt={media.title} loading="lazy" className="h-28 w-full object-cover transition group-hover:opacity-90" />
-  }
-  return <div className="grid h-28 w-full place-items-center text-slate-400" aria-hidden>{media.type === 'video' ? <VideoIcon size={28} /> : <DocumentIcon size={28} />}</div>
-}
-
 function MediaSection({ media, canEdit, onAdd, onOpen }: { media: MediaRow[]; canEdit: boolean; onAdd: () => void; onOpen: (m: MediaRow) => void }) {
   return (
     <div className="space-y-3">
@@ -402,7 +393,7 @@ function MediaSection({ media, canEdit, onAdd, onOpen }: { media: MediaRow[]; ca
             const intel = m.kind === REGISTRY_MEDIA_KIND
             return (
               <button key={m.id} onClick={() => onOpen(m)} className="group relative overflow-hidden rounded-lg border border-white/5 bg-ink-850" title={caption ? `${m.title} — ${caption}` : m.title}>
-                <MediaThumb media={m} />
+                <RegistryMediaThumb media={m} />
                 <span className="block truncate px-1.5 py-1 text-left text-[11px] text-slate-400">{m.title}</span>
                 {/* Registry intelligence is labelled as such: it carries no EV
                     number, no custody chain and no integrity badge. */}
@@ -758,7 +749,7 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
       {linkPlaceOpen && <LinkPlaceModal gang={gang} existing={gangPlaces} onClose={() => setLinkPlaceOpen(false)} onSaved={() => { setLinkPlaceOpen(false); void load() }} />}
       {photoOpen && <AddGangPhotoModal gang={gang} onClose={() => setPhotoOpen(false)} onSaved={() => { setPhotoOpen(false); void load() }} />}
       {attachOpen && <AttachGangModal gang={gang} onClose={() => setAttachOpen(false)} onSaved={() => { setAttachOpen(false); void load() }} />}
-      {lightbox && <GangPhotoLightbox media={lightbox} onClose={() => setLightbox(null)} />}
+      {lightbox && <RegistryMediaLightbox media={lightbox} onClose={() => setLightbox(null)} />}
       {children}
     </section>
   )
