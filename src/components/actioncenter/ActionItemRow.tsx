@@ -17,10 +17,16 @@ import { priorityTint } from '@/lib/tint'
 import { timeAgo } from '@/lib/format'
 import type { ActionItem } from '@/lib/actionItems'
 import { isDismissable, type ActionStateOp } from '@/lib/actionState'
+import { staleLabel } from '@/lib/actionStale'
 import type { InlineAction } from './inlineActions'
 import { SnoozeMenu } from './SnoozeMenu'
 
-const STALE_MS = 14 * 24 * 60 * 60 * 1000
+/** Priority in words, for the readers the accent colour does not reach.
+ *  `critical` and `high` also carry a visible badge; `normal` and `low` carry
+ *  nothing but the border, which is exactly the case this covers. */
+export const PRIORITY_TEXT: Record<string, string> = {
+  critical: 'Critical priority', high: 'High priority', normal: 'Normal priority', low: 'Low priority',
+}
 
 /** Left-border severity accent per priority (priorityTint temperatures). */
 export const ACCENT: Record<string, string> = {
@@ -77,7 +83,9 @@ export function RowCheckbox({ item, selected, onSelect }: Pick<RowProps, 'item' 
 
 export function RowBadges({ item, now, lane }: { item: ActionItem; now: number; lane?: RowLane }) {
   const waiting = item.status === 'waiting'
-  const stale = !item.dueAt && now - new Date(item.createdAt).getTime() > STALE_MS
+  // Shared predicate (lib/actionStale) so the badge, the Stale chip and the
+  // Stale count can never disagree — and so the badge can say what clears it.
+  const stale = staleLabel(item, now)
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
       {item.escalatedAt && (
@@ -91,7 +99,7 @@ export function RowBadges({ item, now, lane }: { item: ActionItem; now: number; 
       {(item.priority === 'critical' || item.priority === 'high') && (
         <Badge tint={priorityTint(item.priority)}>{item.priority === 'critical' ? 'Critical' : 'High'}</Badge>
       )}
-      {stale && <Badge>Stale</Badge>}
+      {stale && <Badge title={stale.advice}>Stale · {stale.days}d</Badge>}
       {lane === 'snoozed' && item.state?.snoozedUntil && (
         <span className="text-[11px] text-slate-400">snoozed until {new Date(item.state.snoozedUntil).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</span>
       )}
@@ -170,6 +178,10 @@ export function ActionItemRow(props: RowProps) {
           selected ? 'border-amber-400/30 bg-amber-500/[0.06]' : 'border-white/10'
         } ${ACCENT[item.priority] ?? ACCENT.normal} ${quiet ? 'opacity-80' : ''}`}
       >
+        {/* The accent border is the only priority signal a normal or low row
+            carries. Colour alone is not a signal for every reader, so the
+            same fact is stated in text that only assistive tech renders. */}
+        <span className="sr-only">{PRIORITY_TEXT[item.priority] ?? PRIORITY_TEXT.normal}.</span>
         <RowCheckbox item={item} selected={selected} onSelect={onSelect} />
         <div className="min-w-0 flex-1 basis-60">
           <Link

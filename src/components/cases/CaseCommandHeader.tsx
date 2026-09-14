@@ -9,10 +9,12 @@
  *      Updated · sign-off chip · follow-up chip · overdue badge · joint/op
  *      chips · one-line summary.
  *  One place per signal: OVERDUE tasks alarm here; open BLOCKERS live in the
- *  MetricStrip below (both clickable). Legal-hold/archived state shows in the
- *  CaseDetail banners, supporting-officer count in the Overview stats — the
- *  header no longer repeats either. Behavior is unchanged: every former
- *  header action is still reachable — the long tail stays in the ActionMenu. */
+ *  MetricStrip below (both clickable). Legal-hold and archived state show as
+ *  a CHIP here — the fact travels with the case, because "this one is sealed"
+ *  should not need scrolling — while the banners below keep the detail and
+ *  the controls; the supporting-officer roster stays on the Brief and the
+ *  header carries only its count. Behavior is unchanged: every former header
+ *  action is still reachable — the long tail stays in the ActionMenu. */
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/Badge'
@@ -242,6 +244,7 @@ export function CaseCommandHeader({
 
   const followUpDue = !!c.follow_up_at && c.follow_up_at.slice(0, 10) <= todayISO()
   const overdueTasks = assessment?.counts.overdueTasks ?? 0
+  const supportCount = assessment?.counts.supportOfficers ?? 0
   // Legal routing bureau: recorded responsible bureau first, else a permanent
   // CID bureau routes itself; JTF/unset shows the needs-routing amber.
   const responsibleBureau = isRoutingBureau(c.originating_bureau)
@@ -334,7 +337,34 @@ export function CaseCommandHeader({
           )}
         </Meta>
         <Meta label="Lead">{officerName(c.lead_detective_id) || 'Unassigned'}</Meta>
+        {/* Who else is on it. The roster itself stays on the Brief; what the
+            header owes a reader arriving cold is that the case is not a
+            one-person job (or that it is). */}
+        {supportCount > 0 && (
+          <Meta label="Supporting">
+            <button
+              type="button"
+              onClick={() => onGoTab('overview')}
+              className="rounded underline-offset-2 hover:underline"
+              title="Supporting officers — open the Brief"
+            >
+              {supportCount}
+            </button>
+          </Meta>
+        )}
         <Meta label="Updated"><span title={c.updated_at}>{timeAgo(c.updated_at)}</span></Meta>
+        {/* Restricted state travels with the case. The banners below carry the
+            detail and the controls; the header carries the fact, because
+            "this case is sealed" is not something a reader should have to
+            scroll to discover. */}
+        {holdActive && (
+          <Badge tone="danger" title="A legal hold is active — the case and its records cannot be deleted or archived while it stands.">
+            Legal hold
+          </Badge>
+        )}
+        {c.archived_at && (
+          <Badge tone="warn" title="Archived — read-only unless it is restored.">Archived</Badge>
+        )}
         {!canEdit && <span className="rounded-lg border border-white/10 px-2 py-0.5 text-[11px] text-slate-300">Read-only</span>}
         {/* Sign-off chip — registry label/tint (lib/status); the tooltip is
             the personalized whose-court-is-it hint when one applies (the

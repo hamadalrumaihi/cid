@@ -92,9 +92,9 @@ function MemberLine({ m, name, dup, openPerson, canEdit, onEdit, onReview, revie
         <div className="flex flex-shrink-0 items-center gap-1.5">
           {!m.reviewed_at && (
             <button onClick={onReview} disabled={reviewing} title="Stamp this membership reviewed"
-              className="-my-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-2 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-50">Review</button>
+              className="min-h-[44px] sm:min-h-0 -my-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-2 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-50">Review</button>
           )}
-          <button onClick={onEdit} className="-my-1 rounded border border-white/10 bg-white/5 px-2 py-2 text-[11px] text-slate-200 hover:bg-white/10">Edit</button>
+          <button onClick={onEdit} className="min-h-[44px] sm:min-h-0 -my-1 rounded border border-white/10 bg-white/5 px-2 py-2 text-[11px] text-slate-200 hover:bg-white/10">Edit</button>
         </div>
       )}
     </div>
@@ -315,7 +315,7 @@ export function RosterSection({ members, personNames, canEdit, canDelete, onAddM
           <option value="updated">Sort: recently updated</option>
           <option value="felony">Sort: felony count</option>
         </select>
-        {activeFilters && <button onClick={resetFilters} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-white/10">Clear</button>}
+        {activeFilters && <button onClick={resetFilters} className="min-h-[44px] sm:min-h-0 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-white/10">Clear</button>}
       </div>
 
       {!members.length ? (

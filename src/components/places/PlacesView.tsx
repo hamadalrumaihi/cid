@@ -16,12 +16,11 @@ import { insert, list, update, withRetry } from '@/lib/db'
 import { deleteRecord } from '@/lib/deleteRecord'
 import { searchCaseHits, searchGangHits, searchNarcoticHits, searchPlaceHits } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
-import { useMediaSrc } from '@/lib/evidence'
 import { useTableVersion } from '@/lib/realtime'
 import { REGISTRY_MEDIA_ACCEPT, attachRegistryMedia } from '@/lib/registryMedia'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
-import { PhotoIcon, RadioIcon } from '@/components/shell/icons'
+import { PhotoIcon } from '@/components/shell/icons'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -32,6 +31,8 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { EntityLink } from '@/components/ui/EntityLink'
 import { EntityLegalLine, fetchEntityLegalRefs, type EntityLegalRef } from '@/components/justice/EntityLegalSection'
+import { RecordProvenance } from '@/components/shared/RecordProvenance'
+import { RegistryMediaLightbox, RegistryMediaThumb } from '@/components/shared/RegistryMedia'
 import { AssociationsSection } from '@/components/shared/AssociationsSection'
 import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
@@ -354,7 +355,7 @@ export function PlacesView() {
       )}
       {attach && <AttachPlaceModal place={attach} onClose={() => setAttach(null)} />}
       {addPhoto && <AddPlacePhotoModal place={addPhoto} onClose={() => setAddPhoto(null)} onSaved={() => { setAddPhoto(null); void refresh() }} />}
-      {lightbox && <PhotoLightbox photo={lightbox} onClose={() => setLightbox(null)} />}
+      {lightbox && <RegistryMediaLightbox media={lightbox} onClose={() => setLightbox(null)} />}
     </section>
   )
 }
@@ -437,28 +438,6 @@ function AddPlacePhotoModal({ place, onClose, onSaved }: { place: PlaceRow; onCl
   )
 }
 
-function PhotoLightbox({ photo, onClose }: { photo: PlacePhoto; onClose: () => void }) {
-  // Storage-hosted rows sign on demand (300 s, cached); external rows are direct.
-  const safe = safeUrl(useMediaSrc(photo) ?? '')
-  return (
-    <Modal open onClose={onClose} wide>
-      <div className="p-6">
-        <ModalHeader title={photo.title} onClose={onClose} />
-        {safe ? (
-          // eslint-disable-next-line @next/next/no-img-element -- external evidence URL
-          <img src={safe} alt={photo.title} className="max-h-[70vh] w-full rounded-lg object-contain" />
-        ) : (
-          <EmptyState icon={<RadioIcon size={24} />} title="No preview available" />
-        )}
-        {safe && (
-          <div className="mt-3 text-right">
-            <a href={safe} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-300 underline">Open ↗</a>
-          </div>
-        )}
-      </div>
-    </Modal>
-  )
-}
 
 function PlaceCard({ place, gang, caseNumber, drug, photos, legal, observationCount, onOpenPhoto, onAddPhoto, canEdit, canDelete, selected, onSelect, onEdit, onDelete, onAttach }: {
   place: PlaceRow
@@ -487,10 +466,10 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, observationCo
           <p className="mt-0.5 text-xs text-slate-400">{locLabel(place.type)} · {place.area || '-'}</p>
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
-          {canEdit && <button onClick={onAddPhoto} aria-label="Attach a photograph of this location" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-emerald-200 transition hover:bg-white/10" title="Attach a photograph of this location"><PhotoIcon size={16} /></button>}
-          {canEdit && <button onClick={onAttach} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-blue-200 transition hover:bg-white/10" title="Attach to case">Attach</button>}
-          {canEdit && <button onClick={onEdit} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
-          {canDelete && <button aria-label="Remove location" onClick={onDelete} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
+          {canEdit && <button onClick={onAddPhoto} aria-label="Attach a photograph of this location" className="min-h-[44px] sm:min-h-0 -my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-emerald-200 transition hover:bg-white/10" title="Attach a photograph of this location"><PhotoIcon size={16} /></button>}
+          {canEdit && <button onClick={onAttach} className="min-h-[44px] sm:min-h-0 -my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-blue-200 transition hover:bg-white/10" title="Attach to case">Attach</button>}
+          {canEdit && <button onClick={onEdit} className="min-h-[44px] sm:min-h-0 -my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
+          {canDelete && <button aria-label="Remove location" onClick={onDelete} className="min-h-[44px] sm:min-h-0 -my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
           {canDelete && (
             <label className="flex items-center pl-0.5" title="Select for bulk delete">
               <input type="checkbox" checked={selected} onChange={(e) => onSelect(e.target.checked)} aria-label={`Select ${place.name} for bulk delete`} className="h-4 w-4 accent-rose-500" />
@@ -543,31 +522,27 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, observationCo
           </div>
         </div>
       )}
+      {/* Who recorded this location, and when it last changed — the same
+          question, in the same words, as every other registry record. */}
+      <RecordProvenance record={place} className="mt-3 border-t border-white/5 pt-2.5" />
     </Card>
   )
 }
 
-/** One thumbnail. A registry attachment lives in the PRIVATE bucket, so its
- *  `storage_path` is a path and not a URL — useMediaSrc signs it (300 s,
- *  cached); a legacy external row is direct. */
+/** One thumbnail in the place card's photo strip. The tile itself is shared
+ *  (shared/RegistryMedia) — it used to return null while the signed URL was
+ *  still resolving, so a photo that was merely slow vanished from a strip
+ *  whose own count still included it. */
 function PlacePhotoThumb({ photo, onOpen }: { photo: PlacePhoto; onOpen: (p: PlacePhoto) => void }) {
-  const safe = safeUrl(useMediaSrc(photo) ?? '')
-  if (!safe) return null
   return (
     <button
       type="button"
       onClick={() => onOpen(photo)}
       aria-label={`Preview ${photo.title}`}
       title={photo.title}
-      className="cursor-zoom-in rounded-lg transition hover:brightness-110"
+      className="group cursor-zoom-in overflow-hidden rounded-lg transition hover:brightness-110"
     >
-      {/* eslint-disable-next-line @next/next/no-img-element -- signed storage / external URL */}
-      <img
-        src={safe}
-        alt=""
-        loading="lazy"
-        className="h-20 w-28 rounded-lg border border-white/10 object-cover"
-      />
+      <RegistryMediaThumb media={photo} shape="strip" />
     </button>
   )
 }

@@ -22,11 +22,13 @@ import { useAction } from '@/lib/useAction'
 import { bureauLabel, roleLabel } from '@/lib/roles'
 import { useTableVersion } from '@/lib/realtime'
 import type { CaseAssessment, ClosureChecklistItem, NextAction } from '@/lib/caseWorkflow'
+import { caseAttention } from '@/lib/caseAttention'
 import { Store } from '@/lib/store'
 import { humanizeError, toast } from '@/lib/toast'
 import type { WorkflowRows } from '../CaseDetail'
 import { JointCaseModal, isActiveAssignment } from '../JointCaseModal'
 import { CaseBlockersPanel } from './CaseBlockersPanel'
+import { NeedsAttentionPanel } from './NeedsAttentionPanel'
 import { Stat, type AssignmentRow, type CaseRow } from './shared'
 
 export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowChanged, showEnableRico, onEnableRico }: {
@@ -62,6 +64,23 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
   // The marker is RE-STAMPED by CaseDetail when the case itself unmounts (or
   // the id changes) — it used to happen here on unmount, so switching to any
   // other tab consumed the recap mid-visit.
+
+  // The case's own waiting list. Derived from the same shell-fetched,
+  // RLS-scoped rows the tabs render — no extra query, and nothing from any
+  // other case can reach it.
+  const attention = useMemo(() => caseAttention({
+    c,
+    meId: profile?.id ?? null,
+    tasks: (wf?.tasks ?? []).map((t) => ({ done: t.done, due: t.due, assignee_id: t.assignee })),
+    reports: (wf?.reports ?? []).map((r) => ({
+      review_status: r.review_status, finalized: r.finalized, author_id: r.author_id, signature: r.signature,
+    })),
+    legal: (wf?.legal ?? []).map((l) => ({
+      review_status: l.review_status, expires_at: l.expires_at, created_by: l.created_by,
+    })),
+    mediaCount: wf ? wf.media.filter((m) => !m.archived_at).length : undefined,
+    assigneeName: c.signoff_assignee_id ? officerName(c.signoff_assignee_id) : null,
+  }), [c, profile?.id, wf])
 
   const recap = useMemo(() => {
     if (!seenAt || !wf) return null
@@ -116,6 +135,10 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
         {/* Left — operational state: what to do next, what stands in the way. */}
         <div className="min-w-0 space-y-4">
           {assessment && <GuidedNextAction caseId={c.id} stageLabel={assessment.stageLabel} actions={assessment.nextActions} />}
+          {/* What this case is waiting on, the viewer's own moves first —
+              built from THIS case's rows only (lib/caseAttention), never a
+              second copy of the Action Center. */}
+          <NeedsAttentionPanel caseId={c.id} items={attention} />
           <CaseBlockersPanel caseId={c.id} blockers={wf?.blockers ?? []} tasks={wf?.tasks ?? []} reports={wf?.reports ?? []} canEdit={canEdit} now={now} onChanged={onWorkflowChanged} />
           {assessment && <ClosureReadinessPanel caseId={c.id} checklist={assessment.closureChecklist} ready={assessment.closureReady} closed={assessment.stage === 'closed'} />}
         </div>

@@ -13,13 +13,12 @@ import { list, remove } from '@/lib/db'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { copyText } from '@/lib/format'
-import { useMediaSrc } from '@/lib/evidence'
 import { officerName } from '@/lib/profiles'
 import { REGISTRY_MEDIA_KIND, registryMediaCaption } from '@/lib/registryMedia'
 import { parseIntelSummary } from '@/lib/jsonShapes'
 import { statusTint, threatTint } from '@/lib/tint'
 import {
-  ArchiveIcon, DocumentIcon, GangIcon, MapIcon, NarcoticIcon, NetworkIcon, PlaceIcon, ReceiptIcon, TrashIcon, UndoIcon, VehicleIcon, VideoIcon,
+  ArchiveIcon, DocumentIcon, GangIcon, MapIcon, NarcoticIcon, NetworkIcon, PlaceIcon, ReceiptIcon, TrashIcon, UndoIcon, VehicleIcon,
 } from '@/components/shell/icons'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { GuideHelpLink } from '@/components/guides/GuideHelpLink'
@@ -39,6 +38,8 @@ import { uiConfirm } from '@/components/ui/dialog'
 import { AssociationsSection } from '@/components/shared/AssociationsSection'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
 import { RecordHistory } from '@/components/shared/RecordHistory'
+import { RecordProvenance } from '@/components/shared/RecordProvenance'
+import { RegistryMediaLightbox, RegistryMediaThumb } from '@/components/shared/RegistryMedia'
 import { LinkEditPopover } from '@/components/shared/LinkEditPopover'
 import { PinButton } from '@/components/shared/PinButton'
 import { RecordPeekButton } from '@/components/shared/RecordPeekButton'
@@ -48,7 +49,7 @@ import { useNow } from '@/lib/useNow'
 import { pushRecent } from '@/lib/recents'
 import { RosterSection } from './gangRoster'
 import { GangAccountsPanel, GangNarcoticsPanel } from './gangLinkPanels'
-import { MemberModal, TurfModal, LinkPlaceModal, AddGangPhotoModal, GangPhotoLightbox, AttachGangModal } from './gangModals'
+import { MemberModal, TurfModal, LinkPlaceModal, AddGangPhotoModal, AttachGangModal } from './gangModals'
 import {
   DEFAULT_REVIEW_DAYS, SUMMARY_SECTIONS, TURF_STATUSES, humanize, isGangStale, parseColors, rankTier, turfLastKnown,
 } from './gangIntel'
@@ -109,8 +110,8 @@ function IntelligenceSummary({ gang, canEdit, onEdit }: { gang: GangRow; canEdit
       <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-[13px] font-semibold text-white">Intelligence summary</h3>
         <div className="flex items-center gap-1.5">
-          {(hasStructured || notes) && <button onClick={copyAll} title="Copy summary" className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-300 hover:bg-white/10">Copy</button>}
-          {canEdit && <button onClick={onEdit} className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-blue-200 hover:bg-white/10">Edit</button>}
+          {(hasStructured || notes) && <button onClick={copyAll} title="Copy summary" className="min-h-[44px] sm:min-h-0 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-300 hover:bg-white/10">Copy</button>}
+          {canEdit && <button onClick={onEdit} className="min-h-[44px] sm:min-h-0 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-blue-200 hover:bg-white/10">Edit</button>}
         </div>
       </div>
 
@@ -186,8 +187,8 @@ function TerritorySection({ gangId, turf, canEdit, canDelete, onAdd, onEdit, onD
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-white">Territory</h3><Badge>{turf.length}</Badge></div>
         <div className="flex items-center gap-2">
-          <button onClick={() => router.push(`/heatmap?gang=${encodeURIComponent(gangId)}`)} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-blue-200 hover:bg-white/10">View on map</button>
-          {canEdit && <button onClick={onAdd} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">+ Turf</button>}
+          <button onClick={() => router.push(`/heatmap?gang=${encodeURIComponent(gangId)}`)} className="min-h-[44px] sm:min-h-0 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-blue-200 hover:bg-white/10">View on map</button>
+          {canEdit && <button onClick={onAdd} className="min-h-[44px] sm:min-h-0 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">+ Turf</button>}
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -252,7 +253,7 @@ function PlacesSection({ linked, media, canEdit, canDelete, onLink, onEdit, onUn
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-white">Controlled properties</h3><Badge>{linked.length}</Badge></div>
-        {canEdit && <button onClick={onLink} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">Link place</button>}
+        {canEdit && <button onClick={onLink} className="min-h-[44px] sm:min-h-0 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">Link place</button>}
       </div>
       {!linked.length ? (
         <EmptyState title="No linked properties" hint={canEdit ? 'Use “Link place” to attach an existing place with a role.' : 'Set a controlling gang on a Place, or link one here.'} />
@@ -332,7 +333,7 @@ function CasesSection({ links, cases, indirect, canEdit, onAttach, onUnlink }: {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-white">Linked cases</h3><Badge>{links.length}</Badge></div>
-        {canEdit && <button onClick={onAttach} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-blue-200 hover:bg-white/10">Attach to case</button>}
+        {canEdit && <button onClick={onAttach} className="min-h-[44px] sm:min-h-0 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-blue-200 hover:bg-white/10">Attach to case</button>}
       </div>
       {!links.length ? (
         <EmptyState title="No durable case links" hint={canEdit ? 'Attach this gang to a case — it creates a structured intel link, not just a chat note.' : undefined} />
@@ -376,21 +377,12 @@ function CasesSection({ links, cases, indirect, canEdit, onAttach, onUnlink }: {
 /** One thumbnail. A registry attachment lives in the PRIVATE bucket, so its
  *  `storage_path` is a path and not a URL — useMediaSrc signs it (300 s,
  *  cached) exactly as the lightbox does; a legacy external row is direct. */
-function MediaThumb({ media }: { media: MediaRow }) {
-  const src = safeUrl(useMediaSrc(media) ?? '')
-  if (src && media.type !== 'document') {
-    // eslint-disable-next-line @next/next/no-img-element -- signed storage / external media URL
-    return <img src={src} alt={media.title} loading="lazy" className="h-28 w-full object-cover transition group-hover:opacity-90" />
-  }
-  return <div className="grid h-28 w-full place-items-center text-slate-400" aria-hidden>{media.type === 'video' ? <VideoIcon size={28} /> : <DocumentIcon size={28} />}</div>
-}
-
 function MediaSection({ media, canEdit, onAdd, onOpen }: { media: MediaRow[]; canEdit: boolean; onAdd: () => void; onOpen: (m: MediaRow) => void }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-white">Media</h3><Badge>{media.length}</Badge></div>
-        {canEdit && <button onClick={onAdd} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">Attach photograph</button>}
+        {canEdit && <button onClick={onAdd} className="min-h-[44px] sm:min-h-0 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">Attach photograph</button>}
       </div>
       {!media.length ? (
         <EmptyState title="No media" hint={canEdit ? 'Attach a photograph — it is stored privately against this record as intelligence, not as case evidence.' : undefined} />
@@ -401,7 +393,7 @@ function MediaSection({ media, canEdit, onAdd, onOpen }: { media: MediaRow[]; ca
             const intel = m.kind === REGISTRY_MEDIA_KIND
             return (
               <button key={m.id} onClick={() => onOpen(m)} className="group relative overflow-hidden rounded-lg border border-white/5 bg-ink-850" title={caption ? `${m.title} — ${caption}` : m.title}>
-                <MediaThumb media={m} />
+                <RegistryMediaThumb media={m} />
                 <span className="block truncate px-1.5 py-1 text-left text-[11px] text-slate-400">{m.title}</span>
                 {/* Registry intelligence is labelled as such: it carries no EV
                     number, no custody chain and no integrity badge. */}
@@ -624,15 +616,17 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
               {gang.classification && <Badge tone="neutral">{humanize(gang.classification)}</Badge>}
               {gang.confidence && <ConfidenceBadge confidence={gang.confidence} />}
               <StaleIntelBadge reviewedAt={gang.reviewed_at} now={now} thresholdDays={DEFAULT_REVIEW_DAYS} />
-              <span className="text-[11px] text-slate-500">Updated {fmtDate(gang.updated_at)}{officerName(gang.lead_detective_id) ? ` · Lead ${officerName(gang.lead_detective_id)}` : ''}</span>
+              <RecordProvenance record={gang}>
+                {officerName(gang.lead_detective_id) ? `Lead ${officerName(gang.lead_detective_id)}` : null}
+              </RecordProvenance>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <PinButton type="gang" id={gang.id} label={gang.name} />
             {canEdit && <Button variant="primary" onClick={onEdit}>Edit gang</Button>}
             {canEdit && <button onClick={() => setMemberEditor('new')} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Add member</button>}
-            {canEdit && <button onClick={onEdit} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-blue-200 hover:bg-white/10">Add intelligence</button>}
-            {canEdit && <button onClick={() => setAttachOpen(true)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-blue-200 hover:bg-white/10">Attach to case</button>}
+            {canEdit && <button onClick={onEdit} className="min-h-[44px] sm:min-h-0 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-blue-200 hover:bg-white/10">Add intelligence</button>}
+            {canEdit && <button onClick={() => setAttachOpen(true)} className="min-h-[44px] sm:min-h-0 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-blue-200 hover:bg-white/10">Attach to case</button>}
             <RestrictToSiuButton type="gang" id={gang.id} />
             <GuideHelpLink
               slug="entities-organizations"
@@ -690,14 +684,14 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
         )}
         {section === 'observations' && (
           <Card pad="lg">
-            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-300">Surveillance history</h3>
+            <h3 className="mb-3 text-[13px] font-semibold text-white">Surveillance history</h3>
             <ObservationHistory kind="gang" refId={gang.id} />
           </Card>
         )}
         {section === 'media' && <MediaSection media={media} canEdit={canEdit} onAdd={() => setPhotoOpen(true)} onOpen={(m) => setLightbox(m)} />}
         {section === 'activity' && (
           <Card pad="lg">
-            <div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Activity</h3><StaleIntelBadge reviewedAt={gang.reviewed_at} now={now} /></div>
+            <div className="mb-2 flex items-center justify-between"><h3 className="text-[13px] font-semibold text-white">Activity</h3><StaleIntelBadge reviewedAt={gang.reviewed_at} now={now} /></div>
             {activity.length ? <WorkflowTimeline entries={activity} /> : <p className="text-sm text-slate-500">No recorded activity yet.</p>}
             <p className="mt-2 text-[11px] text-slate-500">Derived from records visible to you. The authoritative audit trail (audit_log) is available to command/owner.</p>
           </Card>
@@ -705,7 +699,7 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
         {/* Field-level versions (record_versions, P8-04). */}
         {section === 'history' && (
           <Card pad="lg">
-            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-300">Record history</h3>
+            <h3 className="mb-3 text-[13px] font-semibold text-white">Record history</h3>
             <RecordHistory kind="gang" id={gang.id} canRestore={canEdit ? undefined : false} onRestored={() => { void load(); void onRefresh() }} />
           </Card>
         )}
@@ -755,7 +749,7 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
       {linkPlaceOpen && <LinkPlaceModal gang={gang} existing={gangPlaces} onClose={() => setLinkPlaceOpen(false)} onSaved={() => { setLinkPlaceOpen(false); void load() }} />}
       {photoOpen && <AddGangPhotoModal gang={gang} onClose={() => setPhotoOpen(false)} onSaved={() => { setPhotoOpen(false); void load() }} />}
       {attachOpen && <AttachGangModal gang={gang} onClose={() => setAttachOpen(false)} onSaved={() => { setAttachOpen(false); void load() }} />}
-      {lightbox && <GangPhotoLightbox media={lightbox} onClose={() => setLightbox(null)} />}
+      {lightbox && <RegistryMediaLightbox media={lightbox} onClose={() => setLightbox(null)} />}
       {children}
     </section>
   )

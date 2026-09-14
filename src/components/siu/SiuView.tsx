@@ -82,6 +82,23 @@ const SECTIONS = [
   { id: 'activity' as const, label: 'Activity' },
 ]
 
+/** The bureau's four areas of work, so fourteen tabs read as four decisions
+ *  about where you are going rather than one undifferentiated strip. The
+ *  grouping is presentational only — every tab was already reachable, and no
+ *  tab changed what it shows or who may see it.
+ *
+ *  "Disclosure" is deliberately its own area rather than a corner of
+ *  Intelligence: what SIB has taken out of CID's view and what it has given
+ *  back is the bureau's obligation to the rest of the division, and burying it
+ *  among the bureau's own material is how it stops being reviewed. */
+const SECTION_GROUPS = [
+  { label: null, tabs: ['overview'] },
+  { label: 'Casework', tabs: ['intake', 'investigations', 'targets', 'operations'] },
+  { label: 'Intelligence', tabs: ['intelligence', 'watchlist', 'tradecraft'] },
+  { label: 'Disclosure', tabs: ['compartments', 'disclosure'] },
+  { label: 'Bureau', tabs: ['command', 'oversight', 'agents', 'activity'] },
+] as const
+
 /** Designation chips: priority designations read hot, cleared reads resolved,
  *  everything else stays neutral. Investigative standing, never a finding. */
 const designationTint = (d: string): string =>
@@ -160,6 +177,7 @@ export function SiuView() {
 
       <SectionTabs
         tabs={SECTIONS}
+        groups={SECTION_GROUPS}
         active={section}
         onChange={setSection}
         idBase="siu"

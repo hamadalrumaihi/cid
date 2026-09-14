@@ -33,7 +33,11 @@ export interface SectionTab<Id extends string = string> {
  *  render after the last group, ungrouped. Purely presentational — the
  *  tablist semantics, roving focus and activation are unchanged. */
 export interface SectionTabGroup<Id extends string = string> {
-  label: string
+  /** The group's caption, or null for a leading run that needs no caption
+   *  (a workspace's own Overview, say — captioning it "Overview" beside a tab
+   *  called "Overview" is noise, but it still must not be swept to the end
+   *  with the ungrouped remainder). */
+  label: string | null
   tabs: ReadonlyArray<Id>
 }
 

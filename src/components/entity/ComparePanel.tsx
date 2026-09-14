@@ -67,7 +67,10 @@ export function ComparePanel({ kind, recordId, recordLabel, draft, fields, onUse
       ) : state.status === 'missing' ? (
         <Notice text="That record is not visible to you, or no longer exists." />
       ) : (
-        <table className="w-full text-sm">
+        /* Three columns of free text: a long address or a pasted URL can push
+           this past a phone's width, and the page must not be what scrolls. */
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[22rem] text-sm">
           <caption className="sr-only">Draft values compared with the existing record</caption>
           <thead>
             <tr className="text-left text-xs font-semibold text-slate-400">
@@ -91,6 +94,7 @@ export function ComparePanel({ kind, recordId, recordLabel, draft, fields, onUse
             })}
           </tbody>
         </table>
+        </div>
       )}
 
       <div className="flex flex-wrap justify-end gap-2">

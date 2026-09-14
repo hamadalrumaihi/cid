@@ -64,8 +64,9 @@ export interface RegistryCardProps {
   onAttach: () => void
 }
 
+// 44 px on a phone (the target size a thumb actually hits), compact above it.
 const ACTION_BTN =
-  'min-h-[40px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold transition hover:bg-white/10'
+  'min-h-[44px] sm:min-h-[40px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold transition hover:bg-white/10'
 
 export function RegistryCard({
   p, gang, caseCount, vehicleCount, warrantCount, duplicate, now, today,

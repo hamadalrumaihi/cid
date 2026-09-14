@@ -13,7 +13,8 @@
  *  never declassified — the release carries no ci / intel column at all. */
 import { useMemo, useState } from 'react'
 import {
-  CI_HANDLING, CI_HANDLING_LABEL, ciRelease, sanitizeCheck, type CiHandling, type SanitizeSubject,
+  CI_AUDIENCE_HINT, CI_AUDIENCE_LABEL, CI_HANDLING, CI_HANDLING_LABEL, ciRelease, sanitizeCheck,
+  type CiHandling, type SanitizeSubject,
 } from '@/lib/ci'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
@@ -79,6 +80,20 @@ export function SanitizeReleaseDialog({
         <p className="text-sm text-slate-400">
           Only the text you write below reaches the case. The source record, its CI number and its handler never leave the compartment — write what the investigation may know, in your own words.
         </p>
+        {/* What the releaser is actually doing. The paragraph above says what
+            STAYS in; this says what goes out, to whom, and how permanent it
+            is — which is the half that decides how carefully the text gets
+            written. A revoke hides the row from the case; it cannot unread
+            what the case team has already read. */}
+        <div role="note" className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5">
+          <p className="text-sm font-semibold text-amber-100">
+            {CI_AUDIENCE_LABEL.case_team} — this leaves the compartment.
+          </p>
+          <p className="mt-1 text-xs text-amber-200/90">
+            {CI_AUDIENCE_HINT.case_team} It appears the moment you release, and the case lead is notified.
+            CI command can revoke a release, which removes it from the case — but it cannot unread it.
+          </p>
+        </div>
         <div className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
           <p className="text-xs font-semibold text-slate-400">Source intelligence (reference only — not released)</p>
           <p className="mt-1 text-sm text-slate-200">{intel.summary}</p>

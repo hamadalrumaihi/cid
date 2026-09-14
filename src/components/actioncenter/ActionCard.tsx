@@ -5,7 +5,7 @@
  *  flex-row that would wrap unpredictably at phone widths. Same facts and
  *  the same handlers as ActionItemRow; every control ≥ 44 px. */
 import Link from 'next/link'
-import { ACCENT, RowActions, RowBadges, RowCheckbox, type RowProps } from './ActionItemRow'
+import { ACCENT, PRIORITY_TEXT, RowActions, RowBadges, RowCheckbox, type RowProps } from './ActionItemRow'
 
 export function ActionCard(props: RowProps) {
   const { item, now, muted, lane, selected, onSelect, onOpen } = props
@@ -18,6 +18,9 @@ export function ActionCard(props: RowProps) {
           selected ? 'border-amber-400/30 bg-amber-500/[0.06]' : 'border-white/10'
         } ${ACCENT[item.priority] ?? ACCENT.normal} ${quiet ? 'opacity-80' : ''}`}
       >
+        {/* Same reason as the row: the accent colour is not a signal for
+            every reader, so priority is also stated in text. */}
+        <span className="sr-only">{PRIORITY_TEXT[item.priority] ?? PRIORITY_TEXT.normal}.</span>
         <div className="flex items-start gap-1">
           <RowCheckbox item={item} selected={selected} onSelect={onSelect} />
           <div className="min-w-0 flex-1 pt-2">

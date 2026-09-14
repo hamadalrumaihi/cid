@@ -11,12 +11,13 @@ import { insert, list, remove, update } from '@/lib/db'
 import { searchPlaceHits, searchVehicleHits } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
 import { useMediaSrc } from '@/lib/evidence'
+import { RegistryMediaThumb } from '@/components/shared/RegistryMedia'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { fmtDate } from '@/lib/format'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
-import { FileTypeIcon, PlaceIcon } from '@/components/shell/icons'
+import { PlaceIcon } from '@/components/shell/icons'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -521,13 +522,8 @@ function PersonMediaTile({ m, mugshot, canEdit, onOpen, onSetMugshot }: {
   const stableUrl = !!m.external_url
   return (
     <div className={`overflow-hidden rounded-lg border bg-ink-850 ${isMugshot ? 'border-badge-500/60' : 'border-white/5'}`}>
-      <button onClick={onOpen} className="block w-full text-left" title={`Open ${m.title || 'media'}`}>
-        {isImage ? (
-          // eslint-disable-next-line @next/next/no-img-element -- signed / external media URL
-          <img src={src} alt={m.title || 'Media item'} className="h-28 w-full object-cover transition hover:opacity-90" />
-        ) : (
-          <div className="grid h-28 w-full place-items-center text-slate-500" aria-hidden><FileTypeIcon type={m.type ?? 'document'} size={28} /></div>
-        )}
+      <button onClick={onOpen} className="group block w-full text-left" title={`Open ${m.title || 'media'}`}>
+        <RegistryMediaThumb media={m} />
       </button>
       <div className="flex items-center justify-between gap-1 px-1.5 py-1">
         <span className="min-w-0 truncate text-[11px] text-slate-400">

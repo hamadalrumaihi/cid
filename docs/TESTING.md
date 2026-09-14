@@ -27,6 +27,13 @@ pure functions and the client mirrors of server workflow logic. Highlights
 | [`src/lib/roles.test.ts`](../src/lib/roles.test.ts) | **Table-tests pinning the client mirror of the server authority matrix** (`private.can_assign_cid_role`, migration `20260718010000`): requestable roles/departments, `canAssignCidRole` per actor, role changes, transfer initiation/side-decision, Owner/inactive/retired-role edge cases. The client helpers only shape UI options — RPCs re-validate — but the two implementations must agree, so the matrix is pinned here |
 | `src/lib/deadlines.test.ts` | the shared deadline engine (legal expiry, task due dates, joint-case expiry chips) |
 | [`src/lib/directory.test.ts`](../src/lib/directory.test.ts) | the Division Directory model — who is listed (never a removed member, the deletion tombstone or the compartmented SIB bureau), leadership-first + canonical rank ordering, a transfer moving rather than copying a member, the member-safe field set, availability and the search/filter rules |
+| [`src/lib/recordProvenance.test.ts`](../src/lib/recordProvenance.test.ts) | the dossier origin line — an author the roster cannot name is never reported as "no author", and a record whose `updated_at` is its insert stamp is never reported as edited |
+| [`src/lib/registryPurpose.test.ts`](../src/lib/registryPurpose.test.ts) | the Accounts / Indicators explainers — every registry says what it holds, what belongs elsewhere (the half that prevents misuse) and what it buys; the "read the guide" link is checked against the real `GUIDE_BODIES` registry, so a renamed section cannot leave a dead link |
+| [`src/lib/actionStale.test.ts`](../src/lib/actionStale.test.ts) | stale Action Center rows — a dated row is never filed as stale (it is overdue, a louder problem), a waiting row is aged from when it started waiting, and the advice never tells a member to dismiss something the server refuses to dismiss |
+| [`src/lib/commandExceptions.test.ts`](../src/lib/commandExceptions.test.ts) | the Command Center's exceptions-first split — a count that did not load stays "unknown" and never joins the all-clear line as a zero |
+| [`src/lib/legalWizardProgress.test.ts`](../src/lib/legalWizardProgress.test.ts) | the legal wizard's progress rail — complete / incomplete / not-started per step (an unreached step is never reported as failing, an optional step that needs nothing is complete), every state carried in words, and the routing of a returned request's per-field notes to the step that owns the field |
+| [`src/lib/caseAttention.test.ts`](../src/lib/caseAttention.test.ts) | the case's own "needs attention" list — returned reports, returned legal requests, unsigned finalized reports, sign-off actor, overdue tasks split by whose they are, and the mine-first ordering; a closed case produces nothing |
+| [`src/lib/personnel.test.ts`](../src/lib/personnel.test.ts) | the Personnel Management model — the four account states that used to render as one amber "Pending" (awaiting approval, external Field Intelligence submitter, denied login, moved to DOJ), which of them is actually a queue, the work-list sort/search/filter, and the one-line personnel-history summary |
 | [`src/lib/profiles.test.ts`](../src/lib/profiles.test.ts) | the shared roster cache — loading and failure are distinguishable from "the division is empty", a failed refresh keeps stale rows and says so, and out-of-order responses cannot reinstate a member in the bureau they just left |
 | `src/lib/format.test.ts` | formatting helpers |
 | `src/lib/jsonShapes.test.ts` | defensive JSON shape parsing |
@@ -46,6 +53,30 @@ pure functions and the client mirrors of server workflow logic. Highlights
 | `src/lib/recordHistory.test.ts` | `historyRows` / `versionChanges` (the five-minute coalescing mirror, burst marker), `compareVersions(a, b)` (changed fields side by side), `VERSION_KINDS` / `isVersionKind` (the 12 versioned kinds) |
 | `src/mocks/handlers/ci.test.ts` | the Confidential Informant mock contract (scratch `ci_contract.md` §1–§4): the one predicate `canAccessCI = full ‖ handler` over every read surface and the fourteen tables' SELECT walls (`visibleCiRows`), nothing at all for the normal detective, self-recruitment vs command designation, the one `unavailable` wording, capacity 6 with the two `capacity` wordings and the audited override, submit → approve → the assignment kind, handler change ending access at once, status full-only with history restricted, the sanitize / release pair (visible `case_intel_releases`, restricted `ci_releases`), `ci_case_counts` short-circuiting, no `audit_log` row ever, ids-only notifications, export scope, the sweep's Owner denial and fixture runner, the 42501 write refusals — see [TESTING-MOCKS.md](TESTING-MOCKS.md) |
 | `src/lib/reportNarrative.test.ts` | `mergeNarrativeFields(fields, key, md)` — the phone's narrative save merges into the existing `fields` jsonb and never drops another key |
+
+
+### Accessibility
+
+Two layers, and they cover different things.
+
+[`tests/e2e/a11y.spec.ts`](../tests/e2e/a11y.spec.ts) is the real gate: axe
+against the assembled page in a real browser, across every major route, as the
+least-privileged account that can render each one. It is a **ratchet** — new
+serious/critical violations fail; accepted debt lives in
+`tests/e2e/a11y-baseline.json`. It **skips without the `RLS_TEST_PASSWORD_*`
+credentials**, which are not repository secrets, so on an ordinary checkout it
+reports nothing at all. Routes needing owner, SIB or CI standing are
+deliberately absent: no fixture holds those, so scanning them would scan the
+refusal surface and report it as the screen.
+
+[`tests/msw/a11y-components.test.tsx`](../tests/msw/a11y-components.test.tsx)
+runs axe-core against the real components under happy-dom, with no credentials
+and no server, so `npm test` always exercises something. It is a floor, not a
+ceiling: nothing that depends on layout, painting or a real focus ring is
+visible to it (`color-contrast` and the landmark rules are disabled for that
+reason). Its first test is a control that renders an unlabelled button and
+asserts axe reports it — a scan harness that always passes is indistinguishable
+from no scan.
 
 ## Live RLS / RPC suite
 

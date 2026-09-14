@@ -13,13 +13,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
-import { fmtDate } from '@/lib/format'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { statusTint } from '@/lib/tint'
 import { toast } from '@/lib/toast'
 import { useNow } from '@/lib/useNow'
+import { RecordProvenance } from '@/components/shared/RecordProvenance'
+import { RegistryMediaLightbox } from '@/components/shared/RegistryMedia'
 import { CheckIcon, NarcoticIcon, PhotoIcon, SwapIcon } from '@/components/shell/icons'
 import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Badge } from '@/components/ui/Badge'
@@ -30,7 +31,6 @@ import { ConfidenceBadge, ProvenanceBadge, StaleIntelBadge } from '@/components/
 import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { Notice, ErrorNotice } from '@/components/ui/Notice'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
-import { GangPhotoLightbox } from '@/components/gangs/gangModals'
 import { useToolNav } from '@/components/tools/useToolNav'
 import {
   NARCOTIC_REVIEW_DAYS, buildNarcoticActivity, categoryLabel, isNarcoticStale, sectionFromParam,
@@ -293,10 +293,7 @@ export function NarcoticsDossier({ drugId, onClose }: { drugId: string; onClose:
                       aka {aliases.slice(0, 6).map((a) => a.alias).join(', ')}{aliases.length > 6 ? ` +${aliases.length - 6} more` : ''}
                     </p>
                   )}
-                  <p className="mt-1 text-[11px] text-slate-400">
-                    Updated {fmtDate(n.updated_at)}
-                    {officerName(n.created_by) ? ` · Added by ${officerName(n.created_by)}` : ''}
-                  </p>
+                  <RecordProvenance record={n} className="mt-1" />
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -375,7 +372,7 @@ export function NarcoticsDossier({ drugId, onClose }: { drugId: string; onClose:
       {resolveOpen && n && (
         <NarcoticResolveModal narcotic={n} onClose={() => setResolveOpen(false)} onResolved={() => { setResolveOpen(false); void loadCore() }} />
       )}
-      {lightbox && <GangPhotoLightbox media={lightbox} onClose={() => setLightbox(null)} />}
+      {lightbox && <RegistryMediaLightbox media={lightbox} onClose={() => setLightbox(null)} />}
     </section>
   )
 }

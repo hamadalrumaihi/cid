@@ -25,9 +25,9 @@ import { useTableVersion } from '@/lib/realtime'
 import { useSavedViews } from '@/lib/savedViews'
 import { toast } from '@/lib/toast'
 import {
-  CI_DEFAULT_CAPACITY, CI_SECTIONS, capacityLabel, ciExport, ciHref, ciInvolved, ciRefused, fetchCiList,
-  fetchCiStats, handlerRosterStats, isAtCapacity, useCiContext, type CiContext, type CiListFilters, type CiListRow,
-  type CiSection, type CiStats,
+  CI_AUDIENCE_HINT, CI_AUDIENCE_LABEL, CI_DEFAULT_CAPACITY, CI_SECTIONS, capacityLabel, ciExport, ciHref, ciInvolved,
+  ciRefused, fetchCiRoster, fetchCiStats, handlerRosterStats, isAtCapacity, useCiContext,
+  type CiContext, type CiListFilters, type CiRosterRead, type CiSection, type CiStats,
 } from '@/lib/ci'
 import { ViewsMenu } from '@/components/shared/ViewsMenu'
 import { ActionMenu } from '@/components/ui/ActionMenu'
@@ -35,7 +35,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { MetricStrip } from '@/components/ui/MetricStrip'
-import { Notice } from '@/components/ui/Notice'
+import { ErrorNotice, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { DetailSkeleton, ListSkeleton } from '@/components/ui/Skeleton'
 import { AddCiWizard } from './AddCiWizard'
@@ -142,7 +142,9 @@ function Home({ ctx, version, requestsOpen, onOpenRequests, onCloseRequests, onO
 }) {
   const { profile } = useAuth()
   const full = ctx.full_access
-  const [rows, setRows] = useState<CiListRow[] | null>(null)
+  // null = not read yet. A read that FAILED is not an empty roster: the three
+  // states stay apart so a handler is never told their sources are gone.
+  const [read, setRead] = useState<CiRosterRead | null>(null)
   const [stats, setStats] = useState<CiStats | null>(null)
   const [filters, setFilters] = useState<CiListFilters>(EMPTY_CI_FILTERS)
   const [caseHit, setCaseHit] = useState<EntityHit | null>(null)
@@ -155,8 +157,8 @@ function Home({ ctx, version, requestsOpen, onOpenRequests, onCloseRequests, onO
   const serverFilters = useMemo<CiListFilters>(() => (filters.risk === HIGH_RISK_LENS ? { ...filters, risk: undefined } : filters), [filters])
 
   const load = useCallback(async () => {
-    const [list, st] = await Promise.all([fetchCiList(serverFilters), full ? fetchCiStats() : Promise.resolve(null)])
-    setRows(list)
+    const [list, st] = await Promise.all([fetchCiRoster(serverFilters), full ? fetchCiStats() : Promise.resolve(null)])
+    setRead(list)
     if (full) setStats(st)
   }, [serverFilters, full])
 
@@ -183,6 +185,7 @@ function Home({ ctx, version, requestsOpen, onOpenRequests, onCloseRequests, onO
     return () => window.clearTimeout(t)
   }, [viewName, sv.loaded, sv.views])
 
+  const rows = read?.failed ? null : read?.rows ?? null
   const visible = useMemo(() => {
     const base = rows ?? []
     return filters.risk === HIGH_RISK_LENS ? base.filter((r) => r.risk === 'high' || r.risk === 'critical') : base
@@ -231,6 +234,14 @@ function Home({ ctx, version, requestsOpen, onOpenRequests, onCloseRequests, onO
           </>
         }
       />
+
+      {/* Who else can read what is on this screen. Inside a compartment there
+          is no other way to tell, and writing for the wrong audience is how
+          material either over-guards itself or says more than it should. */}
+      <p className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+        <Badge tone="accent">{CI_AUDIENCE_LABEL[full ? 'ci_command' : 'handler']}</Badge>
+        {CI_AUDIENCE_HINT[full ? 'ci_command' : 'handler']}
+      </p>
 
       {full ? (
         <MetricStrip metrics={[
@@ -291,7 +302,15 @@ function Home({ ctx, version, requestsOpen, onOpenRequests, onCloseRequests, onO
 
       <div className={full ? 'grid gap-4 xl:grid-cols-[1fr_22rem]' : ''}>
         <div className="min-w-0">
-          {rows === null ? <ListSkeleton count={5} /> : (
+          {/* Three answers, kept apart. Not read yet · the read failed ·
+              genuinely nothing. The middle one used to render as the third,
+              which reads to a handler as "you no longer have any sources". */}
+          {read === null ? <ListSkeleton count={5} /> : read.failed ? (
+            <ErrorNotice
+              message="The source roster could not be read. This is a loading failure, not a change to your access — nothing has been removed."
+              onRetry={() => { void load() }}
+            />
+          ) : (
             <CiRoster rows={visible} onOpen={onOpenCi}
               emptyHint={activeCiFilterCount(filters) ? 'Try clearing a filter.' : full ? 'No sources have been designated yet.' : 'No source is assigned to you right now.'} />
           )}

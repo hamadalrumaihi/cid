@@ -17,7 +17,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { pushRecent } from '@/lib/recents'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
-import { copyText, fmtDate, timeAgo } from '@/lib/format'
+import { copyText } from '@/lib/format'
 import { FileTypeIcon, GangIcon, PersonIcon, VehicleIcon } from '@/components/shell/icons'
 import { Badge } from '@/components/ui/Badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
@@ -32,6 +32,7 @@ import { uiConfirm } from '@/components/ui/dialog'
 import { WatchButton } from '@/components/cases/WatchButton'
 import { RestrictToSiuButton } from '@/components/siu/RestrictToSiu'
 import { EntityLegalPanel } from '@/components/justice/EntityLegalSection'
+import { RecordProvenance } from '@/components/shared/RecordProvenance'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
 import { RecordHistory } from '@/components/shared/RecordHistory'
 import { LinkEditPopover, LinkStatusBadge } from '@/components/shared/LinkEditPopover'
@@ -537,9 +538,11 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
                     <span className="text-slate-400">—</span>
                   )}
                 </Row>
-                <Row label="Added">{fmtDate(v.created_at)}</Row>
-                <Row label="Updated">{timeAgo(v.updated_at)}</Row>
               </dl>
+              {/* Origin reads the same here as on every other dossier — two
+                  bare dates in the key/value table said less and matched
+                  nothing. */}
+              <RecordProvenance record={v} className="mt-3 border-t border-white/5 pt-3 text-left" />
             </Card>
             <Card>
               <h3 className={PANEL_TITLE}>Notes</h3>

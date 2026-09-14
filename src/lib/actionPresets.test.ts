@@ -3,10 +3,11 @@
 import { describe, expect, it } from 'vitest'
 import { SOURCE_TYPE_LABEL } from './actionItems'
 import {
-  ACTION_PRESETS, ACTION_STATUS_KEYS, ACTION_TYPE_FILTERS, ALL_SECTIONS, availablePresets, availableTypeFilters,
+  ACTION_PRESETS, ACTION_STATUS_FILTERS, ACTION_STATUS_KEYS, ACTION_TYPE_FILTERS, ALL_SECTIONS, availablePresets, availableTypeFilters,
   defaultPresetFor, presetById,
   type PresetViewer,
 } from './actionPresets'
+import type { ActionItem } from './actionItems'
 
 describe('ACTION_TYPE_FILTERS — every queue kind has exactly one chip', () => {
   it('covers every SOURCE_TYPE_LABEL key once', () => {
@@ -175,5 +176,49 @@ describe('normalizeActionConfig', () => {
       expect(n.sections).toEqual(p.config.sections ?? null)
       expect(n.preset).toBe(p.id)
     }
+  })
+})
+
+/* ── Status chips ─────────────────────────────────────────────────────────── */
+
+describe('ACTION_STATUS_FILTERS', () => {
+  const NOW = Date.parse('2026-09-14T12:00:00Z')
+  const TODAY = '2026-09-14'
+  const daysAgo = (d: number) => new Date(NOW - d * 86_400_000).toISOString()
+  const item = (over: Partial<ActionItem> = {}): ActionItem => ({
+    status: 'needs_action', dueAt: null, createdAt: daysAgo(1), waitingSince: null,
+    isCommandItem: false, escalatedAt: null, sourceType: 'task', dedupeKey: 'task:t1',
+    ...over,
+  } as ActionItem)
+
+  it('gives every key a predicate — a chip can never exist without one', () => {
+    for (const k of ACTION_STATUS_KEYS) {
+      expect(ACTION_STATUS_FILTERS[k], k).toBeTruthy()
+      expect(ACTION_STATUS_FILTERS[k].label, `${k} label`).toBeTruthy()
+    }
+  })
+
+  it('"Waiting on me" excludes other people’s queues and your own drafts', () => {
+    const mine = ACTION_STATUS_FILTERS.mine.test
+    expect(mine(item({ status: 'needs_action' }), TODAY, NOW)).toBe(true)
+    expect(mine(item({ status: 'overdue' }), TODAY, NOW)).toBe(true)
+    expect(mine(item({ status: 'returned' }), TODAY, NOW)).toBe(true)
+    expect(mine(item({ status: 'blocked' }), TODAY, NOW)).toBe(true)
+    // Parked in someone else's queue — nothing for you to do yet.
+    expect(mine(item({ status: 'waiting' }), TODAY, NOW)).toBe(false)
+    // Drafts and activity are informational: they are not asking anything.
+    expect(mine(item({ status: 'informational' }), TODAY, NOW)).toBe(false)
+  })
+
+  it('"Stale" and "Overdue" never claim the same row', () => {
+    // A dated row that has lapsed is overdue, not stale; an undated row that
+    // has sat is stale, never overdue. Overlap would double-count the queue.
+    const old = item({ createdAt: daysAgo(40), dueAt: daysAgo(30), status: 'overdue' })
+    expect(ACTION_STATUS_FILTERS.overdue.test(old, TODAY, NOW)).toBe(true)
+    expect(ACTION_STATUS_FILTERS.stale.test(old, TODAY, NOW)).toBe(false)
+
+    const drifting = item({ createdAt: daysAgo(40) })
+    expect(ACTION_STATUS_FILTERS.stale.test(drifting, TODAY, NOW)).toBe(true)
+    expect(ACTION_STATUS_FILTERS.overdue.test(drifting, TODAY, NOW)).toBe(false)
   })
 })

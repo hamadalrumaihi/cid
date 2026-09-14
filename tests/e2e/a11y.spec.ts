@@ -81,6 +81,35 @@ const routes: Array<{ key: string; path: string; account: LiveAccount }> = [
   { key: '/persons', path: '/tools?tool=persons', account: LIVE.lsb },
   { key: '/sops', path: '/sops', account: LIVE.lsb },
   { key: '/command-center', path: '/command-center', account: LIVE.director },
+
+  // Portal-wide pass. Eight routes covered a redesign that touched twenty:
+  // an accessibility ratchet only ratchets what it scans, so the screens this
+  // project changed — and the ones a member actually spends the day on — are
+  // in it now. Each scans as the LEAST privileged account that can render the
+  // real screen, because a screen scanned as the owner is not the screen most
+  // members see.
+  { key: '/directory', path: '/directory', account: LIVE.lsb },
+  { key: '/analytics', path: '/analytics', account: LIVE.lsb },
+  { key: '/legal', path: '/legal', account: LIVE.lsb },
+  { key: '/workspace', path: '/workspace', account: LIVE.lsb },
+  { key: '/guides', path: '/guides', account: LIVE.lsb },
+  { key: '/calendar', path: '/calendar', account: LIVE.lsb },
+  { key: '/profile', path: '/profile', account: LIVE.lsb },
+  { key: '/trash', path: '/trash', account: LIVE.lsb },
+  // The registries the dossier work changed. Accounts and Indicators also
+  // carry the new purpose explainers; Places and Vehicles carry the shared
+  // media tile.
+  { key: '/accounts', path: '/tools?tool=accounts', account: LIVE.lsb },
+  { key: '/indicators', path: '/tools?tool=indicators', account: LIVE.lsb },
+  { key: '/places', path: '/tools?tool=places', account: LIVE.lsb },
+  { key: '/vehicles', path: '/tools?tool=vehicles', account: LIVE.lsb },
+  { key: '/narcotics', path: '/tools?tool=narcotics', account: LIVE.lsb },
+  // NOT listed, deliberately: /owner, /audit, /siu and /informants. No
+  // fixture holds owner, SIB or CI standing, so scanning them would scan the
+  // refusal surface and report it as the console, the bureau or the
+  // compartment. A green tick against a screen the run never rendered is
+  // worse than no tick. They go in when the fixtures exist (see
+  // tests/rls/README.md on provisioning).
 ]
 
 test.describe(enabled ? 'a11y (axe ratchet)' : 'a11y (skipped — no live credentials)', () => {

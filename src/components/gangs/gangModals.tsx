@@ -10,12 +10,9 @@ import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDraft
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/lib/toast'
 import { safeUrl } from '@/lib/safeUrl'
-import { useMediaSrc } from '@/lib/evidence'
 import { REGISTRY_MEDIA_ACCEPT, attachRegistryMedia } from '@/lib/registryMedia'
 import { parseIntelSummary } from '@/lib/jsonShapes'
-import { RadioIcon } from '@/components/shell/icons'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
-import { EmptyState } from '@/components/ui/Notice'
 import { SaveState } from '@/components/ui/SaveState'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
@@ -827,25 +824,6 @@ export function AddGangPhotoModal({ gang, onClose, onSaved }: { gang: GangRow; o
             <Button variant="primary" className="mt-3 w-full" loading={busy} disabled={!url.trim()} onClick={() => void saveUrl()}>{busy ? 'Saving…' : 'Add linked photo'}</Button>
           </div>
         </div>
-      </div>
-    </Modal>
-  )
-}
-
-export function GangPhotoLightbox({ media, onClose }: { media: { title: string; external_url: string | null; storage_path: string | null; type: string }; onClose: () => void }) {
-  // Storage-hosted rows sign on demand (300 s, cached); external rows are direct.
-  const src = safeUrl(useMediaSrc(media) ?? '')
-  return (
-    <Modal open wide onClose={onClose}>
-      <div className="p-4">
-        <ModalHeader title={media.title} onClose={onClose} />
-        {src ? (
-          media.type === 'video'
-            ? <video src={src} controls className="max-h-[70vh] w-full rounded-lg" />
-            // eslint-disable-next-line @next/next/no-img-element -- external media CDN
-            : <img src={src} alt={media.title} className="max-h-[70vh] w-full rounded-lg object-contain" />
-        ) : <EmptyState icon={<RadioIcon size={24} />} title="No preview available" />}
-        {src && <a href={src} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block text-xs font-semibold text-blue-300 hover:text-blue-200">Open original ↗</a>}
       </div>
     </Modal>
   )
