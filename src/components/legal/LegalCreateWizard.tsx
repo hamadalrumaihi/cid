@@ -31,6 +31,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useAuth } from '@/lib/auth'
 import { ScaleIcon } from '@/components/shell/icons'
+import { SaveState } from '@/components/ui/SaveState'
 import type { Json, Tables } from '@/lib/database.types'
 import { list, rpc } from '@/lib/db'
 import { loadCaseCharges, proposeCaseCharge, type CaseChargeRow } from '@/lib/caseCharges'
@@ -38,7 +39,7 @@ import { CASE_MEDIA_CATEGORIES } from '@/lib/caseMedia'
 import { suggestEntities } from '@/lib/entity'
 import { searchLegalRequestHits, searchPersonHits, searchPlaceHits, searchVehicleHits } from '@/lib/entitySearch'
 import { fmConfigured } from '@/lib/fivemanage'
-import { adoptLegacyDraft, clearDraft, saveDraft, type LoadedDraft } from '@/lib/userDrafts'
+import { adoptLegacyDraft, clearDraft, saveDraft, useDraftState, type LoadedDraft } from '@/lib/userDrafts'
 import { timeAgo } from '@/lib/format'
 import {
   CLASSIFICATIONS, SOCIAL_PLATFORMS, STANDARDS_OF_PROOF, SUBPOENA_FIELDS, SUBPOENA_TYPES,
@@ -49,9 +50,11 @@ import {
   CID_ROUTING_BUREAUS, LEGAL_WIZARD_STEPS, ROUTING_SOURCE_LABEL,
   STRUCTURED_TARGET_KINDS, STRUCTURED_TARGET_KIND_LABEL,
   appendSearchTargetLine, canSetResponsibleBureau, humanize, isRoutingBureau,
-  legalWizardAdvisories, legalWizardDraftIssues, legalWizardIssues, resolveResponsibleBureau,
+  legalStepProgress, legalWizardAdvisories, legalWizardDraftIssues, legalWizardIssues,
+  resolveResponsibleBureau, revisionStepFor,
   structuredTargetLine, subtypeRequiresPerson, subtypeSupportsStructuredTargets,
-  type LegalWizardInput, type RoutingBureau, type RoutingSource, type StructuredTargetKind,
+  type LegalWizardInput, type LegalWizardStepId, type RoutingBureau, type RoutingSource,
+  type StructuredTargetKind,
 } from '@/lib/legalWorkflow'
 import { penalSearch } from '@/lib/penal'
 import { bureauLabel, bureauShort } from '@/lib/roles'
@@ -329,6 +332,16 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
   const [busy, setBusy] = useState(false)
   const [stepIdx, setStepIdx] = useState(0)
   const [attempted, setAttempted] = useState(false)
+  // How far the investigator has actually got. A rail that marks step five as
+  // failing while someone is filling in step two is scolding them for reading
+  // in order (lib/legalWorkflow legalStepProgress). A high-water mark: it only
+  // ever grows, and it is raised where navigation happens, never in render.
+  const [furthestStep, setFurthestStep] = useState(0)
+  const goStep = useCallback((next: number) => {
+    setAttempted(false)
+    setStepIdx(next)
+    setFurthestStep((f) => Math.max(f, next))
+  }, [])
 
   /* ── Edit mode: load the request + its structured targets ─────────────────── */
   const [seedJson, setSeedJson] = useState('')
@@ -716,7 +729,13 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
   const currentAdvisories = legalWizardAdvisories(step.id, input)
   const reviewIssues = legalWizardIssues('review', input)
   const reviewAdvisories = legalWizardAdvisories('review', input)
+  // The key this mode autosaves under — the chip reports that pipeline.
+  const draftState = useDraftState(isEdit && editId ? `legal:edit:${editId}` : (stashKey ?? ''))
   const unresolvedItems = revisionItems.filter((i) => !i.resolved_at)
+  // A reviewer's note belongs beside the field it is about, not two screens
+  // later on the review step (lib/legalWorkflow revisionStepFor).
+  const revisionsForStep = (id: LegalWizardStepId) =>
+    unresolvedItems.filter((i) => revisionStepFor(i.field) === id)
   const exhibitCount = isEdit ? savedExhibits.length : pendingExhibits.length + pendingEvidence.length + targets.length
   const reviewChecklist = legalSubmitChecklist({
     requestType: requestType ?? 'warrant', subtype, title, narrative, priority, form, exhibitCount,
@@ -780,7 +799,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
       setTitle(`${label} — ${personSel.label}${caseSel.number ? ` (${caseSel.number})` : ''}`)
     }
     setAttempted(false)
-    setStepIdx((i) => Math.min(i + 1, steps.length - 1))
+    setStepIdx((i) => { const n = Math.min(i + 1, steps.length - 1); setFurthestStep((f) => Math.max(f, n)); return n })
   }
   const prev = () => { setAttempted(false); setStepIdx((i) => Math.max(i - 1, 0)) }
 
@@ -956,19 +975,37 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
         {steps.map((s, i) => {
           const on = i === stepIdx
           const reachable = i <= maxReachable
+          const p = legalStepProgress(s.id, input, { visited: i <= furthestStep })
+          const notes = revisionsForStep(s.id).length
           return (
             <li key={s.id}>
               <button
                 type="button"
                 aria-current={on ? 'step' : undefined}
                 disabled={!reachable && !on}
-                onClick={() => { setAttempted(false); setStepIdx(i) }}
+                onClick={() => goStep(i)}
+                // The state is in the accessible name, not only in the mark:
+                // "3 Charges, complete" reads the same to everyone.
+                aria-label={`${i + 1} ${s.label}, ${p.label}${notes ? `, ${notes} reviewer note${notes === 1 ? '' : 's'}` : ''}`}
+                title={p.label}
                 className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
                   on ? 'border-badge-500/60 bg-badge-500/15 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
                 }`}
               >
                 <span className="font-mono tabular-nums" aria-hidden>{i + 1}</span>
                 {s.label}
+                {/* Completion marks. Text-bearing, never colour alone. */}
+                {p.state === 'complete' && s.id !== 'review' && (
+                  <span aria-hidden className="text-emerald-300" title="Complete">✓</span>
+                )}
+                {p.state === 'incomplete' && (
+                  <span aria-hidden className="rounded-full bg-amber-500/20 px-1.5 text-[10px] text-amber-200" title={p.label}>{p.missing}</span>
+                )}
+                {notes > 0 && (
+                  <span aria-hidden className="rounded-full bg-rose-500/20 px-1.5 text-[10px] text-rose-200" title={`${notes} reviewer note${notes === 1 ? '' : 's'}`}>
+                    ✎{notes}
+                  </span>
+                )}
               </button>
             </li>
           )
@@ -999,9 +1036,30 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
       )}
 
       <div className="space-y-4">
-        <h2 ref={headingRef} tabIndex={-1} className="text-lg font-bold text-white outline-none">
-          Step {stepIdx + 1} of {steps.length} — {step.label}
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 ref={headingRef} tabIndex={-1} className="text-lg font-bold text-white outline-none">
+            Step {stepIdx + 1} of {steps.length} — {step.label}
+          </h2>
+          {/* The draft indicator. Everything typed here is stashed as you go;
+              saying so — including when a sync FAILED and the work is only on
+              this device — is the difference between trusting the wizard and
+              retyping into a notepad first. */}
+          <SaveState status={draftState.status} lastSavedAt={draftState.lastSavedAt} />
+        </div>
+
+        {/* A returned request's notes, beside the step they are about. */}
+        {revisionsForStep(step.id).length > 0 && (
+          <div role="status" className="rounded-lg border border-rose-500/25 bg-rose-500/5 px-3 py-2 text-xs text-rose-100">
+            <p className="font-semibold">
+              The reviewer asked for {revisionsForStep(step.id).length === 1 ? 'a change' : 'changes'} on this step:
+            </p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-4">
+              {revisionsForStep(step.id).map((i) => (
+                <li key={i.id}><span className="font-semibold">{fieldLabel(i.field)}</span> — {i.note}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* ── Step 0: type picker ─────────────────────────────────────────── */}
         {step.id === 'type' && (

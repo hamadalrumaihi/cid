@@ -928,6 +928,83 @@ const pcStatementOf = (w: LegalWizardInput): string =>
  *  every earlier step — empty means the request would pass the server's
  *  submission checks (submit_legal_request_to_cid). Charges and evidence never
  *  block (see legalWizardAdvisories). */
+/* ── Progress and returned-note routing (Phase 3) ────────────────────────── */
+
+/** What the rail may say about one step. A wizard whose steps are numbered and
+ *  nothing more makes the investigator hold the whole form in their head. */
+export type LegalStepState = 'complete' | 'incomplete' | 'todo'
+
+export interface LegalStepProgress {
+  state: LegalStepState
+  /** How many required things the step is still missing. */
+  missing: number
+  /** Said in words — progress is never carried by colour alone. */
+  label: string
+}
+
+/** Read `legalWizardIssues` (the single mirror of the server's checks) and
+ *  turn it into something a rail can show.
+ *
+ *  The distinction that matters is between a step that is INCOMPLETE and one
+ *  the investigator has simply not reached. Marking step five as failing while
+ *  someone is filling in step two is a wizard scolding its user for reading in
+ *  order. An unvisited step that needs nothing at all is complete, though —
+ *  charges and evidence never block, and an untouched optional step is not a
+ *  chore. */
+export function legalStepProgress(
+  step: LegalWizardStepId,
+  w: LegalWizardInput,
+  opts: { visited: boolean },
+): LegalStepProgress {
+  const missing = legalWizardIssues(step, w).length
+  if (missing === 0) return { state: 'complete', missing: 0, label: 'Complete' }
+  if (!opts.visited) return { state: 'todo', missing, label: 'Not started' }
+  return {
+    state: 'incomplete',
+    missing,
+    label: `${missing} item${missing === 1 ? '' : 's'} missing`,
+  }
+}
+
+/** Which step owns a reviewer's revision note.
+ *
+ *  A returned request arrives with per-field notes. Listing them all on the
+ *  final step means reading a complaint about the probable-cause statement two
+ *  screens after the box that holds it; each note belongs beside the field it
+ *  is about, and a note with no field belongs where it cannot be missed. */
+const REVISION_STEP: Record<string, LegalWizardStepId> = {
+  title: 'case_target',
+  case: 'case_target',
+  case_id: 'case_target',
+  person: 'case_target',
+  person_id: 'case_target',
+  subject: 'case_target',
+  recipient: 'case_target',
+  recipient_name: 'case_target',
+  recipient_type: 'case_target',
+  priority: 'case_target',
+  classification: 'case_target',
+  charges: 'charges',
+  charge: 'charges',
+  evidence: 'evidence',
+  exhibit: 'evidence',
+  exhibits: 'evidence',
+  targets: 'evidence',
+  narrative: 'narrative',
+  justification: 'narrative',
+  probable_cause: 'narrative',
+  standard_of_proof: 'narrative',
+  request_type: 'type',
+  subtype: 'type',
+}
+
+export function revisionStepFor(field: string | null | undefined): LegalWizardStepId {
+  if (!field) return 'review'
+  // Anything type-specific (premises, items sought, the subpoena fields, and
+  // whatever a future warrant type adds) lives on the details step.
+  return REVISION_STEP[field] ?? 'details'
+}
+
 export function legalWizardIssues(step: LegalWizardStepId, w: LegalWizardInput): string[] {
   const issues: string[] = []
   const warrant = w.requestType === 'warrant'
