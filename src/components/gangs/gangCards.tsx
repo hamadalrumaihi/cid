@@ -96,7 +96,7 @@ export function GangCard({ gang, stats, canDelete, selected, onSelect, onOpen, o
 
       <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2">
         <button onClick={onOpen} className="text-sm font-semibold text-blue-300 hover:text-blue-200">Open dossier →</button>
-        <button onClick={onProfile} title="Unified intel profile" className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10">Profile</button>
+        <button onClick={onProfile} title="Unified intel profile" className="min-h-[44px] sm:min-h-0 rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10">Profile</button>
       </div>
     </article>
   )

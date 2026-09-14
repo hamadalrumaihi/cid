@@ -466,10 +466,10 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, observationCo
           <p className="mt-0.5 text-xs text-slate-400">{locLabel(place.type)} · {place.area || '-'}</p>
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
-          {canEdit && <button onClick={onAddPhoto} aria-label="Attach a photograph of this location" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-emerald-200 transition hover:bg-white/10" title="Attach a photograph of this location"><PhotoIcon size={16} /></button>}
-          {canEdit && <button onClick={onAttach} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-blue-200 transition hover:bg-white/10" title="Attach to case">Attach</button>}
-          {canEdit && <button onClick={onEdit} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
-          {canDelete && <button aria-label="Remove location" onClick={onDelete} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
+          {canEdit && <button onClick={onAddPhoto} aria-label="Attach a photograph of this location" className="min-h-[44px] sm:min-h-0 -my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-emerald-200 transition hover:bg-white/10" title="Attach a photograph of this location"><PhotoIcon size={16} /></button>}
+          {canEdit && <button onClick={onAttach} className="min-h-[44px] sm:min-h-0 -my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-blue-200 transition hover:bg-white/10" title="Attach to case">Attach</button>}
+          {canEdit && <button onClick={onEdit} className="min-h-[44px] sm:min-h-0 -my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
+          {canDelete && <button aria-label="Remove location" onClick={onDelete} className="min-h-[44px] sm:min-h-0 -my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
           {canDelete && (
             <label className="flex items-center pl-0.5" title="Select for bulk delete">
               <input type="checkbox" checked={selected} onChange={(e) => onSelect(e.target.checked)} aria-label={`Select ${place.name} for bulk delete`} className="h-4 w-4 accent-rose-500" />
