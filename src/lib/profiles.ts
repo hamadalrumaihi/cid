@@ -18,18 +18,43 @@ export type RosterProfile = Pick<
 
 interface ProfilesState {
   profiles: RosterProfile[]
+  /** True once a read has SUCCEEDED. A screen may only say "no members" when
+   *  this is true — before it, an empty array means "not read yet". */
   loaded: boolean
+  /** A read is in flight. `loaded && loading` is a refresh over stale rows. */
+  loading: boolean
+  /** The last read's failure, or null. Kept separately from `profiles` so a
+   *  failed refresh can show stale rows AND say they are stale. */
+  error: string | null
   fetch: () => Promise<void>
 }
+
+/** Monotonic request id. Two refreshes can be in flight at once — a realtime
+ *  bump landing on top of a manual refresh — and they can resolve out of
+ *  order, which used to let an OLDER answer overwrite a newer one (a member
+ *  reappearing in the bureau they had just left). Only the newest request may
+ *  write. */
+let seq = 0
 
 export const useProfilesStore = create<ProfilesState>((set) => ({
   profiles: [],
   loaded: false,
+  loading: false,
+  error: null,
   async fetch() {
+    const mine = ++seq
+    set({ loading: true })
     try {
       const rows = (await list('profiles', { select: ROSTER_COLS })) as unknown as RosterProfile[]
-      set({ profiles: rows, loaded: true })
-    } catch { /* transient — keep the previous cache; views degrade to 'Officer' */ }
+      if (mine !== seq) return // a newer read already answered
+      set({ profiles: rows, loaded: true, loading: false, error: null })
+    } catch (e) {
+      if (mine !== seq) return
+      // The rows already in hand stay: stale beats blank. What changes is that
+      // the failure is now VISIBLE, so a screen can say so and offer a retry
+      // instead of rendering an empty division.
+      set({ loading: false, error: e instanceof Error ? e.message : String(e) })
+    }
   },
 }))
 

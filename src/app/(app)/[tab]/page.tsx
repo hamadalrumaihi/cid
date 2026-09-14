@@ -9,7 +9,7 @@ import { CasesView } from '@/components/cases/CasesView'
 import { OperationsView } from '@/components/operations/OperationsView'
 import { MyDashboardView } from '@/components/dashboard/MyDashboardView'
 import { ActionCenterView } from '@/components/actioncenter/ActionCenterView'
-import { PersonnelView } from '@/components/personnel/PersonnelView'
+import { DirectoryView } from '@/components/directory/DirectoryView'
 import { AnnounceView } from '@/components/announce/AnnounceView'
 import { PenalView } from '@/components/penal/PenalView'
 import { ShiftsView } from '@/components/shifts/ShiftsView'
@@ -63,6 +63,11 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
   // The Portal User Guide moved into the library for the same reason. One
   // library, one copy of each guide; the old address is the door to it.
   if (tab === 'guide') return <LegacyRedirect to="/guides/user-guide" />
+  // The public roster is the Division Directory now, under Division &
+  // Reference rather than Command. Its old address keeps working: bookmarks,
+  // the search palette's member hits and the Trash's commendation links all
+  // pointed at /personnel.
+  if (tab === 'personnel') return <LegacyRedirect to="/directory" />
   // Legacy Intelligence tool routes → the unified workspace. The routes stay
   // prerendered and valid (deep links, bookmarks, notifications, case
   // cross-links); a tiny client shim maps their query params onto
@@ -129,10 +134,10 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
       </Suspense>
     )
   }
-  if (tab === 'personnel') {
+  if (tab === 'directory') {
     return (
-      <Suspense fallback={<ViewPlaceholder tab="personnel" />}>
-        <PersonnelView />
+      <Suspense fallback={<ViewPlaceholder tab="directory" />}>
+        <DirectoryView />
       </Suspense>
     )
   }

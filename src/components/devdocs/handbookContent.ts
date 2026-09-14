@@ -944,7 +944,7 @@ One row per leaf tab in \`PAGE_META\` (\`src/lib/nav.ts\` — the routing truth)
 | \`analytics\` | Division Analytics | cases, evidence, persons (charts) | — |
 | \`announce\` | Announcements | announcements | posting = command |
 | \`heatmap\` | Crime Heatmap | cases, turf, places, raids | — |
-| \`personnel\` | Roster & Commendations | profiles (+ admin RPCs), commendations | admin panel = command |
+| \`directory\` | Division Directory (\`DirectoryView\` — grouped-by-bureau roster over the shared profiles cache: search, bureau/rank/status filters, grouped vs compact layout, live on the \`profiles\` and \`commendations\` channels with a reconnect note; commendations below it). The retired \`/personnel\` address redirects here. **Member-facing only** — approvals, transfers, rank, account state, LOA administration and history live in the Command Center | profiles (non-email projection), commendations | none — every active member; member administration = command |
 | \`cases\` | Case board + detail (keep-alive case sections; saved views via \`lib/savedViews\`; DataTable row-selection bulk status/lead/archive — chunked, preview-confirmed, no bulk delete) | the whole case constellation | bureau-scoped; bulk lead assign command-only |
 | \`operations\` | Task Forces | operations, cases | — |
 | \`case-files\` | Attachments | case_files + FiveManage | delete = command |

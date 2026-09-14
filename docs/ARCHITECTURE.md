@@ -272,6 +272,10 @@ More depth: [Handbook Ch. 9](handbook/09-auth.md).
   mount and releases on unmount or when the id changes, and the channel closes
   when the last holder lets go. Browsing twenty dossiers therefore leaves no
   twenty channels behind.
+- Channel health is tracked per table (`useTableStatus`): a screen showing
+  live data can say when it stopped being live. Postgres changes are NOT
+  replayed after a drop, so a channel that recovers bumps its version and
+  every subscriber re-reads the window it missed.
 - Teardown on sign-out: `supabase.removeAllChannels()` (auth layer) +
   `resetRealtime()`.
 - A table must be in the Supabase realtime publication for events to arrive;

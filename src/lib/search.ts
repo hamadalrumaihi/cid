@@ -65,7 +65,7 @@ export const SEARCH_KINDS: Record<string, { title: string; tab: string; tag: str
   document_page: { title: 'Case documents', tab: 'cases', tag: 'page' },
   source:    { title: 'External sources', tab: 'intelligence', tag: 'source' },
   tip:       { title: 'Intelligence', tab: 'field-review', tag: 'intel' },
-  member:    { title: 'Members',    tab: 'personnel',  tag: 'member' },
+  member:    { title: 'Members',    tab: 'directory',  tag: 'member' },
   charge:    { title: 'Charges',    tab: 'penal',      tag: 'charge' },
   /** Confidential informants (CI §6.4) — produced ONLY by `ciHits` for an
    *  involved viewer; `search_all` never emits this kind. */

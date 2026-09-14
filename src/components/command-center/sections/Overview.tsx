@@ -28,6 +28,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { bureauLabel, bureauShort, roleLabel } from '@/lib/roles'
 import { Store } from '@/lib/store'
 import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { DashPanel } from '@/components/dash/DashPanel'
 import { DashRow } from '@/components/dash/DashRow'
@@ -196,6 +197,9 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
     { label: 'Unassigned cases', value: unassignedCases, hint: 'open, no lead detective', onClick: goCasesUnassigned },
     { label: 'Unassigned intel', value: data.intelUnassigned ?? '—', hint: 'field submissions unclaimed', onClick: () => router.push('/intelligence') },
     { label: 'Expiring BOLOs', value: data.boloExpiring ?? '—', hint: 'window closes within 7 days', onClick: () => router.push('/workspace?tool=bolo') },
+    // Personnel EXCEPTIONS only. The roster itself is the Division Directory's
+    // (Division & Reference) — the Command Center does not keep a second copy
+    // of it, and this tile opens the availability board rather than a list.
     { label: 'On LOA', value: onLoa, hint: 'active but on leave', onClick: () => onGo('duty') },
     { label: 'Overdue tasks', value: overdueTasks, hint: 'across visible cases', onClick: () => onGo('cases') },
   ]
@@ -227,6 +231,10 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
       <div>
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">Decision queues</h3>
         <MetricStrip metrics={tiles} />
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button size="sm" variant="secondary" onClick={() => onGo('personnel')}>Personnel &amp; Admin</Button>
+          <Button size="sm" variant="ghost" onClick={() => router.push('/directory')}>Division Directory</Button>
+        </div>
       </div>
 
       <div>

@@ -11,8 +11,8 @@ import { TOOL_TABS } from './toolsModel'
  *  old deep link still resolves (the [tab] page redirects unknown slugs to
  *  /inbox, which would silently eat bookmarks). */
 describe('nav — legacy redirect routes', () => {
-  it('the retired ids are exactly action, command, tools, the 14 tool routes, reports and undergrnd', () => {
-    expect([...LEGACY_REDIRECT_TABS]).toEqual(['action', 'command', 'tools', ...TOOL_TABS, 'reports', 'undergrnd', 'guide'])
+  it('the retired ids are exactly action, command, tools, the 14 tool routes, reports, undergrnd, guide and personnel', () => {
+    expect([...LEGACY_REDIRECT_TABS]).toEqual(['action', 'command', 'tools', ...TOOL_TABS, 'reports', 'undergrnd', 'guide', 'personnel'])
   })
 
   it('legacy ids are routable (isValidTab) but carry NO page metadata', () => {
@@ -64,9 +64,9 @@ describe('nav — legacy redirect routes', () => {
 describe('nav — categories', () => {
   it('the category ids, labels and tab order are pinned', () => {
     expect(NAV_CATEGORIES.map((c) => [c.id, c.label, c.tabs])).toEqual([
-      ['command', 'Command', ['inbox', 'dashboard', 'analytics', 'announce', 'heatmap', 'personnel']],
+      ['command', 'Command', ['inbox', 'dashboard', 'analytics', 'announce', 'heatmap']],
       ['cases', 'Investigations', ['cases', 'operations', 'legal', 'intelligence', 'informants', 'registries', 'rico', 'case-files']],
-      ['reference', 'Reference', ['penal', 'sops']],
+      ['reference', 'Division & Reference', ['directory', 'penal', 'sops']],
       ['oversight', 'Oversight', ['calendar', 'shifts', 'trash']],
       ['owner', 'Owner', ['owner', 'audit', 'devdocs', 'report-templates']],
     ])
@@ -129,6 +129,34 @@ describe('nav — categories', () => {
     expect(NAV_CATEGORIES.flatMap((c) => c.tabs)).not.toContain('undergrnd')
     expect(SIU_NAV_CATEGORIES.flatMap((c) => c.tabs)).not.toContain('undergrnd')
     expect('undergrnd' in PAGE_META).toBe(false)
+  })
+
+  /** The public roster left Command. It was the one member-facing screen in a
+   *  category of command work, which made it read as command material and put
+   *  it beside the restricted Personnel Management; the two surfaces showed
+   *  overlapping member information with different audiences. The directory is
+   *  division reference now — everyone reads it — and Personnel Management
+   *  keeps the Command Center to itself. */
+  describe('the Division Directory', () => {
+    it('is a Division & Reference leaf, not a Command one', () => {
+      expect(TAB_CATEGORY.directory).toBe('reference')
+      expect(NAV_CATEGORIES.find((c) => c.id === 'command')!.tabs).not.toContain('directory')
+      expect(PAGE_META.directory.title).toBe('Division Directory')
+      expect(TAB_LABEL.directory).toBe('Division Directory')
+    })
+
+    it('keeps /personnel working — the old roster address redirects into it', () => {
+      expect(isValidTab('personnel')).toBe(true)
+      expect('personnel' in PAGE_META, 'a legacy id carries no page metadata').toBe(false)
+      expect(TAB_CATEGORY.personnel).toBe('reference')
+      for (const c of [...NAV_CATEGORIES, ...SIU_NAV_CATEGORIES]) {
+        expect(c.tabs, `category '${c.id}'`).not.toContain('personnel')
+      }
+    })
+
+    it('leads the Division & Reference category, so the category button lands on it', () => {
+      expect(CAT_DEFAULT.reference).toBe('directory')
+    })
   })
 
   it('command-center stays a standalone (per-user-gated) leaf, not a category tab', () => {

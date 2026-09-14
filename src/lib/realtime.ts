@@ -21,15 +21,30 @@ import { useEffect } from 'react'
 import { create } from 'zustand'
 import { isConfigured, supabase } from './supabase'
 
+/** A table channel's connection, as far as the client can tell. A screen
+ *  reading live data needs to be able to SAY when it stopped being live —
+ *  events do not arrive with an apology. */
+export type ChannelStatus = 'connecting' | 'live' | 'down'
+
 interface RtState {
   versions: Record<string, number>
+  /** Per-table channel health; absent = never subscribed (connecting). */
+  channels: Record<string, ChannelStatus>
   bump: (key: string) => void
+  setChannel: (table: string, status: ChannelStatus) => void
 }
 
 export const useRealtimeStore = create<RtState>((set) => ({
   versions: {},
+  channels: {},
   bump: (key) => set((s) => ({ versions: { ...s.versions, [key]: (s.versions[key] ?? 0) + 1 } })),
+  setChannel: (table, status) => set((s) =>
+    s.channels[table] === status ? s : { channels: { ...s.channels, [table]: status } }),
 }))
+
+/** Read a table channel's health outside React (tests, helpers). */
+export const tableStatus = (table: string): ChannelStatus =>
+  useRealtimeStore.getState().channels[table] ?? 'connecting'
 
 const registered = new Set<string>()
 /** One live row-scoped channel per store key, with the number of mounted
@@ -101,7 +116,23 @@ export function subscribeTable(table: string): void {
       .on('postgres_changes', { event: '*', schema: 'public', table }, () => {
         debouncedBump(table)
       })
-      .subscribe()
+      // Channel health, and the reconnect rule. Postgres changes that happen
+      // while the socket is down are NOT replayed, so a channel that comes
+      // back is a channel with a hole behind it: the recovery bumps the
+      // counter and every subscriber re-reads. The first SUBSCRIBED is not a
+      // recovery — the screen is already doing its initial load.
+      .subscribe((status) => {
+        const { setChannel } = useRealtimeStore.getState()
+        if (status === 'SUBSCRIBED') {
+          const recovered = tableStatus(table) === 'down'
+          setChannel(table, 'live')
+          if (recovered) debouncedBump(table)
+          return
+        }
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          setChannel(table, 'down')
+        }
+      })
   } catch {
     registered.delete(table) // allow a later retry if channel setup failed
   }
@@ -189,6 +220,7 @@ export function subscribeCaseTable(table: string, caseId: string): void {
 export function resetRealtime(): void {
   registered.clear()
   scoped.clear()
+  useRealtimeStore.setState({ channels: {} })
   fallbackKeys.clear()
   warnedTables.clear()
 }
@@ -198,6 +230,14 @@ export function resetRealtime(): void {
 export function useTableVersion(table: string): number {
   useEffect(() => { subscribeTable(table) }, [table])
   return useRealtimeStore((s) => s.versions[table] ?? 0)
+}
+
+/** A table channel's health, for a screen that must tell the reader when its
+ *  live data stopped being live. Registers the subscription like
+ *  useTableVersion, so a screen may use either or both. */
+export function useTableStatus(table: string): ChannelStatus {
+  useEffect(() => { subscribeTable(table) }, [table])
+  return useRealtimeStore((s) => s.channels[table] ?? 'connecting')
 }
 
 /** Version counter for the rows of a table where `column = id`. Registers
