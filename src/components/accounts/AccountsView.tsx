@@ -32,6 +32,7 @@ import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { LinkEditPopover } from '@/components/shared/LinkEditPopover'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
 import { PinButton } from '@/components/shared/PinButton'
+import { RegistryPurposeNote } from '@/components/shared/RegistryPurposeNote'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
 import { pushRecent } from '@/lib/recents'
 import { useToolNav } from '@/components/tools/useToolNav'
@@ -151,6 +152,10 @@ export function AccountsView() {
           </>
         }
       />
+
+      {/* What belongs here — "account" reads like a portal login, and the
+          registry fills up with the wrong thing when nobody says otherwise. */}
+      <RegistryPurposeNote registry="accounts" />
 
       {state !== 'in' ? (
         <Notice text="Sign in to view the account registry." />

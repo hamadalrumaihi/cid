@@ -34,6 +34,7 @@ import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { inputCls, labelCls } from '@/components/ui/Field'
 import { CrossrefList } from '@/components/shared/CrossrefList'
+import { RegistryPurposeNote } from '@/components/shared/RegistryPurposeNote'
 import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import { searchCaseHits, type EntityHit } from '@/lib/entitySearch'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
@@ -221,6 +222,12 @@ export function IndicatorsView() {
           </>
         }
       />
+
+      {/* What belongs here — "indicator" is analyst vocabulary, and a registry
+          nobody understands is either misused or left empty. */}
+      <div className="mb-6">
+        <RegistryPurposeNote registry="indicators" />
+      </div>
 
       {!loading && !err && (
         alerts.length ? (
