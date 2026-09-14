@@ -21,11 +21,12 @@ import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { useCapabilities } from '@/lib/permissions'
 import { timeAgo, todayISO } from '@/lib/format'
+import { roleEventLine } from '@/lib/personnel'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useJusticeRoster } from '@/lib/justiceRoster'
 import { useFieldStanding } from '@/lib/fieldStanding'
 import { useTableVersion } from '@/lib/realtime'
-import { bureauLabel, bureauShort, roleLabel } from '@/lib/roles'
+import { bureauLabel } from '@/lib/roles'
 import { Store } from '@/lib/store'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -59,23 +60,6 @@ const FIELD_OPEN = ['new', 'reviewing', 'needs_info']
 const BUREAU_KEYS = ['major_crimes', 'street_crimes', 'JTF'] as const
 const BAR_COLORS: Record<string, string> = {
   major_crimes: 'bg-blue-500', street_crimes: 'bg-emerald-500', JTF: 'bg-amber-500',
-}
-
-const SOURCE_LABEL: Record<string, string> = {
-  membership_approval: 'Membership approved',
-  role_change: 'Role change',
-  transfer: 'Transfer',
-  activation: 'Status change',
-}
-
-/** One quiet line per role_events row — what changed, in plain words. */
-function roleEventWhy(e: RoleEventRow): string {
-  const parts: string[] = []
-  if (e.source && SOURCE_LABEL[e.source]) parts.push(SOURCE_LABEL[e.source])
-  if (e.new_role && e.new_role !== e.old_role) parts.push(`${roleLabel(e.old_role)} → ${roleLabel(e.new_role)}`)
-  if (e.new_division && e.new_division !== e.old_division) parts.push(`${bureauShort(e.old_division)} → ${bureauShort(e.new_division)}`)
-  if (e.new_active !== null && e.new_active !== e.old_active) parts.push(e.new_active ? 'activated' : 'deactivated')
-  return parts.join(' · ') || 'Assignment updated'
 }
 
 interface Counts {
@@ -289,7 +273,7 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
           <DashRow
             key={e.id}
             title={officerName(e.target_id) || 'Officer'}
-            why={`${roleEventWhy(e)}${e.actor_id ? ` — by ${officerName(e.actor_id) || 'Command'}` : ''}`}
+            why={`${roleEventLine(e)}${e.actor_id ? ` — by ${officerName(e.actor_id) || 'Command'}` : ''}`}
             meta={timeAgo(e.created_at)}
             onClick={() => onGo('promotions')}
           />

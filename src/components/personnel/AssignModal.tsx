@@ -24,6 +24,8 @@ import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { fmtDate } from '@/lib/format'
+import { MemberHistory } from './MemberHistory'
 import { canRemoveMember, canTransfer, getAssignableRoles, isCommandRole } from '@/lib/permissions'
 
 type Bureau = keyof typeof BUREAUS & string
@@ -243,15 +245,31 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
         <ModalHeader title="Manage Officer" onClose={onClose} />
         <p className="mb-3 text-[11px] text-slate-500">{email}</p>
 
-        {/* Current authoritative assignment — read-only; changes go through the
-            audited actions below, never a silent dropdown save. */}
-        <div className="mb-4 grid grid-cols-2 gap-x-6 gap-y-1 rounded-lg border border-white/10 bg-ink-950/50 p-3 text-xs">
-          <p className="text-slate-400">Current Role <span className="block text-sm text-slate-100">{roleLabel(p.role)}</span></p>
-          <p className="text-slate-400">Current Department <span className="block text-sm text-slate-100">{p.division ? bureauLabel(p.division) : 'Unassigned (pending approval)'}</span></p>
-          <p className="text-slate-400">Active <span className="block text-sm text-slate-100">{p.active ? 'Yes' : 'No'}</span></p>
-          <p className="text-slate-400">On LOA <span className="block text-sm text-slate-100">{p.loa ? 'Yes' : 'No'}</span></p>
+        {/* Where this member stands, read-only and in three separate facts:
+            what they are assigned to, what their account may do, and whether
+            they are available. Every one of them changes through an audited
+            action below, never a silent dropdown save. */}
+        <div className="mb-4 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Current assignment</p>
+            <p className="mt-1 text-sm text-slate-100">{roleLabel(p.role)}</p>
+            <p className="text-xs text-slate-400">{p.division ? bureauLabel(p.division) : 'Unassigned (pending approval)'}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Current access</p>
+            <p className={`mt-1 text-sm ${p.login_denied ? 'text-rose-300' : p.active ? 'text-emerald-300' : 'text-amber-300'}`}>
+              {p.login_denied ? 'Login denied' : p.active ? 'Active member' : 'Awaiting approval'}
+            </p>
+            <p className="text-xs text-slate-400">{p.is_owner ? 'Portal owner' : isCommandRole(p.role) ? 'Command authority' : 'Standard access'}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Availability</p>
+            <p className={`mt-1 text-sm ${p.loa ? 'text-amber-300' : 'text-slate-100'}`}>{p.loa ? 'On LOA' : 'Available'}</p>
+            <p className="text-xs text-slate-400">{p.loa && p.loa_since ? `since ${fmtDate(p.loa_since)}` : 'Sign-offs route to them normally'}</p>
+          </div>
         </div>
 
+        <p className="mb-2 text-xs font-medium text-slate-500">Identity</p>
         <div className="mb-3 grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-400">Display Name</label>
@@ -268,7 +286,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
         <Button className="mt-3 w-full" disabled={busy} onClick={() => void saveProfile()}>Save profile details</Button>
 
         <div className="mt-4 border-t border-white/5 pt-3">
-          <p className="mb-2 text-xs font-medium text-slate-500">Administrative actions</p>
+          <p className="mb-2 text-xs font-medium text-slate-500">Management actions</p>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" disabled={!roleOptions.length} onClick={() => openPanel('role')}
               title={roleOptions.length ? undefined : 'No role you can grant for this member (authority matrix)'}>
@@ -388,6 +406,11 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
               </Button>
             </div>
           )}
+        </div>
+
+        <div className="mt-4 border-t border-white/5 pt-3">
+          <p className="mb-2 text-xs font-medium text-slate-500">History</p>
+          <MemberHistory memberId={p.id} />
         </div>
 
         <div className="mt-4 border-t border-white/5 pt-3">

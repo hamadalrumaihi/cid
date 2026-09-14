@@ -9,7 +9,7 @@ export interface HandbookPage {
   body: string
 }
 
-export const HANDBOOK_UPDATED = '2026-09-11'
+export const HANDBOOK_UPDATED = '2026-09-14'
 
 export const HANDBOOK_PAGES: HandbookPage[] = [
   {
@@ -979,7 +979,7 @@ One row per leaf tab in \`PAGE_META\` (\`src/lib/nav.ts\` — the routing truth)
 | \`workspace\` | Unified workspace (\`workspace/WorkspaceView\`) — cases, records and tools side by side in one keep-alive tab strip (ids-only persistence, titles re-resolved through RLS; eight tabs max); \`/cases?case=&tab=\` and \`/tools?tool=&record=\` redirect in; a case tab is \`CaseDetail\` embedded with \`CaseSectionSwitcher\` | the whole case constellation, \`case_notes\`, \`case_links\`, \`case_audit_feed\`, \`record_history\` | as the underlying rows; archived cases read-only at RLS (\`case_writable\`) |
 | \`feedback\` | Feedback (sidebar leaf) | feedback | triage = owner flag (\`profiles.is_owner\`) |
 | \`profile\` | My Profile (\`ProfileView\`) | own profile, appearance, notification settings | self |
-| \`command-center\` | Command Center (\`CommandCenterView\`, \`?s=\` sections) | command dashboard overview, Cases & Assignments and Intelligence Oversight queues, personnel admin, approvals, promotions, transfers, duty status, permissions matrix (\`src/lib/permissionsMatrix.ts\`), bureau-vs-division scope badge | command + Owner |
+| \`command-center\` | Command Center (\`CommandCenterView\`, \`?s=\` sections) | command dashboard overview, Cases & Assignments and Intelligence Oversight queues, personnel admin (one work list over every account state, sorted by what awaits a decision; Manage Officer separates identity / assignment / access / availability / actions / history), approvals, promotions, transfers, availability exceptions, permissions matrix (\`src/lib/permissionsMatrix.ts\`), bureau-vs-division scope badge | command + Owner |
 | \`owner\` | Owner Console (\`OwnerView\`, \`?s=\` sections grouped Overview / Operations / Safety / Reference; legacy \`?s=\` values redirect) | owner dashboard (warnings, pending queue, recent admin changes), portal management (SIB release gate, runbook), roles & access (justice grants, test-fixture flag), feedback triage, permanent deletion + ledger, security & audit, system health, handbook reference | **owner-only** |
 
 ¹ **Investigative Tools slugs.** These 14 routes stay registered (deep-link
