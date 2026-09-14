@@ -231,10 +231,22 @@ export interface CiListFilters {
 
 export interface CiPersonStatus { ci_id: string; ci_number: string; status: string }
 
-/* ── Reads (null / [] on refusal — never throw) ───────────────────────────── */
+
+/* ── Reads (null / [] on refusal — never throw) ────────────────────────────
+ *  Grouped by the use case that asks, because that is how the compartment is
+ *  actually used: the ROSTER (who exists, and the numbers over them), one
+ *  informant's PROFILE (the record and its child lists), the INTELLIGENCE a
+ *  case sees, and the capacity REQUESTS queue. Every one of them answers the
+ *  same way — null or an empty list — whether the caller has no CI access,
+ *  the row does not exist, or the read was refused. That sameness is the
+ *  compartment: an error state that differed by authorization would be an
+ *  existence oracle.
+ */
 
 const num = (v: unknown, d = 0): number => (typeof v === 'number' && Number.isFinite(v) ? v : d)
 const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
+
+/* Roster — who exists, and the numbers over them. */
 
 /** Strip empty filter values so the server sees only real constraints. */
 function cleanFilters(f: CiListFilters): Json {
@@ -258,6 +270,41 @@ export async function fetchCiList(filters: CiListFilters = {}, limit = 200): Pro
   return res.error ? [] : (res.data ?? [])
 }
 
+export async function fetchCiStats(): Promise<CiStats | null> {
+  const res = await rpc('ci_stats', {})
+  if (res.error || !res.data || typeof res.data !== 'object' || Array.isArray(res.data)) return null
+  const d = res.data as Record<string, unknown>
+  return {
+    active: num(d.active), dormant: num(d.dormant), high_risk: num(d.high_risk), compromised: num(d.compromised),
+    contacts_overdue: num(d.contacts_overdue), handlers_at_capacity: num(d.handlers_at_capacity),
+    pending_requests: num(d.pending_requests),
+    handlers: arr<Record<string, unknown>>(d.handlers).map((h) => ({
+      user_id: String(h.user_id ?? ''),
+      name: typeof h.name === 'string' ? h.name : null,
+      active_count: num(h.active_count),
+      capacity: num(h.capacity, 6),
+      ci_ids: arr<string>(h.ci_ids),
+    })),
+  }
+}
+
+export async function ciSearch(q: string, limit = 10): Promise<CiSearchRow[]> {
+  const term = q.trim()
+  if (!term) return []
+  const res = await rpc('ci_search', { p_q: term, p_limit: limit })
+  return res.error ? [] : (res.data ?? [])
+}
+
+/* One informant's profile — the record, and the child lists its sections
+ * show. The CI tables are not in db.ts's SOFT_DELETE_KIND (their deletes are
+ * RPC'd), so live-row filtering is explicit; a refused read is an empty list.
+ */
+
+/* RLS-scoped child lists for the profile sections. The CI tables are not in
+ * db.ts's SOFT_DELETE_KIND (their deletes are RPC'd), so live-row filtering is
+ * explicit here. A refused read is an empty list, never an error. */
+const safeList = async <T,>(fn: () => Promise<T[]>): Promise<T[]> => { try { return await fn() } catch { return [] } }
+
 export async function fetchCi(id: string): Promise<CiDetail | null> {
   const res = await rpc('ci_get', { p_ci: id })
   if (res.error || !res.data || typeof res.data !== 'object' || Array.isArray(res.data)) return null
@@ -277,44 +324,12 @@ export async function fetchCi(id: string): Promise<CiDetail | null> {
   }
 }
 
-export async function fetchCiStats(): Promise<CiStats | null> {
-  const res = await rpc('ci_stats', {})
-  if (res.error || !res.data || typeof res.data !== 'object' || Array.isArray(res.data)) return null
-  const d = res.data as Record<string, unknown>
-  return {
-    active: num(d.active), dormant: num(d.dormant), high_risk: num(d.high_risk), compromised: num(d.compromised),
-    contacts_overdue: num(d.contacts_overdue), handlers_at_capacity: num(d.handlers_at_capacity),
-    pending_requests: num(d.pending_requests),
-    handlers: arr<Record<string, unknown>>(d.handlers).map((h) => ({
-      user_id: String(h.user_id ?? ''),
-      name: typeof h.name === 'string' ? h.name : null,
-      active_count: num(h.active_count),
-      capacity: num(h.capacity, 6),
-      ci_ids: arr<string>(h.ci_ids),
-    })),
-  }
-}
-
-export async function fetchCiCaseIntel(caseId: string, limit = 100): Promise<CiCaseIntelRow[]> {
-  const res = await rpc('ci_case_intel', { p_case: caseId, p_limit: limit })
-  return res.error ? [] : (res.data ?? [])
-}
-
-export async function fetchCiCaseCounts(caseIds: string[]): Promise<Map<string, number>> {
-  const out = new Map<string, number>()
-  if (!caseIds.length) return out
-  const res = await rpc('ci_case_counts', { p_cases: caseIds })
-  if (res.error) return out
-  for (const r of res.data ?? []) out.set(r.case_id, r.n)
-  return out
-}
-
-export async function ciSearch(q: string, limit = 10): Promise<CiSearchRow[]> {
-  const term = q.trim()
-  if (!term) return []
-  const res = await rpc('ci_search', { p_q: term, p_limit: limit })
-  return res.error ? [] : (res.data ?? [])
-}
+export const fetchCiContacts = (ciId: string): Promise<CiContactRow[]> =>
+  safeList(() => list('ci_contacts', { eq: { ci_id: ciId }, is: { deleted_at: null }, order: 'occurred_at', ascending: false, limit: 200 }))
+export const fetchCiAssessments = (ciId: string): Promise<CiAssessmentRow[]> =>
+  safeList(() => list('ci_assessments', { eq: { ci_id: ciId }, order: 'assessed_at', ascending: false, limit: 100 }))
+export const fetchCiPayments = (ciId: string): Promise<CiPaymentRow[]> =>
+  safeList(() => list('ci_payments', { eq: { ci_id: ciId }, is: { deleted_at: null }, order: 'paid_at', ascending: false, limit: 200 }))
 
 /** Null is indistinguishable from "not a CI" — by design (§3). */
 export async function fetchCiPersonStatus(personId: string): Promise<CiPersonStatus | null> {
@@ -330,21 +345,29 @@ export async function fetchCiAudit(ciId?: string | null, limit = 100): Promise<C
   return res.error ? [] : (res.data ?? [])
 }
 
-/* RLS-scoped child lists for the profile sections. The CI tables are not in
- * db.ts's SOFT_DELETE_KIND (their deletes are RPC'd), so live-row filtering is
- * explicit here. A refused read is an empty list, never an error. */
-const safeList = async <T,>(fn: () => Promise<T[]>): Promise<T[]> => { try { return await fn() } catch { return [] } }
+/* Intelligence — what an informant reported, and what a case sees of it. */
 
-export const fetchCiContacts = (ciId: string): Promise<CiContactRow[]> =>
-  safeList(() => list('ci_contacts', { eq: { ci_id: ciId }, is: { deleted_at: null }, order: 'occurred_at', ascending: false, limit: 200 }))
 export const fetchCiIntel = (ciId: string): Promise<CiIntelRow[]> =>
   safeList(() => list('ci_intelligence', { eq: { ci_id: ciId }, is: { deleted_at: null }, order: 'received_at', ascending: false, limit: 200 }))
 export const fetchCiIntelLinks = (intelIds: string[]): Promise<CiIntelLinkRow[]> =>
   intelIds.length ? safeList(() => list('ci_intelligence_links', { in: { intel_id: intelIds } })) : Promise.resolve([])
-export const fetchCiAssessments = (ciId: string): Promise<CiAssessmentRow[]> =>
-  safeList(() => list('ci_assessments', { eq: { ci_id: ciId }, order: 'assessed_at', ascending: false, limit: 100 }))
-export const fetchCiPayments = (ciId: string): Promise<CiPaymentRow[]> =>
-  safeList(() => list('ci_payments', { eq: { ci_id: ciId }, is: { deleted_at: null }, order: 'paid_at', ascending: false, limit: 200 }))
+
+export async function fetchCiCaseIntel(caseId: string, limit = 100): Promise<CiCaseIntelRow[]> {
+  const res = await rpc('ci_case_intel', { p_case: caseId, p_limit: limit })
+  return res.error ? [] : (res.data ?? [])
+}
+
+export async function fetchCiCaseCounts(caseIds: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>()
+  if (!caseIds.length) return out
+  const res = await rpc('ci_case_counts', { p_cases: caseIds })
+  if (res.error) return out
+  for (const r of res.data ?? []) out.set(r.case_id, r.n)
+  return out
+}
+
+/* Capacity and assignment requests. */
+
 export const fetchCiRequests = (): Promise<CiRequestRow[]> =>
   safeList(() => list('ci_capacity_requests', { order: 'created_at', ascending: false, limit: 200 }))
 
@@ -363,6 +386,8 @@ export function ciRefused<T extends object>(r: CiResult<T>): r is CiFailure {
   return !r.ok
 }
 
+/* Profile — creating an informant, and the identity, status and handler
+ * changes over that record. */
 export interface CiCreateInput {
   person: string
   alias?: string | null
@@ -395,6 +420,7 @@ export const ciHandlerSet = (ci: string, user: string, role: 'primary' | 'second
   call('ci_handler_set', { p_ci: ci, p_user: user, p_role: role, p_reason: reason, p_override_reason: overrideReason ?? null, p_counts: counts })
 export const ciHandlerRemove = (ci: string, user: string, reason: string) => call('ci_handler_remove', { p_ci: ci, p_user: user, p_reason: reason })
 
+/* Requests — capacity and assignment, and the capacity limit itself. */
 export interface CiRequestInput {
   kind: 'capacity' | 'assignment'
   reason: string
@@ -422,6 +448,7 @@ export const ciRequestWithdraw = (request: string) => call('ci_capacity_request_
 export const ciCapacitySet = (user: string, limit: number | null, reason: string, expiresAt?: string | null) =>
   call('ci_capacity_set', { p_user: user, p_limit: limit, p_reason: reason, p_expires_at: expiresAt ?? null })
 
+/* Profile — the contact log and the periodic assessment. */
 export interface CiContactInput {
   occurredAt: string
   method: string
@@ -453,6 +480,8 @@ export const ciAssess = (ci: string, i: CiAssessInput) => call<{ id: string }>('
   p_risk: i.risk ?? null, p_compromise_likelihood: i.compromiseLikelihood ?? null, p_usefulness: i.usefulness ?? null, p_note: i.note ?? null,
 })
 
+/* Intelligence — what was reported, what it links to, and the sanitized
+ * release that is the only way any of it leaves the compartment. */
 export interface CiIntelLinkInput { kind: string; target_id: string; note?: string | null }
 export interface CiIntelInput {
   summary: string
@@ -488,6 +517,7 @@ export const ciRelease = (intel: string, title: string, body: string, handling =
   call<{ release_id: string }>('ci_release', { p_intel: intel, p_title: title, p_body: body, p_handling: handling })
 export const ciReleaseRevoke = (release: string, reason: string) => call('ci_release_revoke', { p_release: release, p_reason: reason })
 
+/* Payments. */
 export interface CiPaymentInput {
   amount: number
   paidAt: string
@@ -504,6 +534,7 @@ export const ciPaymentApprove = (payment: string) => call('ci_payment_approve', 
 
 /** `ci_export` — the server audits CI_EXPORTED; the answer is the document
  *  body (profile or, with no id, the full-access roster). */
+/* Export and deletion. */
 export async function ciExport(ci: string | null, scope: 'profile' | 'roster' = ci ? 'profile' : 'roster'): Promise<CiResult<{ doc: Record<string, Json> }>> {
   const r = await call<Record<string, Json>>('ci_export', { p_ci: ci, p_scope: scope })
   if (!r.ok) return r

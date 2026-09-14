@@ -34,14 +34,12 @@ import { fmtDate } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { renderMarkdown, type DocHeading } from '@/lib/markdown'
 import {
-  categoryLabelFrom, getGuideBySlug, guideAudienceLabel, guideImageUrl, isArchived, isPublished,
-  isRestrictedAudience, isUpdatedSinceSeen, listGuideCategories, listGuideMedia, listGuideProgress,
-  listGuideSections, listGuides, markGuideComplete, markGuideOutdated, recordGuideView,
-  submitGuideFeedback, toggleGuideBookmark,
-  type GuideCategoryRow, type GuideFeedbackKind, type GuideMediaRow, type GuideProgressRow,
-  type GuideRow, type GuideSectionRow,
+  categoryLabelFrom, guideAudienceLabel, isArchived, isPublished,
+  isRestrictedAudience, isUpdatedSinceSeen, listGuideMedia, loadGuidePage, markGuideComplete,
+  markGuideOutdated, recordGuideView, resolveGuideImages, submitGuideFeedback, toggleGuideBookmark,
+  type GuideCategoryRow, type GuideFeedbackKind, type GuideImage, type GuideMediaRow,
+  type GuideProgressRow, type GuideRow, type GuideSectionRow,
 } from '@/lib/guides'
-import { list } from '@/lib/db'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Textarea } from '@/components/ui/Field'
@@ -50,25 +48,11 @@ import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { DocToc, scrollToHeading, useActiveHeading } from '@/components/sops/DocToc'
 import { useNav } from '@/components/shell/useNav'
-import { GuideHeader, GuideSection, type GuideImageRef } from './GuideParts'
+import { GuideHeader, GuideSection } from './GuideParts'
 import { GuideDocView } from './GuideDocView'
 import { GuideMediaManager, type GuideMediaSlot } from './GuideMediaManager'
 import { CHIP, CHIP_DONE, CHIP_LOCKED, CHIP_NEUTRAL, GOLD_TEXT, GUIDE_CANVAS, PANEL, SLAB, WARN } from './guideSurfaces'
 import { guideBody } from './guideRegistry'
-
-/** A media row, with a signed URL, ready for GuideParts. Rows whose object
- *  could not be signed are dropped rather than rendered broken. */
-type ResolvedImage = GuideImageRef
-
-async function resolveImages(rows: readonly GuideMediaRow[]): Promise<ResolvedImage[]> {
-  const out = await Promise.all(rows.map(async (m): Promise<ResolvedImage | null> => {
-    const src = await guideImageUrl(m.storage_path)
-    return src
-      ? { id: m.id, section: m.section, order: m.sort_order, src, alt: m.alt, caption: m.caption ?? undefined }
-      : null
-  }))
-  return out.filter((i): i is ResolvedImage => i !== null)
-}
 
 /** Reading estimate for a guide whose prose lives in the database. Same rule
  *  as the document modules: 200 words a minute, never less than a minute. */
@@ -194,7 +178,7 @@ export function GuidePage({ slug }: { slug: string }) {
   const [related, setRelated] = useState<GuideRow[]>([])
   const [progress, setProgress] = useState<GuideProgressRow | null>(null)
   const [media, setMedia] = useState<GuideMediaRow[]>([])
-  const [images, setImages] = useState<ResolvedImage[]>([])
+  const [images, setImages] = useState<GuideImage[]>([])
   const [bookmarked, setBookmarked] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -207,39 +191,25 @@ export function GuidePage({ slug }: { slug: string }) {
   const [outdatedReason, setOutdatedReason] = useState('')
   const landed = useRef(false)
 
+  // One read for the whole page (lib/guides): the guide, its prose, its
+  // imagery signed, this reader's bookmark and progress as they stood BEFORE
+  // this visit, and the related guides. Everything past the guide itself is
+  // decoration — a part that fails degrades to empty rather than withholding
+  // the document — and a slug that names nothing this reader may see answers
+  // `guide: null`, the same as a slug that never existed.
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const g = await getGuideBySlug(slug)
-      setRow(g)
-      if (g) {
-        // Everything past the document itself is decoration: none of it
-        // failing is a reason to withhold the guide, so each is settled
-        // separately and swallowed.
-        const [secs, mediaRows, marks, categories, prog, all] = await Promise.all([
-          listGuideSections(g.id).catch((): GuideSectionRow[] => []),
-          listGuideMedia(g.id).catch((): GuideMediaRow[] => []),
-          list('guide_bookmarks', { eq: { guide_id: g.id } }).catch(() => []),
-          listGuideCategories().catch((): GuideCategoryRow[] => []),
-          listGuideProgress().catch(() => new Map<string, GuideProgressRow>()),
-          listGuides().catch((): GuideRow[] => []),
-        ])
-        setDbSections(secs)
-        setMedia(mediaRows)
-        setImages(await resolveImages(mediaRows))
-        setBookmarked(marks.length > 0)
-        setCats(categories)
-        // The progress row as it stood BEFORE this visit, so the
-        // "updated since you last read it" banner still has something to
-        // compare against after the view below records the visit.
-        setProgress(prog.get(g.id) ?? null)
-        // Related guides come from the same already-RLS-filtered list the
-        // library shows, so nothing surfaces here that the reader could not
-        // already see there.
-        setRelated(all.filter((o) =>
-          o.id !== g.id && o.category === g.category && isPublished(o) && !isArchived(o)).slice(0, 4))
-      }
+      const page = await loadGuidePage(slug)
+      setRow(page.guide)
+      setDbSections(page.sections)
+      setMedia(page.media)
+      setImages(page.images)
+      setBookmarked(page.bookmarked)
+      setCats(page.categories)
+      setProgress(page.progress)
+      setRelated(page.related)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -316,7 +286,7 @@ export function GuidePage({ slug }: { slug: string }) {
     if (!row) return
     const next = await listGuideMedia(row.id).catch((): GuideMediaRow[] => [])
     setMedia(next)
-    setImages(await resolveImages(next))
+    setImages(await resolveGuideImages(next).catch((): GuideImage[] => []))
   }, [row])
 
   /** One slot per anchor section, plus the cover. An editor picks where an
