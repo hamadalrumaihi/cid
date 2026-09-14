@@ -291,7 +291,7 @@ async function memberPreview(id: string): Promise<EntityPreview | null> {
     ].filter((t) => t && t !== '—'),
     counts: [],
     imageUrl: m.avatar_url,
-    open: { href: '/personnel' },
+    open: { href: '/directory' },
   }
 }
 

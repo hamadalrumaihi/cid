@@ -29,7 +29,7 @@ vi.mock('./supabase', () => ({
   }),
 }))
 
-import { caseVersionKey, createDebouncedBump, releaseRowScoped, resetRealtime, rowVersionKey, subscribeCaseTable, subscribeRowScoped, subscribeTable, useRealtimeStore } from './realtime'
+import { caseVersionKey, createDebouncedBump, releaseRowScoped, resetRealtime, rowVersionKey, subscribeCaseTable, subscribeRowScoped, subscribeTable, tableStatus, useRealtimeStore } from './realtime'
 
 const byName = (name: string) => channels.find((c) => c.name === name)
 const version = (key: string) => useRealtimeStore.getState().versions[key] ?? 0
@@ -281,5 +281,74 @@ describe('releaseRowScoped', () => {
     expect(() => releaseRowScoped('entity_associations', 'subject_id', 'nobody')).not.toThrow()
     expect(() => releaseRowScoped('entity_associations', 'subject_id', '')).not.toThrow()
     expect(removed).toEqual([])
+  })
+})
+
+/* ── Channel health, and what a reconnect owes the screens ───────────────── */
+//
+// A dropped channel is silent: events simply stop, and a screen that believes
+// it is live goes on showing a roster that is no longer true. Two things
+// follow from that. A screen must be able to SAY the connection is down, and
+// when it comes back the missed window has to be closed — the events that
+// happened while the socket was gone are never replayed, so the counter is
+// bumped on recovery and every subscriber re-reads.
+describe('table channel health', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.stubGlobal('window', {})
+    channels.length = 0
+    removed.length = 0
+    resetRealtime()
+    useRealtimeStore.setState({ versions: {}, channels: {} })
+  })
+  afterEach(() => { vi.runAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
+
+  const health = (table: string) => useRealtimeStore.getState().channels[table]
+
+  it('is connecting until the server answers', () => {
+    expect(tableStatus('profiles')).toBe('connecting')
+    subscribeTable('profiles')
+    expect(tableStatus('profiles')).toBe('connecting')
+    byName('rt_profiles')!.cb?.('SUBSCRIBED')
+    expect(tableStatus('profiles')).toBe('live')
+    expect(health('profiles')).toBe('live')
+  })
+
+  it('reports a dropped channel rather than looking live', () => {
+    subscribeTable('profiles')
+    byName('rt_profiles')!.cb?.('SUBSCRIBED')
+    byName('rt_profiles')!.cb?.('CHANNEL_ERROR')
+    expect(tableStatus('profiles')).toBe('down')
+    byName('rt_profiles')!.cb?.('TIMED_OUT')
+    expect(tableStatus('profiles')).toBe('down')
+    byName('rt_profiles')!.cb?.('CLOSED')
+    expect(tableStatus('profiles')).toBe('down')
+  })
+
+  it('bumps the version when a channel RECOVERS, so subscribers re-read the window they missed', () => {
+    subscribeTable('profiles')
+    const ch = byName('rt_profiles')!
+    ch.cb?.('SUBSCRIBED')
+    const before = version('profiles')
+    ch.cb?.('CHANNEL_ERROR')
+    expect(version('profiles'), 'going down changes nothing on screen').toBe(before)
+    ch.cb?.('SUBSCRIBED')
+    vi.advanceTimersByTime(1000) // drain the debounce
+    expect(version('profiles'), 'coming back re-reads').toBeGreaterThan(before)
+  })
+
+  it('does not bump on the FIRST subscribe — the screen is already loading', () => {
+    subscribeTable('profiles')
+    byName('rt_profiles')!.cb?.('SUBSCRIBED')
+    vi.advanceTimersByTime(1000)
+    expect(version('profiles')).toBe(0)
+  })
+
+  it('forgets channel health on sign-out', () => {
+    subscribeTable('profiles')
+    byName('rt_profiles')!.cb?.('SUBSCRIBED')
+    resetRealtime()
+    expect(useRealtimeStore.getState().channels).toEqual({})
+    expect(tableStatus('profiles')).toBe('connecting')
   })
 })

@@ -138,9 +138,10 @@ export function trashHref(row: Pick<TrashRow, 'kind' | 'id' | 'case_id'>): strin
     return workspaceCaseHref(row.case_id, sec.tab, sec.param ? { [sec.param]: row.id } : {})
   }
   if (row.kind === 'operation') return `/operations?op=${encodeURIComponent(row.id)}`
-  // Templates are managed from the New Case modal; commendations from Personnel.
+  // Templates are managed from the New Case modal; commendations from the
+  // Division Directory, where the division reads them.
   if (row.kind === 'case_template') return '/cases?new=1'
-  if (row.kind === 'commendation') return '/personnel'
+  if (row.kind === 'commendation') return '/directory'
   if (row.kind === 'external_source') return `/intelligence?source=${encodeURIComponent(row.id)}`
   const tool = REGISTRY_TOOL[row.kind]
   if (tool) {

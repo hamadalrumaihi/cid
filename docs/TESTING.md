@@ -26,6 +26,8 @@ pure functions and the client mirrors of server workflow logic. Highlights
 | --- | --- |
 | [`src/lib/roles.test.ts`](../src/lib/roles.test.ts) | **Table-tests pinning the client mirror of the server authority matrix** (`private.can_assign_cid_role`, migration `20260718010000`): requestable roles/departments, `canAssignCidRole` per actor, role changes, transfer initiation/side-decision, Owner/inactive/retired-role edge cases. The client helpers only shape UI options — RPCs re-validate — but the two implementations must agree, so the matrix is pinned here |
 | `src/lib/deadlines.test.ts` | the shared deadline engine (legal expiry, task due dates, joint-case expiry chips) |
+| [`src/lib/directory.test.ts`](../src/lib/directory.test.ts) | the Division Directory model — who is listed (never a removed member, the deletion tombstone or the compartmented SIB bureau), leadership-first + canonical rank ordering, a transfer moving rather than copying a member, the member-safe field set, availability and the search/filter rules |
+| [`src/lib/profiles.test.ts`](../src/lib/profiles.test.ts) | the shared roster cache — loading and failure are distinguishable from "the division is empty", a failed refresh keeps stale rows and says so, and out-of-order responses cannot reinstate a member in the bureau they just left |
 | `src/lib/format.test.ts` | formatting helpers |
 | `src/lib/jsonShapes.test.ts` | defensive JSON shape parsing |
 | `src/lib/safeUrl.test.ts` | URL sanitization (external-link guards) |

@@ -123,7 +123,7 @@ export function CommandCenterView() {
           {section === 'personnel' && <PersonnelAdmin />}
           {section === 'membership' && <MembershipReview />}
           {section === 'promotions' && <PromotionsTransfers />}
-          {section === 'duty' && <DutyStatus />}
+          {section === 'duty' && <DutyStatus onGo={(id) => go(id as SectionId)} />}
           {section === 'permissions' && <PermissionsOverview />}
           {section === 'field' && <FieldOfficers />}
           {section === 'ops' && <CommandOps />}

@@ -96,7 +96,7 @@ describe('trashHref — where a restored row lives', () => {
   })
   it('administrative rows open where they are managed', () => {
     expect(trashHref(row({ kind: 'case_template', id: 'tpl1', case_id: null }))).toBe('/cases?new=1')
-    expect(trashHref(row({ kind: 'commendation', id: 'cm1', case_id: null }))).toBe('/personnel')
+    expect(trashHref(row({ kind: 'commendation', id: 'cm1', case_id: null }))).toBe('/directory')
   })
   it('link rows fall back to their case, or have no address', () => {
     expect(trashHref(row({ kind: 'gang_member', id: 'g1', case_id: 'c1' }))).toBe('/workspace?case=c1')

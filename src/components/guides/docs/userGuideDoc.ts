@@ -69,9 +69,9 @@ export const USER_GUIDE_DOC: GuideDoc = {
         {
           kind: 'ul',
           items: [
-            '**Command** — your Action Center and dashboard, division analytics, announcements, the heatmap and the roster.',
+            '**Command** — your Action Center and dashboard, division analytics, announcements and the heatmap.',
             '**Investigations** — case files, operations, legal requests, intelligence, the shared registries, RICO and attachments.',
-            '**Reference** — the penal code and the SOP library.',
+            '**Division & Reference** — the Division Directory (who is in the division, where they are assigned and whether they are available), the penal code and the SOP library.',
             '**Oversight** — the calendar, shift reports and the Trash.',
             '**Owner** — portal administration, the audit log and the developer handbook. Only the portal owner sees this category.',
           ],
@@ -114,7 +114,7 @@ export const USER_GUIDE_DOC: GuideDoc = {
         },
         {
           kind: 'p',
-          text: 'Command administration — personnel approvals, promotions, chain of command, duty status, workload and the command queues — lives in the **Command Center**.',
+          text: 'Command administration — personnel approvals, promotions, transfers, chain of command, availability, workload and the command queues — lives in the **Command Center**, and only command staff reach it. The **Division Directory** under Division & Reference is the member-facing half: everyone reads who is in the division, their callsign, rank, bureau, assignment and availability. The directory shows no account administration and no personnel history; the Command Center holds those.',
         },
         {
           kind: 'ul',

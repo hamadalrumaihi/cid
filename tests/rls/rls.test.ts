@@ -183,6 +183,21 @@ describe.skipIf(!enabled)('RLS security wall (live project, test accounts)', () 
     expect(error).not.toBeNull() // column-level grant excludes email
   })
 
+  /** The Division Directory's own query. Every active member reads the
+   *  directory, so the projection it uses must be readable by an ordinary
+   *  member — and must stay the projection WITHOUT email, which the test
+   *  above proves is refused. If someone adds a command-only column to
+   *  ROSTER_COLS, this call starts failing here rather than emptying the
+   *  directory in production. */
+  it('the division directory projection is readable by an ordinary member', async () => {
+    const { data, error } = await lsb
+      .from('profiles')
+      .select('id,display_name,avatar_url,badge_number,division,role,active,created_at,updated_at,loa,loa_since,discord_id,removed_at,is_owner,login_denied,is_system')
+      .limit(5)
+    expect(error, error?.message).toBeNull()
+    expect(Array.isArray(data)).toBe(true)
+  })
+
   it('anonymous clients get nothing from member tables', async () => {
     const { data, error } = await anon.from('cases').select('id').limit(1)
     if (error) expect(error).not.toBeNull()

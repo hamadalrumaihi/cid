@@ -341,7 +341,7 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
     // Accounts have no per-record deep link yet — land on the registry.
     else if (hit.kind === 'account') openHref('/accounts')
     // No ?q= support on the roster / review queue yet — land on the view.
-    else if (hit.kind === 'member') openHref('/personnel')
+    else if (hit.kind === 'member') openHref('/directory')
     else if (hit.kind === 'tip') openHref('/field-review')
     else if (hit.term && Q_SEEDED_TABS.has(meta.tab)) openHref(`/${meta.tab}?q=${enc(hit.term)}`)
     else openHref(`/${meta.tab}`)

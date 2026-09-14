@@ -19,7 +19,7 @@ const canCommand = (a: TestAccount) => a.is_owner || COMMAND_ROLES.includes(a.ro
 function screensFor(a: TestAccount): { path: string; name: string }[] {
   const s = [
     { path: '/dashboard', name: 'dashboard' },
-    { path: '/personnel', name: 'personnel' },
+    { path: '/directory', name: 'directory' },
   ]
   if (canCommand(a)) s.push({ path: '/command-center', name: 'command-center' })
   if (a.is_owner) s.push({ path: '/owner', name: 'owner' })

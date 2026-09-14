@@ -84,7 +84,12 @@ export const PAGE_META: Record<string, PageMeta> = {
   // registries (persons, vehicles, gangs, places, accounts, indicators).
   intelligence: { title: 'Intelligence', sub: 'Everything that comes into CID as information — patrol, detectives, surveillance and outside agencies' },
   registries: { title: 'Registries', sub: 'Persons, vehicles, gangs, places, accounts & indicators — one master dataset, deconflicted across cases' },
-  personnel:  { title: 'Personnel & Roster', sub: 'Roster & digital commendations' },
+  // The public roster, out of Command and under Division & Reference. It is
+  // the division looking at itself — every active member reads it — while
+  // member ADMINISTRATION (approvals, transfers, rank, account state, LOA
+  // administration, history) stays in the Command Center behind
+  // `private.is_command()`. The old `/personnel` address redirects here.
+  directory:  { title: 'Division Directory', sub: 'Current active members, assignments and availability' },
   rico:       { title: 'RICO Builder', sub: 'Enterprise & predicate-act element tracker' },
   penal:      { title: 'Penal Code', sub: 'San Andreas statutes, sentences & fines' },
   sops:       { title: 'Standard Operating Procedures', sub: 'Division policy & reference library, managed by command staff' },
@@ -150,8 +155,11 @@ export const PAGE_META: Record<string, PageMeta> = {
  *     the new address)
  *   · guide → /guides/user-guide (the Portal User Guide moved into the Guide
  *     Library for the same reason: one library, one copy of each guide, and
- *     the guide is no longer a Reference tab beside the Penal Code) */
-export const LEGACY_REDIRECT_TABS: readonly string[] = ['action', 'command', 'tools', ...TOOL_TABS, 'reports', 'undergrnd', 'guide']
+ *     the guide is no longer a Reference tab beside the Penal Code)
+ *   · personnel → /directory (the public roster is the Division Directory
+ *     now, under Division & Reference rather than Command; its old address
+ *     keeps every bookmark and cross-link resolving) */
+export const LEGACY_REDIRECT_TABS: readonly string[] = ['action', 'command', 'tools', ...TOOL_TABS, 'reports', 'undergrnd', 'guide', 'personnel']
 
 export interface NavCategory {
   id: string
@@ -162,13 +170,16 @@ export interface NavCategory {
 export const NAV_CATEGORIES: NavCategory[] = [
   // The Action Center (inbox) leads Command — it is the personal home and the
   // app's default landing (src/app/page.tsx); My Dashboard follows it.
-  { id: 'command',   label: 'Command',        tabs: ['inbox', 'dashboard', 'analytics', 'announce', 'heatmap', 'personnel'] },
+  { id: 'command',   label: 'Command',        tabs: ['inbox', 'dashboard', 'analytics', 'announce', 'heatmap'] },
   // Cases + the former Investigative Tools category, as one Investigations
   // group. `intelligence` / `registries` open the workspace on a default
   // tool; `informants` renders only for accounts the CI compartment involves
   // (Sidebar/Subtabs/BottomNav read useCiContext — RLS is the real wall).
   { id: 'cases',     label: 'Investigations', tabs: ['cases', 'operations', 'legal', 'intelligence', 'informants', 'registries', 'rico', 'case-files'] },
-  { id: 'reference', label: 'Reference',      tabs: ['penal', 'sops'] },
+  // Division & Reference: what the division reads about itself and about the
+  // rules it works to. The Division Directory leads it — a member-facing
+  // roster has no business in a category of command administration.
+  { id: 'reference', label: 'Division & Reference', tabs: ['directory', 'penal', 'sops'] },
   { id: 'oversight', label: 'Oversight',      tabs: ['calendar', 'shifts', 'trash'] },
   // Owner-only: the shell renders this category only when the signed-in
   // member is the portal owner (the views and RLS self-gate regardless).
@@ -212,9 +223,9 @@ export const SIU_NAV_CATEGORIES: NavCategory[] = [
   // The SIU-owned workspace leads. Everything after it is CID's own navigation,
   // tab for tab, in CID's order.
   { id: 'siu-unit',      label: 'Bureau',         tabs: ['siu'] },
-  { id: 'siu-command',   label: 'Command',        tabs: ['inbox', 'dashboard', 'analytics', 'announce', 'heatmap', 'personnel'] },
+  { id: 'siu-command',   label: 'Command',        tabs: ['inbox', 'dashboard', 'analytics', 'announce', 'heatmap'] },
   { id: 'siu-cases',     label: 'Investigations', tabs: ['cases', 'operations', 'legal', 'intelligence', 'informants', 'registries', 'rico', 'case-files'] },
-  { id: 'siu-ref',       label: 'Reference',      tabs: ['penal', 'sops'] },
+  { id: 'siu-ref',       label: 'Division & Reference', tabs: ['directory', 'penal', 'sops'] },
   { id: 'siu-oversight', label: 'Oversight',      tabs: ['calendar', 'shifts', 'trash'] },
   { id: 'siu-owner',     label: 'Owner',          tabs: ['owner', 'audit', 'devdocs', 'report-templates'] },
 ]
@@ -229,7 +240,7 @@ export const SIU_TAB_LABEL: Record<string, string> = {
 }
 
 export const TAB_LABEL: Record<string, string> = {
-  inbox: 'Action Center', dashboard: 'My Dashboard', analytics: 'Analytics', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
+  inbox: 'Action Center', dashboard: 'My Dashboard', analytics: 'Analytics', announce: 'Announcements', heatmap: 'Heatmap', directory: 'Division Directory',
   cases: 'Case Files', operations: 'Operations', legal: 'Legal Requests', intelligence: 'Intelligence', registries: 'Registries', 'case-files': 'Attachments', rico: 'RICO', 'report-templates': 'Report Templates',
   // Tool labels: the workspace tab bar and directory (lib/workspace/model
   // toolLabel) read these; the routes themselves are legacy redirects.
@@ -275,6 +286,9 @@ export const TAB_CATEGORY: Record<string, string | null> = {
   guides: null,
   undergrnd: null,
   guide: null,
+  // /personnel redirects to /directory, which lives in Division & Reference —
+  // the strip highlights the right category during the hop.
+  personnel: 'reference',
 }
 export const CAT_DEFAULT: Record<string, string> = {}
 for (const t of TOOL_TABS) TAB_CATEGORY[t] = 'cases'
