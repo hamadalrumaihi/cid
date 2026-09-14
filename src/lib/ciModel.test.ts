@@ -2,6 +2,7 @@
  *  definer RPCs) is exercised by tests/rls/v191*.test.ts, not here. */
 import { describe, expect, it } from 'vitest'
 import {
+  CI_AUDIENCE_HINT, CI_AUDIENCE_LABEL,
   CI_CORROBORATION, CI_DEFAULT_CAPACITY, CI_MOTIVES, CI_RELIABILITY, CI_RISK, CI_STATUSES,
   capacityLabel, contactState, groupHandlers, handlerRosterStats, isAtCapacity, motiveSummary,
   parseCiResult, sanitizeCheck,
@@ -145,5 +146,30 @@ describe('handlerRosterStats — from the caller’s own rows only', () => {
   })
   it('is all zeros for no rows', () => {
     expect(handlerRosterStats([], NOW)).toEqual({ active: 0, contactsDue: 0, followUps: 0, relatedCases: 0 })
+  })
+})
+
+/* ── Audience labelling ───────────────────────────────────────────────────── */
+
+describe('CI audience vocabulary', () => {
+  it('names all three audiences and says who each reaches', () => {
+    for (const a of ['handler', 'ci_command', 'case_team'] as const) {
+      expect(CI_AUDIENCE_LABEL[a], a).toBeTruthy()
+      expect(CI_AUDIENCE_HINT[a], `${a} hint`).toBeTruthy()
+    }
+  })
+
+  it('is explicit that only the sanitized audience reaches the case team', () => {
+    // The two compartment audiences must SAY they do not reach the case —
+    // "handler only" is the claim a releaser relies on when deciding how much
+    // to write, so it cannot be left to inference.
+    expect(CI_AUDIENCE_HINT.handler).toMatch(/does not reach the case/i)
+    expect(CI_AUDIENCE_HINT.ci_command).toMatch(/case team sees none/i)
+    expect(CI_AUDIENCE_HINT.case_team).toMatch(/everyone who can read the case/i)
+  })
+
+  it('promises the source stays behind even on the released audience', () => {
+    expect(CI_AUDIENCE_HINT.case_team).toMatch(/CI number/i)
+    expect(CI_AUDIENCE_HINT.case_team).toMatch(/handler/i)
   })
 })

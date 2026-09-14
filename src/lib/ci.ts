@@ -266,8 +266,33 @@ function cleanFilters(f: CiListFilters): Json {
 }
 
 export async function fetchCiList(filters: CiListFilters = {}, limit = 200): Promise<CiListRow[]> {
+  return (await fetchCiRoster(filters, limit)).rows
+}
+
+/** The roster read, WITH whether it worked.
+ *
+ *  `fetchCiList` collapses a failure to `[]`, which is right for the places
+ *  that decorate another surface — a case tab's source count, the Action
+ *  Center's contact-due lane — where a failed compartment read must not
+ *  become an error the whole page shows. It is wrong for the compartment's
+ *  OWN workspace: there, "[]" renders as "no sources", and a handler whose
+ *  read failed is told their roster is empty. That is the one lie this
+ *  compartment cannot afford, because it looks exactly like being removed.
+ *
+ *  Reporting the failure here confirms nothing: every caller is already past
+ *  `ciInvolved(ctx)`, so the reader is inside the compartment and knows it
+ *  exists. Outside it, `ci_context` still collapses to NO_CI and the page is
+ *  still the ordinary nothing-here surface. */
+export interface CiRosterRead {
+  rows: CiListRow[]
+  /** The read was refused or failed. `rows` is empty and means nothing. */
+  failed: boolean
+}
+
+export async function fetchCiRoster(filters: CiListFilters = {}, limit = 200): Promise<CiRosterRead> {
   const res = await rpc('ci_list', { p_filters: cleanFilters(filters), p_limit: limit })
-  return res.error ? [] : (res.data ?? [])
+  if (res.error) return { rows: [], failed: true }
+  return { rows: res.data ?? [], failed: false }
 }
 
 export async function fetchCiStats(): Promise<CiStats | null> {

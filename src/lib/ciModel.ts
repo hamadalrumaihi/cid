@@ -163,6 +163,35 @@ export function groupHandlers<H extends HandlerLike>(handlers: readonly H[] | nu
   return out
 }
 
+/* ── Who is looking at this ───────────────────────────────────────────────── */
+
+/** The three audiences CI material is written for. They are not access
+ *  levels — RLS and the definer RPCs decide access — they are the answer to
+ *  "who else can read what I am looking at", which a member inside a
+ *  compartment has no other way to know. Getting it wrong in either direction
+ *  is a real cost: material treated as wider than it is gets over-guarded and
+ *  never reaches the case, and material treated as narrower than it is gets
+ *  written as if only the handler will ever see it. */
+export type CiAudience =
+  /** The assigned handler (and CI command, who can see everything). */
+  | 'handler'
+  /** Full CI access — the division's CI command, not the case team. */
+  | 'ci_command'
+  /** Sanitized and released: everyone who can read the case. */
+  | 'case_team'
+
+export const CI_AUDIENCE_LABEL: Record<CiAudience, string> = {
+  handler: 'Handler only',
+  ci_command: 'CI command',
+  case_team: 'Sanitized for the case',
+}
+
+export const CI_AUDIENCE_HINT: Record<CiAudience, string> = {
+  handler: 'Visible to this source’s assigned handler and to CI command. It does not reach the case team.',
+  ci_command: 'Visible to members with full CI access. Handlers see only their own sources; the case team sees none of this.',
+  case_team: 'Visible to everyone who can read the case. The source record, its CI number and its handler stay in the compartment.',
+}
+
 /* ── Sanitization (client mirror of private.ci_sanitized) ─────────────────── */
 
 export interface SanitizeSubject {
