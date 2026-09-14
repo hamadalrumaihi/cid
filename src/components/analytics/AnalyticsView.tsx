@@ -1,8 +1,9 @@
 'use client'
 
 /** Division Analytics — command-level trends over the live data: cases opened
- *  vs closed per week, clearance & time-to-close, open-case workload per
- *  detective, evidence logged per week. Hand-rolled SVG charts (no chart
+ *  vs closed per week, clearance & time-to-close, workload by bureau and per
+ *  detective, evidence logged per week. This is the ONE analytics surface:
+ *  the Command Center keeps the decision queues and points here for trends. Hand-rolled SVG charts (no chart
  *  dependency), dark-surface palette validated for CVD/contrast
  *  (#3b82f6 opened / #059669 closed; single-series charts use the blue).
  *  Close dates are approximated by a closed case's last update. */
@@ -12,6 +13,8 @@ import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
+import { bureauLabel } from '@/lib/roles'
+import { bureauScore, fmtAvgDays } from '@/components/command-center/lib/commandUtils'
 import { Card } from '@/components/ui/Card'
 import { Notice } from '@/components/ui/Notice'
 
@@ -24,6 +27,15 @@ const CLOSED = '#059669'
 const GRID = '#1b2940'
 const WEEKS = 12
 const CLOSED_STATES = new Set(['closed'])
+
+/** The bureaus a division-wide reader can be shown. SIB is deliberately
+ *  absent — it is compartmented, and RLS hides its rows from this read
+ *  anyway, so naming it here would only invite the wrong conclusion from an
+ *  empty column. */
+const BUREAU_KEYS = ['major_crimes', 'street_crimes', 'JTF'] as const
+const BAR_COLORS: Record<string, string> = {
+  major_crimes: 'bg-blue-500', street_crimes: 'bg-emerald-500', JTF: 'bg-amber-500',
+}
 const isOpenCase = (c: CaseRow) => !CLOSED_STATES.has(String(c.status)) && String(c.status) !== 'cold'
 
 interface Tip { x: number; y: number; lines: string[] }
@@ -139,6 +151,10 @@ export function AnalyticsView() {
       avgClose: closedCount ? Math.round(daysToCloseSum / closedCount) : 0,
       bolos: data.persons.filter((p) => p.bolo).length,
       workload: Object.entries(workload).sort((a, b) => b[1] - a[1]).slice(0, 8),
+      // Per-bureau scorecards. These used to sit on the Command Center
+      // Overview, in front of the decision queues a commander opens that page
+      // to read; they are trends, and trends belong here.
+      byBureau: BUREAU_KEYS.map((k) => ({ key: k, ...bureauScore(data.cases.filter((c) => c.bureau === k)) })),
     }
   }, [data, loadedAt])
 
@@ -160,6 +176,7 @@ export function AnalyticsView() {
     setTip({ x: e.clientX - host.left, y: e.clientY - host.top - 8, lines })
   }
   const maxLoad = Math.max(...m.workload.map(([, n]) => n), 1)
+  const bureauMax = Math.max(1, ...m.byBureau.map((b) => b.open))
 
   return (
     <div className="space-y-4">
@@ -226,6 +243,31 @@ export function AnalyticsView() {
           </div>
         </Panel>
       </div>
+
+      <Panel title="Workload by bureau">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {m.byBureau.map((b) => {
+            const clr = b.clearance == null ? '—' : `${b.clearance}%`
+            const clrTint = b.clearance == null ? 'text-slate-400' : b.clearance >= 60 ? 'text-emerald-300' : b.clearance >= 30 ? 'text-amber-300' : 'text-rose-300'
+            return (
+              <div key={b.key} className="rounded-lg border border-white/10 bg-ink-900/60 p-3">
+                <p className="text-sm font-bold text-white">{bureauLabel(b.key)}</p>
+                <p className="mt-0.5 text-[11px] text-slate-400">{b.total} case{b.total === 1 ? '' : 's'} on file</p>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div><p className="text-2xl font-bold text-white">{b.open}</p><p className="text-xs font-medium text-slate-500">Active load</p></div>
+                  {/* The clearance colour is reinforcement, never the message:
+                      the percentage itself is the fact. */}
+                  <div><p className={`text-2xl font-bold ${clrTint}`}>{clr}</p><p className="text-xs font-medium text-slate-500">Clearance</p></div>
+                  <div><p className="text-2xl font-bold text-white">{fmtAvgDays(b.avg)}</p><p className="text-xs font-medium text-slate-500">Avg close</p></div>
+                </div>
+                <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-ink-800" aria-hidden>
+                  <div className={`h-full ${BAR_COLORS[b.key] ?? 'bg-slate-500'}`} style={{ width: `${Math.round((b.open / bureauMax) * 100)}%` }} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </Panel>
 
       <Panel title="Open-case workload per detective">
         {m.workload.length ? (

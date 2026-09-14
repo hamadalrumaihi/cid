@@ -8,11 +8,11 @@
  *      queue (ActionSlice over useActionQueue → isCommandItem), so decisions
  *      surface here without a second derivation of the rules or a second
  *      fetch (Phase 7 AC7).
- *   2. Queue tiles — one bounded count per decision queue, each clicking
- *      through to the section or route that owns it.
- *   3. Bureau workload — per-bureau open/clearance/avg-close scorecards +
- *      active-load bars, linking out to /analytics (the one analytics surface).
- *   4. Recent assignment activity — the latest role_events rows (SELECT is
+ *   2. Queue tiles — one bounded count per decision queue that is NOT clear,
+ *      each clicking through to the section or route that owns it. The zeros
+ *      collapse into a sentence (lib/commandExceptions); a count that failed
+ *      to load keeps its tile, because it is not a zero.
+ *   3. Recent assignment activity — the latest role_events rows (SELECT is
  *      command/owner-scoped; audit_log is owner-only and is NOT read here). */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -20,22 +20,20 @@ import { list, rpc } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { useCapabilities } from '@/lib/permissions'
+import { allClearText, splitExceptions } from '@/lib/commandExceptions'
 import { timeAgo, todayISO } from '@/lib/format'
 import { roleEventLine } from '@/lib/personnel'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useJusticeRoster } from '@/lib/justiceRoster'
 import { useFieldStanding } from '@/lib/fieldStanding'
 import { useTableVersion } from '@/lib/realtime'
-import { bureauLabel } from '@/lib/roles'
 import { Store } from '@/lib/store'
-import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { DashPanel } from '@/components/dash/DashPanel'
 import { DashRow } from '@/components/dash/DashRow'
 import { persistCaseFilters } from '@/components/cases/caseUtils'
 import { ActionSlice } from '@/components/actioncenter/ActionSlice'
-import { bureauScore, fmtAvgDays } from '../lib/commandUtils'
 import { canDecideTransfer, canReviewCase } from '../lib/approvals'
 import { pendingMembership, type JusticeRequestLite } from '../lib/membershipPending'
 
@@ -55,12 +53,6 @@ const TASK_COLS = 'id,case_id,title,due,assignee,done,created_at,updated_at'
 const ROLE_EVENT_COLS =
   'id,target_id,actor_id,old_role,new_role,old_division,new_division,old_active,new_active,source,reason,created_at'
 const FIELD_OPEN = ['new', 'reviewing', 'needs_info']
-
-// SIB is deliberately absent (compartmented; RLS hides its rows anyway).
-const BUREAU_KEYS = ['major_crimes', 'street_crimes', 'JTF'] as const
-const BAR_COLORS: Record<string, string> = {
-  major_crimes: 'bg-blue-500', street_crimes: 'bg-emerald-500', JTF: 'bg-amber-500',
-}
 
 interface Counts {
   cases: CaseRow[]
@@ -170,35 +162,34 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
     router.push('/cases')
   }
 
-  const tiles: Metric[] = [
+  /** Each tile carries the RAW count beside its rendered value, so the
+   *  exceptions split reads the number rather than re-parsing the display. */
+  const tiles: (Metric & { n: number | null })[] = [
     {
-      label: 'Pending membership', value: pm.awaitingCount,
+      label: 'Pending membership', n: pm.awaitingCount, value: pm.awaitingCount,
       hint: pm.requestsLoaded ? `${pm.submitted.length} requests · ${pm.signIns.filter((s) => s.actionable).length} sign-ins` : 'sign-ins awaiting activation',
       onClick: () => onGo('membership'),
     },
-    { label: 'Sign-offs awaiting you', value: awaitingMe, hint: 'at your decision stage', onClick: () => router.push('/inbox?f=signoff&s=command') },
-    { label: 'Legacy transfers', value: decidableTransfers, hint: 'open rows you can settle', onClick: () => onGo('promotions') },
-    { label: 'Unassigned cases', value: unassignedCases, hint: 'open, no lead detective', onClick: goCasesUnassigned },
-    { label: 'Unassigned intel', value: data.intelUnassigned ?? '—', hint: 'field submissions unclaimed', onClick: () => router.push('/intelligence') },
-    { label: 'Expiring BOLOs', value: data.boloExpiring ?? '—', hint: 'window closes within 7 days', onClick: () => router.push('/workspace?tool=bolo') },
+    { label: 'Sign-offs awaiting you', n: awaitingMe, value: awaitingMe, hint: 'at your decision stage', onClick: () => router.push('/inbox?f=signoff&s=command') },
+    { label: 'Legacy transfers', n: decidableTransfers, value: decidableTransfers, hint: 'open rows you can settle', onClick: () => onGo('promotions') },
+    { label: 'Unassigned cases', n: unassignedCases, value: unassignedCases, hint: 'open, no lead detective', onClick: goCasesUnassigned },
+    { label: 'Unassigned intel', n: data.intelUnassigned, value: data.intelUnassigned ?? '—', hint: 'field submissions unclaimed', onClick: () => router.push('/intelligence') },
+    { label: 'Expiring BOLOs', n: data.boloExpiring, value: data.boloExpiring ?? '—', hint: 'window closes within 7 days', onClick: () => router.push('/workspace?tool=bolo') },
     // Personnel EXCEPTIONS only. The roster itself is the Division Directory's
     // (Division & Reference) — the Command Center does not keep a second copy
     // of it, and this tile opens the availability board rather than a list.
-    { label: 'On LOA', value: onLoa, hint: 'active but on leave', onClick: () => onGo('duty') },
-    { label: 'Overdue tasks', value: overdueTasks, hint: 'across visible cases', onClick: () => onGo('cases') },
+    { label: 'On LOA', n: onLoa, value: onLoa, hint: 'active but on leave', onClick: () => onGo('duty') },
+    { label: 'Overdue tasks', n: overdueTasks, value: overdueTasks, hint: 'across visible cases', onClick: () => onGo('cases') },
   ]
 
-  /* ── bureau workload ───────────────────────────────────────────────────── */
-  // A Bureau Lead's own bureau leads, full width; the rest follow for context.
-  const workloadKeys = myBureau
-    ? [myBureau, ...BUREAU_KEYS.filter((k) => k !== myBureau)]
-    : [...BUREAU_KEYS]
-  const openByBureau = useMemo(() => {
-    const m: Record<string, number> = {}
-    for (const k of BUREAU_KEYS) m[k] = data.cases.filter((c) => c.bureau === k && isOpen(c)).length
-    return m
-  }, [data.cases])
-  const openMax = Math.max(1, ...BUREAU_KEYS.map((k) => openByBureau[k] ?? 0))
+  /* ── exceptions first ──────────────────────────────────────────────────── */
+  // The zeros are not news. They collapse into one sentence so the queues that
+  // DO need a decision are the only tiles a commander has to read — and an
+  // unread count stays a tile of its own, because "0" and "we could not read
+  // it" are different answers and only one of them is safe to act on.
+  const split = splitExceptions(tiles, (t) => t.n)
+  const clearLine = allClearText(split.clear.map((t) => t.label))
+  const shownTiles = [...split.attention, ...split.unknown]
 
   return (
     <div className="space-y-5">
@@ -213,55 +204,28 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
       />
 
       <div>
-        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">Decision queues</h3>
-        <MetricStrip metrics={tiles} />
+        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">Needs a decision</h3>
+        {shownTiles.length
+          ? <MetricStrip metrics={shownTiles} />
+          : <p className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">Every command queue is clear.</p>}
+        {clearLine && shownTiles.length > 0 && <p className="mt-2 text-xs text-slate-500">{clearLine}</p>}
         <div className="mt-2 flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={() => onGo('personnel')}>Personnel &amp; Admin</Button>
           <Button size="sm" variant="ghost" onClick={() => router.push('/directory')}>Division Directory</Button>
         </div>
       </div>
 
-      <div>
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Bureau workload</h3>
-          <span className="flex items-center gap-3 text-[11px] text-slate-400">
-            {myBureau ? 'your bureau first' : 'all bureaus'}
-            {/* /analytics is the one analytics surface — this summary never
-                grows charts of its own. */}
-            <button
-              type="button"
-              onClick={() => router.push('/analytics')}
-              className="rounded text-xs font-bold text-badge-200 transition hover:text-white"
-            >
-              Full analytics →
-            </button>
-          </span>
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {workloadKeys.map((k, i) => {
-            const s = bureauScore(data.cases.filter((c) => c.bureau === k))
-            const clr = s.clearance == null ? '—' : `${s.clearance}%`
-            const clrTint = s.clearance == null ? 'text-slate-400' : s.clearance >= 60 ? 'text-emerald-300' : s.clearance >= 30 ? 'text-amber-300' : 'text-rose-300'
-            const own = myBureau === k && i === 0
-            return (
-              <Card key={k} pad="sm" className={own ? 'border-badge-500/25 sm:col-span-2 xl:col-span-3' : undefined}>
-                <p className="text-sm font-bold text-white">
-                  {bureauLabel(k)}
-                  {own && <span className="ml-2 text-xs font-medium text-badge-200">Your bureau</span>}
-                </p>
-                <p className="mt-0.5 text-[11px] text-slate-400">{s.total} case{s.total === 1 ? '' : 's'} on file</p>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  <div><p className="text-2xl font-bold text-white">{s.open}</p><p className="text-xs font-medium text-slate-500">Active load</p></div>
-                  <div><p className={`text-2xl font-bold ${clrTint}`}>{clr}</p><p className="text-xs font-medium text-slate-500">Clearance</p></div>
-                  <div><p className="text-2xl font-bold text-white">{fmtAvgDays(s.avg)}</p><p className="text-xs font-medium text-slate-500">Avg close</p></div>
-                </div>
-                <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-ink-800" aria-hidden>
-                  <div className={`h-full ${BAR_COLORS[k] ?? 'bg-slate-500'}`} style={{ width: `${Math.round(((openByBureau[k] ?? 0) / openMax) * 100)}%` }} />
-                </div>
-              </Card>
-            )
-          })}
-        </div>
+      {/* Per-bureau clearance, average close time and load bars used to sit
+          here. They are analytics, not exceptions — three scorecards a
+          commander reads once a week, in the way of the queues they read
+          every day — so they live on /analytics now, which is the one
+          analytics surface and where the rest of the division's trends
+          already are. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3">
+        <p className="text-xs text-slate-400">
+          Bureau clearance, average time to close and open-case load moved to Division Analytics.
+        </p>
+        <Button size="sm" variant="ghost" onClick={() => router.push('/analytics')}>Division Analytics →</Button>
       </div>
 
       <DashPanel
