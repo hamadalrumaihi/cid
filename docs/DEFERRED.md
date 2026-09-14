@@ -98,6 +98,30 @@ stays documents-only).
   gain one.
 - **Plan §20 open questions** — unchanged.
 
+## 6. Internal cleanup parked by the reliability pass
+
+- **Telling "no CI access" apart from "we could not check".** `useCiContext`
+  collapses EVERY failure to `NO_CI`, and that is load-bearing: an error state
+  that differed by authorization would confirm the compartment exists to
+  someone who may not know it does. A *transport* failure (offline, DNS, a
+  dead gateway) could be distinguished safely — it happens identically whether
+  or not the caller has access — but the distinction is only worth anything if
+  the surfaces show it, and that means a third state through the nav badge,
+  the queue, the palette and the dossier: a user-facing change, not a
+  reliability fix. Parked rather than half-built.
+  **Unblocks when:** a CI surface is being redesigned anyway, or a handler
+  reports mistaking an outage for revoked access.
+- **Restructuring `jobCore.ts`.** `workers/src/jobCore.ts` and
+  `supabase/functions/_shared/jobCore.ts` are 1112 lines and must stay
+  BYTE-IDENTICAL (`workers/test/shared.test.ts` compares them). Any locality
+  pass therefore lands twice, identically, across a file that carries retry,
+  dispatch, evidence, indexing, document and packet-generation behaviour — a
+  very large diff with no behavioural gain and a real chance of drift between
+  the two copies. The `runJob` seam is stable and the job families are already
+  contiguous, so the payoff is small.
+  **Unblocks when:** a job family is being changed on its own merits, or the
+  two copies are replaced by one shared source with a build step.
+
 ---
 
-_Last reviewed: 2026-09-09._
+_Last reviewed: 2026-09-14._

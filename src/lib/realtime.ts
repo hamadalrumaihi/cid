@@ -32,6 +32,13 @@ export const useRealtimeStore = create<RtState>((set) => ({
 }))
 
 const registered = new Set<string>()
+/** One live row-scoped channel per store key, with the number of mounted
+ *  views holding it. A whole-table channel is shared by every view and stays
+ *  for the session; a row-scoped one belongs to an open record, so a session
+ *  that walks through twenty dossiers would otherwise keep twenty channels it
+ *  will never hear from again. The last holder to let go closes it. */
+const scoped = new Map<string, { count: number; table: string; channel: ScopedChannel | null }>()
+type ScopedChannel = ReturnType<ReturnType<typeof supabase>['channel']>
 /** Row-scoped channels that fell back to the whole-table channel, per
  *  table: their scoped counters (store keys) are bumped from the table-wide
  *  events. */
@@ -110,8 +117,13 @@ export function subscribeTable(table: string): void {
  *  request's comments (`legal_request_id=eq.<id>`) with the same mechanics. */
 export function subscribeRowScoped(table: string, column: string, id: string): void {
   const key = rowVersionKey(table, column, id)
-  if (!isConfigured || typeof window === 'undefined' || !id || registered.has(key)) return
+  if (!isConfigured || typeof window === 'undefined' || !id) return
+  const held = scoped.get(key)
+  if (held) { held.count += 1; return } // another view already has this one
+  if (registered.has(key)) return
   registered.add(key)
+  const entry: { count: number; table: string; channel: ScopedChannel | null } = { count: 1, table, channel: null }
+  scoped.set(key, entry)
   const fallBack = (status: string) => {
     if (!fallbackKeys.has(table)) fallbackKeys.set(table, new Set())
     fallbackKeys.get(table)!.add(key)
@@ -129,16 +141,41 @@ export function subscribeRowScoped(table: string, column: string, id: string): v
       .on('postgres_changes', { event: '*', schema: 'public', table, filter: `${column}=eq.${id}` }, () => {
         debouncedBump(key)
       })
+    entry.channel = channel
     let fellBack = false
     channel.subscribe((status) => {
       if (fellBack || (status !== 'CHANNEL_ERROR' && status !== 'TIMED_OUT')) return
       fellBack = true
+      entry.channel = null
       void client.removeChannel(channel)
       fallBack(status)
     })
   } catch {
     registered.delete(key) // allow a later retry if channel setup failed
+    scoped.delete(key)
   }
+}
+
+/** Give up one hold on a row-scoped subscription — the mirror of
+ *  subscribeRowScoped, called when a view unmounts or points at another
+ *  record. The channel closes only when the last holder lets go, so two
+ *  sections on the same record do not tear each other's subscription down.
+ *  A scope that fell back to the whole-table channel simply stops following
+ *  it; the table channel itself is shared and stays. Safe to call for a scope
+ *  that was never subscribed. */
+export function releaseRowScoped(table: string, column: string, id: string): void {
+  const key = rowVersionKey(table, column, id)
+  const held = scoped.get(key)
+  if (!held) return
+  held.count -= 1
+  if (held.count > 0) return
+  scoped.delete(key)
+  registered.delete(key)
+  fallbackKeys.get(table)?.delete(key)
+  if (!held.channel) return
+  try {
+    void supabase().removeChannel(held.channel)
+  } catch { /* the client is gone; the channel went with it */ }
 }
 
 /** Subscribe (once per session) to one case's rows of a table — the
@@ -151,6 +188,7 @@ export function subscribeCaseTable(table: string, caseId: string): void {
  *  torn down by removeAllChannels() in the auth layer. */
 export function resetRealtime(): void {
   registered.clear()
+  scoped.clear()
   fallbackKeys.clear()
   warnedTables.clear()
 }
@@ -166,7 +204,10 @@ export function useTableVersion(table: string): number {
  *  the filtered subscription on first mount; moves only for those rows (or,
  *  after a fallback, with the whole table). */
 export function useRowScopedVersion(table: string, column: string, id: string): number {
-  useEffect(() => { subscribeRowScoped(table, column, id) }, [table, column, id])
+  useEffect(() => {
+    subscribeRowScoped(table, column, id)
+    return () => releaseRowScoped(table, column, id)
+  }, [table, column, id])
   const key = rowVersionKey(table, column, id)
   return useRealtimeStore((s) => s.versions[key] ?? 0)
 }

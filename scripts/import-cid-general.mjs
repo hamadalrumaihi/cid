@@ -8,7 +8,7 @@
  */
 import { createHash } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
-import { basename, dirname, extname, join, resolve } from 'node:path'
+import { basename, dirname, resolve } from 'node:path'
 import { createClient } from '@supabase/supabase-js'
 
 const args = new Set(process.argv.slice(2))

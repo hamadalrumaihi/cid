@@ -263,6 +263,15 @@ More depth: [Handbook Ch. 9](handbook/09-auth.md).
   zustand store; components call `useTableVersion(table)` and refetch when
   the number moves. No payloads are consumed — the model is
   *notify-then-refetch*, which keeps RLS the single read path.
+- Row-scoped channels (`rt_<table>_<column>_<id>`, and the historical
+  `rt_<table>_<caseId>` spelling for case scopes) carry a `<column>=eq.<id>`
+  filter so only one record's rows move a scoped counter; a filter the tier
+  refuses falls back to the whole-table channel. Unlike a table channel —
+  shared by every view, kept for the session — a row-scoped one belongs to an
+  open record, so holders are **counted**: `useRowScopedVersion` subscribes on
+  mount and releases on unmount or when the id changes, and the channel closes
+  when the last holder lets go. Browsing twenty dossiers therefore leaves no
+  twenty channels behind.
 - Teardown on sign-out: `supabase.removeAllChannels()` (auth layer) +
   `resetRealtime()`.
 - A table must be in the Supabase realtime publication for events to arrive;

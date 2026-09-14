@@ -24,6 +24,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Json } from './database.types'
 import { rpc, type MutationResult } from './db'
+import { useRowScopedVersion } from './realtime'
 import { humanizeError } from './toast'
 
 /* ── Vocabulary (mirrors the CHECK constraints) ─────────────────────────── */
@@ -334,10 +335,29 @@ export interface AssociationsState {
   refresh: () => Promise<void>
 }
 
+/** The table `useAssociations` follows. Named once so the hook and its test
+ *  cannot drift apart. */
+export const ASSOCIATIONS_TABLE = 'entity_associations'
+
 /** Every association touching one registry record, both directions, pending
- *  first. Deferred first load (the useRegistry idiom) and no realtime
- *  channel: `entity_associations` is not in the realtime publication, so the
- *  section refreshes on its own writes and on remount. */
+ *  first. Deferred first load (the useRegistry idiom), then live.
+ *
+ *  LIVE means two filtered channels, not one: an association names a subject
+ *  and an object, and the open record can be either end, so the section
+ *  follows `subject_id=eq.<id>` AND `object_id=eq.<id>`. Every supported
+ *  change reaches one of them — a creation is an INSERT, and a decision, an
+ *  amendment, an archival (`historical`) and a soft delete are all UPDATEs on
+ *  the same row. Both are registered once per record and released when the
+ *  dossier closes or points elsewhere (lib/realtime).
+ *
+ *  An event is a SIGNAL AND NOTHING MORE: its payload is never read, never
+ *  merged, and never rendered. What the section shows is always the answer
+ *  `entity_associations_for` gives THIS caller, under the policy that needs
+ *  both endpoints visible — so a change to a row this viewer may not see
+ *  refreshes a list that still does not contain it. The debounce in
+ *  lib/realtime collapses a burst, and the caller's own writes still refresh
+ *  immediately through `refresh()` — the counter bump that follows folds into
+ *  the same read rather than queueing a second one. */
 export function useAssociations(kind: AssociationKind, id: string): AssociationsState {
   const [rows, setRows] = useState<AssociationRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -359,11 +379,16 @@ export function useAssociations(kind: AssociationKind, id: string): Associations
     }
   }, [kind, id])
 
+  // Both ends of the link: the open record may be the subject of one
+  // association and the object of the next.
+  const subjectVersion = useRowScopedVersion(ASSOCIATIONS_TABLE, 'subject_id', id)
+  const objectVersion = useRowScopedVersion(ASSOCIATIONS_TABLE, 'object_id', id)
+
   useEffect(() => {
     // Deferred so the first paint isn't blocked (the useRegistry idiom).
     const t = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(t)
-  }, [refresh])
+  }, [refresh, subjectVersion, objectVersion])
 
   return { rows, loading, error, refresh }
 }

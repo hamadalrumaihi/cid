@@ -26,12 +26,11 @@ import { fmtDate } from '@/lib/format'
 import { usePermissions } from '@/lib/permissions'
 import { useRegistry } from '@/lib/useRegistry'
 import {
-  GUIDE_AUDIENCES, GUIDE_AUDIENCE_LABEL, GUIDE_SORTS, GUIDE_SORT_LABEL, categoryLabelFrom,
-  guideImageUrl, isArchived, isNewToReader, isPublished, isUpdatedSinceSeen,
-  listBookmarkedGuideIds, listGuideCategories, listGuideMedia, listGuideProgress, listGuides,
+  EMPTY_GUIDE_LIBRARY, GUIDE_AUDIENCES, GUIDE_AUDIENCE_LABEL, GUIDE_SORTS, GUIDE_SORT_LABEL,
+  categoryLabelFrom, isArchived, isNewToReader, isPublished, isUpdatedSinceSeen, loadGuideLibrary,
   matchGuides, searchGuides, setGuideArchived, setGuidePinned, setGuidePublished, sortGuides,
   toggleGuideBookmark,
-  type GuideAudience, type GuideCategoryRow, type GuideProgressRow, type GuideRow, type GuideSearchHit,
+  type GuideAudience, type GuideLibraryModel, type GuideRow, type GuideSearchHit,
   type GuideSort,
 } from '@/lib/guides'
 import { Button } from '@/components/ui/Button'
@@ -90,52 +89,26 @@ export function GuideLibraryView() {
   const [status, setStatus] = useState<StatusFilter>('all')
   const [onlyBookmarked, setOnlyBookmarked] = useState(false)
   const [sort, setSort] = useState<GuideSort>('updated')
-  const [bookmarks, setBookmarks] = useState<Set<string>>(new Set())
-  const [progress, setProgress] = useState<Map<string, GuideProgressRow>>(new Map())
-  const [categories, setCategories] = useState<GuideCategoryRow[]>([])
-  /** guide id → signed cover URL. Absent means "no cover" — the normal case,
-   *  and it renders nothing rather than a placeholder. */
-  const [covers, setCovers] = useState<Record<string, string>>({})
   const [editing, setEditing] = useState<GuideRow | null | 'new'>(null)
 
-  const { rows, loading, error, refresh, setRows } = useRegistry<GuideRow>({
+  // One read for the whole screen: the guides, the category list, and this
+  // reader's own bookmarks, progress and covers (lib/guides). The guides are
+  // the hard part — a companion read that fails degrades to empty rather than
+  // withholding the library. useRegistry carries the realtime refresh and the
+  // stale-while-revalidate rule as it does for every registry; the model is
+  // its single "row", so an optimistic edit is a patch to that model.
+  const { rows: loaded, loading, error, refresh, setRows } = useRegistry<GuideLibraryModel>({
     table: 'guides',
-    load: listGuides,
+    load: async () => [await loadGuideLibrary()],
   })
+  const model = loaded[0] ?? EMPTY_GUIDE_LIBRARY
+  const { guides: rows, categories, bookmarks, progress, covers } = model
 
-  // The reader's own bookmarks, progress and the category list load beside the
-  // library; none of them failing is a reason to withhold the guides.
-  useEffect(() => {
-    let live = true
-    void (async () => {
-      const [marks, prog, catRows] = await Promise.all([
-        listBookmarkedGuideIds().catch(() => new Set<string>()),
-        listGuideProgress().catch(() => new Map<string, GuideProgressRow>()),
-        listGuideCategories().catch((): GuideCategoryRow[] => []),
-      ])
-      if (!live) return
-      setBookmarks(marks)
-      setProgress(prog)
-      setCategories(catRows)
-    })()
-    return () => { live = false }
-  }, [rows.length])
-
-  // Covers, resolved once per loaded set.
-  useEffect(() => {
-    let live = true
-    void (async () => {
-      const entries = await Promise.all(rows.map(async (g) => {
-        const media = await listGuideMedia(g.id).catch(() => [])
-        const cover = media.filter((m) => m.section === null).sort((a, b) => a.sort_order - b.sort_order)[0]
-        if (!cover) return null
-        const src = await guideImageUrl(cover.storage_path)
-        return src ? ([g.id, src] as const) : null
-      }))
-      if (live) setCovers(Object.fromEntries(entries.filter((e): e is readonly [string, string] => e !== null)))
-    })()
-    return () => { live = false }
-  }, [rows])
+  /** Patch the loaded model in place — for an edit that is instant and
+   *  reversible, with refresh() settling the real answer a beat later. */
+  const patchModel = useCallback((fn: (m: GuideLibraryModel) => GuideLibraryModel) => {
+    setRows((prev) => (prev.length ? [fn(prev[0])] : prev))
+  }, [setRows])
 
   // Server-side search, debounced. A blank box clears back to the browse view
   // rather than showing an empty result list.
@@ -225,11 +198,11 @@ export function GuideLibraryView() {
   const onBookmark = async (g: GuideRow) => {
     const next = await toggleGuideBookmark(g.id)
     if (next === null) return
-    setBookmarks((prev) => {
-      const s = new Set(prev)
+    patchModel((m) => {
+      const s = new Set(m.bookmarks)
       if (next) s.add(g.id)
       else s.delete(g.id)
-      return s
+      return { ...m, bookmarks: s }
     })
   }
 
@@ -243,7 +216,10 @@ export function GuideLibraryView() {
           onTogglePinned: async () => {
             // Optimistic: a pin is instant and reversible, and refresh()
             // settles the real answer a beat later.
-            setRows((prev) => sortGuides(prev.map((r) => (r.id === g.id ? { ...r, pinned: !g.pinned } : r)), sort))
+            patchModel((m) => ({
+              ...m,
+              guides: sortGuides(m.guides.map((r) => (r.id === g.id ? { ...r, pinned: !g.pinned } : r)), sort),
+            }))
             if (!(await setGuidePinned(g.id, !g.pinned))) await refresh()
           },
         }

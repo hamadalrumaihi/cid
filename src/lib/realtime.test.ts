@@ -29,7 +29,7 @@ vi.mock('./supabase', () => ({
   }),
 }))
 
-import { caseVersionKey, createDebouncedBump, resetRealtime, rowVersionKey, subscribeCaseTable, subscribeRowScoped, subscribeTable, useRealtimeStore } from './realtime'
+import { caseVersionKey, createDebouncedBump, releaseRowScoped, resetRealtime, rowVersionKey, subscribeCaseTable, subscribeRowScoped, subscribeTable, useRealtimeStore } from './realtime'
 
 const byName = (name: string) => channels.find((c) => c.name === name)
 const version = (key: string) => useRealtimeStore.getState().versions[key] ?? 0
@@ -212,5 +212,74 @@ describe('subscribeRowScoped', () => {
   it('ignores an empty id', () => {
     subscribeRowScoped('legal_request_comments', 'legal_request_id', '')
     expect(channels).toHaveLength(0)
+  })
+})
+
+/* ── Releasing a row-scoped channel (association dossiers) ───────────────── */
+//
+// Whole-table channels stay for the session: there is one per table and every
+// view wants it. A row-scoped channel is different — one per open record —
+// so a session that browses twenty dossiers would otherwise hold twenty live
+// channels it will never hear from again. Subscribers are counted; the last
+// one out closes the channel.
+describe('releaseRowScoped', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.stubGlobal('window', {})
+    channels.length = 0
+    removed.length = 0
+    resetRealtime()
+    useRealtimeStore.setState({ versions: {} })
+  })
+  afterEach(() => { vi.runAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
+
+  it('keeps the channel while a second view still holds it', () => {
+    subscribeRowScoped('entity_associations', 'subject_id', 'g1')
+    subscribeRowScoped('entity_associations', 'subject_id', 'g1') // a second mount
+    releaseRowScoped('entity_associations', 'subject_id', 'g1')
+    expect(removed).toEqual([])
+    // …and the survivor still moves the counter.
+    byName('rt_entity_associations_subject_id_g1')!.handlers[0]!()
+    expect(version(rowVersionKey('entity_associations', 'subject_id', 'g1'))).toBe(1)
+  })
+
+  it('closes the channel when the last holder lets go', () => {
+    subscribeRowScoped('entity_associations', 'subject_id', 'g1')
+    subscribeRowScoped('entity_associations', 'subject_id', 'g1')
+    releaseRowScoped('entity_associations', 'subject_id', 'g1')
+    releaseRowScoped('entity_associations', 'subject_id', 'g1')
+    expect(removed).toEqual(['rt_entity_associations_subject_id_g1'])
+  })
+
+  it('re-subscribes with a fresh channel after the last release', () => {
+    subscribeRowScoped('entity_associations', 'object_id', 'g1')
+    releaseRowScoped('entity_associations', 'object_id', 'g1')
+    channels.length = 0
+    subscribeRowScoped('entity_associations', 'object_id', 'g1')
+    expect(channels.map((c) => c.name)).toEqual(['rt_entity_associations_object_id_g1'])
+    channels[0]!.handlers[0]!()
+    expect(version(rowVersionKey('entity_associations', 'object_id', 'g1'))).toBe(1)
+  })
+
+  it('stops following the whole table once a fallen-back scope is released', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    subscribeRowScoped('entity_associations', 'subject_id', 'g1')
+    byName('rt_entity_associations_subject_id_g1')!.cb?.('CHANNEL_ERROR')
+    const whole = byName('rt_entity_associations')!
+    whole.handlers[0]!()
+    expect(version(rowVersionKey('entity_associations', 'subject_id', 'g1'))).toBe(1)
+    releaseRowScoped('entity_associations', 'subject_id', 'g1')
+    vi.advanceTimersByTime(1000) // drain the debounce
+    whole.handlers[0]!()
+    vi.advanceTimersByTime(1000)
+    // The table counter keeps moving; the released scope does not.
+    expect(version(rowVersionKey('entity_associations', 'subject_id', 'g1'))).toBe(1)
+    expect(version('entity_associations')).toBeGreaterThan(0)
+  })
+
+  it('is a no-op for a scope that was never subscribed, and for an empty id', () => {
+    expect(() => releaseRowScoped('entity_associations', 'subject_id', 'nobody')).not.toThrow()
+    expect(() => releaseRowScoped('entity_associations', 'subject_id', '')).not.toThrow()
+    expect(removed).toEqual([])
   })
 })
