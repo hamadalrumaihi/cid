@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
 import { countRows, insert, list, remove, rpc, update } from '@/lib/db'
 import { searchEntities, searchPersonHits, searchPlaceHits, type EntityHit } from '@/lib/entitySearch'
+import { findDuplicates } from '@/lib/entity'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { officerName } from '@/lib/profiles'
@@ -29,6 +30,9 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { DUPLICATE_DEBOUNCE_MS } from '@/components/entity'
+import { DuplicateMatchNotice, duplicateMatches, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
+import { RecordProvenance } from '@/components/shared/RecordProvenance'
 import { LinkEditPopover } from '@/components/shared/LinkEditPopover'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
 import { PinButton } from '@/components/shared/PinButton'
@@ -388,6 +392,10 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
                 (kind='account') — RLS-trimmed like every other registry. */}
             <ObservationHistory kind="account" refId={a.id} />
           </div>
+
+          {/* Who recorded the handle, and when it last changed. Same line, same
+              place, as the person, vehicle, gang, place and narcotic. */}
+          <RecordProvenance record={a} className="border-t border-white/5 pt-2.5" />
         </div>
       )}
     </div>
@@ -412,6 +420,25 @@ export function AccountModal({ account, onClose, onSaved }: { account?: Account;
   const [busy, setBusy] = useState(false)
   // external_id is frozen once set (DB trigger) — only editable while still null.
   const idLocked = !!account?.external_id
+
+  // Duplicate hint, as on every other registry create form. The handle is what
+  // makes an account one account, and the same handle typed twice is the way
+  // this registry goes wrong: two records, the history split between them, and
+  // the cross-case match that should have fired never does. `entity_duplicates`
+  // already answers for accounts (same handle strong, near-miss soft) — it was
+  // simply never asked here. Advisory only; it never blocks Save.
+  const [dupes, setDupes] = useState<DuplicateMatch[]>([])
+  useEffect(() => {
+    if (account) return // edit mode — the record IS the existing one
+    const q = handle.trim().replace(/^@+/, '')
+    let live = true
+    const t = window.setTimeout(async () => {
+      if (q.length < 2) { if (live) setDupes([]); return }
+      const rows = await findDuplicates('account', { handle: q })
+      if (live) setDupes(duplicateMatches('account', rows))
+    }, DUPLICATE_DEBOUNCE_MS)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [handle, account])
 
   const dirty = account
     ? handle !== account.handle || platform !== account.platform || displayName !== (account.display_name ?? '')
@@ -465,7 +492,12 @@ export function AccountModal({ account, onClose, onSaved }: { account?: Account;
             )}
           </Field>
           <Field label="Handle / username" required>
-            {(id) => <Input id={id} value={handle} onChange={(e) => setHandle(e.target.value)} />}
+            {(id) => (
+              <>
+                <Input id={id} value={handle} onChange={(e) => setHandle(e.target.value)} />
+                {!editing && <DuplicateMatchNotice matches={dupes} />}
+              </>
+            )}
           </Field>
           <Field label="Category">
             {(id) => (

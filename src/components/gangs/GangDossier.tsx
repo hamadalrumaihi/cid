@@ -39,6 +39,7 @@ import { uiConfirm } from '@/components/ui/dialog'
 import { AssociationsSection } from '@/components/shared/AssociationsSection'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
 import { RecordHistory } from '@/components/shared/RecordHistory'
+import { RecordProvenance } from '@/components/shared/RecordProvenance'
 import { LinkEditPopover } from '@/components/shared/LinkEditPopover'
 import { PinButton } from '@/components/shared/PinButton'
 import { RecordPeekButton } from '@/components/shared/RecordPeekButton'
@@ -624,7 +625,9 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
               {gang.classification && <Badge tone="neutral">{humanize(gang.classification)}</Badge>}
               {gang.confidence && <ConfidenceBadge confidence={gang.confidence} />}
               <StaleIntelBadge reviewedAt={gang.reviewed_at} now={now} thresholdDays={DEFAULT_REVIEW_DAYS} />
-              <span className="text-[11px] text-slate-500">Updated {fmtDate(gang.updated_at)}{officerName(gang.lead_detective_id) ? ` · Lead ${officerName(gang.lead_detective_id)}` : ''}</span>
+              <RecordProvenance record={gang}>
+                {officerName(gang.lead_detective_id) ? `Lead ${officerName(gang.lead_detective_id)}` : null}
+              </RecordProvenance>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -690,14 +693,14 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
         )}
         {section === 'observations' && (
           <Card pad="lg">
-            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-300">Surveillance history</h3>
+            <h3 className="mb-3 text-[13px] font-semibold text-white">Surveillance history</h3>
             <ObservationHistory kind="gang" refId={gang.id} />
           </Card>
         )}
         {section === 'media' && <MediaSection media={media} canEdit={canEdit} onAdd={() => setPhotoOpen(true)} onOpen={(m) => setLightbox(m)} />}
         {section === 'activity' && (
           <Card pad="lg">
-            <div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Activity</h3><StaleIntelBadge reviewedAt={gang.reviewed_at} now={now} /></div>
+            <div className="mb-2 flex items-center justify-between"><h3 className="text-[13px] font-semibold text-white">Activity</h3><StaleIntelBadge reviewedAt={gang.reviewed_at} now={now} /></div>
             {activity.length ? <WorkflowTimeline entries={activity} /> : <p className="text-sm text-slate-500">No recorded activity yet.</p>}
             <p className="mt-2 text-[11px] text-slate-500">Derived from records visible to you. The authoritative audit trail (audit_log) is available to command/owner.</p>
           </Card>
@@ -705,7 +708,7 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
         {/* Field-level versions (record_versions, P8-04). */}
         {section === 'history' && (
           <Card pad="lg">
-            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-300">Record history</h3>
+            <h3 className="mb-3 text-[13px] font-semibold text-white">Record history</h3>
             <RecordHistory kind="gang" id={gang.id} canRestore={canEdit ? undefined : false} onRestored={() => { void load(); void onRefresh() }} />
           </Card>
         )}

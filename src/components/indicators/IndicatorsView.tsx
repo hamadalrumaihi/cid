@@ -15,6 +15,8 @@
  *  whether the value is already logged elsewhere. */
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { officerName } from '@/lib/profiles'
+import { provenanceText, recordProvenance } from '@/lib/recordProvenance'
 import type { Tables } from '@/lib/database.types'
 import { insert, list, update, withRetry } from '@/lib/db'
 import { deleteRecord } from '@/lib/deleteRecord'
@@ -33,6 +35,7 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { inputCls, labelCls } from '@/components/ui/Field'
+import { RecordProvenance } from '@/components/shared/RecordProvenance'
 import { CrossrefList } from '@/components/shared/CrossrefList'
 import { RegistryPurposeNote } from '@/components/shared/RegistryPurposeNote'
 import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
@@ -170,6 +173,13 @@ export function IndicatorsView() {
       render: (r) => <span className="text-xs">{caseLink(r)}</span>,
     },
     { key: 'note', label: 'Note', value: (r) => r.note ?? '', render: (r) => <span className="line-clamp-2 max-w-[16rem] text-xs text-slate-400">{r.note || '—'}</span> },
+    {
+      // Who logged the identifier. An indicator is a claim about a case, and a
+      // claim with no name against it cannot be gone back to.
+      key: 'logged', label: 'Logged',
+      value: (r) => provenanceText(recordProvenance(r, officerName)),
+      render: (r) => <RecordProvenance record={r} />,
+    },
     { key: 'actions', label: 'Actions', value: () => '', render: (r) => rowActions(r) },
   ]
 
@@ -190,6 +200,7 @@ export function IndicatorsView() {
         </div>
         <p className="mt-3 text-xs">{caseLink(r)}</p>
         {r.note && <p className="mt-2 text-xs text-slate-400">{r.note}</p>}
+        <RecordProvenance record={r} className="mt-2" />
       </div>
     )
   }

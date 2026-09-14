@@ -32,6 +32,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { EntityLink } from '@/components/ui/EntityLink'
 import { EntityLegalLine, fetchEntityLegalRefs, type EntityLegalRef } from '@/components/justice/EntityLegalSection'
+import { RecordProvenance } from '@/components/shared/RecordProvenance'
 import { AssociationsSection } from '@/components/shared/AssociationsSection'
 import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
@@ -543,6 +544,9 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, observationCo
           </div>
         </div>
       )}
+      {/* Who recorded this location, and when it last changed — the same
+          question, in the same words, as every other registry record. */}
+      <RecordProvenance record={place} className="mt-3 border-t border-white/5 pt-2.5" />
     </Card>
   )
 }

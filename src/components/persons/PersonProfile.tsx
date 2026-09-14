@@ -65,6 +65,7 @@ import {
   ActivitySection, ACTIVITY_CAP, IdentityEditorModal, IdentitySection, InvestigationStatusCard, MarkReviewedModal,
   PersonIntelligenceSummary, SummaryEditorModal, type QualityWarningView,
 } from './ProfileSections'
+import { RecordProvenance } from '@/components/shared/RecordProvenance'
 import { AttachPersonModal, CasesSection, LinkAssociateModal, RelationshipsSection } from './ProfileRelations'
 import {
   AddPersonMediaModal, LinkPersonPlaceModal, LinkVehicleModal, PersonMediaSection, PersonPlacesSection, PersonVehiclesSection,
@@ -450,10 +451,9 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
                     {p.lifecycle !== 'active' && <Badge tint={statusTint(p.lifecycle)}>{humanize(p.lifecycle)}</Badge>}
                     {p.priority && <Badge tint={priorityTint(p.priority)}>{humanize(p.priority)} priority</Badge>}
                   </div>
-                  <p className="mt-1.5 text-[11px] text-slate-500">
-                    Updated {fmtDate(p.updated_at)}
-                    {officerName(p.lead_detective_id) ? ` · Lead ${officerName(p.lead_detective_id)}` : ''}
-                  </p>
+                  <RecordProvenance record={p} className="mt-1.5">
+                    {officerName(p.lead_detective_id) ? `Lead ${officerName(p.lead_detective_id)}` : null}
+                  </RecordProvenance>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -540,7 +540,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
                 re-checks). */}
             {section === 'history' && (
               <Card pad="lg">
-                <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-300">Record history</h3>
+                <h3 className="mb-3 text-[13px] font-semibold text-white">Record history</h3>
                 <RecordHistory kind="person" id={p.id} canRestore={mayEdit ? undefined : false} onRestored={() => void loadCore()} />
               </Card>
             )}
