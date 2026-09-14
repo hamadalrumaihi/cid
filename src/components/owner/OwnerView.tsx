@@ -65,12 +65,25 @@ const SECTIONS: { id: string; label: string; sub: string }[] = [
   { id: 'reference', label: 'Handbook & Reference', sub: 'Deep links into the Developer Handbook + the dependency explorer' },
 ]
 
-/** Desktop rail grouping — same section ids + deep-links, grouped by purpose. */
-const NAV_GROUPS: { label: string; ids: string[] }[] = [
+/** Desktop rail grouping — same section ids + deep-links, grouped by purpose.
+ *
+ *  Permanent Deletion used to sit under "Safety" between Security & Audit and
+ *  System Health. Those two are read-only monitoring: you open them to look at
+ *  something, and you scan the group to find the right one. Permanent Deletion
+ *  erases a member irreversibly. Putting an irreversible action in the middle
+ *  of a run of dashboards means the only thing between a mis-scan and that
+ *  screen is the width of a nav row.
+ *
+ *  So the destructive work is its own group, last, named for what it does and
+ *  marked. It is not hidden and it is not harder to reach on purpose — a
+ *  deliberate visit is one click, as before. It simply stops being somewhere
+ *  the eye lands on the way to something else. */
+const NAV_GROUPS: { label: string; ids: string[]; destructive?: boolean }[] = [
   { label: 'Overview', ids: ['home'] },
   { label: 'Operations', ids: ['manage', 'access', 'feedback'] },
-  { label: 'Safety', ids: ['deletion', 'security', 'system'] },
+  { label: 'Monitoring', ids: ['security', 'system'] },
   { label: 'Reference', ids: ['reference'] },
+  { label: 'Irreversible', ids: ['deletion'], destructive: true },
 ]
 
 /** ?s= compatibility — every retired section id maps to its successor, so old
@@ -171,19 +184,24 @@ export function OwnerView() {
         <aside className="sticky-below-header hidden w-52 flex-shrink-0 self-start lg:block" aria-label="Owner Console navigation">
           <nav className="space-y-4">
             {NAV_GROUPS.map((g) => (
-              <div key={g.label} className="space-y-0.5">
-                <p className="px-3 pb-0.5 text-xs font-bold uppercase tracking-wider text-slate-400">{g.label}</p>
+              <div key={g.label} className={`space-y-0.5 ${g.destructive ? 'mt-3 border-t border-rose-500/20 pt-3' : ''}`}>
+                <p className={`px-3 pb-0.5 text-xs font-bold uppercase tracking-wider ${g.destructive ? 'text-rose-300/80' : 'text-slate-400'}`}>{g.label}</p>
                 {g.ids.map((id) => {
                   const s = SECTIONS.find((x) => x.id === id)
                   if (!s) return null
                   const activeItem = s.id === active.id
+                  const tone = g.destructive
+                    ? (activeItem ? 'border-rose-400 bg-rose-500/15 font-bold text-rose-100' : 'border-transparent text-rose-300/80 hover:bg-rose-500/10 hover:text-rose-100')
+                    : (activeItem ? 'border-badge-500 bg-badge-500/15 font-bold text-white' : 'border-transparent text-slate-400 hover:bg-white/5 hover:text-white')
                   return (
                     <button
                       key={s.id} onClick={() => go(s.id)}
                       aria-current={activeItem ? 'page' : undefined}
-                      className={`block w-full rounded-lg border-l-2 py-1.5 pl-2.5 pr-3 text-left text-xs transition ${activeItem ? 'border-badge-500 bg-badge-500/15 font-bold text-white' : 'border-transparent text-slate-400 hover:bg-white/5 hover:text-white'}`}
+                      className={`block w-full rounded-lg border-l-2 py-1.5 pl-2.5 pr-3 text-left text-xs transition ${tone}`}
                     >
                       {s.label}
+                      {/* Colour alone does not say "this one cannot be undone". */}
+                      {g.destructive && <span className="sr-only"> — irreversible actions</span>}
                     </button>
                   )
                 })}
@@ -199,7 +217,17 @@ export function OwnerView() {
               value={active.id} onChange={(e) => go(e.target.value)} aria-label="Owner Console section"
               className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm font-bold text-white outline-none"
             >
-              {SECTIONS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              {/* The same grouping as the desktop rail — a phone picker that
+                  listed all eight flat would put the irreversible section one
+                  scroll-flick from Security & Audit. */}
+              {NAV_GROUPS.map((g) => (
+                <optgroup key={g.label} label={g.destructive ? `${g.label} — cannot be undone` : g.label}>
+                  {g.ids.map((id) => {
+                    const sec = SECTIONS.find((x) => x.id === id)
+                    return sec ? <option key={sec.id} value={sec.id}>{sec.label}</option> : null
+                  })}
+                </optgroup>
+              ))}
             </select>
           </div>
 
