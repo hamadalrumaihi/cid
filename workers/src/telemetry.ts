@@ -13,7 +13,6 @@ let sdk: InstanceType<SdkModule['NodeSDK']> | null = null;
 
 export function log(msg: string, meta: Record<string, unknown> = {}): void {
   const line = { ts: new Date().toISOString(), msg, ...meta };
-  // eslint-disable-next-line no-console
   console.log(JSON.stringify(line));
 }
 

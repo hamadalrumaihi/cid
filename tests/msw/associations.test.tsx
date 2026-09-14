@@ -15,10 +15,12 @@
  *  The panel variant takes the cosmetic gates as props (the harness has no
  *  AuthProvider by design); next/navigation is stubbed because EntityLink
  *  routes through useToolNav. */
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act } from 'react'
 import type { Tables } from '@/lib/database.types'
 import { AssociationsPanel } from '@/components/shared/AssociationsSection'
 import { createAssociation, decideAssociation, listAssociations } from '@/lib/associations'
+import { resetRealtime, rowVersionKey, useRealtimeStore } from '@/lib/realtime'
 import { attachRegistryMedia, registryPhotoProblem } from '@/lib/registryMedia'
 import { insert } from '@/lib/db'
 import { supabase } from '@/lib/supabase'
@@ -191,5 +193,173 @@ describe('AssociationsPanel', () => {
     } finally {
       await view.unmount()
     }
+  })
+})
+
+/* ── Live updates ───────────────────────────────────────────────────────── */
+//
+// Two investigators, one dossier: B has the gang open while A records,
+// decides or amends an association elsewhere. Before this, B read a snapshot
+// taken when the section mounted and kept it until a manual refresh.
+//
+// The channels are faked (a real one would open a websocket to a host that
+// cannot resolve) but everything downstream is real: the subscription the
+// section registers, the store counter a change bumps, the effect that
+// re-reads, and `entity_associations_for` answering under the mock's own
+// visibility rules. Nothing here reads an event payload — the refreshed list
+// is the server's answer to THIS viewer, which is the whole point.
+describe('AssociationsPanel — live updates', () => {
+  interface FakeChannel {
+    name: string
+    handlers: Array<() => void>
+    on: (ev: string, filter: Record<string, unknown>, handler: () => void) => FakeChannel
+    subscribe: (cb?: (status: string) => void) => FakeChannel
+  }
+  let opened: FakeChannel[] = []
+  let closed: string[] = []
+
+  const fakeChannels = () => {
+    const client = supabase()
+    vi.spyOn(client, 'channel').mockImplementation(((name: string) => {
+      const ch: FakeChannel = {
+        name, handlers: [],
+        on(_ev, _filter, handler) { ch.handlers.push(handler); return ch },
+        subscribe() { return ch },
+      }
+      opened.push(ch)
+      return ch
+    }) as unknown as typeof client.channel)
+    vi.spyOn(client, 'removeChannel').mockImplementation((async (ch: FakeChannel) => {
+      closed.push(ch.name)
+      return 'ok'
+    }) as unknown as typeof client.removeChannel)
+  }
+
+  beforeEach(() => {
+    opened = []; closed = []
+    resetRealtime()
+    useRealtimeStore.setState({ versions: {} })
+    fakeChannels()
+  })
+  afterEach(() => { vi.restoreAllMocks(); resetRealtime() })
+
+  const chanFor = (column: string, id: string) =>
+    opened.find((c) => c.name === `rt_entity_associations_${column}_${id}`)
+
+  /** What the other investigator's write looks like from here: a row that
+   *  appeared in the database without this session doing anything. */
+  let assocSeq = 0
+  const recordedByAnother = (subjectId: string, objectId: string, association: string) => {
+    assocSeq += 1
+    return seedRows('entity_associations', [{
+      id: `aa000000-0000-4000-b000-00000000000${assocSeq}`,
+      subject_kind: 'gang', subject_id: subjectId, object_kind: 'gang', object_id: objectId,
+      association, status: 'pending_investigation', confidence: null, source_type: null,
+      note: null, first_observed: null, last_confirmed: null, decided_by: null, decided_at: null,
+      decision_note: null, created_by: null, created_at: '2026-07-02T12:00:00.000Z',
+      updated_at: '2026-07-02T12:00:00.000Z', deleted_at: null, deleted_by: null,
+      delete_reason: null, delete_batch: null,
+    } as unknown as Tables<'entity_associations'>])
+  }
+
+  const panel = (id: string, viewerId: string) => (
+    <AssociationsPanel kind="gang" id={id} label="Grove Street Families"
+      canCreate={false} canDecide={false} viewerId={viewerId} isCommand={false} />
+  )
+
+  it('subscribes to this record only — both ends of the link, nothing else', async () => {
+    const { profile, a } = await signedIn()
+    const view = await render(panel(a.id, profile.id))
+    try {
+      await view.settle(30)
+      expect(opened.map((c) => c.name).sort()).toEqual([
+        `rt_entity_associations_object_id_${a.id}`,
+        `rt_entity_associations_subject_id_${a.id}`,
+      ])
+    } finally { await view.unmount() }
+  })
+
+  it('picks up an association another investigator recorded, without a manual refresh', async () => {
+    const { profile, a, b } = await signedIn()
+    const view = await render(panel(a.id, profile.id))
+    try {
+      await view.settle(30)
+      expect(view.container.textContent).toContain('No associations recorded')
+
+      recordedByAnother(a.id, b.id, 'unconfirmed_association')
+      await act(async () => { chanFor('subject_id', a.id)!.handlers[0]!() })
+      await view.settle(30)
+
+      expect(view.container.textContent).toContain('Unconfirmed Association')
+      expect(view.container.textContent).toContain('Ballas')
+    } finally { await view.unmount() }
+  })
+
+  it('refreshes when the record is the OBJECT end of someone else’s link', async () => {
+    const { profile, a, b } = await signedIn()
+    const view = await render(panel(a.id, profile.id))
+    try {
+      await view.settle(30)
+      recordedByAnother(b.id, a.id, 'rivalry')
+      await act(async () => { chanFor('object_id', a.id)!.handlers[0]!() })
+      await view.settle(30)
+      expect(view.container.textContent).toContain('Rivalry')
+    } finally { await view.unmount() }
+  })
+
+  it('ignores a change to a record it is not showing', async () => {
+    const { profile, a, b } = await signedIn()
+    const [c] = seedRows('gangs', [gangRow('Vagos')])
+    const view = await render(panel(a.id, profile.id))
+    try {
+      await view.settle(30)
+      recordedByAnother(b.id, c.id, 'alliance')
+      // Another dossier's counter moves; this section must not re-read.
+      await act(async () => { useRealtimeStore.getState().bump(rowVersionKey('entity_associations', 'subject_id', b.id)) })
+      await view.settle(30)
+      expect(view.container.textContent).toContain('No associations recorded')
+    } finally { await view.unmount() }
+  })
+
+  it('never reveals an association whose far end the server withholds', async () => {
+    const { profile, a } = await signedIn()
+    // A record the server will not return — the same cheap stand-in the RLS
+    // suite uses for a hidden id (tests/rls/v193a). The mock's visibility is
+    // deliberately shallow ("the row exists and is live"); the real wall,
+    // `perm_registry_visible` on BOTH endpoints, is proven against the live
+    // database in v193a/v193b. What this pins is the client half: an event
+    // causes a RE-READ, so whatever the caller may not see stays unseen.
+    const [withheld] = seedRows('gangs', [
+      { ...gangRow('Withheld Set'), deleted_at: '2026-07-02T00:00:00.000Z' } as Tables<'gangs'>,
+    ])
+    const view = await render(panel(a.id, profile.id))
+    try {
+      await view.settle(30)
+      recordedByAnother(a.id, withheld.id, 'unconfirmed_association')
+      // The event says "something changed"; the ANSWER still comes from the
+      // server, under this viewer's own policies.
+      await act(async () => { chanFor('subject_id', a.id)!.handlers[0]!() })
+      await view.settle(30)
+      expect(view.container.textContent).not.toContain('Withheld Set')
+      expect(view.container.textContent).toContain('No associations recorded')
+    } finally { await view.unmount() }
+  })
+
+  it('closes its channels when the dossier closes, and when the record changes', async () => {
+    const { profile, a, b } = await signedIn()
+    const view = await render(panel(a.id, profile.id))
+    await view.settle(30)
+    expect(closed).toEqual([])
+
+    // Same section, different record: the old subscriptions go with it.
+    await act(async () => { view.rerender(panel(b.id, profile.id)) })
+    await view.settle(30)
+    expect(closed.sort()).toEqual([
+      `rt_entity_associations_object_id_${a.id}`,
+      `rt_entity_associations_subject_id_${a.id}`,
+    ])
+
+    await view.unmount()
+    expect(closed.sort()).toContain(`rt_entity_associations_subject_id_${b.id}`)
   })
 })

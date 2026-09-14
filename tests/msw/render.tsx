@@ -7,6 +7,9 @@ import { createRoot, type Root } from 'react-dom/client'
 
 export interface Rendered {
   container: HTMLElement
+  /** Render a different element into the same root — for props that change
+   *  in place (a section pointed at another record). */
+  rerender: (node: ReactElement) => Promise<void>
   /** Dispatch a bubbling native event inside act() and flush effects. */
   fire: (target: EventTarget, event: Event) => Promise<void>
   /** Let real timers/network settle for `ms`, inside act(). */
@@ -24,6 +27,9 @@ export async function render(node: ReactElement): Promise<Rendered> {
   })
   return {
     container,
+    rerender: async (next) => {
+      await act(async () => root.render(next))
+    },
     fire: async (target, event) => {
       await act(async () => {
         target.dispatchEvent(event)

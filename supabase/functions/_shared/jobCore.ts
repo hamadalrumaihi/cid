@@ -517,7 +517,7 @@ export async function guardedFetch(deps: CoreDeps, startUrl: string, policy: Rec
         signal: ctrl.signal,
         headers: { 'user-agent': 'CIDPortal-SourceFetch/1 (+evidence snapshot)', accept: 'text/html, text/plain, application/json;q=0.9, */*;q=0.1' },
       });
-    } catch (e) {
+    } catch {
       clearTimeout(timer);
       throw new FetchRefused(ctrl.signal.aborted ? 'timeout' : 'network_error', 'transient');
     }

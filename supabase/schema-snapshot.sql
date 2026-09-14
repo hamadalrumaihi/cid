@@ -41420,6 +41420,7 @@ create policy wl_sel on public.watchlist
 --   public.document_suggestion_events
 --   public.document_suggestions
 --   public.documents
+--   public.entity_associations
 --   public.evidence
 --   public.evidence_custody_events
 --   public.feature_flags

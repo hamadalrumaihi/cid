@@ -18,6 +18,7 @@
  *     summary, not its tags, and not in any count. Every write is an RPC that
  *     re-checks server-side, so the client-side checks here are cosmetic. */
 import { list, rpc } from './db'
+import { reportToSentry } from './services/telemetry/sentry'
 import { supabase } from './supabase'
 import type { Tables } from './database.types'
 
@@ -440,11 +441,42 @@ export interface GuideImageUpload {
   file: File
 }
 
+/** Undo a reservation whose upload never landed.
+ *
+ *  `guide_media_remove` is the only authorized way an object leaves the
+ *  bucket — the browser holds no DELETE on storage.objects — and it drops the
+ *  row and the object together, so one call undoes both halves whether or not
+ *  any bytes made it. Idempotent: a row that is already gone answers
+ *  `not_found`, which is the state we wanted.
+ *
+ *  Never throws and never returns anything: the caller owes the officer the
+ *  error that actually happened, not this one. A cleanup that genuinely fails
+ *  leaves an orphan, so it is recorded where orphans can be found. */
+async function releaseGuideMedia(mediaId: string, cause: string): Promise<void> {
+  try {
+    const { data, error } = await rpc('guide_media_remove', { p_id: mediaId })
+    const r = data as { ok?: boolean; code?: string; message?: string } | null
+    if (!error && (r?.ok || r?.code === 'not_found')) return
+    await reportToSentry(new Error(`guide media cleanup failed: ${error?.message ?? r?.message ?? r?.code ?? 'refused'}`), {
+      tags: { area: 'guides', op: 'guide_media_cleanup', cause },
+    })
+  } catch (e) {
+    await reportToSentry(e, { tags: { area: 'guides', op: 'guide_media_cleanup', cause } })
+  }
+}
+
 /** Reserve the row, then upload the bytes to the path it returns.
  *
  *  The order matters and is not an implementation detail: the storage policy
  *  admits an object only when a guide_media row already names that exact path,
- *  belongs to that guide, and was created by the caller. */
+ *  belongs to that guide, and was created by the caller.
+ *
+ *  The cost of that order is a window where the row exists and the object does
+ *  not, and a row on its own renders as a real attachment in the media manager
+ *  and the guide. So the pair is one operation: an upload that fails takes its
+ *  reservation with it (the same compensating undo fieldEvidence.ts uses for
+ *  the mirror image of this problem), and the caller still gets the upload's
+ *  own error — a failure to clean up never replaces it. */
 export async function addGuideImage(u: GuideImageUpload): Promise<string | null> {
   const bad = validateGuideImage(u.file)
   if (bad) return bad
@@ -458,13 +490,15 @@ export async function addGuideImage(u: GuideImageUpload): Promise<string | null>
     p_byte_size: u.file.size,
   })
   if (error) return error.message
-  const r = data as { ok?: boolean; message?: string; storage_path?: string } | null
+  const r = data as { ok?: boolean; message?: string; media_id?: string; storage_path?: string } | null
   if (!r?.ok || !r.storage_path) return r?.message ?? 'the image was refused'
   const up = await supabase().storage.from(GUIDE_BUCKET).upload(r.storage_path, u.file, {
     contentType: u.file.type,
     upsert: false,
   })
-  return up.error ? up.error.message : null
+  if (!up.error) return null
+  if (r.media_id) await releaseGuideMedia(r.media_id, 'upload_failed')
+  return up.error.message
 }
 
 export async function updateGuideImage(id: string, alt: string, caption: string | null): Promise<boolean> {
