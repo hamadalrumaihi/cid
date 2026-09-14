@@ -8,7 +8,8 @@
  *  `?preset=<id>` in the URL applies one; the ViewsMenu lists them next to
  *  the member's own saved views (`useSavedViews<ActionViewConfig>('action')`). */
 
-import type { ActionSourceType } from './actionItems'
+import type { ActionItem, ActionSourceType } from './actionItems'
+import { isStale } from './actionStale'
 
 /** The queue's lanes (ActionCenterView.SECTION_ORDER + the activity fold). */
 export type ActionSectionKey =
@@ -17,9 +18,34 @@ export type ActionSectionKey =
 export const ALL_SECTIONS: readonly ActionSectionKey[] =
   ['overdue', 'returned', 'personal', 'command', 'intel', 'bolo', 'waiting', 'drafts', 'activity']
 
-/** Status chips (`?s=`) — the predicates live in ActionCenterView. */
-export const ACTION_STATUS_KEYS = ['overdue', 'due', 'waiting', 'command', 'escalated', 'returns'] as const
+/** Status chips (`?s=`) — every key has a predicate in ACTION_STATUS_FILTERS below. */
+export const ACTION_STATUS_KEYS = ['mine', 'overdue', 'due', 'waiting', 'command', 'escalated', 'returns', 'stale'] as const
 export type ActionStatusKey = (typeof ACTION_STATUS_KEYS)[number]
+
+/** What each status chip selects. The predicates live here, beside the keys
+ *  they belong to, so a key can never be added without one — they used to sit
+ *  in the view, which is how `mine` (the question the page exists to answer)
+ *  went missing for so long. Pure: `today` is the viewer's local date and
+ *  `now` an epoch ms, both passed in so a render stays stable. */
+export const ACTION_STATUS_FILTERS: Record<ActionStatusKey, { label: string; test: (it: ActionItem, today: string, now: number) => boolean }> = {
+  // Waiting on ME is the question this page exists to answer, and it was the
+  // one filter you could not ask for: the "Needs action now" metric counted
+  // these rows and then CLEARED the status filter, showing the whole queue —
+  // other people's queues and your own drafts included. It leads the strip.
+  mine: { label: 'Waiting on me', test: (it) => it.status !== 'waiting' && it.status !== 'informational' },
+  overdue: { label: 'Overdue', test: (it) => it.status === 'overdue' },
+  due: { label: 'Due today', test: (it, today) => !!it.dueAt && it.dueAt.slice(0, 10) === today },
+  waiting: { label: 'Waiting on others', test: (it) => it.status === 'waiting' },
+  command: { label: 'Command decisions', test: (it) => it.isCommandItem },
+  escalated: { label: 'Escalated', test: (it) => !!it.escalatedAt },
+  returns: {
+    label: 'Returns & mentions',
+    test: (it) => it.status === 'returned' || it.sourceType === 'mention' || it.sourceType === 'handover',
+  },
+  // Undated work that has stopped moving (lib/actionStale). Grouping it is
+  // half the fix; the badge on each row carries the sentence that clears it.
+  stale: { label: 'Stale', test: (it, _today, now) => isStale(it, now) },
+}
 
 /** Type chips (`?f=`): every queue kind grouped into a chip the way members
  *  think about the work — not one chip per sourceType (46 of them). The

@@ -25,10 +25,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { SOURCE_TYPE_LABEL, type ActionItem } from '@/lib/actionItems'
 import {
-  ACTION_STATUS_KEYS, availableTypeFilters, defaultPresetFor, normalizeActionConfig, presetById,
+  ACTION_STATUS_FILTERS as STATUS_FILTERS, ACTION_STATUS_KEYS, availableTypeFilters, defaultPresetFor,
+  normalizeActionConfig, presetById,
   type ActionSectionKey, type ActionStatusKey, type ActionViewConfig, type PresetViewer,
 } from '@/lib/actionPresets'
 import { isDbError, isDismissable, type ActionStateOp } from '@/lib/actionState'
+import { STALE_DAYS, isStale } from '@/lib/actionStale'
 import { markRead } from '@/lib/notifications'
 import { useAuth } from '@/lib/auth'
 import { ciInvolved, useCiContext } from '@/lib/ci'
@@ -61,20 +63,9 @@ import { ViewsMenu } from './ViewsMenu'
 /* ── Filter model — one type filter (?f=) + one status filter (?s=) ──────── */
 
 /** Type chips come from lib/actionPresets (unit-tested to cover every
- *  SOURCE_TYPE_LABEL kind) — `availableTypeFilters(viewer)` in the view, so a
- *  gated chip (Informants) exists only for the accounts the CI compartment
- *  involves; the status predicates live here. */
-const STATUS_FILTERS: Record<ActionStatusKey, { label: string; test: (it: ActionItem, today: string) => boolean }> = {
-  overdue: { label: 'Overdue', test: (it) => it.status === 'overdue' },
-  due: { label: 'Due today', test: (it, today) => !!it.dueAt && it.dueAt.slice(0, 10) === today },
-  waiting: { label: 'Waiting on others', test: (it) => it.status === 'waiting' },
-  command: { label: 'Command decisions', test: (it) => it.isCommandItem },
-  escalated: { label: 'Escalated', test: (it) => !!it.escalatedAt },
-  returns: {
-    label: 'Returns & mentions',
-    test: (it) => it.status === 'returned' || it.sourceType === 'mention' || it.sourceType === 'handover',
-  },
-}
+ *  SOURCE_TYPE_LABEL kind) — `availableTypeFilters(viewer)` in the view; the
+ *  status predicates live beside their keys in lib/actionPresets too, so a
+ *  new key cannot be added without a predicate to go with it. */
 
 const isStatusKey = (v: string | null): v is ActionStatusKey => !!v && (ACTION_STATUS_KEYS as readonly string[]).includes(v)
 
@@ -473,10 +464,10 @@ export function ActionCenterView() {
   const filtered = useMemo(() => {
     let out = items
     if (typeFilter) out = out.filter((it) => (typeFilter.types as readonly string[]).includes(it.sourceType))
-    if (statusFilter) out = out.filter((it) => STATUS_FILTERS[statusFilter].test(it, today))
+    if (statusFilter) out = out.filter((it) => STATUS_FILTERS[statusFilter].test(it, today, now))
     if (bureauFilter) out = out.filter((it) => it.bureau === bureauFilter)
     return out
-  }, [items, typeFilter, statusFilter, bureauFilter, today])
+  }, [items, typeFilter, statusFilter, bureauFilter, today, now])
 
   const sections = useMemo(() => {
     const buckets = EMPTY_SECTIONS()
@@ -577,19 +568,22 @@ export function ActionCenterView() {
   /* ── Metrics count the FULL visible queue (never the filtered slice) ── */
 
   const localCounts = useMemo(() => {
-    let needsNow = 0, dueToday = 0, waiting = 0, returnsMentions = 0
+    let needsNow = 0, dueToday = 0, waiting = 0, returnsMentions = 0, stale = 0
     for (const it of items) {
-      if (it.status === 'needs_action' || it.status === 'overdue' || it.status === 'due_soon' || it.status === 'returned') needsNow++
+      // Counted by the SAME predicate the chip filters by, so clicking the
+      // number can never land on a different set than the number promised.
+      if (STATUS_FILTERS.mine.test(it, today, now)) needsNow++
       if (it.dueAt && it.dueAt.slice(0, 10) === today) dueToday++
       if (it.status === 'waiting') waiting++
       if (it.status === 'returned' || it.sourceType === 'mention' || it.sourceType === 'handover') returnsMentions++
+      if (isStale(it, now)) stale++
     }
-    return { needsNow, dueToday, waiting, returnsMentions }
-  }, [items, today])
+    return { needsNow, dueToday, waiting, returnsMentions, stale }
+  }, [items, today, now])
 
   const metrics = useMemo<Metric[]>(() => {
     const m: Metric[] = [
-      { label: 'Needs action now', value: localCounts.needsNow, onClick: () => setParam('s', null) },
+      { label: 'Waiting on me', value: localCounts.needsNow, onClick: () => setParam('s', 'mine') },
       { label: 'Due today', value: localCounts.dueToday, tint: localCounts.dueToday > 0 ? 'bg-amber-500/15 text-amber-300' : undefined, onClick: () => setParam('s', 'due') },
       { label: 'Overdue', value: counts.overdue, tint: counts.overdue > 0 ? 'bg-rose-500/15 text-rose-300' : undefined, onClick: () => setParam('s', 'overdue') },
       { label: 'Escalated', value: counts.escalated, tint: counts.escalated > 0 ? 'bg-rose-500/15 text-rose-300' : undefined, onClick: () => setParam('s', 'escalated') },
@@ -597,6 +591,11 @@ export function ActionCenterView() {
     ]
     if (isCommand) m.push({ label: 'Command decisions', value: counts.command, onClick: () => setParam('s', 'command') })
     m.push({ label: 'Unread returns & mentions', value: localCounts.returnsMentions, onClick: () => setParam('s', 'returns') })
+    // Only when there is something to say: a permanent "Stale 0" is noise,
+    // and a queue with no stale work should not be told about staleness.
+    if (localCounts.stale > 0) {
+      m.push({ label: `Stale (${STALE_DAYS}d+)`, value: localCounts.stale, onClick: () => setParam('s', 'stale') })
+    }
     return m
   }, [localCounts, counts.overdue, counts.escalated, counts.command, isCommand, setParam])
 
