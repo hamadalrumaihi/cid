@@ -29,6 +29,12 @@ const config: StorybookConfig = {
     '../src/components/entity/**/*.stories.@(ts|tsx)',
     // Workspace chrome (tab strip) — presentational, provider-free.
     '../src/components/workspace/**/*.stories.@(ts|tsx)',
+    // The library's document surfaces — card, header, callouts, related
+    // documents, the filter control. All props-in, no AuthContext and no
+    // Supabase, and the responsive behaviour (bottom sheet vs popover, the
+    // card grid at phone width) cannot be checked any other way without a
+    // signed-in portal.
+    '../src/components/guides/**/*.stories.@(ts|tsx)',
   ],
   addons: [
     // Advisory only — parameters.a11y.test is 'todo' in preview.tsx, so

@@ -51,8 +51,14 @@ export const CHIP_NEUTRAL = 'border-white/10 bg-white/5 text-slate-300'
 /** Amber, chip-sized. The "notice this before you act on it" tier: a draft, a
  *  superseded document, a document somebody has flagged as out of date. Red is
  *  wrong for all three — none of them is restricted, and a rose chip next to a
- *  title is read as a classification. */
-export const CHIP_WARN = 'border-amber-400/25 bg-amber-500/15 text-amber-300'
+ *  title is read as a classification.
+ *
+ *  Deliberately HEAVIER than CHIP_TYPE. globals.css remaps every `blue-*` tier
+ *  to the reader's accent and the default accent is AMBER, so on most screens
+ *  a card reads "SOP · SUPERSEDED" in two similar golds. The status is the one
+ *  a reader must not miss, so it takes the stronger border and fill and wins
+ *  the glance. (Found by rendering it, not by reading the class names.) */
+export const CHIP_WARN = 'border-amber-400/60 bg-amber-500/25 text-amber-200'
 
 /** The document-type badge. One accent for every type rather than eight
  *  colours: the badge's job is to say WHICH type in a word, and a library

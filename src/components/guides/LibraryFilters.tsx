@@ -103,7 +103,7 @@ export function LibraryFilters({ groups, activeCount, onClearAll }: LibraryFilte
                   <label className="flex min-h-11 cursor-pointer touch-manipulation items-center gap-2.5 rounded px-1.5 text-sm text-slate-200 transition hover:bg-white/5 lg:min-h-8">
                     <input
                       type="checkbox"
-                      className="h-4 w-4 flex-shrink-0 accent-badge-500"
+                      className="h-4 w-4 flex-shrink-0 accent-[rgb(var(--acc-500))]"
                       checked={on}
                       onChange={() => g.onToggle(o.value)}
                     />

@@ -12,7 +12,15 @@
  *     amber from red loses nothing. This is also why the label is not
  *     optional.
  *  2. The portal's own colour language, not a documentation-only one — the
- *     same blue / amber / rose / emerald the Badge primitive uses.
+ *     same neutral / amber / rose the Badge primitive uses.
+ *
+ *     Note what that language actually resolves to: globals.css remaps every
+ *     `blue-*` tier to the reader's chosen accent, and the default accent is
+ *     AMBER. So a callout built on blue is amber on most screens, and an
+ *     earlier draft of this table put info, important, time-sensitive and
+ *     command on blue-or-amber — six kinds rendering as two. They are toned
+ *     against what the browser produces, not against what the class name
+ *     says.
  *  3. They emphasise; they do not restate. A callout wraps wording that is
  *     already in the document. Putting a sentence in a box does not make it
  *     policy, and rewriting it to fit the box is how a presentation change
@@ -44,15 +52,28 @@ interface Spec {
   icon: string
 }
 
+/** Five visual weights for six kinds, which is the honest number.
+ *
+ *  QUIET (info) — context a reader does not have to act on, so it is the
+ *  calmest thing on the page rather than the brightest.
+ *  QUIET + ACCENT LABEL (command) — the same calm box; the accent is on the
+ *  word, because what makes it different is WHOSE it is, not how urgent.
+ *  AMBER (important, time-sensitive) — one tier, deliberately shared: both
+ *  mean "act on this". The word and the glyph say which, and inventing a
+ *  sixth hue to split them would spend colour the portal does not have.
+ *  ROSE (warning) — prohibited conduct or a consequence.
+ *  STRONG ROSE (restricted) — heavier border and fill than warning, plus the
+ *  lock, because "you may not read this on" is a different claim from "do not
+ *  do this" and must not be mistaken for it at a glance. */
 const SPEC: Record<CalloutKind, Spec> = {
   info: {
     label: 'Information',
-    cls: 'border-blue-400/25 bg-blue-500/10 text-blue-100/90',
-    head: 'text-blue-300', icon: 'i',
+    cls: 'border-white/10 bg-white/[0.04] text-slate-200',
+    head: 'text-slate-300', icon: 'i',
   },
   important: {
     label: 'Important',
-    cls: 'border-amber-400/25 bg-amber-500/10 text-amber-100/90',
+    cls: 'border-amber-400/30 bg-amber-500/10 text-amber-100/90',
     head: 'text-amber-300', icon: '!',
   },
   warning: {
@@ -62,17 +83,17 @@ const SPEC: Record<CalloutKind, Spec> = {
   },
   restricted: {
     label: 'Restricted',
-    cls: 'border-rose-400/30 bg-rose-500/10 text-rose-100/90',
-    head: 'text-rose-300', icon: '🔒',
+    cls: 'border-rose-400/60 bg-rose-500/20 text-rose-100',
+    head: 'text-rose-200', icon: '🔒',
   },
   time: {
     label: 'Time-sensitive',
-    cls: 'border-amber-400/25 bg-amber-500/10 text-amber-100/90',
+    cls: 'border-amber-400/30 bg-amber-500/10 text-amber-100/90',
     head: 'text-amber-300', icon: '⏱',
   },
   command: {
     label: 'Command',
-    cls: 'border-blue-400/30 bg-blue-500/10 text-blue-100/90',
+    cls: 'border-white/10 bg-white/[0.04] text-slate-200',
     head: 'text-blue-300', icon: '★',
   },
 }
