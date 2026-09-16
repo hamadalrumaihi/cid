@@ -27,10 +27,12 @@ import { usePermissions } from '@/lib/permissions'
 import { useRegistry } from '@/lib/useRegistry'
 import {
   EMPTY_GUIDE_LIBRARY, GUIDE_AUDIENCES, GUIDE_AUDIENCE_LABEL, GUIDE_SORTS, GUIDE_SORT_LABEL,
-  categoryLabelFrom, isArchived, isNewToReader, isPublished, isUpdatedSinceSeen, loadGuideLibrary,
+  GUIDE_DOC_TYPES, GUIDE_DOC_TYPE_LABEL,
+  categoryLabelFrom, isArchived, isCurrent, isNewToReader, isPublished, isSuperseded,
+  isUpdatedSinceSeen, loadGuideLibrary,
   matchGuides, searchGuides, setGuideArchived, setGuidePinned, setGuidePublished, sortGuides,
   toggleGuideBookmark,
-  type GuideAudience, type GuideLibraryModel, type GuideRow, type GuideSearchHit,
+  type GuideAudience, type GuideDocType, type GuideLibraryModel, type GuideRow, type GuideSearchHit,
   type GuideSort,
 } from '@/lib/guides'
 import { Button } from '@/components/ui/Button'
@@ -44,7 +46,7 @@ import { GuideEditorDialog } from './GuideEditorDialog'
 import { guideBody } from './guideRegistry'
 import { CHIP, CHIP_DONE, CHIP_NEUTRAL, GOLD_TEXT, GUIDE_CANVAS, PANEL, SLAB } from './guideSurfaces'
 
-type StatusFilter = 'all' | 'published' | 'draft' | 'archived'
+type StatusFilter = 'all' | 'published' | 'superseded' | 'draft' | 'archived'
 
 /** A quiet filter chip. The pressed state is carried by `aria-pressed` and by
  *  the word in the chip, never by colour alone. */
@@ -86,6 +88,7 @@ export function GuideLibraryView() {
   const [searching, setSearching] = useState(false)
   const [cats, setCats] = useState<Set<string>>(new Set())
   const [audiences, setAudiences] = useState<Set<GuideAudience>>(new Set())
+  const [types, setTypes] = useState<Set<GuideDocType>>(new Set())
   const [status, setStatus] = useState<StatusFilter>('all')
   const [onlyBookmarked, setOnlyBookmarked] = useState(false)
   const [sort, setSort] = useState<GuideSort>('updated')
@@ -177,14 +180,20 @@ export function GuideLibraryView() {
   const shown = useMemo(() => {
     let out = matchGuides(rows, query)
     if (cats.size) out = out.filter((g) => cats.has(g.category))
+    if (types.size) out = out.filter((g) => types.has(g.doc_type as GuideDocType))
     if (audiences.size) out = out.filter((g) => audiences.has(g.audience as GuideAudience))
-    if (status === 'published') out = out.filter((g) => isPublished(g) && !isArchived(g))
-    if (status === 'draft') out = out.filter((g) => !isPublished(g))
+    if (status === 'published') out = out.filter((g) => isCurrent(g))
+    if (status === 'superseded') out = out.filter((g) => isSuperseded(g))
+    if (status === 'draft') out = out.filter((g) => g.status === 'draft')
     if (status === 'archived') out = out.filter((g) => isArchived(g))
-    if (status === 'all' && mayEdit) out = out.filter((g) => !isArchived(g))
+    // The default view is what is CURRENTLY in force. A superseded document is
+    // still readable and still searchable — it is simply not the answer to
+    // "what are the rules", so it waits behind its own filter or behind the
+    // link on the document that replaced it.
+    if (status === 'all') out = out.filter((g) => !isArchived(g) && !isSuperseded(g))
     if (onlyBookmarked) out = out.filter((g) => bookmarks.has(g.id))
     return sortGuides(out, sort)
-  }, [rows, query, cats, audiences, status, onlyBookmarked, bookmarks, sort, mayEdit])
+  }, [rows, query, cats, types, audiences, status, onlyBookmarked, bookmarks, sort])
 
   const readMinutesOf = useCallback(
     (g: GuideRow) => g.read_minutes ?? guideBody(g.body_key)?.readMinutes ?? 3,
@@ -325,14 +334,42 @@ export function GuideLibraryView() {
             </div>
           )}
 
+          {/* Document type. Everyone sees this one: "show me the forms" is the
+              question the old library answered with a folder, and the reason
+              type is now a column of its own. */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Type</span>
+            {GUIDE_DOC_TYPES.map((t) => (
+              <FilterChip
+                key={t}
+                on={types.has(t)}
+                label={GUIDE_DOC_TYPE_LABEL[t]}
+                onClick={() => setTypes((p) => toggleIn(p, t))}
+              />
+            ))}
+            {types.size > 0 && <Button variant="ghost" size="sm" onClick={() => setTypes(new Set())}>Clear</Button>}
+          </div>
+
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Show</span>
             <FilterChip on={onlyBookmarked} label="My bookmarks" onClick={() => setOnlyBookmarked((v) => !v)} />
-            {mayEdit && (['all', 'published', 'draft', 'archived'] as const).map((s) => (
+            {/* Superseded is offered to every reader, not just editors: the
+                history of a policy is division reading, and hiding it would
+                make "what did the rules used to say" unanswerable. Drafts and
+                archived stay with the people who manage them. */}
+            {(['all', 'published', 'superseded'] as const).map((s) => (
               <FilterChip
                 key={s}
                 on={status === s}
-                label={s === 'all' ? 'Live' : s === 'published' ? 'Published' : s === 'draft' ? 'Drafts' : 'Archived'}
+                label={s === 'all' ? 'Current' : s === 'published' ? 'Active' : 'Superseded'}
+                onClick={() => setStatus(s)}
+              />
+            ))}
+            {mayEdit && (['draft', 'archived'] as const).map((s) => (
+              <FilterChip
+                key={s}
+                on={status === s}
+                label={s === 'draft' ? 'Drafts' : 'Archived'}
                 onClick={() => setStatus(s)}
               />
             ))}

@@ -131,7 +131,9 @@ export function JumpBack({ cases }: { cases?: CaseRow[] }) {
       case 'place': openHref(`/places?place=${encodeURIComponent(id)}`); break
       case 'account': openHref('/accounts'); break
       case 'legal_request': openHref(`/legal?request=${encodeURIComponent(id)}`); break
-      case 'document': openHref(`/sops?doc=${encodeURIComponent(id)}`); break
+      // The SOPs area retired into the Guide Library; a recent document opens
+      // the guide it became (the /guides route resolves ?doc= by provenance).
+      case 'document': openHref(`/guides?doc=${encodeURIComponent(id)}`); break
       case 'operation': openHref(`/operations?op=${encodeURIComponent(id)}`); break
       case 'field_submission': openHref('/field-review'); break
     }

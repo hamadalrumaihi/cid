@@ -75,7 +75,7 @@ const SEMANTIC_PREF = 'searchSemantic'
 /** The glyph for the two upgrade kinds: page hits share the document glyph,
  *  sources the link glyph (KindIcon falls back to a search glyph otherwise). */
 function HitIcon({ kind }: { kind: string }) {
-  if (kind === 'document_page') return <KindIcon kind="document" />
+  if (kind === 'document_page' || kind === 'guide') return <KindIcon kind="document" />
   if (kind === 'source') return <LinkIcon size={15} />
   return <KindIcon kind={kind} />
 }
@@ -326,7 +326,7 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
     else if (hit.kind === 'evidence') { pushRecent('case', hit.id); openHref(caseLink(hit.id, 'media')) }
     else if (hit.kind === 'legal') { pushRecent('legal_request', hit.id); openHref(`/legal?request=${enc(hit.id)}`) }
     // Documents deep-link straight into the reader (SopsView reads ?doc=).
-    else if (hit.kind === 'document') { pushRecent('document', hit.id); openHref(`/sops?doc=${enc(hit.id)}`) }
+    else if (hit.kind === 'guide') { openHref(`/guides/${enc(hit.id)}`) }
     // Record-tab tools open the actual record (openRecord pushes the recent).
     // A BOLO is a flag on a person record — same destination as a person hit.
     else if (hit.kind === 'person' || hit.kind === 'bolo') openRecord('persons', hit.id, hit.label)

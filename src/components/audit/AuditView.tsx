@@ -18,7 +18,6 @@ import { Card } from '@/components/ui/Card'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { Notice } from '@/components/ui/Notice'
 import { ListSkeleton } from '@/components/ui/Skeleton'
-import { DocGovernanceWarnings } from './DocGovernanceWarnings'
 
 type AuditRow = Tables<'audit_log'>
 
@@ -90,7 +89,6 @@ export function AuditView() {
 
   return (
     <div className="space-y-5">
-      <DocGovernanceWarnings />
       <Card pad="lg">
       {loading && rows.length === 0 ? (
         // First load renders the shape of the incoming table rows instead of a

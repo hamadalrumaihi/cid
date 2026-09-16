@@ -32,10 +32,10 @@ import { useAuth } from '@/lib/auth'
 import { usePermissions } from '@/lib/permissions'
 import { fmtDate } from '@/lib/format'
 import { toast } from '@/lib/toast'
-import { renderMarkdown, type DocHeading } from '@/lib/markdown'
+import { renderDocumentMarkdown, renderMarkdown, type DocHeading } from '@/lib/markdown'
 import {
   categoryLabelFrom, guideAudienceLabel,
-  guideClassification, isArchived, isPublished,
+  guideClassification, guideDocTypeLabel, isArchived, isPublished, isSuperseded,
   isRestrictedAudience, isUpdatedSinceSeen, listGuideMedia, loadGuidePage, markGuideComplete,
   markGuideOutdated, recordGuideView, resolveGuideImages, submitGuideFeedback, toggleGuideBookmark,
   type GuideCategoryRow, type GuideFeedbackKind, type GuideImage, type GuideMediaRow,
@@ -47,13 +47,13 @@ import { Field, Input, Textarea } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { DocToc, scrollToHeading, useActiveHeading } from '@/components/sops/DocToc'
+import { DocToc, scrollToHeading, useActiveHeading } from '@/components/shared/DocToc'
 import { useNav } from '@/components/shell/useNav'
 import { GuideHeader, GuideSection } from './GuideParts'
 import { GuideDocView } from './GuideDocView'
 import { GuideMediaManager, type GuideMediaSlot } from './GuideMediaManager'
 import { GuideAcknowledgement, guideOffersAcknowledgement } from './GuideAcknowledgement'
-import { CHIP, CHIP_DONE, CHIP_LOCKED, CHIP_NEUTRAL, GOLD_TEXT, GUIDE_CANVAS, PANEL, SLAB, WARN } from './guideSurfaces'
+import { CHIP, CHIP_DONE, CHIP_LOCKED, CHIP_NEUTRAL, CHIP_TYPE, GOLD_TEXT, GUIDE_CANVAS, PANEL, SLAB, WARN } from './guideSurfaces'
 import { guideBody } from './guideRegistry'
 
 /** Reading estimate for a guide whose prose lives in the database. Same rule
@@ -178,6 +178,8 @@ export function GuidePage({ slug }: { slug: string }) {
   const [dbSections, setDbSections] = useState<GuideSectionRow[]>([])
   const [cats, setCats] = useState<GuideCategoryRow[]>([])
   const [related, setRelated] = useState<GuideRow[]>([])
+  const [replacement, setReplacement] = useState<GuideRow | null>(null)
+  const [policy, setPolicy] = useState<GuideRow | null>(null)
   const [progress, setProgress] = useState<GuideProgressRow | null>(null)
   const [media, setMedia] = useState<GuideMediaRow[]>([])
   const [images, setImages] = useState<GuideImage[]>([])
@@ -212,6 +214,8 @@ export function GuidePage({ slug }: { slug: string }) {
       setCats(page.categories)
       setProgress(page.progress)
       setRelated(page.related)
+      setReplacement(page.replacement)
+      setPolicy(page.policy)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -234,18 +238,33 @@ export function GuidePage({ slug }: { slug: string }) {
 
   const body = guideBody(row?.body_key)
 
-  /** The contents, from whichever of the three prose sources this guide uses. */
+  /** A migrated document is ONE section holding the whole body, so its
+   *  structure lives in the text rather than in rows. `renderDocumentMarkdown`
+   *  returns the nodes and the heading list from a single pass, which is how
+   *  the old SOP reader built its rail — and the better arrangement: a table
+   *  of contents derived from the text cannot disagree with the text. */
+  const singleBody = !body && dbSections.length === 1 ? dbSections[0].body : null
+  const rendered = useMemo(
+    () => (singleBody === null ? null : renderDocumentMarkdown(singleBody)),
+    [singleBody],
+  )
+
+  /** The contents, from whichever prose source this guide uses. */
   const sections = useMemo<DocHeading[]>(() => {
     if (body) return body.sections
+    if (rendered) return rendered.headings
     return dbSections.map((s) => ({ id: s.anchor, text: s.heading, level: 2 as const }))
-  }, [body, dbSections])
+  }, [body, rendered, dbSections])
 
   const shown = useMemo(() => {
     if (body) return body.matchSections(query)
+    // A single-body document has nothing to filter: its structure is in the
+    // text. The rail below narrows to matching headings instead.
+    if (rendered) return new Set(rendered.headings.map((h) => h.id))
     const q = query.trim().toLowerCase()
     const hit = dbSections.filter((s) => !q || `${s.heading} ${s.body}`.toLowerCase().includes(q))
     return new Set(hit.map((s) => s.anchor))
-  }, [body, dbSections, query])
+  }, [body, rendered, dbSections, query])
 
   const active = useActiveHeading(slug, sections)
   const visible = sections.filter((s) => shown.has(s.id))
@@ -450,7 +469,36 @@ export function GuidePage({ slug }: { slug: string }) {
             </p>
           )}
 
+          {/* Superseded: say it before the prose, and name the replacement.
+              A reader who lands here from an old link must not read a retired
+              policy believing it is in force. */}
+          {isSuperseded(row) && (
+            <div className={`${WARN} px-4 py-3 text-sm`} role="status">
+              <p className="font-semibold">This document has been superseded.</p>
+              <p className="mt-1 font-normal">
+                It is kept as the record of what the rules were. For the rules in force now,{' '}
+                {replacement
+                  ? <a className="underline underline-offset-2" href={`/guides/${replacement.slug}`}>read {replacement.title}</a>
+                  : 'see the current document in the library'}.
+                {row.change_summary ? ` ${row.change_summary}` : ''}
+              </p>
+            </div>
+          )}
+
+          {/* The form's governing policy. A form filled in without its rules is
+              a form filled in wrongly. */}
+          {policy && (
+            <p className={`${SLAB} px-4 py-3 text-sm text-slate-300`}>
+              Governed by{' '}
+              <a className="font-semibold text-white underline underline-offset-2" href={`/guides/${policy.slug}`}>
+                {policy.title}
+              </a>
+              {policy.doc_type ? ` · ${guideDocTypeLabel(policy.doc_type)}` : ''}
+            </p>
+          )}
+
           <div className="flex flex-wrap items-center gap-2">
+            <span className={`${CHIP} ${CHIP_TYPE}`}>{guideDocTypeLabel(row.doc_type)}</span>
             <span className={`${CHIP} ${CHIP_NEUTRAL}`}>{categoryLabelFrom(cats, row.category)}</span>
             <span className={`${CHIP} ${CHIP_NEUTRAL}`}>~{readMinutes} min read</span>
             {!isPublished(row) && <span className={`${CHIP} ${CHIP_NEUTRAL}`}>Draft</span>}
@@ -461,6 +509,33 @@ export function GuidePage({ slug }: { slug: string }) {
             )}
             {done && <span className={`${CHIP} ${CHIP_DONE}`}>Read</span>}
           </div>
+
+          {/* Document metadata — the questions an issued document has to answer
+              about itself. Rendered only when a document actually carries
+              them: an ordinary how-to guide has no issuing authority, and a
+              row of empty labels is worse than no row. */}
+          {(row.issuing_authority || row.effective_date || row.version_label) && (
+            <dl className={`${SLAB} grid gap-x-6 gap-y-2 px-4 py-3 sm:grid-cols-3`}>
+              {row.issuing_authority && (
+                <div>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Issuing authority</dt>
+                  <dd className="mt-0.5 text-sm text-slate-200">{row.issuing_authority}</dd>
+                </div>
+              )}
+              {row.effective_date && (
+                <div>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Effective</dt>
+                  <dd className="mt-0.5 text-sm text-slate-200">{fmtDate(row.effective_date)}</dd>
+                </div>
+              )}
+              {row.version_label && (
+                <div>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Version</dt>
+                  <dd className="mt-0.5 text-sm text-slate-200">{row.version_label}</dd>
+                </div>
+              )}
+            </dl>
+          )}
 
           {changed && (
             <p className={`${SLAB} px-4 py-3 text-sm text-slate-300`} role="status">
@@ -500,7 +575,9 @@ export function GuidePage({ slug }: { slug: string }) {
 
           {query.trim() && (
             <p className="text-xs text-slate-500" role="status">
-              {visible.length} of {sections.length} sections match “{query.trim()}”.
+              {rendered
+                ? `${sections.filter((h) => h.text.toLowerCase().includes(query.trim().toLowerCase())).length} of ${sections.length} headings match “${query.trim()}” — the document is shown in full.`
+                : `${visible.length} of ${sections.length} sections match “${query.trim()}”.`}
             </p>
           )}
 
@@ -516,7 +593,15 @@ export function GuidePage({ slug }: { slug: string }) {
 
           {body?.Body && !body.doc && <body.Body shown={shown} imagesFor={imagesFor} />}
 
-          {!body && dbSections.filter((s) => shown.has(s.anchor)).map((s) => (
+          {/* A migrated document renders as the document it is: one continuous
+              body with its own headings, not a section card wrapping the lot. */}
+          {rendered && (
+            <div className="prose-guide text-sm leading-relaxed text-slate-300">
+              {rendered.nodes}
+            </div>
+          )}
+
+          {!body && !rendered && dbSections.filter((s) => shown.has(s.anchor)).map((s) => (
             <GuideSection
               key={s.id}
               id={s.anchor}
@@ -536,7 +621,7 @@ export function GuidePage({ slug }: { slug: string }) {
             </p>
           )}
 
-          {sections.length > 0 && !visible.length && (
+          {!rendered && sections.length > 0 && !visible.length && (
             <p className={`${SLAB} px-4 py-6 text-center text-sm text-slate-400`}>
               Nothing in this guide matches “{query.trim()}”.
             </p>

@@ -36,6 +36,11 @@ export const CHIP_LOCKED = 'border-red-400/30 bg-red-500/10 text-red-200'
 export const CHIP_DONE = 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
 export const CHIP_NEUTRAL = 'border-white/10 bg-white/5 text-slate-300'
 
+/** The document-type badge. One accent for every type rather than eight
+ *  colours: the badge's job is to say WHICH type in a word, and a card that
+ *  changes colour per type turns a library listing into a paint chart. */
+export const CHIP_TYPE = 'border-sky-400/30 bg-sky-500/10 text-sky-200'
+
 /** One chip shape, so every state chip on every guide is the same size. */
 export const CHIP =
   'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide'

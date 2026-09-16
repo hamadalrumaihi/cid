@@ -70,7 +70,6 @@ import { EmptyState, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { GuideHelpLink } from '@/components/guides/GuideHelpLink'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { RelatedGuidance } from '@/components/sops/RelatedGuidance'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
 import { RelatedRecordPicker } from '@/components/shared/RelatedRecordPicker'
 import { Row, exhibitSources, sanitizeStash, useCaseRecordsFor, type DraftShape } from '@/components/justice/dossier/dossierShared'
@@ -968,7 +967,6 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
       {/* Warrant and subpoena guidance, if any has been written and linked to
           this work. Placed before the stepper because the standard to meet is
           something you read BEFORE drafting, not after being refused. */}
-      <RelatedGuidance route="legal" />
 
       {/* ── Stepper (keyboard: every reachable step is a real button) ───────── */}
       <ol aria-label="Wizard steps" className="flex flex-wrap gap-1.5">

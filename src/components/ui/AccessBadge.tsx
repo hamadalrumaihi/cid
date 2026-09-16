@@ -8,7 +8,7 @@
  *   - `legal` — legal-request classification (lib/justice): standard /
  *               restricted / classified / sealed. Keeps the bordered uppercase
  *               idiom and the 🔒 on sealed.
- *   - `sop`   — library document classification (sops/docModel CLASS_LABEL):
+ *   - `sop`   — library document classification (CLASS_LABEL below):
  *               internal / restricted / command / justice / owner.
  *  Every chip carries a title explaining WHO can access — the audience is the
  *  point of a classification, so the tooltip says it out loud. */
@@ -16,7 +16,15 @@ import {
   visibilityLabel, visibilityTint, type VisibilityRow,
 } from '@/lib/siuVisibility'
 import { CLASSIFICATION_STYLE, type Classification } from '@/lib/justice'
-import { CLASS_LABEL } from '@/components/sops/docModel'
+/** The library's classification vocabulary. It used to live in the SOPs
+ *  area's docModel; that area is retired (20261112120000) and the labels
+ *  outlived it, because `sop`-kind badges still render on records that carry
+ *  a classification. Four words, kept where the one component that reads them
+ *  can see them. */
+const CLASS_LABEL: Record<string, string> = {
+  internal: 'Internal', restricted: 'Restricted', command: 'Command',
+  justice: 'Justice', owner: 'Owner',
+}
 
 /** The row slice visibilityLabel reads — pass it when you have one so the
  *  label reflects scope ("2 sections restricted", "Revealed to one case"). */

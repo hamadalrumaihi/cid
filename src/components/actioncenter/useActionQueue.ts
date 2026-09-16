@@ -30,10 +30,6 @@ import {
   type AcSurvTarget, type AcTracker, type ActionItem, type ActionItemState, type ActionSources,
 } from '@/lib/actionItems'
 import { isDbError, isHidden, setActionState, type ActionStateOp } from '@/lib/actionState'
-import {
-  ackState, canApproveDoc, docTitle, reviewState,
-  type MyAckVersions, type ShelfDoc,
-} from '@/components/sops/docModel'
 import { ciInvolved, fetchCiList, getCiContext, useCiContext } from '@/lib/ci'
 import { list, rpc, type DbError } from '@/lib/db'
 import { supabase } from '@/lib/supabase'
@@ -129,10 +125,35 @@ const OBS_COLS = 'id,case_id,activity,source_type,created_at,observed_at,updated
 const TGT_COLS = 'id,case_id,label,status,expires_at,requested_by,updated_at,created_at'
 const NOTIF_COLS = 'id,user_id,type,payload,read,read_at,created_at'
 /** Library governance projection — never full bodies (docModel AcDoc inputs). */
-const DOC_COLS =
-  'id,name,folder,kind,status,category,classification,owner_user_id,mandatory,'
-  + 'acknowledgement_required,acknowledgement_deadline,review_due_at,sync_status,'
-  + 'current_version_number,created_at,updated_at'
+/** The Guide Library projection the queue needs — the two duties a document
+ *  can owe a reader, and nothing else. The SOPs area's wider projection went
+ *  with it (20261112120000): approvals and Google Drive sync have no
+ *  equivalent on a guide. */
+const GUIDE_COLS =
+  'id,title,status,content_owner,acknowledgement_required,acknowledgement_deadline,next_review_at,created_at,updated_at'
+
+interface GuideDocRow {
+  id: string
+  title: string
+  status: string
+  content_owner: string | null
+  acknowledgement_required: boolean | null
+  acknowledgement_deadline: string | null
+  next_review_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Is a scheduled review overdue, due soon, or neither? One date, one rule,
+ *  local to the queue now that the SOPs area's docModel has retired. */
+function reviewState(due: string | null, nowMs: number): 'overdue' | 'due_soon' | null {
+  if (!due) return null
+  const t = Date.parse(due)
+  if (Number.isNaN(t)) return null
+  if (t <= nowMs) return 'overdue'
+  return t - nowMs <= 14 * 24 * 60 * 60 * 1000 ? 'due_soon' : null
+}
+
 /** Document-suggestion projection — RLS already scopes visibility to the
  *  submitter and the managers, so no body/thread columns are ever fetched. */
 const SUGGESTION_COLS = 'id,title,status,document_id,created_by,assigned_editor,created_at,updated_at'
@@ -348,8 +369,11 @@ const useActionQueueStore = create<QueueStore>((set, get) => ({
           : Promise.resolve(null),
         // Library governance: narrow RLS-scoped projection + my own acks —
         // both fail-open to empty (the queue never sinks on the library).
-        list('documents', { select: DOC_COLS }).then((r) => r as unknown as ShelfDoc[]).catch(() => [] as ShelfDoc[]),
-        list('document_acknowledgements', { select: 'document_id, documents_versions(version_number)' }).catch(() => []),
+        // The Guide Library, not the retired documents area (20261112120000).
+        // `guides_sel` already scopes these to the reader's audience, so a
+        // document they may not open can never become an item they owe.
+        list('guides', { select: GUIDE_COLS }).then((r) => r as unknown as GuideDocRow[]).catch(() => [] as GuideDocRow[]),
+        list('guide_acknowledgements', { select: 'guide_id,revision_no' }).catch(() => []),
         // Document suggestions: RLS returns the submitter's own rows plus any
         // the viewer manages — open statuses only. Fail-open to empty.
         list('document_suggestions', { select: SUGGESTION_COLS, in: { status: SUGGESTION_OPEN } })
@@ -563,27 +587,29 @@ const useActionQueueStore = create<QueueStore>((set, get) => ({
         : null
       // Library governance facts, pre-derived through docModel so the pure
       // builder stays free of component imports (AcDoc contract).
-      const myAcks: MyAckVersions = {}
-      for (const a of docAcks as Array<{ document_id: string; documents_versions: { version_number: number | null } | null }>) {
-        const v = a.documents_versions?.version_number
-        if (typeof v === 'number') (myAcks[a.document_id] ??= []).push(v)
+      const myAcks = new Set<string>()
+      for (const a of docAcks as Array<{ guide_id: string; revision_no: number }>) {
+        myAcks.add(`${a.guide_id}:${a.revision_no}`)
       }
-      const viewer = { userId: me, active: !!profile.active, role: profile.role, isCommand, isOwner, justiceRole }
       const documents: AcDoc[] = docRows.flatMap((d) => {
-        const ack = ackState(d, myAcks)
+        // A guide owes an acknowledgement when it asks for one and this reader
+        // has not given one for the CURRENT revision — a reissued policy is a
+        // new thing to read, which is why the revision is part of the key.
+        // The projection carries no revision, so revision 0 is the key an
+        // unrevised guide acknowledges under, matching `guide_acknowledge`.
+        const ackPending = !!d.acknowledgement_required && !myAcks.has(`${d.id}:0`)
+        const reviewDue = d.content_owner === me ? reviewState(d.next_review_at, nowMs) : null
         const item: AcDoc = {
-          id: d.id, title: docTitle(d.name), status: d.status,
-          ackPending: ack === 'pending' || ack === 'reack_needed',
+          id: d.id, title: d.title, status: d.status,
+          ackPending,
           ackDeadline: d.acknowledgement_deadline,
-          reviewDue: d.owner_user_id === me ? reviewState(d, nowMs) : null,
-          reviewDueAt: d.review_due_at,
-          awaitingMyApproval: d.status === 'in_review' && canApproveDoc(viewer, d),
-          syncConflict: d.sync_status === 'conflict' && (isCommand || isOwner),
+          reviewDue,
+          reviewDueAt: d.next_review_at,
           createdAt: d.created_at, updatedAt: d.updated_at,
         }
-        return item.ackPending || item.reviewDue || item.awaitingMyApproval || item.syncConflict ? [item] : []
+        return item.ackPending || item.reviewDue ? [item] : []
       })
-      // Document suggestions: RLS guarantees a visible non-self row is one the
+            // Document suggestions: RLS guarantees a visible non-self row is one the
       // viewer can manage, so canManage mirrors !mine (the builder re-gates by
       // status, and the server RPCs are the real authority).
       const suggestions: AcSuggestion[] = suggestionRows.map((r) => ({

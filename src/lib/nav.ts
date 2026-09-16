@@ -92,7 +92,6 @@ export const PAGE_META: Record<string, PageMeta> = {
   directory:  { title: 'Division Directory', sub: 'Current active members, assignments and availability' },
   rico:       { title: 'RICO Builder', sub: 'Enterprise & predicate-act element tracker' },
   penal:      { title: 'Penal Code', sub: 'San Andreas statutes, sentences & fines' },
-  sops:       { title: 'Standard Operating Procedures', sub: 'Division policy & reference library, managed by command staff' },
   devdocs:    { title: 'Developer Handbook', sub: 'How the portal works — architecture, database, every file (owner-only)' },
   announce:   { title: 'Announcements', sub: 'Division-wide notices from command staff' },
   'case-files': { title: 'Case Files — Attachments', sub: 'Files uploaded and linked per case' },
@@ -165,7 +164,7 @@ export const PAGE_META: Record<string, PageMeta> = {
  *   · personnel → /directory (the public roster is the Division Directory
  *     now, under Division & Reference rather than Command; its old address
  *     keeps every bookmark and cross-link resolving) */
-export const LEGACY_REDIRECT_TABS: readonly string[] = ['action', 'command', 'tools', ...TOOL_TABS, 'reports', 'undergrnd', 'guide', 'personnel']
+export const LEGACY_REDIRECT_TABS: readonly string[] = ['action', 'command', 'tools', ...TOOL_TABS, 'reports', 'undergrnd', 'guide', 'personnel', 'sops']
 
 export interface NavCategory {
   id: string
@@ -185,7 +184,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
   // Division & Reference: what the division reads about itself and about the
   // rules it works to. The Division Directory leads it — a member-facing
   // roster has no business in a category of command administration.
-  { id: 'reference', label: 'Division & Reference', tabs: ['directory', 'penal', 'sops'] },
+  { id: 'reference', label: 'Division & Reference', tabs: ['directory', 'penal'] },
   { id: 'oversight', label: 'Oversight',      tabs: ['calendar', 'shifts', 'trash'] },
   // Owner-only: the shell renders this category only when the signed-in
   // member is the portal owner (the views and RLS self-gate regardless).
@@ -236,7 +235,7 @@ export const SIU_NAV_CATEGORIES: NavCategory[] = [
   // empty list. Navigation, not access — the same arrangement `informants`
   // already has, and SIB's own secrecy is untouched by it.
   { id: 'siu-cases',     label: 'Investigations', tabs: ['cases', 'operations', 'legal', 'intelligence', 'informants', 'undercover', 'registries', 'rico', 'case-files'] },
-  { id: 'siu-ref',       label: 'Division & Reference', tabs: ['directory', 'penal', 'sops'] },
+  { id: 'siu-ref',       label: 'Division & Reference', tabs: ['directory', 'penal'] },
   { id: 'siu-oversight', label: 'Oversight',      tabs: ['calendar', 'shifts', 'trash'] },
   { id: 'siu-owner',     label: 'Owner',          tabs: ['owner', 'audit', 'devdocs', 'report-templates'] },
 ]
@@ -246,7 +245,6 @@ export const SIU_NAV_CATEGORIES: NavCategory[] = [
 export const SIU_TAB_LABEL: Record<string, string> = {
   siu: 'SIB Workspace',
   cases: 'Cases',
-  sops: 'SIB SOP',
   legal: 'Legal Requests',
 }
 
@@ -257,7 +255,7 @@ export const TAB_LABEL: Record<string, string> = {
   // toolLabel) read these; the routes themselves are legacy redirects.
   persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', accounts: 'Accounts', indicators: 'Indicators', 'field-review': 'Intelligence',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
-  media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guides: 'Guides', devdocs: 'Developer Handbook',
+  media: 'Media Vault', records: 'Records', penal: 'Penal Code', guides: 'Guides', devdocs: 'Developer Handbook',
   tools: 'Investigative Tools', workspace: 'Workspace',
   calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', trash: 'Trash', owner: 'Owner Console', profile: 'My Profile', 'command-center': 'Command Center', siu: 'Special Investigations Bureau',
   informants: 'Informants',
@@ -298,6 +296,10 @@ export const TAB_CATEGORY: Record<string, string | null> = {
   guides: null,
   undergrnd: null,
   guide: null,
+  // /sops redirects into the Guide Library too — the SOPs, forms and
+  // reference documents moved there, so the old address resolves into a
+  // top-level destination that lights no category button.
+  sops: null,
   // /personnel redirects to /directory, which lives in Division & Reference —
   // the strip highlights the right category during the hop.
   personnel: 'reference',

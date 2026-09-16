@@ -65,7 +65,6 @@ import { Card } from '@/components/ui/Card'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { EmptyState, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { RelatedGuidance } from '@/components/sops/RelatedGuidance'
 import { RecordHistory } from '@/components/shared/RecordHistory'
 import { SectionTabs } from '@/components/ui/SectionTabs'
 import { uiPrompt } from '@/components/ui/dialog'
@@ -172,7 +171,6 @@ export function FieldReviewView() {
         />
         {/* Whichever documents have declared themselves relevant to this work.
             Renders nothing until one does, which is the honest state today. */}
-        <RelatedGuidance route="field" className="mt-3 border-t border-white/5 pt-3" />
       </div>
 
       {/* The same structured form a patrol officer fills in. An investigator

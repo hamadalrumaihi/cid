@@ -3,8 +3,7 @@ import {
   buildActionItems, describeDraftKey, priorityFromScore, NUDGE, STATUS_BASE,
   type AcAccess, type AcBlocker, type AcBoloPerson, type AcCase, type AcDoc, type AcDraft,
   type AcFieldSubmission, type AcLegal, type AcNotif,
-  type AcObservation, type AcSiuAccessRequest, type AcSiuDisclosure, type AcSiuReferral,
-  type AcSuggestion, type AcSurvTarget, type AcTask, type AcTransfer,
+  type AcObservation, type AcSiuAccessRequest, type AcSiuDisclosure, type AcSiuReferral, type AcSurvTarget, type AcTask, type AcTransfer,
   type AcCi, type AcCiRequest,
   type ActionSources,
 } from './actionItems'
@@ -626,115 +625,42 @@ describe('ranking', () => {
 })
 
 describe('library governance items (AcDoc — pre-derived facts)', () => {
+  /** Two duties survive the move to the Guide Library (20261112120000):
+   *  required reading, and a scheduled policy review on a document you own.
+   *  Approvals and Google Drive sync retired with the SOPs area — a guide has
+   *  neither — and the change-suggestion workflow went with them. */
   const mkDoc = (over: Partial<AcDoc> = {}): AcDoc => ({
     id: 'd-1', title: 'Evidence Handling SOP', status: 'published',
     ackPending: false, ackDeadline: null,
     reviewDue: null, reviewDueAt: null,
-    awaitingMyApproval: false, syncConflict: false,
     createdAt: NOW_ISO, updatedAt: NOW_ISO, ...over,
   })
 
-  it('required acknowledgement: personal item, overdue past the deadline, deep-links to the reader', () => {
+  it('required acknowledgement: personal item, overdue past the deadline, deep-links to the document', () => {
     const q = buildActionItems(src({ documents: [
       mkDoc({ ackPending: true, ackDeadline: '2026-07-10T00:00:00Z' }),
     ] }))
-    const it1 = q.items.find((i) => i.sourceType === 'document_ack')!
-    expect(it1).toBeDefined()
-    expect(it1.status).toBe('overdue')
-    expect(it1.isPersonalItem).toBe(true)
-    expect(it1.deepLink).toBe('/sops?doc=d-1')
-    expect(it1.actionLabel).toBe('Read & acknowledge')
+    const item = q.items.find((i) => i.sourceType === 'guide_ack')
+    expect(item, 'a required acknowledgement is an item').toBeTruthy()
+    expect(item!.status).toBe('overdue')
+    expect(item!.isPersonalItem).toBe(true)
+    expect(item!.deepLink).toContain('/guides')
   })
 
-  it('review due (docs I own), approval waiting on me, and sync conflict each emit their own item', () => {
-    const q = buildActionItems(src({ documents: [
-      mkDoc({ id: 'd-r', reviewDue: 'overdue', reviewDueAt: '2026-07-01T00:00:00Z' }),
-      mkDoc({ id: 'd-a', status: 'in_review', awaitingMyApproval: true }),
-      mkDoc({ id: 'd-s', syncConflict: true }),
+  it('a review due on a document I own is its own item, and a quiet document emits nothing', () => {
+    const due = buildActionItems(src({ documents: [
+      mkDoc({ reviewDue: 'due_soon', reviewDueAt: '2026-07-20T00:00:00Z' }),
     ] }))
-    const types = q.items.map((i) => i.sourceType)
-    expect(types).toContain('document_review')
-    expect(types).toContain('document_approval')
-    expect(types).toContain('document_sync')
-    const sync = q.items.find((i) => i.sourceType === 'document_sync')!
-    expect(sync.isCommandItem).toBe(true)
-    expect(sync.status).toBe('blocked')
-  })
+    const review = due.items.find((i) => i.sourceType === 'guide_review')
+    expect(review, 'a due review is an item').toBeTruthy()
+    expect(review!.status).toBe('due_soon')
 
-  it('a quiet document emits nothing; a document_required notification is suppressed by its structural item', () => {
-    const quiet = buildActionItems(src({ documents: [mkDoc()] }))
-    expect(quiet.items.filter((i) => i.sourceType.startsWith('document_'))).toHaveLength(0)
-    const withNotif = buildActionItems(src({
-      documents: [mkDoc({ ackPending: true })],
-      notifications: [{
-        id: 'n-1', user_id: ME, type: 'document_required',
-        payload: { document_id: 'd-1' }, read: false, read_at: null, created_at: NOW_ISO,
-      }],
-    }))
-    expect(withNotif.suppressedCount).toBe(1)
-    const ack = withNotif.items.find((i) => i.sourceType === 'document_ack')!
-    expect(ack.sourceMetadata.notificationIds).toEqual(['n-1'])
+    // Nothing pending, nothing owed: the library contributes no noise.
+    expect(buildActionItems(src({ documents: [mkDoc()] })).items
+      .filter((i) => i.sourceType === 'guide_ack' || i.sourceType === 'guide_review')).toEqual([])
   })
 })
 
-describe('document suggestions (AcSuggestion — pre-derived facts)', () => {
-  const mkSug = (over: Partial<AcSuggestion> = {}): AcSuggestion => ({
-    id: 's-1', title: 'Clarify evidence chain', status: 'submitted',
-    documentId: 'd-1', canManage: false, mine: false, assignedToMe: false,
-    createdAt: NOW_ISO, updatedAt: NOW_ISO, ...over,
-  })
-
-  it('manager triage: a fresh submission on a doc I manage is a command needs-action item, deep-linked to the queue', () => {
-    const q = buildActionItems(src({ suggestions: [mkSug({ canManage: true })] }))
-    const it1 = q.items.find((i) => i.sourceType === 'document_suggestion')!
-    expect(it1).toBeDefined()
-    expect(it1.status).toBe('needs_action')
-    expect(it1.isCommandItem).toBe(true)
-    expect(it1.deepLink).toBe('/sops?view=suggestions&suggestion=s-1')
-    expect(it1.actionLabel).toBe('Review')
-  })
-
-  it('submitter reply: my suggestion in needs_more_information is a personal needs-action item on the doc', () => {
-    const q = buildActionItems(src({ suggestions: [
-      mkSug({ mine: true, canManage: false, status: 'needs_more_information' }),
-    ] }))
-    const it1 = q.items.find((i) => i.sourceType === 'document_suggestion')!
-    expect(it1).toBeDefined()
-    expect(it1.isPersonalItem).toBe(true)
-    expect(it1.deepLink).toBe('/sops?doc=d-1')
-    expect(it1.actionLabel).toBe('Reply')
-  })
-
-  it('assigned editor: an accepted suggestion assigned to me is a personal implement item', () => {
-    const q = buildActionItems(src({ suggestions: [
-      mkSug({ status: 'accepted', assignedToMe: true }),
-    ] }))
-    const it1 = q.items.find((i) => i.sourceType === 'document_suggestion')!
-    expect(it1).toBeDefined()
-    expect(it1.actionLabel).toBe('Implement')
-    expect(it1.isPersonalItem).toBe(true)
-  })
-
-  it('informational states emit nothing: my submitted suggestion (awaiting a reviewer) and an accepted one not assigned to me', () => {
-    const mineWaiting = buildActionItems(src({ suggestions: [mkSug({ mine: true, status: 'submitted' })] }))
-    expect(mineWaiting.items.filter((i) => i.sourceType === 'document_suggestion')).toHaveLength(0)
-    const acceptedElsewhere = buildActionItems(src({ suggestions: [mkSug({ status: 'accepted', assignedToMe: false })] }))
-    expect(acceptedElsewhere.items.filter((i) => i.sourceType === 'document_suggestion')).toHaveLength(0)
-  })
-
-  it('a document_suggestion notification is suppressed by its structural item', () => {
-    const q = buildActionItems(src({
-      suggestions: [mkSug({ canManage: true })],
-      notifications: [{
-        id: 'n-9', user_id: ME, type: 'document_suggestion',
-        payload: { suggestion_id: 's-1', document_id: 'd-1' }, read: false, read_at: null, created_at: NOW_ISO,
-      }],
-    }))
-    expect(q.suppressedCount).toBe(1)
-    const it1 = q.items.find((i) => i.sourceType === 'document_suggestion')!
-    expect(it1.sourceMetadata.notificationIds).toEqual(['n-9'])
-  })
-})
 
 /* ---- surveillance ------------------------------------------------------------- */
 
@@ -1012,8 +938,8 @@ describe('Phase 7 — SOURCE_TYPE_LABEL', () => {
   it('names every source type the builder can emit', () => {
     const emitted: ActionSourceType[] = [
       'task', 'signoff', 'returned_case', 'transfer', 'access_request', 'access_expiring', 'membership_request',
-      'legal_request', 'case_followup', 'handover', 'mention', 'blocker', 'document_ack', 'document_review',
-      'document_approval', 'document_sync', 'document_suggestion', 'legal_hold', 'restricted_access',
+      'legal_request', 'case_followup', 'handover', 'mention', 'blocker', 'guide_ack', 'guide_review',
+      'legal_hold', 'restricted_access',
       'unverified_observation', 'surveillance_expiring', 'legal_queue', 'draft', 'unassigned_intel', 'bolo_expiring',
       'sib_access_request', 'sib_referral', 'sib_disclosure', 'restricted_export', 'mdt_export', 'field_access',
       'claim_verdict', 'narcotic_suggestion', 'gang_duplicate', 'tracker_cosign', 'sib_conflict', 'sib_watch_review',

@@ -30,7 +30,7 @@ import { Button } from '@/components/ui/Button'
 import { Field, Select, Textarea } from '@/components/ui/Field'
 import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { ListSkeleton } from '@/components/ui/Skeleton'
-import { DiffView } from '@/components/sops/docDiff'
+import { DiffView } from '@/components/shared/docDiff'
 
 export interface RecordHistoryProps {
   kind: VersionKind
