@@ -64,6 +64,22 @@ export const GUIDE_AUDIENCE_LABEL: Record<GuideAudience, string> = {
 export const isRestrictedAudience = (a: string | null | undefined): boolean =>
   !!a && a !== 'all' && a !== 'investigative'
 
+/** The classification line a guide carries above its title, or null when the
+ *  guide is open to everyone.
+ *
+ *  Derived from `audience` — the column the SELECT policy actually enforces —
+ *  rather than from a tag, so the banner and the wall can never disagree.
+ *  A guide nobody is excluded from gets no banner: a classification stamped on
+ *  everything is a classification nobody reads.
+ *
+ *  This is a LABEL. `private.guide_audience_ok` in the guides policy is the
+ *  control; removing this banner would not widen access by one reader. */
+export function guideClassification(a: string | null | undefined): string | null {
+  if (!a || a === 'all') return null
+  if (a === 'investigative') return 'CID Restricted — CID access only'
+  return `Restricted — ${guideAudienceLabel(a)} only`
+}
+
 export function guideAudienceLabel(a: string | null | undefined): string {
   if (!a) return GUIDE_AUDIENCE_LABEL.all
   if ((GUIDE_AUDIENCES as readonly string[]).includes(a)) return GUIDE_AUDIENCE_LABEL[a as GuideAudience]

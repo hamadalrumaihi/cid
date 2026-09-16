@@ -7012,6 +7012,45 @@ export type Database = {
           },
         ]
       }
+      guide_acknowledgements: {
+        Row: {
+          acknowledged_at: string
+          guide_id: string
+          id: string
+          revision_no: number
+          user_id: string
+        }
+        Insert: {
+          acknowledged_at?: string
+          guide_id: string
+          id?: string
+          revision_no: number
+          user_id?: string
+        }
+        Update: {
+          acknowledged_at?: string
+          guide_id?: string
+          id?: string
+          revision_no?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_acknowledgements_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "guides"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guide_acknowledgements_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guide_bookmarks: {
         Row: {
           created_at: string
@@ -15353,6 +15392,288 @@ export type Database = {
           },
         ]
       }
+      uc_audit_events: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          detail: Json | null
+          entity: string | null
+          entity_id: string | null
+          id: number
+          operation_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          detail?: Json | null
+          entity?: string | null
+          entity_id?: string | null
+          id?: never
+          operation_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          detail?: Json | null
+          entity?: string | null
+          entity_id?: string | null
+          id?: never
+          operation_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uc_audit_events_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "uc_operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      uc_command_actions: {
+        Row: {
+          action: string
+          actor_id: string
+          created_at: string
+          id: string
+          note: string | null
+          operation_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          operation_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          operation_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uc_command_actions_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uc_command_actions_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "uc_operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      uc_criminal_activity: {
+        Row: {
+          bureau_lead_notified_at: string | null
+          command_notified_at: string | null
+          created_at: string
+          created_by: string | null
+          description: string
+          id: string
+          incident_reference: string | null
+          occurred_at: string
+          operation_id: string
+          recording_reference: string | null
+          recording_submitted_at: string | null
+          related_case_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          bureau_lead_notified_at?: string | null
+          command_notified_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description: string
+          id?: string
+          incident_reference?: string | null
+          occurred_at: string
+          operation_id: string
+          recording_reference?: string | null
+          recording_submitted_at?: string | null
+          related_case_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bureau_lead_notified_at?: string | null
+          command_notified_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          id?: string
+          incident_reference?: string | null
+          occurred_at?: string
+          operation_id?: string
+          recording_reference?: string | null
+          recording_submitted_at?: string | null
+          related_case_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uc_criminal_activity_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uc_criminal_activity_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "uc_operations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uc_criminal_activity_related_case_id_fkey"
+            columns: ["related_case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      uc_operations: {
+        Row: {
+          alias: string | null
+          bureau: Database["public"]["Enums"]["bureau"]
+          bureau_lead_notified_at: string | null
+          case_id: string
+          command_notified_at: string | null
+          command_review_status: string
+          compromise_note: string | null
+          compromised_at: string | null
+          created_at: string
+          created_by: string | null
+          criminal_activity: boolean
+          detective_id: string
+          end_reason: string | null
+          ended_at: string | null
+          id: string
+          notes: string | null
+          objective: string | null
+          recording_media_id: string | null
+          recording_note: string | null
+          recording_reference: string | null
+          recording_status: string
+          recording_submitted_at: string | null
+          recording_submitted_to: string | null
+          retention_until: string | null
+          started_at: string | null
+          status: string
+          updated_at: string
+          withdrawn: boolean | null
+        }
+        Insert: {
+          alias?: string | null
+          bureau: Database["public"]["Enums"]["bureau"]
+          bureau_lead_notified_at?: string | null
+          case_id: string
+          command_notified_at?: string | null
+          command_review_status?: string
+          compromise_note?: string | null
+          compromised_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          criminal_activity?: boolean
+          detective_id: string
+          end_reason?: string | null
+          ended_at?: string | null
+          id?: string
+          notes?: string | null
+          objective?: string | null
+          recording_media_id?: string | null
+          recording_note?: string | null
+          recording_reference?: string | null
+          recording_status?: string
+          recording_submitted_at?: string | null
+          recording_submitted_to?: string | null
+          retention_until?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          withdrawn?: boolean | null
+        }
+        Update: {
+          alias?: string | null
+          bureau?: Database["public"]["Enums"]["bureau"]
+          bureau_lead_notified_at?: string | null
+          case_id?: string
+          command_notified_at?: string | null
+          command_review_status?: string
+          compromise_note?: string | null
+          compromised_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          criminal_activity?: boolean
+          detective_id?: string
+          end_reason?: string | null
+          ended_at?: string | null
+          id?: string
+          notes?: string | null
+          objective?: string | null
+          recording_media_id?: string | null
+          recording_note?: string | null
+          recording_reference?: string | null
+          recording_status?: string
+          recording_submitted_at?: string | null
+          recording_submitted_to?: string | null
+          retention_until?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          withdrawn?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uc_operations_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uc_operations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uc_operations_detective_id_fkey"
+            columns: ["detective_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uc_operations_recording_media_id_fkey"
+            columns: ["recording_media_id"]
+            isOneToOne: false
+            referencedRelation: "media"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uc_operations_recording_submitted_to_fkey"
+            columns: ["recording_submitted_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_drafts: {
         Row: {
           data: Json
@@ -18549,6 +18870,38 @@ export type Database = {
       }
       guide_upsert: {
         Args: { p_id?: string | null; p_slug?: string | null; p_title?: string | null; p_summary?: string | null; p_category?: string | null; p_body_key?: string | null; p_audience?: string | null; p_custom_roles?: string[] | null; p_tags?: string[] | null; p_keywords?: string | null; p_body_kind?: string | null; p_read_minutes?: number | null; p_content_owner?: string | null; p_next_review_at?: string | null; p_expected_updated_at?: string | null }
+        Returns: Json
+      }
+      guide_acknowledge: {
+        Args: { p_guide: string }
+        Returns: Json
+      }
+      uc_report_criminal_activity: {
+        Args: {
+          p_op: string
+          p_description: string
+          p_occurred_at: string
+          p_related_case?: string | null
+          p_incident_reference?: string | null
+          p_bureau_lead_notified?: boolean
+          p_command_notified?: boolean
+          p_recording_submitted?: boolean
+          p_recording_reference?: string | null
+        }
+        Returns: Json
+      }
+      uc_mark_compromised: {
+        Args: {
+          p_op: string
+          p_compromised_at: string | null
+          p_note: string | null
+          p_withdrawn?: boolean
+          p_command_notified?: boolean
+        }
+        Returns: Json
+      }
+      uc_command_act: {
+        Args: { p_op: string; p_action: string; p_note?: string | null }
         Returns: Json
       }
       guide_publish: {

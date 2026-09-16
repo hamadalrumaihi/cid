@@ -24,6 +24,7 @@ function seededBodyKeys(): string[] {
   const sql = [
     'supabase/migrations/20261108120000_guide_library_v2.sql',
     'supabase/migrations/20261109120000_guide_vanilla_unicorn.sql',
+    'supabase/migrations/20261111120000_cid_undercover_operations.sql',
   ].map((f) => readFileSync(f, 'utf8')).join('\n')
   // Every library row seeds `body_key` as a quoted literal, either in the
   // VALUES tuple or in the named-column insert.
