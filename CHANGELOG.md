@@ -8,6 +8,76 @@ the merged PRs that compose it.
 
 ## [Unreleased]
 
+### Guide Library / SOP visual redesign — one presentation system for every document
+
+The library's documents looked like two libraries. Documents written for the
+portal had a layout; the ten SOPs migrated out of the old area were plain text
+dumps. One presentation system now serves all of them — SOPs, policies,
+procedures, guides, forms, report templates, references and training material
+alike. **No policy wording was changed anywhere in this work.**
+
+- **`.prose-guide` was referenced by five components and defined nowhere.**
+  That one missing definition is why long SOPs read as a wall. Defining it once
+  lifts every document simultaneously: a 72ch reading measure for prose (tables
+  exempt — narrowing a wide table just moves the problem), headings with a
+  hairline rule rather than a box around every paragraph, nested list levels
+  that are visibly subordinate instead of merely further right, and a phone
+  breakpoint that tightens the rhythm **without shrinking the text**.
+- **One `DocumentHeader` for every type**, rendering only the metadata a
+  document actually carries — title, type, category, access, status, issuing
+  authority, version, effective date, last updated, reading estimate. A
+  restricted document gets a prominent classification strip above everything
+  else. Access is now always stated, including when it is "everyone": a badge
+  row whose fourth question is sometimes missing teaches a reader that its
+  absence means nothing.
+- **Six reusable callouts** — Info, Important, Warning, Restricted,
+  Time-sensitive, Command. Each prints its kind as a word and uses `role="note"`
+  rather than `alert`, because a long SOP that announces every callout on load
+  is unusable. They are applied where a document already carried that meaning,
+  never sprinkled.
+- **The browse page is quiet by default.** Title, description, search, a short
+  quick-type row (All / SOPs / Procedures / Guides / Forms) and a bookmark
+  toggle. Twenty categories, eight audiences and four statuses used to be three
+  permanent rows of buttons above the results; they now live behind one
+  **Filters** control — a popover on a wide screen, a bottom sheet on a phone —
+  with collapsible multi-select groups. **No category was removed.** Applied
+  filters appear as removable chips above the results, so the view can never be
+  narrowed invisibly.
+- **Filters offer only what the data carries.** Every group is built from the
+  loaded rows with facet counts computed against every *other* filter, so a
+  count is what that option would actually return. A group with nothing to
+  choose between does not render — which is also why there is no Bureau filter:
+  `guides` has no bureau column, and a filter that cannot narrow anything is
+  worse than a missing one.
+- **Cards show only what decides whether to open**, and forms no longer look
+  like the policies that require them: the type badge is outlined for the form
+  family and filled for governing documents (same hue, different weight —
+  `guideDocFamily`). Titles are no longer forced to ALL CAPS.
+- **Colour reinforces the label, never replaces it.** Blue informs, amber says
+  "not the rule in force" (draft, superseded, flagged out of date), red
+  restricts, green confirms — and every coloured chip says its state in a word.
+  Superseded and out-of-date moved off rose, which was reading as a
+  classification. Nothing is themed by document type.
+- **Search results now say what they found**: type, category, access and status
+  chips beside the title, plus the section heading and an excerpt. Both halves
+  of the search run under the reader's own policies (`guides_search` is
+  SECURITY INVOKER and inner-joins `public.guides`; the module half runs over
+  rows RLS already returned), so a restricted document produces no hit at all
+  for a reader outside its audience — no title, no heading, no snippet, no
+  count.
+- **Related documents, both ways.** A policy now names the forms filled in
+  under it and the document it replaced, not just the other direction
+  (`GuidePageModel.governs` / `.supersedes`). Every row resolves through the
+  same RLS-filtered list, so a document the reader may not open cannot be named.
+- **The duplicated document title is gone.** Every migrated document opened by
+  typing its own name into the page, because the word processor it came from
+  gave it nowhere else to live — so the portal showed it as the `<h1>`, again as
+  the section heading, and again as the first line of the text.
+  `stripDocumentPreamble` drops the opening restatement (and a bare `Tab N`
+  export marker above it) **at render time only**: the stored body and its
+  revision history are untouched, and a line that says anything the heading does
+  not is left exactly where its author put it.
+
 ### Guide Library audit — Accounts and Indicators coverage, and a real `check:guides`
 
 - **Accounts and Indicators were buried.** The portal has both as registries of

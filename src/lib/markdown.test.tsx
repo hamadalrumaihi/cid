@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { EntityLink } from '@/components/ui/EntityLink'
-import { renderDocumentMarkdown, renderMarkdown } from './markdown'
+import { renderDocumentMarkdown, renderMarkdown, stripDocumentPreamble } from './markdown'
 
 /** Depth-first flatten of a ReactNode tree into elements. */
 function elements(node: ReactNode): ReactElement[] {
@@ -155,5 +155,42 @@ describe('narrative mentions (P5-05)', () => {
   it('doc mode threads the resolver through headings, lists, quotes and tables', () => {
     const { nodes } = renderDocumentMarkdown(`# About [person:${P}]\n\n- [person:${P}]\n\n> [person:${P}]\n\n| a | b |\n|---|---|\n| [person:${P}] | x |`, { mentions: { [`person:${P}`]: 'John Doe' } })
     expect(elements(nodes).filter((e) => e.type === EntityLink)).toHaveLength(4)
+  })
+})
+
+/** The duplicated-title rule. Every document migrated out of the old library
+ *  opened by typing its own name into the page, because a word processor gave
+ *  it nowhere else to live. The portal's header already says it, so the
+ *  opening restatement is dropped at render — and nothing else is. */
+describe('stripDocumentPreamble', () => {
+  const TITLE = 'Criminal Investigation Division (CID) Standard Operating Procedure'
+
+  it('drops an ALL-CAPS restatement of the title', () => {
+    const out = stripDocumentPreamble(`${TITLE.toUpperCase()}\n\nTITLE 1 | INTRODUCTION`, TITLE)
+    expect(out).toBe('TITLE 1 | INTRODUCTION')
+  })
+
+  it('drops a markdown heading restatement, and the CRLF form', () => {
+    expect(stripDocumentPreamble(`# ${TITLE}\r\n\r\nTitle 1`, TITLE)).toBe('Title 1')
+    expect(stripDocumentPreamble(`**${TITLE}**\n\nTitle 1`, TITLE)).toBe('Title 1')
+  })
+
+  it('drops the export tab marker, but only when the title follows it', () => {
+    expect(stripDocumentPreamble(`Tab 1\n${TITLE}\n\nTitle 1`, TITLE)).toBe('Title 1')
+    // No restated title behind it: the marker is somebody's content, not an
+    // export artifact, and stays.
+    expect(stripDocumentPreamble('Tab 1\n\nTitle 1', TITLE)).toBe('Tab 1\n\nTitle 1')
+  })
+
+  it('stops at the opening — a later heading about the subject survives', () => {
+    const deep = `a\nb\nc\nd\n${TITLE}\n`
+    expect(stripDocumentPreamble(deep, TITLE)).toContain(TITLE)
+  })
+
+  it('leaves policy wording alone', () => {
+    const body = `${TITLE} — Purpose\n\nThis document governs everything.`
+    expect(stripDocumentPreamble(body, TITLE)).toBe(body)
+    expect(stripDocumentPreamble(body, '')).toBe(body)
+    expect(stripDocumentPreamble(null, TITLE)).toBe('')
   })
 })

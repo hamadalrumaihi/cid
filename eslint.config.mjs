@@ -17,6 +17,11 @@ const eslintConfig = defineConfig([
     "*.js",
     // Supabase edge functions are Deno code with their own conventions:
     "supabase/functions/**",
+    // Storybook's build output. Gitignored, but ESLint does not read
+    // .gitignore, so anyone who ran `npm run build-storybook` before
+    // `npm run lint` was linting a directory of minified bundles — thousands
+    // of warnings and a failing gate from an artifact, not from code.
+    "storybook-static/**",
   ]),
   // P1-08 / P1-09: client authorization predicates live ONLY in
   // src/lib/permissions. Labels, bureau maps and fetch helpers stay

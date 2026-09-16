@@ -156,6 +156,68 @@ function heading(raw: string, mdLevel: number | null, collect: HeadingCollector 
   )
 }
 
+/** Reduce a line to the letters and digits in it, lowercased — so
+ *  "CRIMINAL INVESTIGATION DIVISION (CID) STANDARD OPERATING PROCEDURE",
+ *  "# Criminal Investigation Division (CID) Standard Operating Procedure" and
+ *  "**Criminal Investigation Division (CID) Standard Operating Procedure**"
+ *  all compare equal. */
+const titleKey = (s: string): string =>
+  s.replace(/^#{1,6}\s+/, '').replace(/[*_`]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '')
+
+/** A word-processor tab label — "Tab 1", "Tab 2" — left behind by the export
+ *  every migrated document came through. It names a tab in a document that no
+ *  longer exists, so on its own line at the very top it is noise, not policy. */
+const TAB_MARKER = /^Tab\s+\d+$/i
+
+/** Drop the opening lines that only restate the document's own title.
+ *
+ *  Every document migrated out of the old library came from a word processor,
+ *  where the title had to be typed into the page because nothing else carried
+ *  it. In the portal the title is already the `<h1>`, so the first thing a
+ *  reader sees is the same sentence two or three times — and the derived table
+ *  of contents opens with an entry that goes nowhere useful.
+ *
+ *  Two things are removed and nothing else: an exact restatement of the title,
+ *  and a bare export tab marker above it. Both only within the first few lines,
+ *  before any prose. Policy wording is untouched — a line that says anything
+ *  the heading does not is left exactly where the author put it — and the
+ *  stored body is not modified, so the authoritative text and its revision
+ *  history stay whole. This is a reading view, not an edit. */
+export function stripDocumentPreamble(body: string | null | undefined, title: string | null | undefined): string {
+  const text = String(body ?? '')
+  const want = titleKey(String(title ?? ''))
+  if (!want || !text) return text
+  const lines = text.replace(/\r\n?/g, '\n').split('\n')
+  let seen = 0
+  let i = 0
+  let dropped = false
+  // Only the opening of the document: once four non-empty lines have gone by,
+  // a matching line is far more likely to be a real section about the subject
+  // than a restated cover heading.
+  while (i < lines.length && seen < 4) {
+    const line = lines[i].trim()
+    if (!line) { i += 1; continue }
+    seen += 1
+    // The tab marker goes only when it is the very first thing on the page and
+    // the title follows it — that pairing is the export's signature, and it is
+    // the only shape in which the marker is certainly not content.
+    const isPreamble = titleKey(line) === want
+      || (seen === 1 && TAB_MARKER.test(line)
+        && lines.slice(i + 1).map((l) => l.trim()).filter(Boolean).slice(0, 3)
+          .some((t) => titleKey(t) === want))
+    if (isPreamble) {
+      lines.splice(i, 1)
+      dropped = true
+      continue
+    }
+    // Nothing dropped from the first line means this document does not open
+    // with a restatement at all; leave the rest of it alone.
+    if (!dropped && seen >= 2) break
+    i += 1
+  }
+  return lines.join('\n').replace(/^\n+/, '')
+}
+
 function renderBlocks(body: string | null | undefined, collect: HeadingCollector | null, labels: MentionLabels | null): ReactNode {
   const norm = String(body ?? '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').replace(/^_{4,}\s*$/gm, '')
   const blocks = norm.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean)
