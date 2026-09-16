@@ -628,6 +628,24 @@ Tests: `tests/rls/v192b`, `tests/e2e/packets.spec.ts`.
 
 **Who sees a source.** A source without a case: every active member. A source pinned to a case: whoever can read the case. The other bureau reads zero rows and gets the same P0403 for a hidden id and a random one. Tests: `tests/rls/v192c`, `tests/e2e/sources.spec.ts`.
 
+## 19. Undercover operations ([`20261111120000`](../supabase/migrations/20261111120000_cid_undercover_operations.sql); authority in [AUTHORIZATION.md §26](AUTHORIZATION.md#26-undercover-operations--the-cid-compartment-20261111120000-20261111130000); the procedure itself at `/guides/undercover-procedure`)
+
+The issued **CID Undercover Operations Procedure** is a Guide Library document; `/undercover` is where the duties it creates are discharged. The portal does not approve an operation — §2 lists conditions, not approvals — so nothing here gates, refuses or authorizes one. It records one, and shows what the procedure still asks.
+
+**Logging an operation (§2).** *Log an operation* asks for the case (**required** — an undercover capacity exists only in service of an authorized CID case or investigation, and the picker offers only cases you can already read), the identity or alias, the objective and a start time. The **Recording Required** callout is on this form, before the work starts, because a reminder that arrives at the end arrives too late to act on. Your bureau is taken from your profile: the insert policy checks it, and a Bureau Lead's read scope is keyed to it.
+
+**Recording and retention (§3).** The operation screen asks one question with two answers: **Recording confirmed** or **Recording unavailable** — and the second requires an explanation of the circumstances, in the UI and in a CHECK constraint. When the session ends, the screen shows *Retain the recording until …* and the hours left; the deadline is `ended_at + 72 hours`, derived server-side. Past it, the screen says the minimum has been met. **The portal never deletes a recording, and the procedure does not require deletion** — 72 hours is a floor, not an expiry.
+
+**Reporting criminal activity (§5).** *Report criminal activity* records what happened, when, the related incident if there is one, and which of the three required notifications have been made: the Bureau Lead, CID Command, and the full session recording submitted to Command. Ticking a box records that **you** made the notification — the portal does not send it for you. An incomplete report is accepted and the outstanding steps stay on the operation until they are done, each shown as its own badge. This is a **reporting requirement**: filing it records no disciplinary finding, and nothing on the screen or in the data says otherwise.
+
+**Compromise (§7).** *Mark operation compromised* records the time (blank means now), the circumstances, whether you withdrew and whether Command was notified; it concludes the operation as compromised and writes an audit event. Your own Bureau Lead is notified, and nobody else — a wider alert would tell people §4 does not authorize that an undercover operation exists.
+
+**Command oversight (§8).** CID Command (Deputy Director, Director, Owner) sees the division's operations and holds nine actions: request a recording, record one received, require termination, add a restriction, flag for review, clear a review, restrict future UC authorization, refer to High Command, add a note. A restriction, a referral or an authorization restriction requires a reason. Every action is logged on the operation and audited, and **none of them changes the underlying case**. A Bureau Lead reads their bureau's operations — §4 authorizes them to know — but holds none of these actions.
+
+**On the case.** A restricted **Undercover** tab appears on a case only when you are authorized to see an operation on it; otherwise the tab is not there at all. See AUTHORIZATION.md §26 for why that is a disclosure rule and not a UI preference.
+
+**Acknowledgement (§9, optional).** The procedure's guide page carries an acknowledgement block recording the member, the procedure, its revision and the date. It is opt-in per guide (no other guide has it), append-only, and reading the procedure is never gated on it.
+
 ## Related workflows documented elsewhere
 
 - **Announcements** — audience-targeted publish (`publish_announcement()` resolves recipients server-side; `all` is DD+/Owner-only, bureau audiences are that bureau's lead or DD+, `specific_members` mentions only): [`20260713050000`](../supabase/migrations/20260713050000_announcement_audiences.sql), [handbook ch. 4.5](handbook/04-features.md).
