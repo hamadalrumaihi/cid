@@ -646,6 +646,20 @@ The issued **CID Undercover Operations Procedure** is a Guide Library document; 
 
 **Acknowledgement (§9, optional).** The procedure's guide page carries an acknowledgement block recording the member, the procedure, its revision and the date. It is opt-in per guide (no other guide has it), append-only, and reading the procedure is never gated on it.
 
+## 20. The documentation library ([`20261112120000`](../supabase/migrations/20261112120000_one_documentation_library.sql); authority in [AUTHORIZATION.md §27](AUTHORIZATION.md#27-one-documentation-library-20261112120000))
+
+There is **one** documentation library — the Guide Library at `/guides` — and one working legal reference, the **Penal Code** at `/penal`. The separate SOPs / Library area is gone; `/sops` redirects, and `/sops?doc=<id>` resolves to the guide that document became.
+
+**Finding a document.** Filter by **Type** (SOP, Policy, Procedure, Guide, Form, Report Template, Reference, Training), **Category** (what it is about), **Access** (editors only — it means nothing to a reader who can see one audience) and **Status**. The default listing shows what is currently in force: superseded documents wait behind their own filter or behind the link on the document that replaced them, and archived ones stay with the people who manage them.
+
+**Reading one.** A document carries its type, category, access classification and status as separate badges, plus — where it has them — issuing authority, effective date and version. A restricted document shows its classification banner at the top. A form shows the policy that governs it; a superseded document says so before the prose and links to its replacement.
+
+**Required reading.** A document can ask for an acknowledgement. The reader gets it in the Action Center under **Required reading**, and Command can ask `guide_ack_summary` who still owes one. An acknowledgement records the member, the document, its revision and the date, and cannot be edited or withdrawn.
+
+**Searching.** The Guide Library is in global search now (it never was before). Searching for "SOP", "undercover", "surveillance" or "case management" returns the migrated documents, and the search matches **section text** rather than titles alone.
+
+**What retired with the old area.** Document approvals, Google Drive sync and the change-suggestion workflow. A guide has no approval state and no Drive origin, and the suggestion workflow never carried a row.
+
 ## Related workflows documented elsewhere
 
 - **Announcements** — audience-targeted publish (`publish_announcement()` resolves recipients server-side; `all` is DD+/Owner-only, bureau audiences are that bureau's lead or DD+, `specific_members` mentions only): [`20260713050000`](../supabase/migrations/20260713050000_announcement_audiences.sql), [handbook ch. 4.5](handbook/04-features.md).
