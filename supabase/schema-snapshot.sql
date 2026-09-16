@@ -2504,6 +2504,19 @@ alter table public.gangs add constraint gangs_source_submission_id_fkey FOREIGN 
 alter table public.gangs add constraint gangs_pkey PRIMARY KEY (id);
 alter table public.gangs enable row level security;
 
+create table public.guide_acknowledgements (
+  id uuid not null default gen_random_uuid(),
+  guide_id uuid not null,
+  user_id uuid not null default auth.uid(),
+  revision_no integer not null,
+  acknowledged_at timestamp with time zone not null default now()
+);
+alter table public.guide_acknowledgements add constraint guide_acknowledgements_guide_id_fkey FOREIGN KEY (guide_id) REFERENCES guides(id) ON DELETE CASCADE;
+alter table public.guide_acknowledgements add constraint guide_acknowledgements_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+alter table public.guide_acknowledgements add constraint guide_acknowledgements_pkey PRIMARY KEY (id);
+alter table public.guide_acknowledgements add constraint guide_acknowledgements_guide_id_user_id_revision_no_key UNIQUE (guide_id, user_id, revision_no);
+alter table public.guide_acknowledgements enable row level security;
+
 create table public.guide_bookmarks (
   guide_id uuid not null,
   user_id uuid not null,
@@ -5732,6 +5745,100 @@ alter table public.transfer_requests add constraint transfer_requests_target_id_
 alter table public.transfer_requests add constraint transfer_requests_pkey PRIMARY KEY (id);
 alter table public.transfer_requests enable row level security;
 
+create table public.uc_audit_events (
+  id bigint generated always as identity not null,
+  operation_id uuid,
+  actor_id uuid,
+  action text not null,
+  entity text,
+  entity_id uuid,
+  detail jsonb,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.uc_audit_events add constraint uc_audit_events_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES uc_operations(id) ON DELETE CASCADE;
+alter table public.uc_audit_events add constraint uc_audit_events_pkey PRIMARY KEY (id);
+alter table public.uc_audit_events enable row level security;
+
+create table public.uc_command_actions (
+  id uuid not null default gen_random_uuid(),
+  operation_id uuid not null,
+  action text not null,
+  note text,
+  actor_id uuid not null default auth.uid(),
+  created_at timestamp with time zone not null default now()
+);
+alter table public.uc_command_actions add constraint uc_command_actions_action_check CHECK ((action = ANY (ARRAY['request_recording'::text, 'recording_received'::text, 'terminate'::text, 'add_restriction'::text, 'flag_review'::text, 'clear_review'::text, 'restrict_authorization'::text, 'refer_high_command'::text, 'note'::text])));
+alter table public.uc_command_actions add constraint uc_command_actions_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES profiles(id);
+alter table public.uc_command_actions add constraint uc_command_actions_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES uc_operations(id) ON DELETE CASCADE;
+alter table public.uc_command_actions add constraint uc_command_actions_pkey PRIMARY KEY (id);
+alter table public.uc_command_actions enable row level security;
+
+create table public.uc_criminal_activity (
+  id uuid not null default gen_random_uuid(),
+  operation_id uuid not null,
+  description text not null,
+  occurred_at timestamp with time zone not null,
+  related_case_id uuid,
+  incident_reference text,
+  bureau_lead_notified_at timestamp with time zone,
+  command_notified_at timestamp with time zone,
+  recording_submitted_at timestamp with time zone,
+  recording_reference text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.uc_criminal_activity add constraint uc_criminal_activity_description_present CHECK ((btrim(description) <> ''::text));
+alter table public.uc_criminal_activity add constraint uc_criminal_activity_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
+alter table public.uc_criminal_activity add constraint uc_criminal_activity_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES uc_operations(id) ON DELETE CASCADE;
+alter table public.uc_criminal_activity add constraint uc_criminal_activity_related_case_id_fkey FOREIGN KEY (related_case_id) REFERENCES cases(id) ON DELETE SET NULL;
+alter table public.uc_criminal_activity add constraint uc_criminal_activity_pkey PRIMARY KEY (id);
+alter table public.uc_criminal_activity enable row level security;
+
+create table public.uc_operations (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  detective_id uuid not null,
+  bureau bureau not null,
+  alias text,
+  status text not null default 'planned'::text,
+  objective text,
+  notes text,
+  started_at timestamp with time zone,
+  ended_at timestamp with time zone,
+  end_reason text,
+  recording_status text not null default 'pending'::text,
+  recording_note text,
+  recording_media_id uuid,
+  recording_reference text,
+  recording_submitted_at timestamp with time zone,
+  recording_submitted_to uuid,
+  retention_until timestamp with time zone,
+  criminal_activity boolean not null default false,
+  bureau_lead_notified_at timestamp with time zone,
+  command_notified_at timestamp with time zone,
+  compromised_at timestamp with time zone,
+  compromise_note text,
+  withdrawn boolean,
+  command_review_status text not null default 'not_required'::text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.uc_operations add constraint uc_operations_alias_len CHECK (((alias IS NULL) OR (length(alias) <= 120)));
+alter table public.uc_operations add constraint uc_operations_ends_after_start CHECK (((ended_at IS NULL) OR (started_at IS NULL) OR (ended_at >= started_at)));
+alter table public.uc_operations add constraint uc_operations_recording_status_check CHECK ((recording_status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'unavailable'::text])));
+alter table public.uc_operations add constraint uc_operations_review_status_check CHECK ((command_review_status = ANY (ARRAY['not_required'::text, 'requested'::text, 'under_review'::text, 'cleared'::text, 'referred'::text])));
+alter table public.uc_operations add constraint uc_operations_status_check CHECK ((status = ANY (ARRAY['planned'::text, 'active'::text, 'concluded'::text, 'compromised'::text, 'terminated'::text])));
+alter table public.uc_operations add constraint uc_operations_unavailable_needs_note CHECK (((recording_status <> 'unavailable'::text) OR (btrim(COALESCE(recording_note, ''::text)) <> ''::text)));
+alter table public.uc_operations add constraint uc_operations_case_id_fkey FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
+alter table public.uc_operations add constraint uc_operations_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
+alter table public.uc_operations add constraint uc_operations_detective_id_fkey FOREIGN KEY (detective_id) REFERENCES profiles(id);
+alter table public.uc_operations add constraint uc_operations_recording_media_id_fkey FOREIGN KEY (recording_media_id) REFERENCES media(id) ON DELETE SET NULL;
+alter table public.uc_operations add constraint uc_operations_recording_submitted_to_fkey FOREIGN KEY (recording_submitted_to) REFERENCES profiles(id);
+alter table public.uc_operations add constraint uc_operations_pkey PRIMARY KEY (id);
+alter table public.uc_operations enable row level security;
+
 create table public.user_drafts (
   user_id uuid not null default auth.uid(),
   key text not null,
@@ -6202,6 +6309,8 @@ CREATE INDEX gangs_lead_detective_id_fkey_idx ON public.gangs USING btree (lead_
 CREATE INDEX gangs_name_trgm ON public.gangs USING gin (name gin_trgm_ops);
 CREATE INDEX gangs_notes_trgm ON public.gangs USING gin (notes gin_trgm_ops);
 CREATE INDEX gangs_reviewed_by_fkey_idx ON public.gangs USING btree (reviewed_by);
+CREATE INDEX guide_acknowledgements_guide_idx ON public.guide_acknowledgements USING btree (guide_id);
+CREATE INDEX guide_acknowledgements_user_idx ON public.guide_acknowledgements USING btree (user_id);
 CREATE INDEX guide_bookmarks_user_idx ON public.guide_bookmarks USING btree (user_id);
 CREATE INDEX guide_categories_order_idx ON public.guide_categories USING btree (sort_order, slug);
 CREATE INDEX guide_feedback_created_by_idx ON public.guide_feedback USING btree (created_by);
@@ -6720,6 +6829,19 @@ CREATE INDEX transfer_requests_requested_by_idx ON public.transfer_requests USIN
 CREATE INDEX transfer_requests_source_approved_by_idx ON public.transfer_requests USING btree (source_approved_by);
 CREATE INDEX transfer_requests_target_approved_by_idx ON public.transfer_requests USING btree (target_approved_by);
 CREATE INDEX transfer_requests_target_idx ON public.transfer_requests USING btree (target_id);
+CREATE INDEX uc_audit_events_op_idx ON public.uc_audit_events USING btree (operation_id, created_at DESC);
+CREATE INDEX uc_command_actions_actor_idx ON public.uc_command_actions USING btree (actor_id);
+CREATE INDEX uc_command_actions_op_idx ON public.uc_command_actions USING btree (operation_id);
+CREATE INDEX uc_criminal_activity_case_idx ON public.uc_criminal_activity USING btree (related_case_id);
+CREATE INDEX uc_criminal_activity_created_by_idx ON public.uc_criminal_activity USING btree (created_by);
+CREATE INDEX uc_criminal_activity_op_idx ON public.uc_criminal_activity USING btree (operation_id);
+CREATE INDEX uc_operations_bureau_idx ON public.uc_operations USING btree (bureau);
+CREATE INDEX uc_operations_case_idx ON public.uc_operations USING btree (case_id);
+CREATE INDEX uc_operations_created_by_idx ON public.uc_operations USING btree (created_by);
+CREATE INDEX uc_operations_detective_idx ON public.uc_operations USING btree (detective_id);
+CREATE INDEX uc_operations_media_idx ON public.uc_operations USING btree (recording_media_id);
+CREATE INDEX uc_operations_status_idx ON public.uc_operations USING btree (status);
+CREATE INDEX uc_operations_submitted_to_idx ON public.uc_operations USING btree (recording_submitted_to);
 CREATE INDEX user_pins_user_idx ON public.user_pins USING btree (user_id);
 CREATE INDEX vehicles_color_trgm ON public.vehicles USING gin (color gin_trgm_ops);
 CREATE INDEX vehicles_created_by_idx ON public.vehicles USING btree (created_by);
@@ -41475,6 +41597,9 @@ create policy wl_sel on public.watchlist
 --   public.tickets
 --   public.trackers
 --   public.transfer_requests
+--   public.uc_command_actions
+--   public.uc_criminal_activity
+--   public.uc_operations
 --   public.vehicles
 
 -- ============================================================

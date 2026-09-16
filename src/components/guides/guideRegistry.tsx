@@ -26,6 +26,7 @@ import { REPORTS_EVIDENCE_DOC } from './docs/reportsEvidenceDoc'
 import { LEGAL_REQUESTS_DOC } from './docs/legalRequestsDoc'
 import { ACTION_CENTER_DOC } from './docs/actionCenterDoc'
 import { ENTITIES_DOC } from './docs/entitiesDoc'
+import { UNDERCOVER_PROCEDURE_DOC } from './docs/undercoverProcedureDoc'
 import { VANILLA_UNICORN_DOC } from './docs/vanillaUnicornDoc'
 import { docHeadings, matchDocSections, readMinutes, searchDocSections, type DocSectionHit, type GuideDoc } from './guideDoc'
 import type { GuideImageRef } from './GuideParts'
@@ -79,6 +80,9 @@ const REVISED = '2026-09-11T00:00:00'
 /** The Vanilla Unicorn system record, written from the interface. */
 const VANILLA_UNICORN_REVISED = '2026-09-12T00:00:00'
 
+/** The CID Undercover Operations Procedure as issued by Director Jack Crow. */
+const UNDERCOVER_ISSUED = '2026-09-16T00:00:00'
+
 export const GUIDE_BODIES: Record<string, GuideBody> = {
   'user-guide': fromDoc(USER_GUIDE_DOC, REVISED),
   'case-management': fromDoc(CASE_MANAGEMENT_DOC, REVISED),
@@ -86,6 +90,9 @@ export const GUIDE_BODIES: Record<string, GuideBody> = {
   'legal-requests': fromDoc(LEGAL_REQUESTS_DOC, REVISED),
   'action-center': fromDoc(ACTION_CENTER_DOC, REVISED),
   'entities-organizations': fromDoc(ENTITIES_DOC, REVISED),
+  // Issued policy, not portal documentation: its revision date is the date the
+  // Director issued it, not the date the Guide Library was last tidied.
+  'undercover-procedure': fromDoc(UNDERCOVER_PROCEDURE_DOC, UNDERCOVER_ISSUED),
   'vanilla-unicorn': fromDoc(VANILLA_UNICORN_DOC, VANILLA_UNICORN_REVISED),
   undergrnd: {
     sections: UNDERGRND_SECTIONS,

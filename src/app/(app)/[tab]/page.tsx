@@ -27,7 +27,7 @@ import { LegalView } from '@/components/legal/LegalView'
 // (components/tools/toolRegistry); their routes below redirect into /workspace.
 import {
   AuditView, InformantsView, ConcernView, DevDocsView, FeedbackView, HeatmapView,
-  OwnerView, ReportTemplatesView, RicoView, SiuView, TrashView, WorkspaceView,
+  OwnerView, ReportTemplatesView, RicoView, SiuView, TrashView, UndercoverView, WorkspaceView,
 } from './lazyViews'
 
 /** One route per leaf tab, statically prerendered via generateStaticParams.
@@ -192,6 +192,16 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<div className="view-in" aria-hidden />}>
         <InformantsView />
+      </Suspense>
+    )
+  }
+  if (tab === 'undercover') {
+    // Restricted, but not hidden from the URL: every read behind it is
+    // RLS-gated (uc_operations_sel), so an account with no authorized
+    // operation simply gets an empty list. The route resolving proves nothing.
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="undercover" />}>
+        <UndercoverView />
       </Suspense>
     )
   }

@@ -34,7 +34,8 @@ import { fmtDate } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { renderMarkdown, type DocHeading } from '@/lib/markdown'
 import {
-  categoryLabelFrom, guideAudienceLabel, isArchived, isPublished,
+  categoryLabelFrom, guideAudienceLabel,
+  guideClassification, isArchived, isPublished,
   isRestrictedAudience, isUpdatedSinceSeen, listGuideMedia, loadGuidePage, markGuideComplete,
   markGuideOutdated, recordGuideView, resolveGuideImages, submitGuideFeedback, toggleGuideBookmark,
   type GuideCategoryRow, type GuideFeedbackKind, type GuideImage, type GuideMediaRow,
@@ -51,6 +52,7 @@ import { useNav } from '@/components/shell/useNav'
 import { GuideHeader, GuideSection } from './GuideParts'
 import { GuideDocView } from './GuideDocView'
 import { GuideMediaManager, type GuideMediaSlot } from './GuideMediaManager'
+import { GuideAcknowledgement, guideOffersAcknowledgement } from './GuideAcknowledgement'
 import { CHIP, CHIP_DONE, CHIP_LOCKED, CHIP_NEUTRAL, GOLD_TEXT, GUIDE_CANVAS, PANEL, SLAB, WARN } from './guideSurfaces'
 import { guideBody } from './guideRegistry'
 
@@ -395,6 +397,7 @@ export function GuidePage({ slug }: { slug: string }) {
   const readMinutes = body?.readMinutes ?? row.read_minutes ?? dbReadMinutes(dbSections)
   const done = doneOverride ?? !!progress?.completed_at
   const changed = isUpdatedSinceSeen(row, progress ?? undefined)
+  const classification = guideClassification(row.audience)
   const idx = active ? sections.findIndex((s) => s.id === active) : -1
   const prev = idx > 0 ? sections[idx - 1] : null
   const next = idx >= 0 && idx < sections.length - 1 ? sections[idx + 1] : null
@@ -435,6 +438,17 @@ export function GuidePage({ slug }: { slug: string }) {
             note={body?.note}
             cover={cover}
           />
+
+          {/* Classification, once, where the reader starts — not repeated
+              between every section the way an issued document does on paper.
+              Driven by `audience`, which is the column the SELECT policy
+              enforces, so the banner cannot promise a wall that is not there. */}
+          {classification && (
+            <p className={`${WARN} px-4 py-3 text-sm font-semibold`} role="note">
+              <span className="uppercase tracking-wide">{classification}.</span>{' '}
+              <span className="font-normal">Do not distribute outside the authorized audience.</span>
+            </p>
+          )}
 
           <div className="flex flex-wrap items-center gap-2">
             <span className={`${CHIP} ${CHIP_NEUTRAL}`}>{categoryLabelFrom(cats, row.category)}</span>
@@ -552,6 +566,12 @@ export function GuidePage({ slug }: { slug: string }) {
               {done ? 'Marked as read' : 'Mark as read'}
             </Button>
           </div>
+
+          {/* Opt-in only — see GuideAcknowledgement. Every other guide renders
+              nothing here, and no guide is gated on it. */}
+          {guideOffersAcknowledgement(row.slug) && (
+            <GuideAcknowledgement guideId={row.id} guideTitle={row.title} />
+          )}
 
           <GuideFeedbackBlock guideId={row.id} anchor={active ?? null} />
 

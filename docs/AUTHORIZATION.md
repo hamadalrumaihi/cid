@@ -1013,3 +1013,54 @@ Guides get their own permanent destination — `/guides` for the library and `/g
 **Refusals.** Authority → `private.perm_raise` (P0403). Validation → `{ok:false, code, message}`: `conflict`, `empty`, `anchor_taken`, `bad_anchor`, `bad_value` (audience, body kind, rating, feedback kind, status, reading time), plus §24's `bad_slug`, `slug_taken`, `bad_request` and `not_found`.
 
 **Catalog.** `permission_catalog` rows 900–914 join 880–898 — `guide`: write_sections, archive, revision, review, manage_categories, progress, feedback, resolve_feedback; the `read` and `edit` rows are corrected in place for the audience wall and for sections. `test_id` v195a (reading and the audience wall) and v195b (the editor surface). `npm run gen:permissions` regenerates the matrix.
+
+---
+
+## 26. Undercover operations — the CID compartment ([`20261111120000`](../supabase/migrations/20261111120000_cid_undercover_operations.sql), [`20261111130000`](../supabase/migrations/20261111130000_uc_no_delete_grant.sql))
+
+**The rule.** The CID Undercover Operations Procedure §4 names the positions that may be told an undercover identity — **High Command, the CID Bureau Lead, CID Command** — and the Detective running the operation knows it by definition. That list is the entire access model, and `private.uc_row_visible(p_bureau, p_detective)` is its only implementation:
+
+```
+detective_id = auth.uid()
+  or (an active bureau_lead whose division = the operation's bureau)
+  or private.uc_command()
+```
+
+`private.uc_command()` is an **active Deputy Director, Director or Owner** — deliberately **narrower than `private.is_command()`**, which admits Bureau Leads. A Bureau Lead *reads* their own bureau's operations because §4 authorizes them to know; they hold none of §8's command actions, and `uc_command_act` refuses them `P0403` on an operation they can see perfectly well. `private.uc_visible(op)` / `private.uc_writable(op)` wrap the row predicate for the RPCs.
+
+**Case access is not UC access.** This is the load-bearing separation, and the one most likely to be got wrong. A detective with full access to the case an operation serves — the case lead, a bureau colleague, a Senior Detective — reads **zero rows** from all four `uc_*` tables, including a direct-id lookup, and never learns the alias through any column projection. Accordingly the case's **Undercover** tab is conditional on exactly the same terms as CI Intelligence: present with a count, or absent entirely. Never a lock, a placeholder or a zero pill — the *existence* of an undercover operation on a case is itself part of what §4 restricts, so a tab that appears and refuses is the disclosure.
+
+**Why not `siu_undercover_operations`.** SIB already has an undercover table, and reusing it was the first thing considered. Every one of its policies is gated on SIB standing, which a CID detective does not hold. Reuse would therefore mean either widening SIB's policies — weakening the SIB compartment, which is out of scope and off limits — or leaving a CID Detective unable to read their own operation. The compartments stay separate; nothing in `siu_*` is renamed, widened or read by any of this.
+
+**What is restricted.** Five tables, all `enable row level security`:
+
+| Table | SELECT | Client writes |
+|---|---|---|
+| `uc_operations` | `uc_row_visible(bureau, detective_id)` | INSERT: an active member, `can_read_case(case_id)`, and either `uc_command()` or (`detective_id = auth.uid()` **and** `bureau` = their own division). UPDATE: `uc_writable(id)`. **No DELETE policy and no DELETE grant.** |
+| `uc_criminal_activity` | through its operation | INSERT / UPDATE through the operation; in practice written by `uc_report_criminal_activity` |
+| `uc_command_actions` | through its operation | **SELECT only** — written solely by `uc_command_act` |
+| `uc_audit_events` | through its operation | **SELECT only**, plus a non-definer BEFORE UPDATE OR DELETE trigger. Append-only for everyone including the operation's own subject |
+| `guide_acknowledgements` | the member's own rows | INSERT only (via `guide_acknowledge`); no UPDATE, no DELETE |
+
+`20261111130000` makes that table structural rather than policy-only: the project's default privileges hand `authenticated` INSERT / UPDATE / DELETE on every new `public` table, so the first migration's narrower grants were *additions* to a wider grant. Nothing was exposed by it — RLS is the authority, and a DELETE with no DELETE policy removes zero rows — but "no rows came back" and "the statement was refused" are different promises, and the audit trail is something Command relies on. The second migration revokes what is not needed and revokes **everything** from `anon`.
+
+**Retention is the server's arithmetic.** §3 requires the full session recording to be kept for at least **72 hours after the operation concludes**. `uc_operations.retention_until` is derived in the `uc_operation_touch` trigger as `ended_at + interval '72 hours'` (a generated column would say it better, but `timestamptz + interval` is STABLE, not IMMUTABLE, and Postgres refuses it). A client value is discarded. It is a **minimum to hold, not a destruction date**: nothing in the schema, the sweeps or the UI deletes a recording, and the screens say so in as many words.
+
+**§5 is a reporting duty, not a finding.** `uc_report_criminal_activity` records what happened and which of the three notifications (Bureau Lead, CID Command, the recording submitted to Command) have been made, returns the `outstanding` list, and **accepts an incomplete report** — recording what happened promptly matters more than recording it completely, and the outstanding steps stay visible on the operation until they are discharged. `criminal_activity` is a reporting state; nothing in the schema, the model (`src/lib/undercover.ts`) or the screens turns it into a disciplinary one. §9 is a separate section with a separate process and the portal does not blur the two.
+
+**Notifications are narrow on purpose.** `uc_mark_compromised` notifies the detective's **own Bureau Lead** and nobody else (`uc_compromised`); `uc_command_act` notifies the detective (`uc_command_action`). Both kinds are `destination: 'portal'` — they never ride to Discord. A wider alert would disclose an undercover operation to people §4 does not authorize, and a compromise is the moment that matters most.
+
+**Command oversight moves the operation, never the case.** `uc_command_act(p_op, p_action, p_note)` writes a `uc_command_actions` row and moves only the operation's own oversight fields (`command_review_status`, `status` for `terminate`, `command_restrictions`). The underlying `cases` row is not touched by any of the nine actions — verified live, by comparing `cases.updated_at` across a command action.
+
+**Audit.** `private.uc_audit()` + `uc_audit_events`, following the `ci_audit_events` precedent rather than inventing a parallel system: `audit_log` is Owner-only, and Bureau Leads and Command have a review duty here. Kinds: `UC_OPERATION_CREATED`, `UC_STATUS_CHANGED`, `UC_RECORDING_STATUS_CHANGED`, `UC_RECORDING_SUBMITTED`, `UC_CRIMINAL_ACTIVITY_FLAGGED`, `UC_CRIMINAL_ACTIVITY_REPORTED`, `UC_COMPROMISED`, `UC_COMMAND_ACTION`.
+
+| RPC | Authority | Behaviour |
+|---|---|---|
+| `uc_report_criminal_activity(p_op, p_description, p_occurred_at, …)` → jsonb | `uc_writable` else `P0403` | `description_required` / `occurred_at_required`; returns `{ok, id, outstanding[]}` |
+| `uc_mark_compromised(p_op, p_compromised_at, p_note, p_withdrawn, p_command_notified)` → jsonb | `uc_writable` else `P0403` | status `compromised`; `ended_at` when withdrawn; notifies the own Bureau Lead only |
+| `uc_command_act(p_op, p_action, p_note)` → jsonb | `uc_command()` else `P0403` | nine actions; `note_required` for `add_restriction` / `refer_high_command` / `restrict_authorization`; `not_found` for an unknown id |
+| `guide_acknowledge(p_guide)` → jsonb | `is_active()` + `guide_readable` else `P0403` | one row per guide **revision** per member; append-only |
+
+An unauthorized id and an unknown id answer with the same `P0403` wording, so a refused caller learns nothing about whether the operation exists.
+
+**Tests.** `tests/rls/v196a.test.ts` — twenty cases across the seven personas (the Detective, a case-reading peer, the own Bureau Lead, another bureau's Lead, CID Command, High Command, an SIB account, an inactive account, and `anon`), the write paths, the deletion floor, audit immutability, the retention arithmetic and the case-untouched guarantee. `tests/msw/undercover.test.tsx` covers the four things a policy cannot reach: the absent tab, a failed read that is not an empty compartment, the retention wording, and the §5 wording.

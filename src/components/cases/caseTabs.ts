@@ -25,7 +25,7 @@
 import type { SectionTabGroup } from '@/components/ui/SectionTabs'
 
 export const CASE_TABS = [
-  'overview', 'people', 'vehicles', 'gangs', 'locations', 'intel', 'ci', 'surveillance', 'extractions', 'timeline', 'graph',
+  'overview', 'people', 'vehicles', 'gangs', 'locations', 'intel', 'ci', 'uc', 'surveillance', 'extractions', 'timeline', 'graph',
   'media', 'documents', 'charges', 'rico', 'reports',
   'notes', 'activity', 'legal', 'tasks', 'signoff', 'chat',
 ] as const
@@ -33,19 +33,19 @@ export type CaseTabId = (typeof CASE_TABS)[number]
 
 export const CASE_TAB_LABELS: Record<CaseTabId, string> = {
   overview: 'Brief', people: 'People', vehicles: 'Vehicles', gangs: 'Gangs', locations: 'Locations',
-  intel: 'Intel', ci: 'CI Intelligence', surveillance: 'Surveillance', extractions: 'Extractions', timeline: 'Timeline', graph: 'Graph',
+  intel: 'Intel', ci: 'CI Intelligence', uc: 'Undercover', surveillance: 'Surveillance', extractions: 'Extractions', timeline: 'Timeline', graph: 'Graph',
   media: 'Evidence & Media', documents: 'Documents', charges: 'Charges', rico: 'RICO', reports: 'Reports',
   notes: 'Notes', activity: 'Activity', legal: 'Legal', tasks: 'Tasks', signoff: 'Sign-off', chat: 'Chat',
 }
 
 /** Tabs that exist only when they have something to show — present with a
  *  count or absent entirely (never in More…, never on mobile, never in the
- *  documented rail). Today: `ci`. */
-export const CASE_TAB_CONDITIONAL: ReadonlySet<CaseTabId> = new Set<CaseTabId>(['ci'])
+ *  documented rail). Today: `ci` and `uc`. */
+export const CASE_TAB_CONDITIONAL: ReadonlySet<CaseTabId> = new Set<CaseTabId>(['ci', 'uc'])
 
 /** Tabs CaseDetail folds into the "More…" chip while their count is 0 and
- *  they are not the active tab. `ci` is deliberately NOT here — it is either
- *  present with a count or absent. */
+ *  they are not the active tab. `ci` and `uc` are deliberately NOT here —
+ *  each is either present with a count or absent. */
 export const CASE_TAB_OPTIONAL: ReadonlySet<CaseTabId> = new Set<CaseTabId>([
   'graph', 'charges', 'rico', 'legal', 'surveillance', 'extractions', 'timeline', 'documents',
 ])
@@ -58,7 +58,7 @@ export const CASE_TAB_OPTIONAL: ReadonlySet<CaseTabId> = new Set<CaseTabId>([
  *  them when hidden. This is the COMPLETE rail (every CASE_TABS id) —
  *  CaseDetail's desktop strip. */
 export const CASE_TAB_GROUPS_ALL: ReadonlyArray<SectionTabGroup<CaseTabId>> = [
-  { label: 'Investigation', tabs: ['overview', 'people', 'vehicles', 'gangs', 'locations', 'intel', 'ci', 'surveillance', 'extractions', 'timeline', 'graph'] },
+  { label: 'Investigation', tabs: ['overview', 'people', 'vehicles', 'gangs', 'locations', 'intel', 'ci', 'uc', 'surveillance', 'extractions', 'timeline', 'graph'] },
   { label: 'Evidence & Case Record', tabs: ['media', 'documents', 'charges', 'rico', 'reports'] },
   { label: 'Coordination & Closure', tabs: ['notes', 'activity', 'legal', 'tasks', 'signoff', 'chat'] },
 ]

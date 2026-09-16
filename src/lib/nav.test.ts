@@ -65,7 +65,7 @@ describe('nav — categories', () => {
   it('the category ids, labels and tab order are pinned', () => {
     expect(NAV_CATEGORIES.map((c) => [c.id, c.label, c.tabs])).toEqual([
       ['command', 'Command', ['inbox', 'dashboard', 'analytics', 'announce', 'heatmap']],
-      ['cases', 'Investigations', ['cases', 'operations', 'legal', 'intelligence', 'informants', 'registries', 'rico', 'case-files']],
+      ['cases', 'Investigations', ['cases', 'operations', 'legal', 'intelligence', 'informants', 'undercover', 'registries', 'rico', 'case-files']],
       ['reference', 'Division & Reference', ['directory', 'penal', 'sops']],
       ['oversight', 'Oversight', ['calendar', 'shifts', 'trash']],
       ['owner', 'Owner', ['owner', 'audit', 'devdocs', 'report-templates']],
