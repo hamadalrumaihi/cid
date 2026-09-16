@@ -7146,6 +7146,16 @@ export type Database = {
       }
       guides: {
         Row: {
+          acknowledgement_deadline: string | null
+          acknowledgement_required: boolean
+          change_summary: string | null
+          doc_type: string
+          effective_date: string | null
+          issuing_authority: string | null
+          migrated_document_id: string | null
+          related_policy: string | null
+          superseded_by: string | null
+          version_label: string | null
           archived_at: string | null
           archived_by: string | null
           audience: string
@@ -7181,6 +7191,16 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          acknowledgement_deadline?: string | null
+          acknowledgement_required?: boolean
+          change_summary?: string | null
+          doc_type?: string
+          effective_date?: string | null
+          issuing_authority?: string | null
+          migrated_document_id?: string | null
+          related_policy?: string | null
+          superseded_by?: string | null
+          version_label?: string | null
           archived_at?: string | null
           archived_by?: string | null
           audience?: string
@@ -7216,6 +7236,16 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          acknowledgement_deadline?: string | null
+          acknowledgement_required?: boolean
+          change_summary?: string | null
+          doc_type?: string
+          effective_date?: string | null
+          issuing_authority?: string | null
+          migrated_document_id?: string | null
+          related_policy?: string | null
+          superseded_by?: string | null
+          version_label?: string | null
           archived_at?: string | null
           archived_by?: string | null
           audience?: string
@@ -18873,6 +18903,10 @@ export type Database = {
         Returns: Json
       }
       guide_acknowledge: {
+        Args: { p_guide: string }
+        Returns: Json
+      }
+      guide_ack_summary: {
         Args: { p_guide: string }
         Returns: Json
       }
