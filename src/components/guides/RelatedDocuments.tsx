@@ -52,17 +52,17 @@ export function RelatedDocuments({ governs, supersedes, sameCategory }: RelatedD
 
       {lanes.map((lane) => (
         <div key={lane.id} className="flex flex-col gap-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             {lane.label}
             {lane.hint && <span className="ml-2 font-normal normal-case tracking-normal">{lane.hint}</span>}
-          </p>
+          </h3>
           <ul className="grid gap-2 sm:grid-cols-2">
             {lane.rows.map((g) => (
               <li key={g.id}>
                 <button
                   type="button"
                   onClick={() => router.push(`/guides/${g.slug}`)}
-                  className={`${SLAB} w-full px-3 py-2 text-left transition hover:border-white/20 hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
+                  className={`${SLAB} w-full touch-manipulation px-3 py-2 text-left transition hover:border-white/20 hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
                 >
                   <span className="flex flex-wrap items-center gap-2">
                     <span className={`break-words text-sm font-semibold ${GOLD_TEXT}`}>{g.title}</span>

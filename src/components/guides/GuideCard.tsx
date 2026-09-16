@@ -71,7 +71,7 @@ export function GuideCard({
     <article className={`${PANEL} flex flex-col overflow-hidden`}>
       {coverSrc && (
         /* eslint-disable-next-line @next/next/no-img-element -- intrinsic size varies per guide; next/image needs fixed dimensions and would letterbox or crop. */
-        <img src={coverSrc} alt="" className="h-32 w-full object-cover" />
+        <img src={coverSrc} alt="" loading="lazy" className="h-32 w-full object-cover" />
       )}
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex flex-wrap items-center gap-1.5">

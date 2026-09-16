@@ -100,7 +100,7 @@ export function LibraryFilters({ groups, activeCount, onClearAll }: LibraryFilte
               const on = g.selected.has(o.value)
               return (
                 <li key={o.value}>
-                  <label className="flex min-h-[40px] cursor-pointer items-center gap-2.5 rounded px-1.5 text-sm text-slate-200 transition hover:bg-white/5 sm:min-h-[32px]">
+                  <label className="flex min-h-11 cursor-pointer touch-manipulation items-center gap-2.5 rounded px-1.5 text-sm text-slate-200 transition hover:bg-white/5 lg:min-h-8">
                     <input
                       type="checkbox"
                       className="h-4 w-4 flex-shrink-0 accent-badge-500"
@@ -157,7 +157,7 @@ export function LibraryFilters({ groups, activeCount, onClearAll }: LibraryFilte
             role="group"
             aria-label="Filters"
             className={
-              'fixed inset-x-0 bottom-0 z-50 max-h-[75vh] overflow-y-auto rounded-t-2xl border-t border-white/10 bg-ink-850 p-4 ' +
+              'fixed inset-x-0 bottom-0 z-50 max-h-[75vh] overflow-y-auto overscroll-contain rounded-t-2xl border-t border-white/10 bg-ink-850 p-4 ' +
               // Above the bottom nav (z-30) and clear of the home indicator.
               'pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 ' +
               'sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-full sm:z-30 sm:mt-2 sm:max-h-[70vh] sm:w-80 ' +
@@ -193,7 +193,7 @@ export function ActiveFilterChips({ chips, onClear }: {
           key={c.key}
           type="button"
           onClick={c.onRemove}
-          className="inline-flex min-h-[32px] items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 text-xs font-semibold text-slate-200 transition hover:border-white/20 hover:text-white"
+          className="inline-flex min-h-11 touch-manipulation items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 text-xs font-semibold text-slate-200 transition hover:border-white/20 hover:text-white lg:min-h-8"
         >
           {c.label}
           <span aria-hidden className="text-slate-400">×</span>

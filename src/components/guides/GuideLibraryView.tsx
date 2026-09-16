@@ -84,7 +84,7 @@ function FilterChip({ on, label, onClick }: { on: boolean; label: string; onClic
       type="button"
       onClick={onClick}
       aria-pressed={on}
-      className={`${CHIP} ${on ? CHIP_DONE : CHIP_NEUTRAL} min-h-[32px] transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
+      className={`${CHIP} ${on ? CHIP_DONE : CHIP_NEUTRAL} min-h-11 touch-manipulation transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent lg:min-h-8`}
     >
       {on && <span aria-hidden>✓</span>}
       {label}
@@ -121,7 +121,7 @@ function SearchHit({ hit, row, categoryLabel, onOpen }: {
     <button
       type="button"
       onClick={onOpen}
-      className={`${SLAB} w-full px-3 py-2.5 text-left transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
+      className={`${SLAB} w-full touch-manipulation px-3 py-2.5 text-left transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
     >
       <span className="flex flex-wrap items-center gap-1.5">
         <span className={`mr-1 break-words text-sm font-semibold ${GOLD_TEXT}`}>{hit.title}</span>
@@ -144,13 +144,28 @@ function SearchHit({ hit, row, categoryLabel, onOpen }: {
   )
 }
 
-function Zone({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+function Zone({ title, hint, liveHint = false, children }: {
+  title: string
+  hint?: string
+  /** Announce changes to the hint. For a zone whose contents are replaced
+   *  asynchronously — the search results — a reader who cannot see the list
+   *  redraw otherwise gets no signal that it did. */
+  liveHint?: boolean
+  children: React.ReactNode
+}) {
   const id = `gz-${title.toLowerCase().replace(/\s+/g, '-')}`
   return (
     <section aria-labelledby={id} className="flex flex-col gap-3">
       <div>
         <h2 id={id} className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{title}</h2>
-        {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
+        {hint && (
+          <p
+            className="mt-0.5 text-xs text-slate-500"
+            {...(liveHint ? { role: 'status', 'aria-live': 'polite' as const } : {})}
+          >
+            {hint}
+          </p>
+        )}
       </div>
       {children}
     </section>
@@ -555,6 +570,7 @@ export function GuideLibraryView() {
         {!loading && !error && allHits !== null && (
           <Zone
             title="Search results"
+            liveHint
             hint={searching ? 'Searching…' : `${allHits.length} matching section${allHits.length === 1 ? '' : 's'}.`}
           >
             {allHits.length === 0 && !searching ? (
