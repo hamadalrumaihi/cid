@@ -138,6 +138,23 @@ export const GUIDE_DOC_TYPE_LABEL: Record<GuideDocType, string> = {
 export const guideDocTypeLabel = (t: string | null | undefined): string =>
   (t && GUIDE_DOC_TYPE_LABEL[t as GuideDocType]) || humanizeSlug(t) || 'Document'
 
+/** What a document is FOR, which is the distinction a reader makes while
+ *  SCANNING rather than while reading: something they must follow, something
+ *  they fill in, or something they consult.
+ *
+ *  Three families, not eight — the eight are still on the badge as a word,
+ *  and nothing here themes a document by its type. This exists so a form does
+ *  not look identical to the policy that requires it in a grid of twenty
+ *  cards, which was the one type distinction the old library got right (by
+ *  giving forms their own folder) and the consolidated one lost. */
+export type GuideDocFamily = 'governing' | 'form' | 'reference'
+
+export function guideDocFamily(t: string | null | undefined): GuideDocFamily {
+  if (t === 'form' || t === 'report_template') return 'form'
+  if (t === 'sop' || t === 'policy' || t === 'procedure') return 'governing'
+  return 'reference'
+}
+
 /* ---- state ---------------------------------------------------------------- */
 
 export const isPublished = (g: Pick<GuideRow, 'status'>): boolean => g.status === 'published'
@@ -732,11 +749,21 @@ export interface GuidePageModel {
   replacement: GuideRow | null
   /** The policy or procedure this document is governed by (related_policy). */
   policy: GuideRow | null
+  /** The other side of `policy`: the forms, report templates and procedures
+   *  that name THIS document as the thing that governs them. A policy that
+   *  requires a form should say which form, and before this the link only
+   *  ran one way — you could get from the UC activity report to the UC
+   *  procedure, but not back. */
+  governs: GuideRow[]
+  /** The other side of `replacement`: what this document replaced. Recorded
+   *  because "what did the rules used to say" is a real question, and the
+   *  superseded copy is kept precisely so it can be answered. */
+  supersedes: GuideRow[]
 }
 
 const EMPTY_PAGE: Omit<GuidePageModel, 'guide'> = {
   sections: [], media: [], images: [], categories: [], bookmarked: false, progress: null, related: [],
-  replacement: null, policy: null,
+  replacement: null, policy: null, governs: [], supersedes: [],
 }
 
 /** Everything a guide page shows, by slug. */
@@ -767,5 +794,10 @@ export async function loadGuidePage(slug: string): Promise<GuidePageModel> {
     // offered — no second query, and no way to probe for a hidden title.
     replacement: all.find((o) => o.id === guide.superseded_by) ?? null,
     policy: all.find((o) => o.id === guide.related_policy) ?? null,
+    // The reverse edges, from the same list and therefore under the same
+    // rule: a form whose audience excludes this reader is simply not in
+    // `all`, so it cannot be named here.
+    governs: all.filter((o) => o.id !== guide.id && o.related_policy === guide.id && !isArchived(o)),
+    supersedes: all.filter((o) => o.id !== guide.id && o.superseded_by === guide.id),
   }
 }

@@ -48,10 +48,23 @@ export const CHIP_LOCKED = 'border-rose-400/25 bg-rose-500/15 text-rose-300'
 export const CHIP_DONE = 'border-emerald-400/25 bg-emerald-500/15 text-emerald-300'
 export const CHIP_NEUTRAL = 'border-white/10 bg-white/5 text-slate-300'
 
+/** Amber, chip-sized. The "notice this before you act on it" tier: a draft, a
+ *  superseded document, a document somebody has flagged as out of date. Red is
+ *  wrong for all three — none of them is restricted, and a rose chip next to a
+ *  title is read as a classification. */
+export const CHIP_WARN = 'border-amber-400/25 bg-amber-500/15 text-amber-300'
+
 /** The document-type badge. One accent for every type rather than eight
  *  colours: the badge's job is to say WHICH type in a word, and a library
  *  listing where each card is a different colour is a paint chart. */
 export const CHIP_TYPE = 'border-blue-400/25 bg-blue-500/15 text-blue-300'
+
+/** The type badge for the form family (forms, report templates). Same hue —
+ *  the type badge stays one visual family — but outlined rather than filled,
+ *  because "a thing you fill in" and "a rule you follow" is the one type
+ *  distinction a reader makes while scanning rather than while reading. It
+ *  invents no new colour: the word in the chip is still what says which. */
+export const CHIP_FORM = 'border-blue-400/45 bg-transparent text-blue-200'
 
 /** One chip shape, so every chip on every document is the same size. */
 export const CHIP =

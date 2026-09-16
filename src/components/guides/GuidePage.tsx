@@ -32,7 +32,7 @@ import { useAuth } from '@/lib/auth'
 import { usePermissions } from '@/lib/permissions'
 import { fmtDate } from '@/lib/format'
 import { toast } from '@/lib/toast'
-import { renderDocumentMarkdown, renderMarkdown, type DocHeading } from '@/lib/markdown'
+import { renderDocumentMarkdown, renderMarkdown, stripDocumentPreamble, type DocHeading } from '@/lib/markdown'
 import {
   categoryLabelFrom, guideDocTypeLabel, isSuperseded,
   isUpdatedSinceSeen, listGuideMedia, loadGuidePage, markGuideComplete,
@@ -57,6 +57,7 @@ import { GuideMediaManager, type GuideMediaSlot } from './GuideMediaManager'
 import { GuideAcknowledgement, guideOffersAcknowledgement } from './GuideAcknowledgement'
 import { GOLD_TEXT, GUIDE_CANVAS, PANEL, SLAB, WARN } from './guideSurfaces'
 import { guideBody } from './guideRegistry'
+import { RelatedDocuments } from './RelatedDocuments'
 
 /** Reading estimate for a guide whose prose lives in the database. Same rule
  *  as the document modules: 200 words a minute, never less than a minute. */
@@ -182,6 +183,8 @@ export function GuidePage({ slug }: { slug: string }) {
   const [related, setRelated] = useState<GuideRow[]>([])
   const [replacement, setReplacement] = useState<GuideRow | null>(null)
   const [policy, setPolicy] = useState<GuideRow | null>(null)
+  const [governs, setGoverns] = useState<GuideRow[]>([])
+  const [supersedes, setSupersedes] = useState<GuideRow[]>([])
   const [progress, setProgress] = useState<GuideProgressRow | null>(null)
   const [media, setMedia] = useState<GuideMediaRow[]>([])
   const [images, setImages] = useState<GuideImage[]>([])
@@ -217,6 +220,8 @@ export function GuidePage({ slug }: { slug: string }) {
       setRelated(page.related)
       setReplacement(page.replacement)
       setPolicy(page.policy)
+      setGoverns(page.governs)
+      setSupersedes(page.supersedes)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -244,7 +249,14 @@ export function GuidePage({ slug }: { slug: string }) {
    *  returns the nodes and the heading list from a single pass, which is how
    *  the old SOP reader built its rail — and the better arrangement: a table
    *  of contents derived from the text cannot disagree with the text. */
-  const singleBody = !body && dbSections.length === 1 ? dbSections[0].body : null
+  //  ...minus an opening line that only restates the title, which every
+  //  document carried out of the word processor it was written in. The <h1>
+  //  above already says it; saying it twice more (once as the section row's
+  //  heading, once as the first line of the text) is the "duplicated document
+  //  title" every migrated SOP opened with.
+  const singleBody = !body && dbSections.length === 1
+    ? stripDocumentPreamble(dbSections[0].body, row?.title)
+    : null
   const rendered = useMemo(
     () => (singleBody === null ? null : renderDocumentMarkdown(singleBody)),
     [singleBody],
@@ -573,7 +585,9 @@ export function GuidePage({ slug }: { slug: string }) {
               images={imagesFor(s.anchor)}
             >
               <div className="prose-guide text-sm leading-relaxed text-slate-300">
-                {renderMarkdown(s.body)}
+                {/* Same rule one level down: a section whose first line
+                    repeats its own heading says it once, in the heading. */}
+                {renderMarkdown(stripDocumentPreamble(s.body, s.heading))}
               </div>
             </GuideSection>
           ))}
@@ -639,25 +653,7 @@ export function GuidePage({ slug }: { slug: string }) {
             </>
           )}
 
-          {related.length > 0 && (
-            <section className={`${PANEL} flex flex-col gap-3 p-4 sm:p-6`}>
-              <h2 className={`text-sm font-black uppercase tracking-[0.2em] ${GOLD_TEXT}`}>Related guides</h2>
-              <ul className="grid gap-2 sm:grid-cols-2">
-                {related.map((g) => (
-                  <li key={g.id}>
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/guides/${g.slug}`)}
-                      className={`${SLAB} w-full px-3 py-2 text-left hover:border-white/20`}
-                    >
-                      <span className={`block text-sm font-semibold ${GOLD_TEXT}`}>{g.title}</span>
-                      {g.summary && <span className="mt-0.5 block text-xs text-slate-400">{g.summary}</span>}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+          <RelatedDocuments governs={governs} supersedes={supersedes} sameCategory={related} />
 
           {sections.length > 0 && (
             <div className="flex justify-end">

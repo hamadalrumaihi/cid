@@ -24,11 +24,13 @@
 import type { ReactNode } from 'react'
 import { fmtDate } from '@/lib/format'
 import {
-  guideAudienceLabel, guideClassification, guideDocTypeLabel, guideStatusLabel, guideStatusOf,
-  isRestrictedAudience, type GuideRow,
+  guideAudienceLabel, guideClassification, guideDocFamily, guideDocTypeLabel, guideStatusLabel,
+  guideStatusOf, isRestrictedAudience, type GuideRow,
 } from '@/lib/guides'
 import { ClassificationStrip } from './DocCallout'
-import { CHIP, CHIP_DONE, CHIP_LOCKED, CHIP_NEUTRAL, CHIP_TYPE, SLAB } from './guideSurfaces'
+import {
+  CHIP, CHIP_DONE, CHIP_FORM, CHIP_LOCKED, CHIP_NEUTRAL, CHIP_TYPE, CHIP_WARN, SLAB,
+} from './guideSurfaces'
 
 export interface DocumentHeaderProps {
   row: GuideRow
@@ -39,14 +41,13 @@ export interface DocumentHeaderProps {
   readMinutes?: number | null
 }
 
-/** The status chip's tone: current is a quiet confirmation, everything else
- *  wants a reader to notice before they act on the contents. */
+/** The status chip's tone: current is a quiet confirmation (green — in
+ *  force), and every other status is amber, because draft, superseded and
+ *  archived all mean the same thing to a reader about to act — this is not
+ *  the rule. Red stays with the classification chip: a rose status badge
+ *  beside a title is read as "restricted", which is a different claim. */
 function statusTone(row: GuideRow): string {
-  switch (guideStatusOf(row)) {
-    case 'published': return CHIP_DONE
-    case 'superseded': return CHIP_LOCKED
-    default: return CHIP_NEUTRAL
-  }
+  return guideStatusOf(row) === 'published' ? CHIP_DONE : CHIP_WARN
 }
 
 export function DocumentHeader({ row, categoryLabel, actions, readMinutes }: DocumentHeaderProps) {
@@ -68,7 +69,7 @@ export function DocumentHeader({ row, categoryLabel, actions, readMinutes }: Doc
       )}
 
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">{row.title}</h1>
+        <h1 className="break-words text-2xl font-bold tracking-tight text-white sm:text-3xl">{row.title}</h1>
         {row.summary && (
           <p className="max-w-[60ch] text-sm leading-relaxed text-slate-400">{row.summary}</p>
         )}
@@ -77,13 +78,20 @@ export function DocumentHeader({ row, categoryLabel, actions, readMinutes }: Doc
       {/* Four badges, four questions. Type leads because it is what a reader
           scanning for "the form" is matching on. */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className={`${CHIP} ${CHIP_TYPE}`}>{guideDocTypeLabel(row.doc_type)}</span>
+        <span className={`${CHIP} ${guideDocFamily(row.doc_type) === 'form' ? CHIP_FORM : CHIP_TYPE}`}>
+          {guideDocTypeLabel(row.doc_type)}
+        </span>
         <span className={`${CHIP} ${CHIP_NEUTRAL}`}>{categoryLabel}</span>
-        {restricted && (
-          <span className={`${CHIP} ${CHIP_LOCKED}`} title={guideAudienceLabel(row.audience)}>
-            {guideAudienceLabel(row.audience)}
-          </span>
-        )}
+        {/* Access is always stated, even when it is "everyone". A badge row
+            where the fourth question is sometimes missing teaches a reader
+            that its absence means nothing in particular — and then a document
+            with no classification and one with an unrendered one look alike. */}
+        <span
+          className={`${CHIP} ${restricted ? CHIP_LOCKED : CHIP_NEUTRAL}`}
+          title={restricted ? 'Restricted distribution — this document does not leave its audience.' : undefined}
+        >
+          {guideAudienceLabel(row.audience)}
+        </span>
         <span className={`${CHIP} ${statusTone(row)}`}>{guideStatusLabel(row)}</span>
         {row.pinned && <span className={`${CHIP} ${CHIP_NEUTRAL}`}>Pinned</span>}
       </div>

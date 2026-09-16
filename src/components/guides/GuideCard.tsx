@@ -1,24 +1,38 @@
 'use client'
 
-/** One guide in the library.
+/** One document in the library — SOP, policy, procedure, form, guide alike.
  *
- *  A card says what the guide is and lets the reader open it. It carries the
- *  few pieces of metadata a reader actually chooses by — category, how long it
- *  takes, when it changed, how far they got — and stops there. Everything else
- *  belongs on the guide.
+ *  A card exists to answer one question: is this the document I want? So it
+ *  carries only what that decision needs — what it IS, what it is ABOUT, who
+ *  may read it, whether it is still in force, whether it changed since I last
+ *  looked, how long it takes — and stops. Everything else belongs on the
+ *  document.
  *
- *  Restricted guides reach only their audience at all (the wall is in the
+ *  ── Forms do not look like policies ──────────────────────────────────────
+ *  The type badge is outlined for the form family and filled for governing
+ *  documents (guideDocFamily). Same hue, different weight: a reader scanning
+ *  twenty cards for "the activity report" can pick the forms out without
+ *  reading twenty titles, and nothing about the card is themed by type.
+ *
+ *  ── Colour reinforces the word, never replaces it ────────────────────────
+ *  Blue informs, amber says read this before you act on it (draft,
+ *  superseded, flagged out of date), red restricts, green confirms. Every
+ *  coloured chip also says its state in a word, so none of it depends on a
+ *  reader distinguishing amber from rose.
+ *
+ *  Restricted documents reach only their audience at all (the wall is in the
  *  SELECT policy, not here), so the restricted badge is a reminder to the
- *  people who can see it, never a hint to anyone who cannot.
- *
- *  Status is never carried by colour alone: every badge has a word in it. */
+ *  people who can see it, never a hint to anyone who cannot. */
 import { Button } from '@/components/ui/Button'
 import { Progress } from '@/components/ui/Progress'
 import {
-  guideAudienceLabel, guideDocTypeLabel, guideStatusLabel, isArchived, isRestrictedAudience, isSuperseded,
+  guideAudienceLabel, guideDocFamily, guideDocTypeLabel, guideStatusLabel, isArchived,
+  isRestrictedAudience, isSuperseded,
   type GuideProgressRow, type GuideRow,
 } from '@/lib/guides'
-import { CHIP, CHIP_DONE, CHIP_LOCKED, CHIP_NEUTRAL, CHIP_TYPE, GOLD_TEXT, PANEL, SLAB } from './guideSurfaces'
+import {
+  CHIP, CHIP_DONE, CHIP_FORM, CHIP_LOCKED, CHIP_NEUTRAL, CHIP_TYPE, CHIP_WARN, GOLD_TEXT, PANEL, SLAB,
+} from './guideSurfaces'
 
 export interface GuideCardProps {
   guide: GuideRow
@@ -51,6 +65,7 @@ export function GuideCard({
   const restricted = isRestrictedAudience(guide.audience)
   const done = !!progress?.completed_at
   const started = !done && !!progress?.last_anchor
+  const isForm = guideDocFamily(guide.doc_type) === 'form'
 
   return (
     <article className={`${PANEL} flex flex-col overflow-hidden`}>
@@ -63,15 +78,15 @@ export function GuideCard({
           {/* Type first, then category. They are different questions — what
               this IS, and what it is ABOUT — and the type is the one a reader
               scanning for "the form" is matching on. */}
-          <span className={`${CHIP} ${CHIP_TYPE}`}>{guideDocTypeLabel(guide.doc_type)}</span>
+          <span className={`${CHIP} ${isForm ? CHIP_FORM : CHIP_TYPE}`}>{guideDocTypeLabel(guide.doc_type)}</span>
           <span className={`${CHIP} ${CHIP_NEUTRAL}`}>{categoryLabel}</span>
-          {guide.pinned && <span className={`${CHIP} ${CHIP_DONE}`}>Pinned</span>}
           {/* One status chip from one rule — archiving outranks the status
               column when both apply, which `guideStatusOf` settles. Active is
-              the norm and says nothing; the other three are worth a word. */}
+              the norm and says nothing; the other three are amber, because
+              each of them means "do not treat this as the rule". */}
           {(draft || archived || superseded) && (
             <span
-              className={`${CHIP} ${CHIP_NEUTRAL}`}
+              className={`${CHIP} ${CHIP_WARN}`}
               title={superseded ? 'Replaced by a later document' : undefined}
             >
               {guideStatusLabel(guide)}
@@ -82,13 +97,22 @@ export function GuideCard({
               Restricted
             </span>
           )}
+          {/* Out of date is a caution, not a classification: somebody flagged
+              the contents, nobody restricted them. */}
+          {guide.outdated_at && <span className={`${CHIP} ${CHIP_WARN}`}>Flagged out of date</span>}
           {isNew && <span className={`${CHIP} ${CHIP_DONE}`}>New</span>}
           {!isNew && isUpdated && <span className={`${CHIP} ${CHIP_DONE}`}>Updated</span>}
-          {guide.outdated_at && <span className={`${CHIP} ${CHIP_LOCKED}`}>Flagged out of date</span>}
+          {/* Pinned is neither a state of the document nor a warning — it is
+              the division saying "read this". Quiet, and last. */}
+          {guide.pinned && <span className={`${CHIP} ${CHIP_NEUTRAL}`}>Pinned</span>}
         </div>
 
         <div className="min-w-0">
-          <h3 className={`text-sm font-black uppercase tracking-[0.14em] ${GOLD_TEXT}`}>{guide.title}</h3>
+          {/* A document title is a proper name — "CID Undercover Operations
+              Procedure", not an all-caps banner. Uppercase forced onto a
+              40-character SOP title costs a line and reads as shouting; the
+              weight and the colour carry the emphasis instead. */}
+          <h3 className={`break-words text-sm font-bold leading-snug ${GOLD_TEXT}`}>{guide.title}</h3>
           {guide.summary && <p className="mt-1 text-sm text-slate-300">{guide.summary}</p>}
         </div>
 
@@ -113,7 +137,7 @@ export function GuideCard({
 
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" onClick={onOpen}>
-            {started ? 'Continue' : 'Open Guide'}
+            {started ? 'Continue reading' : isForm ? 'Open form' : 'Open document'}
           </Button>
           {onToggleBookmark && (
             <Button

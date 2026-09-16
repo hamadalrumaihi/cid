@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   GUIDE_AUDIENCES, GUIDE_AUDIENCE_LABEL, GUIDE_IMAGE_MAX_BYTES, GUIDE_IMAGE_TYPES,
-  categoryLabelFrom, guideAudienceLabel, humanizeSlug, isArchived, isNewToReader, isPublished,
+  GUIDE_DOC_TYPES, categoryLabelFrom, guideAudienceLabel, guideDocFamily, humanizeSlug,
+  isArchived, isNewToReader, isPublished,
   isRestrictedAudience, isUpdatedSinceSeen, matchGuides, sortGuides, validateGuideImage,
   type GuideCategoryRow, type GuideProgressRow, type GuideRow,
 } from './guides'
@@ -115,6 +116,22 @@ describe('audiences', () => {
     // case, never as the open one.
     expect(isRestrictedAudience('task_force')).toBe(true)
     expect(guideAudienceLabel('task_force')).toBe('Task Force')
+  })
+})
+
+describe('guideDocFamily — what a document is FOR', () => {
+  it('splits the eight types into rules, things you fill in, and things you consult', () => {
+    expect(GUIDE_DOC_TYPES.map(guideDocFamily)).toEqual([
+      'governing', 'governing', 'governing', // sop, policy, procedure
+      'reference',                            // guide
+      'form', 'form',                         // form, report_template
+      'reference', 'reference',               // reference, training
+    ])
+  })
+
+  it('a type the client has never heard of consults rather than governs', () => {
+    expect(guideDocFamily('memorandum')).toBe('reference')
+    expect(guideDocFamily(null)).toBe('reference')
   })
 })
 
