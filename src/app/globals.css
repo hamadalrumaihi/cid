@@ -404,10 +404,15 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
 /* A measure for prose, and only prose. Past roughly 75 characters the eye
    loses its place on the return sweep. Tables, figures and anything that
    scrolls are exempt — narrowing a wide table just moves the problem. */
-.prose-guide > p,
-.prose-guide > ul,
-.prose-guide > ol,
-.prose-guide > blockquote {
+/* Descendant selectors, deliberately: the renderer groups a paragraph with
+   the heading above it inside a <div>, so a child selector (`> p`) matched
+   nothing and every paragraph ran the full column width. Found by rendering
+   the CID SOP at 1440px — 880px lines — not by reading the rule. Table cells
+   carry no <p>, so tables keep their width. */
+.prose-guide p,
+.prose-guide ul,
+.prose-guide ol,
+.prose-guide blockquote {
   max-width: 72ch;
 }
 
@@ -442,13 +447,27 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
 
 /* Rhythm. Paragraphs breathe; a paragraph immediately under a heading does
    not, because the gap already exists above the heading. */
+/* A clause inside a sub-section — "5C.3 | Evidence Access Control". Plain
+   weight and colour, one step down from the sub-title: it is a label for the
+   paragraph under it, not a new part of the document. */
+.prose-guide h4 {
+  margin-top: 1.25rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  font-weight: 600;
+  color: #f1f5f9;
+}
 .prose-guide p { margin-block: 0.75rem; line-height: 1.7; }
 .prose-guide h2 + p,
 .prose-guide h3 + p,
+.prose-guide h4 + p,
 .prose-guide h2 + ul,
 .prose-guide h3 + ul,
+.prose-guide h4 + ul,
 .prose-guide h2 + ol,
-.prose-guide h3 + ol { margin-top: 0; }
+.prose-guide h3 + ol,
+.prose-guide h4 + ol { margin-top: 0; }
 
 /* Lists, including nested ones. The old rendering indented the first level
    and then lost the thread: a sub-requirement sat at the same margin as its
@@ -480,7 +499,10 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
 /* Nothing in a document may scroll the PAGE sideways. A wide table scrolls
    inside its own frame; long unbroken strings wrap instead of pushing. */
 .prose-guide { overflow-wrap: anywhere; }
-.prose-guide table { min-width: 32rem; }
+/* A wide table scrolls inside its own container rather than being squeezed.
+   Only a table that IS wide, though: a two-column bracket table forced to
+   32rem on a 390px phone scrolls for no reason. */
+.prose-guide table:has(tr > :nth-child(3)) { min-width: 32rem; }
 
 /* Phone: the measure is the viewport, and the rhythm tightens so a short
    screen is not mostly gaps. Text size does NOT shrink — small text on a

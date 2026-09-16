@@ -1460,3 +1460,4 @@ another record's folder, and an unregistered media id under the right one.
 | applied via MCP (`record_versions`) | record_versions | `20261011120000_record_versions.sql` |
 | applied via MCP (`case_access_grant_expiry`) | case_access_grant_expiry | `20261012120000_case_access_grant_expiry.sql` |
 | applied via MCP (`permanent_delete_record`, `permanent_delete_record_preview_fix`) | permanent_delete_record | `20261013120000_permanent_delete_record.sql` |
+| applied via MCP (`cid_sop_v3`) — verified: guide_revisions #1 = version 2 (39,444 chars) before, #2 = version 3 after; live body md5 62ac908f2b9431d5a6623207aa7785a0 = the file's; superseded SOP `updated_at` unchanged; `guide_search_index` re-indexed (MCB present, LSPD absent); `related_policy` set on the two forms | cid_sop_v3 | `20261113120000_cid_sop_v3.sql` |

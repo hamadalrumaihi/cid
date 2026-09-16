@@ -326,7 +326,8 @@ export function GuidePage({ slug }: { slug: string }) {
    *  image goes by the section it illustrates. */
   const slots: GuideMediaSlot[] = [
     { section: null, label: 'Cover' },
-    ...sections.map((s) => ({ section: s.id, label: s.text })),
+    // Sections and sub-sections; a clause is too fine a place to hang an image.
+    ...sections.filter((s) => s.level < 4).map((s) => ({ section: s.id, label: s.text })),
   ]
 
   const onBookmark = async () => {
@@ -444,7 +445,11 @@ export function GuidePage({ slug }: { slug: string }) {
         {/* Contents rail — desktop only; the sheet below serves small screens. */}
         {sections.length > 0 && (
           <aside className="hidden w-56 flex-shrink-0 lg:block">
-            <div className="sticky top-20 flex flex-col gap-3">
+            {/* The rail scrolls inside the viewport rather than past it: the
+                CID SOP lists 48 Titles and sub-titles, which is taller than
+                most screens, and a sticky column with no bound simply hides
+                its last entries. */}
+            <div className="sticky top-20 flex max-h-[calc(100vh-6rem)] flex-col gap-3 overflow-y-auto overscroll-contain pr-1">
               <DocToc headings={sections} activeId={active} onSelect={jump} size="rail" />
               <Button
                 variant="ghost"

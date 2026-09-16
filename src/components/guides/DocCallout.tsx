@@ -119,15 +119,16 @@ export function DocCallout({ kind, title, children, className = '' }: DocCallout
       aria-label={`${s.label}: ${title ?? ''}`.trim()}
       className={`rounded-lg border px-3.5 py-3 ${s.cls} ${className}`}
     >
-      <p className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide ${s.head}`}>
-        <span aria-hidden className="grid h-4 w-4 place-items-center rounded-full bg-white/10 text-[9px] leading-none">
+      <p className={`flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] font-bold uppercase tracking-wide ${s.head}`}>
+        <span aria-hidden className="grid h-4 w-4 flex-shrink-0 place-items-center rounded-full bg-white/10 text-[9px] leading-none">
           {s.icon}
         </span>
-        {title ?? s.label}
+        <span className="min-w-0">{title ?? s.label}</span>
         {/* When the caller renames it, the KIND still has to be legible —
             otherwise "Recording Required" in amber says nothing to a reader
-            who cannot see amber. */}
-        {title && <span className="font-semibold text-current/70">· {s.label}</span>}
+            who cannot see amber. It never breaks mid-word: on a phone a long
+            title wraps, and the kind drops whole to the next line. */}
+        {title && <span className="whitespace-nowrap font-semibold text-current/70">· {s.label}</span>}
       </p>
       <div className="prose-guide mt-1.5 text-sm leading-relaxed [&_a]:underline [&_a]:underline-offset-2">
         {children}

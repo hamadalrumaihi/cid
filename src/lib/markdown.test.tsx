@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { EntityLink } from '@/components/ui/EntityLink'
+import { DocCallout } from '@/components/guides/DocCallout'
 import { renderDocumentMarkdown, renderMarkdown, stripDocumentPreamble } from './markdown'
 
 /** Depth-first flatten of a ReactNode tree into elements. */
@@ -69,6 +70,11 @@ describe('renderDocumentMarkdown (doc mode — TOC in lockstep with render)', ()
     expect(headings.map((h) => h.id)).toEqual(['scene-response', 'scene-response-2'])
     const again = renderDocumentMarkdown('# Scene Response!\n\nx\n\n# Scene Response!\n\ny')
     expect(again.headings.map((h) => h.id)).toEqual(['scene-response', 'scene-response-2'])
+  })
+
+  it('a document with its own # headings gets no guessed ones', () => {
+    const { headings } = renderDocumentMarkdown('## Duties\n\nDuties include:\n\n- a\n- b\n\nNOTE\n\nAlways.')
+    expect(headings.map((h) => h.text)).toEqual(['Duties'])
   })
 
   it('heuristic headings (ALL-CAPS / colon lines) join the TOC as h2', () => {
@@ -192,5 +198,68 @@ describe('stripDocumentPreamble', () => {
     expect(stripDocumentPreamble(body, TITLE)).toBe(body)
     expect(stripDocumentPreamble(body, '')).toBe(body)
     expect(stripDocumentPreamble(null, TITLE)).toBe('')
+  })
+})
+
+/** What a policy needs and a case note does not. Every one of these is
+ *  document-mode only, and the legacy assertions above pin that a case note
+ *  renders exactly as before. */
+describe('document mode — clauses, callouts and links between documents', () => {
+  it('#### is a level-4 clause: anchored, listed, under its sub-title', () => {
+    const { nodes, headings } = renderDocumentMarkdown('## Title 5 | Case Management\n\n### 5C | Evidence\n\n#### 5C.3 | Access Control\n\nOnce submitted…')
+    expect(headings.map((h) => [h.level, h.id])).toEqual([
+      [2, 'title-5-case-management'], [3, '5c-evidence'], [4, '5c-3-access-control'],
+    ])
+    const h4 = elements(nodes).find((e) => e.type === 'h4')
+    expect((h4!.props as { id: string }).id).toBe('5c-3-access-control')
+  })
+
+  it('a [!KIND] quote is a callout — kind, title, and a body of real blocks', () => {
+    const md = '> [!IMPORTANT] Reporting deadline\n> Reports are due within twelve (12) hours.\n>\n> - one\n> - two'
+    const { nodes } = renderDocumentMarkdown(md)
+    const callout = elements(nodes).find((e) => e.type === DocCallout)
+    expect(callout).toBeDefined()
+    const props = callout!.props as { kind: string; title?: string; children: ReactNode }
+    expect(props.kind).toBe('important')
+    expect(props.title).toBe('Reporting deadline')
+    // The body went through the block classifier: a paragraph and a list.
+    const inner = tags(props.children)
+    expect(inner).toContain('p')
+    expect(inner).toContain('ul')
+    expect(tags(nodes)).not.toContain('blockquote')
+  })
+
+  it('RELATED and PROCEDURE are titled information; aliases and case are forgiving', () => {
+    const rel = elements(renderDocumentMarkdown('> [!RELATED]\n> - [Form](/guides/uc-operation-activity-report)\n> - [Guide](/guides/case-management)').nodes)
+      .find((e) => e.type === DocCallout)!.props as { kind: string; title?: string }
+    expect(rel).toMatchObject({ kind: 'info', title: 'Related documents' })
+    const proc = elements(renderDocumentMarkdown('> [!procedure] Undercover operations\n> See the procedure.').nodes)
+      .find((e) => e.type === DocCallout)!.props as { kind: string; title?: string }
+    expect(proc).toMatchObject({ kind: 'info', title: 'Undercover operations' })
+    for (const [alias, kind] of [['NOTE', 'info'], ['CAUTION', 'warning'], ['DEADLINE', 'time'], ['COMMAND', 'command'], ['RESTRICTED', 'restricted']]) {
+      const c = elements(renderDocumentMarkdown(`> [!${alias}]\n> x`).nodes).find((e) => e.type === DocCallout)!
+      expect((c.props as { kind: string }).kind).toBe(kind)
+    }
+  })
+
+  it('an unknown [!KIND] and every legacy-mode quote stay plain quotes', () => {
+    expect(tags(renderDocumentMarkdown('> [!BANANA] x\n> y').nodes)).toContain('blockquote')
+    const legacy = renderMarkdown('> [!IMPORTANT] x\n> y')
+    expect(tags(legacy)).toContain('blockquote')
+    expect(elements(legacy).some((e) => e.type === DocCallout)).toBe(false)
+  })
+
+  it('links: /guides/<slug>#anchor stays in-tab, http opens a tab, anything else is text', () => {
+    const { nodes } = renderDocumentMarkdown('See [the form](/guides/uc-operation-activity-report#purpose) and [ext](https://example.com) but not [x](javascript:alert(1)) or [y](/cases/1) or [z](//evil.example).')
+    const links = elements(nodes).filter((e) => e.type === 'a').map((e) => e.props as { href: string; target?: string; rel?: string })
+    expect(links).toHaveLength(2)
+    expect(links[0]).toMatchObject({ href: '/guides/uc-operation-activity-report#purpose' })
+    expect(links[0].target).toBeUndefined()
+    expect(links[0].rel).toBeUndefined()
+    expect(links[1]).toMatchObject({ href: 'https://example.com', target: '_blank', rel: 'noreferrer' })
+    // Case notes get the same internal links — a plain <a>, never a new tab.
+    const note = elements(renderMarkdown('[g](/guides/case-management)')).find((e) => e.type === 'a')!
+    expect(note.props as { href: string }).toMatchObject({ href: '/guides/case-management' })
+    expect((note.props as { target?: string }).target).toBeUndefined()
   })
 })
