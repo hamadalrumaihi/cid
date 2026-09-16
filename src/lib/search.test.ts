@@ -155,11 +155,15 @@ describe('document / source hits', () => {
     expect(u.sublabel).toBe('x.example')
   })
 
-  it('the section registry knows both kinds and orders them after documents', () => {
+  it('the section registry knows both kinds and orders them after the library', () => {
     expect(SEARCH_KINDS.document_page.title).toBe('Case documents')
     expect(SEARCH_KINDS.source.title).toBe('External sources')
+    // The SOPs area retired into the Guide Library (20261112120000): the
+    // `document` section is now `guide`, and it still leads this trio.
+    expect(SEARCH_KINDS.guide.title).toBe('Guide Library')
+    expect(SEARCH_KINDS.guide.tab).toBe('guides')
     const order = [...SEARCH_SECTION_ORDER]
-    expect(order.indexOf('document_page')).toBe(order.indexOf('document') + 1)
+    expect(order.indexOf('document_page')).toBe(order.indexOf('guide') + 1)
     expect(order.indexOf('source')).toBe(order.indexOf('document_page') + 1)
   })
 })

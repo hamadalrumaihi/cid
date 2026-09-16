@@ -1064,3 +1064,34 @@ detective_id = auth.uid()
 An unauthorized id and an unknown id answer with the same `P0403` wording, so a refused caller learns nothing about whether the operation exists.
 
 **Tests.** `tests/rls/v196a.test.ts` — twenty cases across the seven personas (the Detective, a case-reading peer, the own Bureau Lead, another bureau's Lead, CID Command, High Command, an SIB account, an inactive account, and `anon`), the write paths, the deletion floor, audit immutability, the retention arithmetic and the case-untouched guarantee. `tests/msw/undercover.test.tsx` covers the four things a policy cannot reach: the absent tab, a failed read that is not an empty compartment, the retention wording, and the §5 wording.
+
+---
+
+## 27. One documentation library ([`20261112120000`](../supabase/migrations/20261112120000_one_documentation_library.sql))
+
+**The change.** The portal carried two documentation systems: `documents` (the SOPs / Library area — the division's SOPs, forms and reference material) and `guides` (the Guide Library). A member looking for "the CID SOP" had to already know which of the two to open. The Guide Library is now the library. The **Penal Code is untouched** and stays its own top-level feature.
+
+**The access mapping, checked predicate by predicate.** `documents.classification` and `guides.audience` are different columns over the same idea, and every value maps **exactly** — this was verified against the live definitions, not assumed:
+
+| classification | → audience | why it is exact |
+|---|---|---|
+| `internal` | `all` | both are `private.is_active()` |
+| `restricted` | `custom` + `{senior_detective, bureau_lead, deputy_director, director}` | both also admit the Owner |
+| `command` | `command` | both are `is_command() or is_owner()` |
+| `justice` | `doj` | both are a justice role, or the Owner |
+| `siu` | `sib` | `private.siu_operates()` **is** `private.siu_standing() is not null`, which is verbatim what the `sib` audience tests |
+| `owner` | `owner` | identical |
+
+Nothing widened, nothing narrowed. The **Special Investigations Bureau SOP** keeps exactly the readership it had, decided by the SIB compartment's own helper; no `siu_*` policy is touched. `doc_class_visible` also admits a document's own `owner_user_id`, but all ten documents have a null owner, so that branch carried nothing across.
+
+**Four separate concepts.** `doc_type` (what it IS — sop / policy / procedure / guide / form / report_template / reference / training), `category` (what it is ABOUT), `audience` (who may read it), `status` (whether it is current). The old library expressed type through a `folder` string, so a form about undercover work had nowhere to say so. A filter over one never filters another.
+
+**Supersession.** `status = 'superseded'` + `superseded_by`, with a constraint that supersession must name a replacement and that a document cannot supersede itself. `guides_sel` was widened by exactly one status value so a superseded document stays readable **to the audience it already had** — the requirement is that readers see the current version by default, not that the record of what the rules were disappears. `archived` is deliberately NOT included: archiving is the act of taking a document out of circulation, and it stays editor-only.
+
+**The retired tables.** `documents`, `document_sections` and `documents_versions` are **not destroyed** — an SOP that governed the division is a record of what the rules were, and the eleven stored versions are the only copy of that history. They are narrowed to `private.is_owner()`, read-only (all write policies dropped, INSERT/UPDATE/DELETE revoked). `guides.migrated_document_id` records which guide each document became.
+
+**Search.** `search_all` could **not** be repointed: it is declared `SET "pg_trgm.word_similarity_threshold"`, that setting is superuser-only, and `pg_get_functiondef` reproduces it — so any `CREATE OR REPLACE` built from its own definition is refused `42501`. The Guide Library joins global search on the client instead, as its own hits source over `public.guides_search` (the `ciHits` arrangement). That is the better wall and the better search: `guides_search` is SECURITY INVOKER over `guides_sel`, and unlike the title-only arm it replaces it matches **section text**. The old `document` arm is left in place, returns rows to the Owner alone, and is dropped client-side.
+
+**`guide_ack_summary(p_guide)`** — Command-only (`P0403` otherwise); returns `{acknowledged, members, outstanding, revision_no}`. An acknowledgement list is a personnel record, so it is not the author's to read and not every reader's.
+
+**Verified live**, in rolled-back transactions: all ten documents migrated with **byte-identical bodies** (including the 39,444-character CID SOP); an ordinary detective sees 15 guides and **zero** retired documents; the SIB SOP is invisible to that detective and visible to an SIB member; the Owner reads all 10 documents and 11 versions; and `guides_search` returns migrated SOP content for SOP, undercover, CI, evidence, surveillance and case management.

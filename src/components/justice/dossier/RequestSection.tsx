@@ -20,7 +20,7 @@ import { Card } from '@/components/ui/Card'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { RecordHistory } from '@/components/shared/RecordHistory'
 import { VersionViewer, type VersionItem } from '@/components/shared/VersionViewer'
-import { DiffView } from '@/components/sops/docDiff'
+import { DiffView } from '@/components/shared/docDiff'
 import { ChargesBlock } from './ChargesBlock'
 import { Row, sanitizeStash, type DraftShape } from './dossierShared'
 

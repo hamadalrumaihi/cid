@@ -5,6 +5,7 @@ import { TOOL_TABS } from '@/lib/toolsModel'
 import { ViewPlaceholder } from '@/components/ViewPlaceholder'
 import { ToolTabRedirect } from '@/components/tools/ToolTabRedirect'
 import { LegacyRedirect } from './LegacyRedirect'
+import { SopsRedirect } from './SopsRedirect'
 import { CasesView } from '@/components/cases/CasesView'
 import { OperationsView } from '@/components/operations/OperationsView'
 import { MyDashboardView } from '@/components/dashboard/MyDashboardView'
@@ -14,7 +15,6 @@ import { AnnounceView } from '@/components/announce/AnnounceView'
 import { PenalView } from '@/components/penal/PenalView'
 import { ShiftsView } from '@/components/shifts/ShiftsView'
 import { CaseFilesView } from '@/components/casefiles/CaseFilesView'
-import { SopsView } from '@/components/sops/SopsView'
 import { CalendarView } from '@/components/calendar/CalendarView'
 import { AnalyticsView } from '@/components/analytics/AnalyticsView'
 import { ProfileView } from '@/components/profile/ProfileView'
@@ -68,6 +68,10 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
   // the search palette's member hits and the Trash's commendation links all
   // pointed at /personnel.
   if (tab === 'personnel') return <LegacyRedirect to="/directory" />
+  // The SOPs / Library area folded into the Guide Library. `?doc=<id>` is
+  // resolved to the guide that document became, so an old deep link opens the
+  // same document rather than the library's front page.
+  if (tab === 'sops') return <SopsRedirect />
   // Legacy Intelligence tool routes → the unified workspace. The routes stay
   // prerendered and valid (deep links, bookmarks, notifications, case
   // cross-links); a tiny client shim maps their query params onto
@@ -230,13 +234,6 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="case-files" />}>
         <CaseFilesView />
-      </Suspense>
-    )
-  }
-  if (tab === 'sops') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="sops" />}>
-        <SopsView />
       </Suspense>
     )
   }

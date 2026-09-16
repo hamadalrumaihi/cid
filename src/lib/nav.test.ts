@@ -12,7 +12,7 @@ import { TOOL_TABS } from './toolsModel'
  *  /inbox, which would silently eat bookmarks). */
 describe('nav — legacy redirect routes', () => {
   it('the retired ids are exactly action, command, tools, the 14 tool routes, reports, undergrnd, guide and personnel', () => {
-    expect([...LEGACY_REDIRECT_TABS]).toEqual(['action', 'command', 'tools', ...TOOL_TABS, 'reports', 'undergrnd', 'guide', 'personnel'])
+    expect([...LEGACY_REDIRECT_TABS]).toEqual(['action', 'command', 'tools', ...TOOL_TABS, 'reports', 'undergrnd', 'guide', 'personnel', 'sops'])
   })
 
   it('legacy ids are routable (isValidTab) but carry NO page metadata', () => {
@@ -66,7 +66,7 @@ describe('nav — categories', () => {
     expect(NAV_CATEGORIES.map((c) => [c.id, c.label, c.tabs])).toEqual([
       ['command', 'Command', ['inbox', 'dashboard', 'analytics', 'announce', 'heatmap']],
       ['cases', 'Investigations', ['cases', 'operations', 'legal', 'intelligence', 'informants', 'undercover', 'registries', 'rico', 'case-files']],
-      ['reference', 'Division & Reference', ['directory', 'penal', 'sops']],
+      ['reference', 'Division & Reference', ['directory', 'penal']],
       ['oversight', 'Oversight', ['calendar', 'shifts', 'trash']],
       ['owner', 'Owner', ['owner', 'audit', 'devdocs', 'report-templates']],
     ])

@@ -2681,14 +2681,31 @@ create table public.guides (
   publication_note text,
   outdated_at timestamp with time zone,
   outdated_by uuid,
-  outdated_reason text
+  outdated_reason text,
+  doc_type text not null default 'guide'::text,
+  issuing_authority text,
+  effective_date timestamp with time zone,
+  version_label text,
+  change_summary text,
+  superseded_by uuid,
+  acknowledgement_required boolean not null default false,
+  acknowledgement_deadline timestamp with time zone,
+  migrated_document_id uuid,
+  related_policy uuid
 );
+alter table public.guides add constraint guides_doc_type_check CHECK ((doc_type = ANY (ARRAY['sop'::text, 'policy'::text, 'procedure'::text, 'guide'::text, 'form'::text, 'report_template'::text, 'reference'::text, 'training'::text])));
+alter table public.guides add constraint guides_supersede_not_self CHECK (((superseded_by IS NULL) OR (superseded_by <> id)));
+alter table public.guides add constraint guides_superseded_needs_target CHECK (((status <> 'superseded'::text) OR (superseded_by IS NOT NULL)));
+alter table public.guides add constraint guides_related_policy_not_self CHECK (((related_policy IS NULL) OR (related_policy <> id)));
+alter table public.guides add constraint guides_superseded_by_fkey FOREIGN KEY (superseded_by) REFERENCES guides(id) ON DELETE SET NULL;
+alter table public.guides add constraint guides_migrated_document_id_fkey FOREIGN KEY (migrated_document_id) REFERENCES documents(id) ON DELETE SET NULL;
+alter table public.guides add constraint guides_related_policy_fkey FOREIGN KEY (related_policy) REFERENCES guides(id) ON DELETE SET NULL;
 alter table public.guides add constraint guides_audience_check CHECK ((audience = ANY (ARRAY['all'::text, 'investigative'::text, 'command'::text, 'doj'::text, 'sib'::text, 'ci_handlers'::text, 'owner'::text, 'custom'::text])));
 alter table public.guides add constraint guides_body_kind_check CHECK ((body_kind = ANY (ARRAY['module'::text, 'sections'::text])));
-alter table public.guides add constraint guides_published_has_date CHECK (((status <> 'published'::text) OR (published_at IS NOT NULL)));
+alter table public.guides add constraint guides_published_has_date CHECK (((status <> ALL (ARRAY['published'::text, 'superseded'::text])) OR (published_at IS NOT NULL)));
 alter table public.guides add constraint guides_read_minutes_check CHECK (((read_minutes IS NULL) OR ((read_minutes > 0) AND (read_minutes <= 600))));
 alter table public.guides add constraint guides_slug_shape CHECK ((slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text));
-alter table public.guides add constraint guides_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text])));
+alter table public.guides add constraint guides_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'superseded'::text])));
 alter table public.guides add constraint guides_archived_by_fkey FOREIGN KEY (archived_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.guides add constraint guides_category_fkey FOREIGN KEY (category) REFERENCES guide_categories(slug) ON UPDATE CASCADE;
 alter table public.guides add constraint guides_content_owner_fkey FOREIGN KEY (content_owner) REFERENCES profiles(id) ON DELETE SET NULL;
@@ -6329,6 +6346,10 @@ CREATE INDEX guides_archived_by_idx ON public.guides USING btree (archived_by);
 CREATE INDEX guides_archived_idx ON public.guides USING btree (archived_at) WHERE (archived_at IS NOT NULL);
 CREATE INDEX guides_audience_idx ON public.guides USING btree (audience) WHERE (deleted_at IS NULL);
 CREATE INDEX guides_category_idx ON public.guides USING btree (category) WHERE (deleted_at IS NULL);
+CREATE INDEX guides_doc_type_idx ON public.guides USING btree (doc_type);
+CREATE INDEX guides_superseded_by_idx ON public.guides USING btree (superseded_by);
+CREATE INDEX guides_migrated_document_idx ON public.guides USING btree (migrated_document_id);
+CREATE INDEX guides_related_policy_idx ON public.guides USING btree (related_policy);
 CREATE INDEX guides_content_owner_idx ON public.guides USING btree (content_owner);
 CREATE INDEX guides_created_by_idx ON public.guides USING btree (created_by);
 CREATE INDEX guides_delete_batch_idx ON public.guides USING btree (delete_batch) WHERE (delete_batch IS NOT NULL);

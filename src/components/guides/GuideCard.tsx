@@ -15,9 +15,10 @@
 import { Button } from '@/components/ui/Button'
 import { Progress } from '@/components/ui/Progress'
 import {
-  guideAudienceLabel, isArchived, isPublished, isRestrictedAudience, type GuideProgressRow, type GuideRow,
+  guideAudienceLabel, guideDocTypeLabel, guideStatusLabel, isArchived, isRestrictedAudience, isSuperseded,
+  type GuideProgressRow, type GuideRow,
 } from '@/lib/guides'
-import { CHIP, CHIP_DONE, CHIP_LOCKED, CHIP_NEUTRAL, GOLD_TEXT, PANEL, SLAB } from './guideSurfaces'
+import { CHIP, CHIP_DONE, CHIP_LOCKED, CHIP_NEUTRAL, CHIP_TYPE, GOLD_TEXT, PANEL, SLAB } from './guideSurfaces'
 
 export interface GuideCardProps {
   guide: GuideRow
@@ -44,8 +45,9 @@ export function GuideCard({
   guide, categoryLabel, readMinutes, coverSrc = null, bookmarked = false, progress,
   lastUpdatedText, isNew = false, isUpdated = false, onOpen, onToggleBookmark, editor,
 }: GuideCardProps) {
-  const draft = !isPublished(guide)
+  const draft = guide.status === 'draft'
   const archived = isArchived(guide)
+  const superseded = isSuperseded(guide)
   const restricted = isRestrictedAudience(guide.audience)
   const done = !!progress?.completed_at
   const started = !done && !!progress?.last_anchor
@@ -58,10 +60,23 @@ export function GuideCard({
       )}
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex flex-wrap items-center gap-1.5">
+          {/* Type first, then category. They are different questions — what
+              this IS, and what it is ABOUT — and the type is the one a reader
+              scanning for "the form" is matching on. */}
+          <span className={`${CHIP} ${CHIP_TYPE}`}>{guideDocTypeLabel(guide.doc_type)}</span>
           <span className={`${CHIP} ${CHIP_NEUTRAL}`}>{categoryLabel}</span>
           {guide.pinned && <span className={`${CHIP} ${CHIP_DONE}`}>Pinned</span>}
-          {draft && <span className={`${CHIP} ${CHIP_NEUTRAL}`}>Draft</span>}
-          {archived && <span className={`${CHIP} ${CHIP_NEUTRAL}`}>Archived</span>}
+          {/* One status chip from one rule — archiving outranks the status
+              column when both apply, which `guideStatusOf` settles. Active is
+              the norm and says nothing; the other three are worth a word. */}
+          {(draft || archived || superseded) && (
+            <span
+              className={`${CHIP} ${CHIP_NEUTRAL}`}
+              title={superseded ? 'Replaced by a later document' : undefined}
+            >
+              {guideStatusLabel(guide)}
+            </span>
+          )}
           {restricted && (
             <span className={`${CHIP} ${CHIP_LOCKED}`} title={guideAudienceLabel(guide.audience)}>
               Restricted

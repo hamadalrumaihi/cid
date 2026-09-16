@@ -106,10 +106,73 @@ export async function listGuideCategories(): Promise<GuideCategoryRow[]> {
 export const categoryLabelFrom = (cats: readonly GuideCategoryRow[], slug: string | null | undefined): string =>
   cats.find((c) => c.slug === slug)?.label || humanizeSlug(slug) || 'General'
 
+/* ---- document type -------------------------------------------------------- */
+
+/** What a document IS.
+ *
+ *  Four things describe a library entry and they are deliberately four
+ *  columns, not one: TYPE is what the document is, CATEGORY is what it is
+ *  about, AUDIENCE is who may read it, STATUS is whether it is current. The
+ *  old library conflated type and category in a single `folder` string — a
+ *  document lived in "SOPs" or in "Forms", so a form about undercover work
+ *  had nowhere to say that it was about undercover work. Filtering by one of
+ *  the four must never quietly filter another. */
+export const GUIDE_DOC_TYPES = [
+  'sop', 'policy', 'procedure', 'guide', 'form', 'report_template', 'reference', 'training',
+] as const
+export type GuideDocType = (typeof GUIDE_DOC_TYPES)[number]
+
+export const GUIDE_DOC_TYPE_LABEL: Record<GuideDocType, string> = {
+  sop: 'SOP',
+  policy: 'Policy',
+  procedure: 'Procedure',
+  guide: 'Guide',
+  form: 'Form',
+  report_template: 'Report Template',
+  reference: 'Reference',
+  training: 'Training',
+}
+
+/** A type the client does not know renders verbatim rather than blank, so a
+ *  value added server-side is visible instead of silently missing. */
+export const guideDocTypeLabel = (t: string | null | undefined): string =>
+  (t && GUIDE_DOC_TYPE_LABEL[t as GuideDocType]) || humanizeSlug(t) || 'Document'
+
 /* ---- state ---------------------------------------------------------------- */
 
 export const isPublished = (g: Pick<GuideRow, 'status'>): boolean => g.status === 'published'
 export const isArchived = (g: Pick<GuideRow, 'archived_at'>): boolean => g.archived_at !== null
+
+/** Replaced by a later document. Still readable — that is the point of
+ *  recording supersession rather than deleting — but not the authoritative
+ *  copy, and the library says so wherever it appears. */
+export const isSuperseded = (g: Pick<GuideRow, 'status'>): boolean => g.status === 'superseded'
+
+/** The one a reader should be reading unless they went looking for history. */
+export const isCurrent = (g: Pick<GuideRow, 'status' | 'archived_at'>): boolean =>
+  isPublished(g) && !isArchived(g)
+
+export const GUIDE_STATUSES = ['published', 'superseded', 'archived', 'draft'] as const
+export type GuideStatusFilter = (typeof GUIDE_STATUSES)[number]
+
+export const GUIDE_STATUS_LABEL: Record<GuideStatusFilter, string> = {
+  published: 'Active',
+  superseded: 'Superseded',
+  archived: 'Archived',
+  draft: 'Draft',
+}
+
+/** The status a reader sees, which is not always the status column: archiving
+ *  is a separate flag, and it outranks the status when both apply. */
+export function guideStatusOf(g: Pick<GuideRow, 'status' | 'archived_at'>): GuideStatusFilter {
+  if (isArchived(g)) return 'archived'
+  if (g.status === 'superseded') return 'superseded'
+  if (g.status === 'draft') return 'draft'
+  return 'published'
+}
+
+export const guideStatusLabel = (g: Pick<GuideRow, 'status' | 'archived_at'>): string =>
+  GUIDE_STATUS_LABEL[guideStatusOf(g)]
 
 /** "Updated since you last read it" — true only when the reader has actually
  *  read it before, so a guide nobody has opened is never marked as changed. */
@@ -663,10 +726,17 @@ export interface GuidePageModel {
    *  already-RLS-filtered list the library shows, so nothing surfaces here
    *  that the reader could not already see there. */
   related: GuideRow[]
+  /** The document that replaced this one (guides.superseded_by), when it is
+   *  one the reader may see. Null rather than a dangling id: a link to a
+   *  document the reader cannot open is worse than no link. */
+  replacement: GuideRow | null
+  /** The policy or procedure this document is governed by (related_policy). */
+  policy: GuideRow | null
 }
 
 const EMPTY_PAGE: Omit<GuidePageModel, 'guide'> = {
   sections: [], media: [], images: [], categories: [], bookmarked: false, progress: null, related: [],
+  replacement: null, policy: null,
 }
 
 /** Everything a guide page shows, by slug. */
@@ -690,7 +760,12 @@ export async function loadGuidePage(slug: string): Promise<GuidePageModel> {
     bookmarked: marks.length > 0,
     progress: progress.get(guide.id) ?? null,
     related: all
-      .filter((o) => o.id !== guide.id && o.category === guide.category && isPublished(o) && !isArchived(o))
+      .filter((o) => o.id !== guide.id && o.category === guide.category && isCurrent(o))
       .slice(0, 4),
+    // Both resolve through the SAME list RLS already returned, so a document
+    // the reader may not see resolves to null and the link simply is not
+    // offered — no second query, and no way to probe for a hidden title.
+    replacement: all.find((o) => o.id === guide.superseded_by) ?? null,
+    policy: all.find((o) => o.id === guide.related_policy) ?? null,
   }
 }

@@ -209,6 +209,13 @@ export function guideUpsert(args: Args): Fns['guide_upsert']['Returns'] {
       id: mockId(), slug, title, summary: blank(args.p_summary),
       category: category ?? 'portal', status: 'draft', body_key: body ?? slug, pinned: false,
       body_kind: kind, audience: audience ?? 'all',
+      // The consolidated library's metadata: a new guide is an untyped
+      // 'guide' until an editor says otherwise, governs nothing, supersedes
+      // nothing and demands no acknowledgement.
+      doc_type: 'guide', issuing_authority: null, effective_date: null,
+      version_label: null, change_summary: null, superseded_by: null,
+      related_policy: null, acknowledgement_required: false,
+      acknowledgement_deadline: null, migrated_document_id: null,
       custom_roles: strArray(args.p_custom_roles) ?? [], tags: strArray(args.p_tags) ?? [],
       keywords: blank(args.p_keywords), read_minutes: readMinutes, view_count: 0,
       content_owner: blank(args.p_content_owner) ?? uid(),

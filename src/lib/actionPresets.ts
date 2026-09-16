@@ -82,7 +82,7 @@ export const ACTION_TYPE_FILTERS: readonly ActionTypeFilter[] = [
   { key: 'draft', label: 'Drafts', types: ['draft'] },
   // Library governance is navigation-only by design: acknowledging happens in
   // the reader AFTER reading — never as a one-click inline write here.
-  { key: 'library', label: 'Library', types: ['document_ack', 'document_review', 'document_approval', 'document_sync', 'document_suggestion'] },
+  { key: 'library', label: 'Library', types: ['guide_ack', 'guide_review'] },
   { key: 'registry', label: 'Registry', types: ['narcotic_suggestion', 'gang_duplicate', 'tracker_cosign'] },
   { key: 'sib', label: 'SIB', types: ['sib_access_request', 'sib_referral', 'sib_disclosure', 'sib_conflict', 'sib_watch_review'] },
   { key: 'owner', label: 'Owner signals', types: ['owner_signal'] },

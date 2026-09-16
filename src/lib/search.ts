@@ -7,6 +7,7 @@ import { caseLink } from './caseLinks'
 import { CI_STATUS_LABEL, ciSearch } from './ci'
 import { rpc } from './db'
 import { searchSubmissions } from './fieldReview'
+import { searchGuides } from './guides'
 import { REVIEW_STATUS_LABEL } from './legalWorkflow'
 import { penalCatalog, penalSentence, type PenalCharge } from './penal'
 import { activeProfiles } from './profiles'
@@ -55,7 +56,15 @@ export const SEARCH_KINDS: Record<string, { title: string; tab: string; tag: str
   narcotic:  { title: 'Narcotics',  tab: 'narcotics',  tag: 'narcotic' },
   bench:     { title: 'Ballistics', tab: 'ballistics', tag: 'ballistics' },
   footprint: { title: 'Ballistics', tab: 'ballistics', tag: 'ballistics' },
-  document:  { title: 'Documents',  tab: 'sops',       tag: 'document' },
+  /** The Guide Library — SOPs, policies, procedures, forms and reference
+   *  documents, all of it since 20261112120000. `search_all`'s arm still
+   *  answers under the name `document`; the palette maps it here rather than
+   *  to the retired /sops page. */
+  guide:     { title: 'Guide Library', tab: 'guides',   tag: 'document' },
+  /** RETIRED (20261112120000) — `search_all` still carries a `document` arm
+   *  over the old SOPs tables, which are Owner-only now. Its rows are dropped
+   *  rather than rendered: they would link into a retired area, and the same
+   *  documents are in the `guide` group above under their new address. */
   /** Platform upgrade (§5.2 Search): page hits from `document_search`
    *  (evidence documents, extracted per page — media rows, never the SOP
    *  library's `document` kind above) and `external_source_search`. Both
@@ -72,7 +81,7 @@ export const SEARCH_KINDS: Record<string, { title: string; tab: string; tag: str
   ci:        { title: 'Informants', tab: 'informants', tag: 'CI' },
 }
 
-export const SEARCH_SECTION_ORDER = ['case', 'report', 'task', 'evidence', 'operation', 'legal', 'person', 'bolo', 'gang', 'place', 'vehicle', 'account', 'narcotic', 'bench', 'document', 'document_page', 'source', 'tip', 'member', 'charge', 'ci'] as const
+export const SEARCH_SECTION_ORDER = ['case', 'report', 'task', 'evidence', 'operation', 'legal', 'person', 'bolo', 'gang', 'place', 'vehicle', 'account', 'narcotic', 'bench', 'guide', 'document_page', 'source', 'tip', 'member', 'charge', 'ci'] as const
 
 /* ── Platform upgrade: headline rendering + the two FTS row shapes ──────── */
 
@@ -263,6 +272,43 @@ export function ciHitsFromRows(rows: ReadonlyArray<{ id: string; ci_number: stri
   }))
 }
 
+
+/** Guide Library matches → palette hits.
+ *
+ *  The Guide Library was never in global search: `search_all` had an arm over
+ *  the OLD documents tables and none over guides, so consolidating the two
+ *  libraries would have made every SOP unfindable from the palette. The arm
+ *  could not simply be repointed — `search_all` is declared with a
+ *  superuser-only pg_trgm setting that `pg_get_functiondef` reproduces, so it
+ *  cannot be rewritten from its own definition — so the library joins here
+ *  instead, the way `ciHits` does.
+ *
+ *  `guides_search` is SECURITY INVOKER over `guides_sel`, so a document the
+ *  reader may not open never reaches this function; and unlike the title-only
+ *  arm it replaces, it matches SECTION TEXT, so "surveillance" finds the
+ *  paragraph that discusses it. One hit per guide — the best-ranked section. */
+export function guideHitsFromRows(
+  rows: ReadonlyArray<{ guide_id: string; slug: string; title: string; heading: string; rank: number }>,
+  max = 6,
+): SearchHit[] {
+  const seen = new Set<string>()
+  const out: SearchHit[] = []
+  for (const r of rows) {
+    if (seen.has(r.guide_id)) continue
+    seen.add(r.guide_id)
+    out.push({
+      kind: 'guide',
+      id: r.slug,
+      label: r.title,
+      sublabel: r.heading,
+      term: null,
+      rank: Math.min(0.94, 0.5 + (r.rank || 0)),
+    })
+    if (out.length >= max) break
+  }
+  return out
+}
+
 /** One round-trip cross-entity search (plus the intel-submission RPC in
  *  parallel — its failure degrades to "no tips" and never kills the search).
  *  Returns hits sorted by rank within their kind (the RPC caps at 8 per kind
@@ -275,15 +321,20 @@ export function ciHitsFromRows(rows: ReadonlyArray<{ id: string; ci_number: stri
 export async function runSearch(q: string, opts: { ci?: boolean } = {}): Promise<SearchHit[]> {
   const query = q.trim()
   if (!query) return []
-  const [res, tips, cis] = await Promise.all([
+  const [res, tips, cis, guideRows] = await Promise.all([
     rpc('search_all', { q: query }),
     // SECURITY DEFINER but readability-guarded per row; min 2 chars enforced
     // inside searchSubmissions. Tolerate failure — tips are additive.
     searchSubmissions(query).catch(() => new Map<string, string[]>()),
     opts.ci ? ciSearch(query).catch(() => []) : Promise.resolve([]),
+    // Additive and fail-soft: a library that cannot be searched must not take
+    // the rest of the palette down with it.
+    searchGuides(query, 12).catch(() => []),
   ])
   if (res.error) throw new Error(res.error.message)
-  const rows = (res.data ?? []) as SearchHit[]
+  // The retired SOPs arm is dropped here rather than server-side: see the
+  // note on the `guide` kind above.
+  const rows = ((res.data ?? []) as SearchHit[]).filter((h) => h.kind !== 'document')
   return rows
     .map((h) => (
       h.kind === 'legal' ? { ...h, sublabel: legalHitSublabel(h.sublabel) }
@@ -293,6 +344,7 @@ export async function runSearch(q: string, opts: { ci?: boolean } = {}): Promise
     .concat(memberHits(query))
     .concat(tipHitsFromMatches(tips))
     .concat(ciHitsFromRows(cis))
+    .concat(guideHitsFromRows(guideRows))
 }
 
 /** Recent-search memory — same Store key + shape as vanilla (deduped,

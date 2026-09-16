@@ -42,8 +42,7 @@ export type ActionSourceType =
   | 'task' | 'signoff' | 'returned_case' | 'transfer' | 'access_request' | 'access_expiring'
   | 'membership_request' | 'legal_request' | 'case_followup' | 'handover'
   | 'mention' | 'blocker'
-  | 'document_ack' | 'document_review' | 'document_approval' | 'document_sync'
-  | 'document_suggestion'
+  | 'guide_ack' | 'guide_review'
   | 'legal_hold'
   | 'restricted_access'
   | 'unverified_observation' | 'surveillance_expiring'
@@ -94,11 +93,8 @@ export const SOURCE_TYPE_LABEL: Record<ActionSourceType, string> = {
   handover: 'Handovers',
   mention: 'Mentions',
   blocker: 'Blockers',
-  document_ack: 'Required reading',
-  document_review: 'Policy reviews',
-  document_approval: 'Document approvals',
-  document_sync: 'Drive conflicts',
-  document_suggestion: 'Document suggestions',
+  guide_ack: 'Required reading',
+  guide_review: 'Policy reviews',
   legal_hold: 'Legal holds',
   restricted_access: 'Restricted access',
   unverified_observation: 'Observations',
@@ -390,6 +386,13 @@ export interface AcMemberTransfer {
  *  docModel (ack state, review state, approval/resolve authority) so this
  *  module stays free of component imports and every flag is unit-testable
  *  at the source. One entry per RLS-visible document that matters. */
+/** A Guide Library document that owes the reader something.
+ *
+ *  Named AcDoc still, because that is what it describes — a document. What
+ *  changed in 20261112120000 is which table they come from: the SOPs area
+ *  retired and its documents are guides now. Approvals and Google Drive sync
+ *  retired with it (guides have neither), so only the two duties that survive
+ *  the move are modelled here. */
 export interface AcDoc {
   id: string
   title: string
@@ -400,10 +403,6 @@ export interface AcDoc {
   /** reviewState(...) for docs the current user owns (else null). */
   reviewDue: 'overdue' | 'due_soon' | null
   reviewDueAt: string | null
-  /** status === 'in_review' AND the current user holds approval authority. */
-  awaitingMyApproval: boolean
-  /** sync_status === 'conflict' AND the current user may resolve it. */
-  syncConflict: boolean
   createdAt: string
   updatedAt: string
 }
@@ -734,10 +733,7 @@ function semanticKey(n: AcNotif): string | null {
   if (n.type === 'membership_request') return 'membership:pending'
   if (n.type.startsWith('legal') && p.request_id) return `legal:${p.request_id}`
   // Required-reading fan-out is covered by the structural document_ack item.
-  if (n.type === 'document_required' && p.document_id) return `document_ack:${p.document_id}`
-  // Suggestion fan-out is covered by the structural document_suggestion item
-  // (when one is owed); otherwise it stays an informational notification.
-  if (n.type === 'document_suggestion' && p.suggestion_id) return `document_suggestion:${p.suggestion_id}`
+  if (n.type === 'document_required' && p.document_id) return `guide_ack:${p.document_id}`
   // CI fan-out (§6.4): the sweep's overdue-contact ping is covered by the
   // structural contact item, a request ping by the decision item.
   if (n.type === 'ci_contact_overdue' && typeof p.ci_id === 'string') return `ci:${p.ci_id}:contact`
@@ -1267,109 +1263,40 @@ export function buildActionItems(s: ActionSources): ActionQueue {
     if (d.ackPending) {
       const dl = deadlineInfo(d.ackDeadline, 'due', { now: s.nowMs, urgentHours: 72 })
       add({
-        id: `document_ack:${d.id}`, sourceType: 'document_ack', sourceId: d.id,
+        id: `guide_ack:${d.id}`, sourceType: 'guide_ack', sourceId: d.id,
         title: d.title, summary: 'Required reading',
         reason: dl?.overdue ? `Acknowledgement is overdue — ${dl.text}`
           : dl ? `Acknowledgement due — ${dl.text}` : 'Read and acknowledge the current version',
         status: dl?.overdue ? 'overdue' : dl?.urgent ? 'due_soon' : 'needs_action',
         dueAt: d.ackDeadline, createdAt: d.createdAt, updatedAt: d.updatedAt,
-        ownerId: s.me, deepLink: `/sops?doc=${d.id}`,
+        ownerId: s.me, deepLink: `/guides?doc=${d.id}`,
         actionLabel: 'Read & acknowledge', canAct: true,
         isPersonalItem: true, isWaitingOnCurrentUser: true,
         sourceMetadata: { document_id: d.id },
-        dedupeKey: `document_ack:${d.id}`,
+        dedupeKey: `guide_ack:${d.id}`,
       })
     }
     if (d.reviewDue) {
       add({
-        id: `document_review:${d.id}`, sourceType: 'document_review', sourceId: d.id,
+        id: `guide_review:${d.id}`, sourceType: 'guide_review', sourceId: d.id,
         title: d.title, summary: 'Policy review',
         reason: d.reviewDue === 'overdue' ? 'Scheduled review is overdue' : 'Scheduled review is due soon',
         status: d.reviewDue === 'overdue' ? 'overdue' : 'due_soon',
         dueAt: d.reviewDueAt, createdAt: d.createdAt, updatedAt: d.updatedAt,
-        ownerId: s.me, deepLink: `/sops?doc=${d.id}`,
+        ownerId: s.me, deepLink: `/guides?doc=${d.id}`,
         actionLabel: 'Record review', canAct: true,
         isPersonalItem: true, isWaitingOnCurrentUser: true,
         sourceMetadata: { document_id: d.id },
-        dedupeKey: `document_review:${d.id}`,
-      })
-    }
-    if (d.awaitingMyApproval) {
-      add({
-        id: `document_approval:${d.id}`, sourceType: 'document_approval', sourceId: d.id,
-        title: d.title, summary: 'Document review',
-        reason: 'Submitted for review — your approval authority applies',
-        status: 'needs_action',
-        createdAt: d.createdAt, updatedAt: d.updatedAt,
-        deepLink: `/sops?doc=${d.id}`,
-        actionLabel: 'Review & approve', canAct: true,
-        isCommandItem: true, isWaitingOnCurrentUser: true,
-        sourceMetadata: { document_id: d.id },
-        dedupeKey: `document_approval:${d.id}`,
-      })
-    }
-    if (d.syncConflict) {
-      add({
-        id: `document_sync:${d.id}`, sourceType: 'document_sync', sourceId: d.id,
-        title: d.title, summary: 'Google Drive conflict',
-        reason: 'Portal and Drive both changed — an authorized resolution is required',
-        status: 'blocked',
-        createdAt: d.createdAt, updatedAt: d.updatedAt,
-        deepLink: `/sops?doc=${d.id}`,
-        actionLabel: 'Resolve conflict', canAct: true,
-        isCommandItem: true, isWaitingOnCurrentUser: true, nudge: 40,
-        sourceMetadata: { document_id: d.id },
-        dedupeKey: `document_sync:${d.id}`,
+        dedupeKey: `guide_review:${d.id}`,
       })
     }
   }
 
-  /* 9c · document suggestions — surfaced ONLY when action is genuinely required:
-   *      a manager owes the first triage decision on a fresh submission; the
-   *      submitter owes a reply after a request for more information; an
-   *      assigned editor owes the actual implementation of an accepted change.
-   *      Waiting/terminal states (needs-info still with the reviewer, declined,
-   *      duplicate, implemented) are informational and emit nothing here. */
-  for (const g of s.suggestions ?? []) {
-    const base = {
-      sourceType: 'document_suggestion' as const, sourceId: g.id, title: g.title,
-      createdAt: g.createdAt, updatedAt: g.updatedAt,
-      canAct: true, isWaitingOnCurrentUser: true,
-      sourceMetadata: { suggestion_id: g.id, document_id: g.documentId },
-      dedupeKey: `document_suggestion:${g.id}`,
-    }
-    if (g.canManage && !g.mine && g.status === 'submitted') {
-      add({
-        ...base, id: `document_suggestion:${g.id}`,
-        summary: 'Suggestion awaiting triage',
-        reason: 'A new suggestion needs your review decision',
-        status: 'needs_action', waitingSince: g.createdAt,
-        ownerId: s.me, responsibleRole: s.role,
-        deepLink: `/sops?view=suggestions&suggestion=${g.id}`,
-        actionLabel: 'Review', isCommandItem: true,
-      })
-    } else if (g.mine && g.status === 'needs_more_information') {
-      add({
-        ...base, id: `document_suggestion:${g.id}`,
-        summary: 'More information requested',
-        reason: 'A reviewer asked for more information on your suggestion',
-        status: 'needs_action', waitingSince: g.updatedAt,
-        ownerId: s.me,
-        deepLink: g.documentId ? `/sops?doc=${g.documentId}` : '/sops?view=suggestions',
-        actionLabel: 'Reply', isPersonalItem: true,
-      })
-    } else if (g.assignedToMe && (g.status === 'accepted' || g.status === 'partially_accepted')) {
-      add({
-        ...base, id: `document_suggestion:${g.id}`,
-        summary: 'Accepted — implement the change',
-        reason: 'You are assigned to implement this accepted suggestion',
-        status: 'needs_action', waitingSince: g.updatedAt,
-        ownerId: s.me,
-        deepLink: g.documentId ? `/sops?doc=${g.documentId}` : '/sops?view=suggestions',
-        actionLabel: 'Implement', isPersonalItem: true,
-      })
-    }
-  }
+  /* 9c · RETIRED (20261112120000) — document approvals, Google Drive sync
+   *      conflicts and the change-suggestion workflow left with the SOPs
+   *      area. Approvals and sync have no equivalent on a guide, and the
+   *      suggestion workflow never carried a row in production. Required
+   *      reading and policy review survive, above, over the Guide Library. */
 
   /* 9d · legal holds — a case under an active preservation lock is a standing
    *      command concern: informational (nothing is overdue), but it stays in
