@@ -381,3 +381,115 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
   color: #93c5fd;
 }
 .inv-map-popup-link:hover { text-decoration: underline; }
+
+/* ── Documentation prose ────────────────────────────────────────────────────
+ * `.prose-guide` wraps every rendered document in the Guide Library — SOPs,
+ * policies, procedures, guides, forms, references and training alike.
+ *
+ * It was referenced in five components and DEFINED NOWHERE, which is why long
+ * SOPs read as a wall: the renderer emits sensible per-element classes, but
+ * nothing established a rhythm ACROSS them, gave headings a hierarchy tall
+ * enough to survive a 39,000-character document, or stopped a paragraph
+ * running the full width of a monitor.
+ *
+ * The rules live here rather than in the renderer because they are about
+ * READING — measure, rhythm, hierarchy — and the renderer is shared with case
+ * notes and report narratives, which sit in narrow columns already and want
+ * none of this.
+ *
+ * Specificity: a descendant selector (0,1,1) outranks a Tailwind utility
+ * (0,1,0), so these win over the renderer's inline classes without !important.
+ */
+
+/* A measure for prose, and only prose. Past roughly 75 characters the eye
+   loses its place on the return sweep. Tables, figures and anything that
+   scrolls are exempt — narrowing a wide table just moves the problem. */
+.prose-guide > p,
+.prose-guide > ul,
+.prose-guide > ol,
+.prose-guide > blockquote {
+  max-width: 72ch;
+}
+
+/* Headings, with enough contrast between levels to be scannable at a glance.
+   h2 gains a hairline above it: a divider is cheaper than a box and gives a
+   long document the section breaks it needs without drawing 40 rectangles. */
+.prose-guide h2 {
+  margin-top: 2.25rem;
+  margin-bottom: 0.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgb(255 255 255 / 0.07);
+  font-size: 1.125rem;
+  line-height: 1.4;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+.prose-guide h2:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.prose-guide h3 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #93c5fd;
+}
+
+/* Rhythm. Paragraphs breathe; a paragraph immediately under a heading does
+   not, because the gap already exists above the heading. */
+.prose-guide p { margin-block: 0.75rem; line-height: 1.7; }
+.prose-guide h2 + p,
+.prose-guide h3 + p,
+.prose-guide h2 + ul,
+.prose-guide h3 + ul,
+.prose-guide h2 + ol,
+.prose-guide h3 + ol { margin-top: 0; }
+
+/* Lists, including nested ones. The old rendering indented the first level
+   and then lost the thread: a sub-requirement sat at the same margin as its
+   parent, so a numbered SOP clause and its exceptions read as siblings. */
+.prose-guide ul,
+.prose-guide ol { margin-block: 0.75rem; padding-left: 1.5rem; }
+.prose-guide li { margin-block: 0.35rem; line-height: 1.65; }
+.prose-guide li > ul,
+.prose-guide li > ol {
+  margin-block: 0.35rem;
+  padding-left: 1.25rem;
+}
+/* A nested level is visibly subordinate, not just further right. */
+.prose-guide li > ul > li { list-style-type: circle; }
+.prose-guide li > ul > li > ul > li { list-style-type: square; }
+.prose-guide ol { list-style-type: decimal; }
+.prose-guide li > ol > li { list-style-type: lower-alpha; }
+.prose-guide li > ol > li > ol > li { list-style-type: lower-roman; }
+.prose-guide li::marker { color: #64748b; }
+
+/* Quotes are asides, not warnings. They were gold because everything was. */
+.prose-guide blockquote {
+  margin-block: 1rem;
+  border-left: 2px solid rgb(255 255 255 / 0.14);
+  background: rgb(255 255 255 / 0.03);
+  color: #cbd5e1;
+}
+
+/* Nothing in a document may scroll the PAGE sideways. A wide table scrolls
+   inside its own frame; long unbroken strings wrap instead of pushing. */
+.prose-guide { overflow-wrap: anywhere; }
+.prose-guide table { min-width: 32rem; }
+
+/* Phone: the measure is the viewport, and the rhythm tightens so a short
+   screen is not mostly gaps. Text size does NOT shrink — small text on a
+   phone is the complaint, not the fix. */
+@media (max-width: 640px) {
+  .prose-guide h2 { margin-top: 1.75rem; padding-top: 1rem; font-size: 1.0625rem; }
+  .prose-guide h3 { margin-top: 1.25rem; }
+  .prose-guide ul,
+  .prose-guide ol { padding-left: 1.25rem; }
+  .prose-guide li > ul,
+  .prose-guide li > ol { padding-left: 1rem; }
+}

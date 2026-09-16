@@ -56,7 +56,7 @@ function FilterChip({ on, label, onClick }: { on: boolean; label: string; onClic
       type="button"
       onClick={onClick}
       aria-pressed={on}
-      className={`${CHIP} ${on ? CHIP_DONE : CHIP_NEUTRAL} transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300`}
+      className={`${CHIP} ${on ? CHIP_DONE : CHIP_NEUTRAL} transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
     >
       {on && <span aria-hidden>✓</span>}
       {label}
@@ -379,7 +379,7 @@ export function GuideLibraryView() {
                 id="guide-sort"
                 value={sort}
                 onChange={(e) => setSort(e.target.value as GuideSort)}
-                className="rounded-lg border border-white/10 bg-ink-900 px-2 py-1 text-xs text-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
+                className="rounded-lg border border-white/10 bg-ink-900 px-2 py-1 text-xs text-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 {GUIDE_SORTS.map((s) => <option key={s} value={s}>{GUIDE_SORT_LABEL[s]}</option>)}
               </select>
@@ -417,7 +417,7 @@ export function GuideLibraryView() {
                     <button
                       type="button"
                       onClick={() => router.push(`/guides/${h.slug}#${h.anchor}`)}
-                      className={`${SLAB} w-full px-3 py-2 text-left transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300`}
+                      className={`${SLAB} w-full px-3 py-2 text-left transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
                     >
                       <p className="flex flex-wrap items-center gap-2">
                         <span className={`text-sm font-semibold ${GOLD_TEXT}`}>{h.title}</span>
@@ -471,7 +471,7 @@ export function GuideLibraryView() {
                     <li key={g.id} className="flex flex-wrap items-center justify-between gap-2">
                       <button
                         onClick={() => open(g)}
-                        className="rounded text-sm font-semibold text-badge-200 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
+                        className="rounded text-sm font-semibold text-badge-200 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                       >
                         {g.title}
                       </button>
@@ -492,7 +492,7 @@ export function GuideLibraryView() {
                       key={category.slug}
                       type="button"
                       onClick={() => setCats(new Set([category.slug]))}
-                      className={`${SLAB} px-3 py-2 text-left transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300`}
+                      className={`${SLAB} px-3 py-2 text-left transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
                     >
                       <span className="text-sm font-semibold text-slate-100">{category.label}</span>
                       <span className="ml-2 text-xs text-slate-500">{guides.length}</span>

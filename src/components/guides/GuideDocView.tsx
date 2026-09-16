@@ -106,7 +106,7 @@ function Block({ block, onOpen }: { block: GuideBlock; onOpen?: (to: string) => 
       )
     case 'ol':
       return (
-        <ol className="flex list-decimal flex-col gap-1.5 pl-5 text-sm leading-relaxed text-slate-300 marker:font-semibold marker:text-amber-200/70">
+        <ol className="flex list-decimal flex-col gap-1.5 pl-5 text-sm leading-relaxed text-slate-300 marker:font-semibold marker:text-accent">
           {block.items.map((t, i) => <li key={i}>{inline(t)}</li>)}
         </ol>
       )
@@ -155,10 +155,10 @@ function Block({ block, onOpen }: { block: GuideBlock; onOpen?: (to: string) => 
               <button
                 type="button"
                 onClick={() => onOpen?.(l.to)}
-                className="rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-1.5 text-left text-xs font-semibold text-amber-100 transition hover:bg-amber-500/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
+                className="rounded-lg border border-white/10 bg-ink-900/60 px-3 py-1.5 text-left text-xs font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 {l.label}
-                {l.hint && <span className="ml-1.5 font-normal text-amber-200/70">{l.hint}</span>}
+                {l.hint && <span className="ml-1.5 font-normal text-slate-400">{l.hint}</span>}
               </button>
             </li>
           ))}

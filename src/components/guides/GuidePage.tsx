@@ -34,9 +34,8 @@ import { fmtDate } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { renderDocumentMarkdown, renderMarkdown, type DocHeading } from '@/lib/markdown'
 import {
-  categoryLabelFrom, guideAudienceLabel,
-  guideClassification, guideDocTypeLabel, isArchived, isPublished, isSuperseded,
-  isRestrictedAudience, isUpdatedSinceSeen, listGuideMedia, loadGuidePage, markGuideComplete,
+  categoryLabelFrom, guideDocTypeLabel, isSuperseded,
+  isUpdatedSinceSeen, listGuideMedia, loadGuidePage, markGuideComplete,
   markGuideOutdated, recordGuideView, resolveGuideImages, submitGuideFeedback, toggleGuideBookmark,
   type GuideCategoryRow, type GuideFeedbackKind, type GuideImage, type GuideMediaRow,
   type GuideProgressRow, type GuideRow, type GuideSectionRow,
@@ -48,12 +47,15 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { DocToc, scrollToHeading, useActiveHeading } from '@/components/shared/DocToc'
+import { Collapsible } from '@/components/ui/Collapsible'
 import { useNav } from '@/components/shell/useNav'
-import { GuideHeader, GuideSection } from './GuideParts'
+import { GuideCover, GuideSection } from './GuideParts'
+import { DocumentHeader } from './DocumentHeader'
+import { DocCallout } from './DocCallout'
 import { GuideDocView } from './GuideDocView'
 import { GuideMediaManager, type GuideMediaSlot } from './GuideMediaManager'
 import { GuideAcknowledgement, guideOffersAcknowledgement } from './GuideAcknowledgement'
-import { CHIP, CHIP_DONE, CHIP_LOCKED, CHIP_NEUTRAL, CHIP_TYPE, GOLD_TEXT, GUIDE_CANVAS, PANEL, SLAB, WARN } from './guideSurfaces'
+import { GOLD_TEXT, GUIDE_CANVAS, PANEL, SLAB, WARN } from './guideSurfaces'
 import { guideBody } from './guideRegistry'
 
 /** Reading estimate for a guide whose prose lives in the database. Same rule
@@ -187,7 +189,6 @@ export function GuidePage({ slug }: { slug: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
-  const [tocOpen, setTocOpen] = useState(false)
   // Set once the reader marks the guide read or unread in this visit, so
   // the chip answers immediately without re-reading the progress row.
   const [doneOverride, setDoneOverride] = useState<boolean | null>(null)
@@ -279,7 +280,6 @@ export function GuidePage({ slug }: { slug: string }) {
   )
 
   const jump = useCallback((id: string) => {
-    setTocOpen(false)
     scrollToHeading(id)
     if (row) void recordGuideView(row.id, id)
   }, [row])
@@ -416,7 +416,6 @@ export function GuidePage({ slug }: { slug: string }) {
   const readMinutes = body?.readMinutes ?? row.read_minutes ?? dbReadMinutes(dbSections)
   const done = doneOverride ?? !!progress?.completed_at
   const changed = isUpdatedSinceSeen(row, progress ?? undefined)
-  const classification = guideClassification(row.audience)
   const idx = active ? sections.findIndex((s) => s.id === active) : -1
   const prev = idx > 0 ? sections[idx - 1] : null
   const next = idx >= 0 && idx < sections.length - 1 ? sections[idx + 1] : null
@@ -448,94 +447,47 @@ export function GuidePage({ slug }: { slug: string }) {
         )}
 
         <div className="flex min-w-0 flex-1 flex-col gap-5">
-          <GuideHeader
-            title={row.title}
-            summary={row.summary ?? undefined}
-            lastUpdated={body?.lastUpdated ?? row.updated_at}
-            lastUpdatedText={fmtDate(body?.lastUpdated ?? row.updated_at)}
+          {/* The cover, when a guide has one. Above the header rather than
+              inside it: a header is a contract every document keeps, and most
+              documents have no cover. */}
+          <GuideCover image={cover} />
+
+          <DocumentHeader
+            row={row}
+            categoryLabel={categoryLabelFrom(cats, row.category)}
             actions={crumbs}
-            note={body?.note}
-            cover={cover}
+            readMinutes={readMinutes}
           />
 
-          {/* Classification, once, where the reader starts — not repeated
-              between every section the way an issued document does on paper.
-              Driven by `audience`, which is the column the SELECT policy
-              enforces, so the banner cannot promise a wall that is not there. */}
-          {classification && (
-            <p className={`${WARN} px-4 py-3 text-sm font-semibold`} role="note">
-              <span className="uppercase tracking-wide">{classification}.</span>{' '}
-              <span className="font-normal">Do not distribute outside the authorized audience.</span>
-            </p>
-          )}
+          {/* The document's own standing note, where its module supplies one. */}
+          {body?.note && <DocCallout kind="info">{body.note}</DocCallout>}
 
-          {/* Superseded: say it before the prose, and name the replacement.
-              A reader who lands here from an old link must not read a retired
+          {/* Superseded: say it before the prose, and name the replacement. A
+              reader who lands here from an old link must not read a retired
               policy believing it is in force. */}
           {isSuperseded(row) && (
-            <div className={`${WARN} px-4 py-3 text-sm`} role="status">
-              <p className="font-semibold">This document has been superseded.</p>
-              <p className="mt-1 font-normal">
+            <DocCallout kind="warning" title="This document has been superseded">
+              <p>
                 It is kept as the record of what the rules were. For the rules in force now,{' '}
                 {replacement
-                  ? <a className="underline underline-offset-2" href={`/guides/${replacement.slug}`}>read {replacement.title}</a>
+                  ? <a href={`/guides/${replacement.slug}`}>read {replacement.title}</a>
                   : 'see the current document in the library'}.
                 {row.change_summary ? ` ${row.change_summary}` : ''}
               </p>
-            </div>
+            </DocCallout>
           )}
 
-          {/* The form's governing policy. A form filled in without its rules is
-              a form filled in wrongly. */}
+          {/* A form filled in without its rules is a form filled in wrongly. */}
           {policy && (
-            <p className={`${SLAB} px-4 py-3 text-sm text-slate-300`}>
-              Governed by{' '}
-              <a className="font-semibold text-white underline underline-offset-2" href={`/guides/${policy.slug}`}>
-                {policy.title}
-              </a>
-              {policy.doc_type ? ` · ${guideDocTypeLabel(policy.doc_type)}` : ''}
-            </p>
+            <DocCallout kind="info" title="Governing policy">
+              <p>
+                This {guideDocTypeLabel(row.doc_type).toLowerCase()} is governed by{' '}
+                <a href={`/guides/${policy.slug}`}>{policy.title}</a>
+                {policy.doc_type ? ` (${guideDocTypeLabel(policy.doc_type)})` : ''}.
+              </p>
+            </DocCallout>
           )}
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`${CHIP} ${CHIP_TYPE}`}>{guideDocTypeLabel(row.doc_type)}</span>
-            <span className={`${CHIP} ${CHIP_NEUTRAL}`}>{categoryLabelFrom(cats, row.category)}</span>
-            <span className={`${CHIP} ${CHIP_NEUTRAL}`}>~{readMinutes} min read</span>
-            {!isPublished(row) && <span className={`${CHIP} ${CHIP_NEUTRAL}`}>Draft</span>}
-            {isArchived(row) && <span className={`${CHIP} ${CHIP_NEUTRAL}`}>Archived</span>}
-            {row.pinned && <span className={`${CHIP} ${CHIP_DONE}`}>Pinned</span>}
-            {isRestrictedAudience(row.audience) && (
-              <span className={`${CHIP} ${CHIP_LOCKED}`} title={guideAudienceLabel(row.audience)}>Restricted</span>
-            )}
-            {done && <span className={`${CHIP} ${CHIP_DONE}`}>Read</span>}
-          </div>
-
-          {/* Document metadata — the questions an issued document has to answer
-              about itself. Rendered only when a document actually carries
-              them: an ordinary how-to guide has no issuing authority, and a
-              row of empty labels is worse than no row. */}
-          {(row.issuing_authority || row.effective_date || row.version_label) && (
-            <dl className={`${SLAB} grid gap-x-6 gap-y-2 px-4 py-3 sm:grid-cols-3`}>
-              {row.issuing_authority && (
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Issuing authority</dt>
-                  <dd className="mt-0.5 text-sm text-slate-200">{row.issuing_authority}</dd>
-                </div>
-              )}
-              {row.effective_date && (
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Effective</dt>
-                  <dd className="mt-0.5 text-sm text-slate-200">{fmtDate(row.effective_date)}</dd>
-                </div>
-              )}
-              {row.version_label && (
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Version</dt>
-                  <dd className="mt-0.5 text-sm text-slate-200">{row.version_label}</dd>
-                </div>
-              )}
-            </dl>
-          )}
 
           {changed && (
             <p className={`${SLAB} px-4 py-3 text-sm text-slate-300`} role="status">
@@ -567,10 +519,21 @@ export function GuidePage({ slug }: { slug: string }) {
                   )}
                 </Field>
               </div>
-              <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => setTocOpen(true)}>
-                Sections
-              </Button>
             </div>
+          )}
+
+          {/* Contents on a narrow screen. The desktop rail cannot follow you
+              down a phone, and a bare "Sections" button hides both where you
+              are and how much is left. This names the section you are in and
+              opens the whole list in place. */}
+          {sections.length > 1 && (
+            <Collapsible
+              className="lg:hidden"
+              title="Contents"
+              hint={active ? sections.find((h) => h.id === active)?.text : `${sections.length} sections`}
+            >
+              <DocToc headings={sections} activeId={active} onSelect={jump} size="sheet" />
+            </Collapsible>
           )}
 
           {query.trim() && (
@@ -685,7 +648,7 @@ export function GuidePage({ slug }: { slug: string }) {
                     <button
                       type="button"
                       onClick={() => router.push(`/guides/${g.slug}`)}
-                      className={`${SLAB} w-full px-3 py-2 text-left hover:border-amber-400/30`}
+                      className={`${SLAB} w-full px-3 py-2 text-left hover:border-white/20`}
                     >
                       <span className={`block text-sm font-semibold ${GOLD_TEXT}`}>{g.title}</span>
                       {g.summary && <span className="mt-0.5 block text-xs text-slate-400">{g.summary}</span>}
@@ -707,12 +670,6 @@ export function GuidePage({ slug }: { slug: string }) {
       </div>
 
       {/* Mobile section menu. */}
-      <Modal open={tocOpen} onClose={() => setTocOpen(false)} slide>
-        <ModalHeader title="Sections" onClose={() => setTocOpen(false)} />
-        <div className="p-3">
-          <DocToc headings={sections} activeId={active} onSelect={jump} size="sheet" />
-        </div>
-      </Modal>
 
       <Modal open={outdatedOpen} onClose={() => setOutdatedOpen(false)}>
         <ModalHeader title="Flag as out of date" onClose={() => setOutdatedOpen(false)} />

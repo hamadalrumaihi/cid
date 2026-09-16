@@ -91,51 +91,6 @@ export function GuideImages({ images }: { images: readonly GuideImageRef[] }) {
 
 /* ---- header -------------------------------------------------------------- */
 
-export interface GuideHeaderProps {
-  title: string
-  summary?: string
-  /** ISO date of the last review. */
-  lastUpdated?: string
-  /** Rendered date — the caller formats it, so this file imports no locale. */
-  lastUpdatedText?: string
-  /** Breadcrumbs, a back action, a bookmark control — supplied by the page. */
-  actions?: React.ReactNode
-  /** The one-line statement that this document is not live. */
-  note?: string
-  cover?: GuideImageRef | null
-}
-
-/** A guide's masthead. Deliberately carries NO author, rank, source or
- *  confidence field: a guide is reference material, and attributing it to a
- *  person invites reading it as a personal claim rather than a description. */
-export function GuideHeader({
-  title, summary, lastUpdated, lastUpdatedText, actions, note, cover = null,
-}: GuideHeaderProps) {
-  return (
-    <header className="flex flex-col gap-4">
-      {actions}
-      <div className="flex flex-col gap-2">
-        <h1 className={`text-2xl font-black uppercase tracking-[0.18em] sm:text-3xl ${GOLD_TEXT}`}>
-          {title}
-        </h1>
-        {summary && <p className="max-w-3xl text-sm text-slate-300">{summary}</p>}
-        {lastUpdatedText && (
-          <p className="text-xs text-slate-500">
-            Last updated{' '}
-            <time dateTime={lastUpdated}>{lastUpdatedText}</time>
-          </p>
-        )}
-      </div>
-      <GuideCover image={cover} />
-      {note && (
-        <p className={`${SLAB} px-4 py-3 text-xs leading-relaxed text-slate-400`}>{note}</p>
-      )}
-    </header>
-  )
-}
-
-/* ---- section ------------------------------------------------------------- */
-
 export interface GuideSectionProps {
   /** DOM id — also the anchor target and the table-of-contents key. */
   id: string
