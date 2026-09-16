@@ -5,9 +5,18 @@
  *
  *  Handles: \r\n, # headings, **bold**, `code`, > note blocks, -/1. lists,
  *  Markdown tables (|:-:| separators), bare pipe-delimited data blocks, and
- *  the short-ALL-CAPS / colon-terminated heading heuristic. */
+ *  the short-ALL-CAPS / colon-terminated heading heuristic.
+ *
+ *  Document mode (renderDocumentMarkdown) adds what a policy needs and a case
+ *  note does not: a THIRD heading level (`####`, for "5C.3" under "5C" under
+ *  "Title 5"), contextual callouts written as GitHub-style alerts
+ *  (`> [!IMPORTANT] Title` — the six DocCallout kinds, plus RELATED and
+ *  PROCEDURE as titled information), and links between documents
+ *  (`[text](/guides/<slug>#anchor)`). Legacy mode renders a `[!…]` quote as
+ *  the plain quote it always was. */
 import type { ReactNode } from 'react'
 import { EntityLink } from '@/components/ui/EntityLink'
+import { DocCallout, type CalloutKind } from '@/components/guides/DocCallout'
 import { MENTION_RE, RESTRICTED_LABEL, isMentionKind, isMentionLinkKind, mentionKey, type MentionLabels } from './mentions'
 
 /** Mention resolution for the read-only render (P5-05): the label map the
@@ -33,17 +42,26 @@ function mentionNode(kind: string, id: string, labels: MentionLabels, key: numbe
   return <span key={key} className="text-slate-400" aria-busy="true">Resolving record…</span>
 }
 
-/** Inline **bold**, `code`, and [label](https://…) links within an
- *  escaped-by-React text run. Links are http(s)-only by the tokenizer's own
- *  pattern — any other scheme stays plain text, so javascript:/data: URLs
- *  can never become an href. */
+/** A link target the renderer will turn into an href: an absolute http(s)
+ *  URL, or a root-relative path INTO THE GUIDE LIBRARY — `/guides/<slug>`,
+ *  optionally with a `#section`. Nothing else: the pattern is the whole
+ *  allow-list, so `javascript:`, `data:`, protocol-relative `//` and every
+ *  other path on the portal stay plain text. A policy naming the form filled
+ *  in under it is the reason the second shape exists. */
+const LINK_TARGET = 'https?:\\/\\/[^\\s)]+|\\/guides\\/[a-z0-9]+(?:-[a-z0-9]+)*(?:#[a-z0-9-]+)?'
+const LINK_TOKEN = `\\[[^\\]\\n]+\\]\\((?:${LINK_TARGET})\\)`
+const LINK_PARSE = new RegExp(`^\\[([^\\]]+)\\]\\((${LINK_TARGET})\\)$`)
+
+/** Inline **bold**, `code`, and [label](href) links within an
+ *  escaped-by-React text run. Links are limited to LINK_TARGET by the
+ *  tokenizer's own pattern — any other scheme or path stays plain text. */
 function inline(t: string, labels: MentionLabels | null = null): ReactNode[] {
   const out: ReactNode[] = []
-  // Tokenize on **bold**, `code`, [text](http…) links and — only when a
+  // Tokenize on **bold**, `code`, [text](href) links and — only when a
   // resolver is present — [kind:id] mention tokens, preserving order.
   const re = labels
-    ? new RegExp(`(\\*\\*[^*]+\\*\\*|\`[^\`]+\`|\\[[^\\]\\n]+\\]\\(https?:\\/\\/[^\\s)]+\\)|${MENTION_RE.source})`, 'gi')
-    : /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\))/g
+    ? new RegExp(`(\\*\\*[^*]+\\*\\*|\`[^\`]+\`|${LINK_TOKEN}|${MENTION_RE.source})`, 'gi')
+    : new RegExp(`(\\*\\*[^*]+\\*\\*|\`[^\`]+\`|${LINK_TOKEN})`, 'g')
   let last = 0
   let m: RegExpExecArray | null
   let k = 0
@@ -53,9 +71,18 @@ function inline(t: string, labels: MentionLabels | null = null): ReactNode[] {
     if (tok.startsWith('**')) out.push(<strong key={k++}>{tok.slice(2, -2)}</strong>)
     else if (labels && m[2] && m[3]) out.push(mentionNode(m[2].toLowerCase(), m[3].toLowerCase(), labels, k++))
     else if (tok.startsWith('[')) {
-      const link = /^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/.exec(tok) as RegExpExecArray
+      const link = LINK_PARSE.exec(tok) as RegExpExecArray
+      const internal = link[2].startsWith('/')
+      // An internal link stays in this tab: it is the same portal, and a
+      // reader following a policy to its form expects the back button to
+      // bring the policy back.
       out.push(
-        <a key={k++} href={link[2]} target="_blank" rel="noreferrer" className="text-blue-300 underline decoration-blue-300/40 underline-offset-2 transition hover:text-blue-200">
+        <a
+          key={k++}
+          href={link[2]}
+          {...(internal ? {} : { target: '_blank', rel: 'noreferrer' })}
+          className="text-blue-300 underline decoration-blue-300/40 underline-offset-2 transition hover:text-blue-200"
+        >
           {link[1]}
         </a>,
       )
@@ -125,8 +152,11 @@ const H3 = ({ children }: { children: ReactNode }) => (
 )
 
 /** One heading the document renderer emitted — the TOC consumes exactly this
- *  list, produced during the SAME render pass (never a second parser). */
-export interface DocHeading { id: string; text: string; level: 2 | 3 }
+ *  list, produced during the SAME render pass (never a second parser).
+ *  Level 4 is a sub-clause ("5C.3" under "5C"): anchored and scroll-spied
+ *  like the others, but the contents rail lists levels 2–3 only — forty
+ *  clause numbers is an index, not a table of contents. */
+export interface DocHeading { id: string; text: string; level: 2 | 3 | 4 }
 
 /** Deterministic, URL-safe anchor id; uniqueness handled by the collector. */
 const slugify = (t: string): string =>
@@ -138,23 +168,43 @@ interface HeadingCollector { used: Map<string, number>; out: DocHeading[] }
 
 /** Emit a heading. Legacy mode (no collector) keeps the exact pre-doc-mode
  *  rendering — one styled visual h3, no ids — so case notes are unchanged.
- *  Doc mode maps #/## and heuristic headings to a semantic <h2> and ###+ to
- *  <h3>, each with a stable unique id for TOC/anchor navigation. */
+ *  Doc mode maps #/## and heuristic headings to a semantic <h2>, ### to
+ *  <h3> and ####+ to <h4>, each with a stable unique id for TOC/anchor
+ *  navigation. */
 function heading(raw: string, mdLevel: number | null, collect: HeadingCollector | null, key: number, labels: MentionLabels | null): ReactNode {
   if (!collect) return <H3 key={key}>{inline(raw, labels)}</H3>
-  const level: 2 | 3 = mdLevel !== null && mdLevel >= 3 ? 3 : 2
+  const level: 2 | 3 | 4 = mdLevel === null || mdLevel <= 2 ? 2 : mdLevel === 3 ? 3 : 4
   const text = raw.replace(/\*\*|`/g, '').trim()
   const base = slugify(text)
   const n = collect.used.get(base) ?? 0
   collect.used.set(base, n + 1)
   const id = n === 0 ? base : `${base}-${n + 1}`
   collect.out.push({ id, text, level })
-  return level === 2 ? (
-    <h2 key={key} id={id} className="mb-2 mt-7 scroll-mt-24 text-base font-bold text-white first:mt-0">{inline(raw, labels)}</h2>
-  ) : (
-    <h3 key={key} id={id} className="mb-2 mt-5 scroll-mt-24 text-sm font-bold uppercase tracking-wider text-blue-300/90 first:mt-0">{inline(raw, labels)}</h3>
-  )
+  if (level === 2) {
+    return <h2 key={key} id={id} className="mb-2 mt-7 scroll-mt-24 text-base font-bold text-white first:mt-0">{inline(raw, labels)}</h2>
+  }
+  if (level === 3) {
+    return <h3 key={key} id={id} className="mb-2 mt-5 scroll-mt-24 text-sm font-bold uppercase tracking-wider text-blue-300/90 first:mt-0">{inline(raw, labels)}</h3>
+  }
+  return <h4 key={key} id={id} className="mb-1.5 mt-4 scroll-mt-24 text-sm font-semibold text-slate-100 first:mt-0">{inline(raw, labels)}</h4>
 }
+
+/** `> [!KIND] Optional title` — the first line of a quote block that makes
+ *  it a callout in document mode. The six DocCallout kinds by name (with the
+ *  aliases a writer will reach for), plus two titled information callouts
+ *  the policies use constantly: RELATED (the forms and guides that belong
+ *  with a section) and PROCEDURE (a rule that lives in another document). */
+const CALLOUT_KINDS: Record<string, { kind: CalloutKind; title?: string }> = {
+  NOTE: { kind: 'info' }, INFO: { kind: 'info' }, INFORMATION: { kind: 'info' },
+  IMPORTANT: { kind: 'important' },
+  WARNING: { kind: 'warning' }, CAUTION: { kind: 'warning' },
+  RESTRICTED: { kind: 'restricted' },
+  TIME: { kind: 'time' }, DEADLINE: { kind: 'time' },
+  COMMAND: { kind: 'command' },
+  RELATED: { kind: 'info', title: 'Related documents' },
+  PROCEDURE: { kind: 'info', title: 'Procedure reference' },
+}
+const CALLOUT_HEAD = /^\[!([A-Za-z]+)\]\s*(.*)$/
 
 /** Reduce a line to the letters and digits in it, lowercased — so
  *  "CRIMINAL INVESTIGATION DIVISION (CID) STANDARD OPERATING PROCEDURE",
@@ -223,8 +273,13 @@ function renderBlocks(body: string | null | undefined, collect: HeadingCollector
   const blocks = norm.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean)
   if (!blocks.length) return <p className="text-slate-500">No content.</p>
 
+  // The ALL-CAPS / colon heuristic exists for the documents that came out of
+  // a word processor with no heading markup at all. A document that authored
+  // its own `#` headings has said where its headings are, and guessing more
+  // of them turns every "Duties include:" into a table-of-contents entry.
+  const explicit = /^#{1,6}\s/m.test(norm)
   const isHeadingText = (t: string) =>
-    t.length <= 64 && ((t === t.toUpperCase() && /[A-Z]/.test(t)) || /:$/.test(t)) && !t.includes('|')
+    !explicit && t.length <= 64 && ((t === t.toUpperCase() && /[A-Z]/.test(t)) || /:$/.test(t)) && !t.includes('|')
 
   return blocks.map((b, bi) => {
     const lines = b.split('\n').map((l) => l.trim()).filter(Boolean)
@@ -232,12 +287,28 @@ function renderBlocks(body: string | null | undefined, collect: HeadingCollector
     // Markdown heading / quote blocks.
     if (/^#{1,6}\s/.test(lines[0]) && lines.length === 1)
       return heading(lines[0].replace(/^#{1,6}\s+/, ''), (lines[0].match(/^#+/) as RegExpMatchArray)[0].length, collect, bi, labels)
-    if (lines.every((l) => /^>\s?/.test(l)))
+    if (lines.every((l) => /^>\s?/.test(l))) {
+      const quoted = lines.map((l) => l.replace(/^>\s?/, ''))
+      const head = collect ? CALLOUT_HEAD.exec(quoted[0]) : null
+      const spec = head ? CALLOUT_KINDS[head[1].toUpperCase()] : undefined
+      if (head && spec) {
+        // The rest of the block is rendered with the same classifier, so a
+        // callout can carry a list or several paragraphs. The block splitter
+        // has already cut on blank lines, so a paragraph break INSIDE a
+        // callout is written as a bare `>` line — it strips to "" here.
+        const inner = quoted.slice(1).join('\n')
+        return (
+          <DocCallout key={bi} kind={spec.kind} title={head[2].trim() || spec.title} className="my-3">
+            {inner.trim() ? renderBlocks(inner, collect, labels) : null}
+          </DocCallout>
+        )
+      }
       return (
         <blockquote key={bi} className="my-3 rounded-lg border-l-2 border-amber-500/50 bg-amber-500/5 px-3 py-2 text-sm text-amber-100/90">
-          {inline(lines.map((l) => l.replace(/^>\s?/, '')).join(' '), labels)}
+          {inline(quoted.join(' '), labels)}
         </blockquote>
       )
+    }
     // Lists.
     if (lines.length > 1 && lines.every((l) => /^([-*•]|\d+[.)])\s/.test(l))) {
       const ordered = /^\d/.test(lines[0])

@@ -8,6 +8,72 @@ the merged PRs that compose it.
 
 ## [Unreleased]
 
+### CID Standard Operating Procedure — content correction, version 3
+
+The active CID SOP (`cid-standard-operating-procedure`) is corrected in place
+and published as **version 3** (`20261113120000_cid_sop_v3`). The superseded
+June 2026 SOP is untouched. Version 2's text is preserved as a revision before
+the change and version 3 recorded as one after it, so both are restorable.
+
+- **The division as it is.** Title 1C now describes the Major Crimes Bureau,
+  the Street Crimes Bureau, the compartmentalized Special Investigations
+  Bureau (appointment-only, governed by its own SOP and access controls), and
+  JTF as a temporary joint-case designation with a lead and participating
+  bureaus. The LSPD / BCSO / SAHP jurisdiction structure is gone from the
+  active text; case identifiers issued under it stay historical. The mission
+  statement no longer names a Firearms & Drug Enforcement bureau.
+- **Numbering.** Title 2C's clauses are 2C.1 / 2C.2 (they read 2B.2 / 2B.3).
+  Title 7 is 7A / 7B / 7C — the imported text had 7A, 7C, 7D and no 7B, an
+  export artifact rather than a retired section. The rank order is stated
+  once at the head of Title 2.
+- **Undercover policy.** Title 7A is a concise reference to the CID Undercover
+  Operations Procedure, which governs. The old certification regime — the
+  two-operation prerequisite, Bureau Lead plus Command certification, the
+  Bureau Lead as automatic handler, the old reporting and closure rules — is
+  not carried anywhere, and the conversational UC sentences in the vehicle
+  and attire sections are gone.
+- **Vehicles.** Personal vehicles are no longer listed among CID fleet
+  vehicles; 3A.4 states on its own when one may be used (surveillance or an
+  authorized undercover operation) and what it may never do.
+- **Justice roles.** The Assistant District Attorney, District Attorney and
+  prosecutor are retired in the portal. Wiretap authority (7B) and the DOJ
+  liaison (8C) describe the current path — the responsible Bureau Lead as
+  the CID gate, a Judge as the deciding authority, the Attorney General for
+  oversight and sealed assignments.
+- **Aligned with what the portal enforces**, stated as policy rather than
+  bent to fit software: evidence access follows case access, restricted items
+  to command, every access logged (5C.3); case status (Open / Cold / Closed /
+  Archived) is distinguished from the portal's investigative stage (5A.4);
+  the CI policy names the compartment's oversight roles (Bureau Leads, the
+  Deputy Director, the Director, active SIB members), capacity six with
+  recorded overrides, the CI number and codename, and sanitized release as the
+  only route from a source to a case (6A.2, 6A.4, 6B.4, 6D.2, 11B) — identity
+  protection is not weakened; surveillance (7C) separates trackers / GPS,
+  camera and audio monitoring and electronic intercepts, with authorization
+  from a Bureau Lead over the case's bureau, the Deputy Director or the
+  Director and never the requester.
+- **Policy, not tutorial.** Ticket procedure (5D) states the responsibility
+  and drops the Discord rename instructions; the how-to lives in the guides
+  the section now links.
+- **Formatting.** The "Tab 1" line, the underscore rules, the restated title,
+  the broken nested bullet in 9C, the tab-separated compensation table and
+  the unnumbered sub-headings are corrected. Callouts mark the twelve-hour
+  reporting rule, the evidence-destruction prohibition, CI confidentiality
+  and the UC procedure reference; each Title links its related guides and
+  forms. Two forms gain `related_policy` = the SOP (the CID Investigative
+  Report and the Raid Seizure Value Distribution & Allocation Form).
+- **Renderer.** Document mode gains a third heading level (`####` → `h4`,
+  anchored and scroll-spied, with the contents rail listing levels 2–3),
+  GitHub-style callouts (`> [!IMPORTANT] Title` for the six kinds, plus
+  `RELATED` and `PROCEDURE` as titled information), links between documents
+  (`/guides/<slug>#anchor`, in-tab; every other scheme or path stays text),
+  and a document that authors its own `#` headings no longer gets guessed
+  ones. Legacy mode (case notes) is unchanged.
+- **Pinned** by `src/lib/markdown.sop.test.ts`, which reads the body out of
+  the migration and checks the twelve Titles, the numbering, the artifacts,
+  the callouts, every link target, the item-27 legacy-term audit and the
+  verbatim brackets and deadlines.
+
 ### Guide Library / SOP visual redesign — one presentation system for every document
 
 The library's documents looked like two libraries. Documents written for the

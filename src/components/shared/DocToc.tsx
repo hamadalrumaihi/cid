@@ -64,14 +64,23 @@ export function scrollToHeading(id: string): void {
  *  mobile drawer with full-size touch targets. The parent owns the actual
  *  scroll (onSelect) so the drawer can close before jumping. Renders nothing
  *  under two headings — a TOC with one entry is noise. */
-export function DocToc({ headings, activeId, onSelect, size = 'rail' }: {
+export function DocToc({ headings: all, activeId, onSelect, size = 'rail' }: {
   headings: DocHeading[]
   activeId: string | null
   onSelect: (id: string) => void
   size?: 'rail' | 'sheet'
 }) {
+  // Titles and sub-titles only. A level-4 clause ("5C.3") is anchored and
+  // scroll-spied like everything else, but listing forty clause numbers
+  // turns a table of contents into an index nobody can scan. While the
+  // reader is inside a clause, its parent sub-title stays highlighted.
+  const headings = all.filter((h) => h.level < 4)
   if (headings.length < 2) return null
   const sheet = size === 'sheet'
+  const activeIdx = all.findIndex((h) => h.id === activeId)
+  const parentOfActive = activeIdx >= 0 && all[activeIdx].level === 4
+    ? all.slice(0, activeIdx).reverse().find((h) => h.level < 4)?.id ?? null
+    : activeId
 
   const copySectionLink = (id: string) => {
     const { origin, pathname, search } = window.location
@@ -83,7 +92,7 @@ export function DocToc({ headings, activeId, onSelect, size = 'rail' }: {
       <p className="mb-2 text-xs font-medium text-slate-500">On this page</p>
       <ul className={`border-l border-white/10 ${sheet ? 'space-y-1' : 'space-y-0.5'}`}>
         {headings.map((h) => {
-          const active = activeId === h.id
+          const active = parentOfActive === h.id
           return (
             <li key={h.id} className="flex items-center gap-1">
               <button
