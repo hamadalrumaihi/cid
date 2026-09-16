@@ -55,6 +55,7 @@ import { ChargesTab } from './tabs/ChargesTab'
 import { RicoTab } from './tabs/RicoTab'
 import { IntelTab } from './tabs/IntelTab'
 import { CiIntelligenceTab, useCiCaseCount } from './tabs/CiIntelligenceTab'
+import { UndercoverCaseTab, useUcCaseCount } from './tabs/UndercoverCaseTab'
 import { SurveillanceTab } from './tabs/SurveillanceTab'
 import { ExtractionsTab } from './tabs/ExtractionsTab'
 import { LegalTab } from './tabs/LegalTab'
@@ -79,8 +80,8 @@ const CaseGraphTab = dynamic(() => import('./CaseGraphTab').then((m) => m.CaseGr
 
 // Tab ids/labels/grouping live in caseTabs.ts so the in-app User Guide renders
 // the real rail (aliased here to keep the 30+ existing references unchanged).
-// This strip uses the COMPLETE grouping (incl. the conditional `ci` tab); the
-// guide and the phone screen render CASE_TAB_GROUPS without it.
+// This strip uses the COMPLETE grouping (incl. the conditional `ci` and `uc`
+// tabs); the guide and the phone screen render CASE_TAB_GROUPS without them.
 const TABS = CASE_TABS
 type TabId = CaseTabId
 const TAB_LABELS = CASE_TAB_LABELS
@@ -159,6 +160,10 @@ export function CaseDetail({ id, onBack, onChanged, embedded = false, section, o
   // unknown yet; the tab exists only while the count is > 0 — never a lock,
   // a placeholder or a zero pill.
   const ciCount = useCiCaseCount(id)
+  // Undercover Operations (procedure §2/§4): the same gate. RLS returns no
+  // uc_operations row to a viewer §4 does not authorize, so their count is 0
+  // and the tab does not exist — a lock would itself disclose the operation.
+  const ucCount = useUcCaseCount(id)
   const operations = useOperationsStore((s) => s.operations)
   // DB-backed pins (user_pins) — replaces the localStorage pinnedCases toggle
   // so a pin follows the member across devices. The Store-key readers stay in
@@ -547,8 +552,9 @@ export function CaseDetail({ id, onBack, onChanged, embedded = false, section, o
   // only with a positive count (a deep link to ?tab=ci without one lands on
   // the Brief, like any unknown section).
   const ciOn = (ciCount ?? 0) > 0
+  const ucOn = (ucCount ?? 0) > 0
   const tabDefs: Array<SectionTab<TabId>> = TABS
-    .filter((t) => (t !== 'rico' || ricoOn) && (t !== 'ci' || ciOn))
+    .filter((t) => (t !== 'rico' || ricoOn) && (t !== 'ci' || ciOn) && (t !== 'uc' || ucOn))
     .map((t) => ({
     id: t,
     label: TAB_LABELS[t],
@@ -564,6 +570,7 @@ export function CaseDetail({ id, onBack, onChanged, embedded = false, section, o
       : t === 'extractions' ? wf?.extractions
       : t === 'rico' ? wf?.rico
       : t === 'ci' ? ciCount ?? undefined
+      : t === 'uc' ? ucCount ?? undefined
       : undefined,
     marker:
       t === 'signoff' ? awaitingSignoff
@@ -749,6 +756,7 @@ export function CaseDetail({ id, onBack, onChanged, embedded = false, section, o
             {t === 'documents' && <DocumentsTab c={c} canEdit={canEdit} />}
             {t === 'intel' && <IntelTab c={c} canEdit={canEdit && !c.archived_at} />}
             {t === 'ci' && <CiIntelligenceTab caseId={c.id} />}
+            {t === 'uc' && <UndercoverCaseTab caseId={c.id} />}
             {t === 'surveillance' && <SurveillanceTab c={c} />}
             {t === 'extractions' && <ExtractionsTab c={c} canEdit={canEdit} />}
             {t === 'charges' && <ChargesTab c={c} canEdit={canEdit} onChanged={fetchCase} />}

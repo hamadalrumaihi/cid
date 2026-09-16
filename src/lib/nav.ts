@@ -131,6 +131,12 @@ export const PAGE_META: Record<string, PageMeta> = {
   // command (bureau leads, deputy directors, director, SIB, Owner) sees all;
   // everyone else gets the ordinary nothing-here surface — RLS is the wall.
   informants: { title: 'Confidential Informants', sub: 'Protected source management — handlers see their own sources, CI command sees all' },
+  // Undercover operations (CID Undercover Operations Procedure). Unlike the CI
+  // compartment, this is not an admission you hold: the procedure binds every
+  // detective, so the leaf is offered to all of CID and the ROWS are what is
+  // restricted — a detective sees their own operations, a Bureau Lead their
+  // bureau's, CID Command all of them. `private.uc_row_visible` is the wall.
+  undercover: { title: 'Undercover Operations', sub: 'Your undercover operations — recording, retention and the notifications the procedure requires' },
   // The unified workspace (plan §5.5): cases, records and tools side by side
   // in one tab strip. A valid leaf (deep links, the Open workspace tabs
   // panel) that belongs to no category button — the Investigations leaves
@@ -175,7 +181,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
   // group. `intelligence` / `registries` open the workspace on a default
   // tool; `informants` renders only for accounts the CI compartment involves
   // (Sidebar/Subtabs/BottomNav read useCiContext — RLS is the real wall).
-  { id: 'cases',     label: 'Investigations', tabs: ['cases', 'operations', 'legal', 'intelligence', 'informants', 'registries', 'rico', 'case-files'] },
+  { id: 'cases',     label: 'Investigations', tabs: ['cases', 'operations', 'legal', 'intelligence', 'informants', 'undercover', 'registries', 'rico', 'case-files'] },
   // Division & Reference: what the division reads about itself and about the
   // rules it works to. The Division Directory leads it — a member-facing
   // roster has no business in a category of command administration.
@@ -224,7 +230,12 @@ export const SIU_NAV_CATEGORIES: NavCategory[] = [
   // tab for tab, in CID's order.
   { id: 'siu-unit',      label: 'Bureau',         tabs: ['siu'] },
   { id: 'siu-command',   label: 'Command',        tabs: ['inbox', 'dashboard', 'analytics', 'announce', 'heatmap'] },
-  { id: 'siu-cases',     label: 'Investigations', tabs: ['cases', 'operations', 'legal', 'intelligence', 'informants', 'registries', 'rico', 'case-files'] },
+  // `undercover` mirrors like every other leaf. It is CID's compartment:
+  // `private.uc_row_visible` admits the detective, their own Bureau Lead and
+  // CID Command, and no SIB standing, so an SIB account opens the route to an
+  // empty list. Navigation, not access — the same arrangement `informants`
+  // already has, and SIB's own secrecy is untouched by it.
+  { id: 'siu-cases',     label: 'Investigations', tabs: ['cases', 'operations', 'legal', 'intelligence', 'informants', 'undercover', 'registries', 'rico', 'case-files'] },
   { id: 'siu-ref',       label: 'Division & Reference', tabs: ['directory', 'penal', 'sops'] },
   { id: 'siu-oversight', label: 'Oversight',      tabs: ['calendar', 'shifts', 'trash'] },
   { id: 'siu-owner',     label: 'Owner',          tabs: ['owner', 'audit', 'devdocs', 'report-templates'] },
@@ -250,6 +261,7 @@ export const TAB_LABEL: Record<string, string> = {
   tools: 'Investigative Tools', workspace: 'Workspace',
   calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', trash: 'Trash', owner: 'Owner Console', profile: 'My Profile', 'command-center': 'Command Center', siu: 'Special Investigations Bureau',
   informants: 'Informants',
+  undercover: 'Undercover',
 }
 
 /** Presentational sub-grouping for crowded categories — a visual layer over

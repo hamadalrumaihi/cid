@@ -52,6 +52,7 @@ import { useNav } from '@/components/shell/useNav'
 import { GuideHeader, GuideSection } from './GuideParts'
 import { GuideDocView } from './GuideDocView'
 import { GuideMediaManager, type GuideMediaSlot } from './GuideMediaManager'
+import { GuideAcknowledgement, guideOffersAcknowledgement } from './GuideAcknowledgement'
 import { CHIP, CHIP_DONE, CHIP_LOCKED, CHIP_NEUTRAL, GOLD_TEXT, GUIDE_CANVAS, PANEL, SLAB, WARN } from './guideSurfaces'
 import { guideBody } from './guideRegistry'
 
@@ -565,6 +566,12 @@ export function GuidePage({ slug }: { slug: string }) {
               {done ? 'Marked as read' : 'Mark as read'}
             </Button>
           </div>
+
+          {/* Opt-in only — see GuideAcknowledgement. Every other guide renders
+              nothing here, and no guide is gated on it. */}
+          {guideOffersAcknowledgement(row.slug) && (
+            <GuideAcknowledgement guideId={row.id} guideTitle={row.title} />
+          )}
 
           <GuideFeedbackBlock guideId={row.id} anchor={active ?? null} />
 

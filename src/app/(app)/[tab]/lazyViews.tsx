@@ -21,6 +21,11 @@ export const SiuView = lazy('siu', () => import('@/components/siu/SiuView').then
 // accounts are few; everyone else sees the nothing-here surface, so the
 // chunk never rides in the shared page bundle.
 export const InformantsView = lazy('informants', () => import('@/components/informants/InformantsView').then((m) => m.InformantsView))
+// Undercover Operations (/undercover) — the workflow half of the CID
+// Undercover Operations Procedure. Restricted, rarely opened, and RLS returns
+// nothing to an account with no operation to see, so it stays out of the
+// shared page chunk.
+export const UndercoverView = lazy('undercover', () => import('@/components/undercover/UndercoverView').then((m) => m.UndercoverView))
 export const AuditView = lazy('audit', () => import('@/components/audit/AuditView').then((m) => m.AuditView))
 export const FeedbackView = lazy('feedback', () => import('@/components/feedback/FeedbackView').then((m) => m.FeedbackView))
 export const ConcernView = lazy('concern', () => import('@/components/concern/ConcernView').then((m) => m.ConcernView))
