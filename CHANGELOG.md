@@ -8,6 +8,30 @@ the merged PRs that compose it.
 
 ## [Unreleased]
 
+### Portal mode — reversible read-only, maintenance and retirement switch
+
+One server-side environment variable, `PORTAL_MODE` (`normal` | `readonly` |
+`maintenance` | `retired`), controls the whole portal. It is a service-control
+switch, not a data operation: changing it deletes, alters or migrates nothing
+in Supabase, and setting it back to `normal` restores the portal exactly as it
+was. [DEPLOYMENT.md §8](docs/DEPLOYMENT.md) is the runbook.
+
+- **Server-side enforcement** — a Next proxy (`src/proxy.ts`) runs before every
+  route. In `maintenance` and `retired` every address, including direct links
+  to protected pages, is served the notice with HTTP 503; `/api/*` paths and
+  server actions get a JSON `portal_retired` / `portal_maintenance` refusal.
+  Every response carries the mode as a cookie and a header.
+- **Read-only mode** — the Supabase client refuses every write before it leaves
+  the browser (PostgREST inserts/updates/deletes, every RPC not in the STABLE
+  read list, storage uploads, non-search edge functions, media uploads); reads
+  the user is authorized for continue, restricted views stay logged, and a
+  persistent "Read-only mode" pill is shown.
+- **The screens** — `CID Portal Retired` with the owner's notice, and `Portal
+  temporarily unavailable for maintenance`; dark portal canvas, centered, no
+  navigation, sidebar, login form or controls; 390 / 768 / 1440 checked.
+- **Normal mode is unchanged** — the guard is a pass-through and the proxy
+  only sets the cookie.
+
 ### CID Standard Operating Procedure — content correction, version 3
 
 The active CID SOP (`cid-standard-operating-procedure`) is corrected in place

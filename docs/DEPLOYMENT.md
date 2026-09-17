@@ -31,6 +31,7 @@ database**:
 | `NEXT_PUBLIC_SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_ENV` (optional) | the DSN; `production` | unset, or `preview` | unset |
 | `NEXT_PUBLIC_ENABLE_<FLAG>` (optional; STIRLING_PDF, CRAWL4AI, DOCUMENT_PROCESSING, ADVANCED_GRAPH, MEILISEARCH, SEMANTIC_SEARCH, EVIDENCE_SEALING, OPENFGA, ADVANCED_EDITOR, AI_ASSISTANT) | unset — the `feature_flags` row decides | `on` / `off` to exercise an optional service on one preview | unset |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` (optional, server only — never `NEXT_PUBLIC_`) | a collector, if any | unset | unset |
+| `PORTAL_MODE` (optional, server only — never `NEXT_PUBLIC_`) | `normal` (or unset); `readonly` / `maintenance` / `retired` to change the whole portal's mode — §8 | unset | unset |
 
 **The portal runs with every optional variable unset.** They are listed in
 [`.env.example`](../.env.example) and in the Owner Console's environment
@@ -272,3 +273,67 @@ handles every lightweight kind.
 
 Ongoing monitoring and incident response live in
 [OPERATIONS.md](OPERATIONS.md).
+
+## 8. Portal mode — read-only, maintenance, retirement
+
+One environment variable, `PORTAL_MODE`, puts the whole portal into one of four
+modes. It is a **service-control switch, not a data operation**: changing it
+deletes, alters or migrates nothing in Supabase — no rows, no users, no
+storage objects, no integrations — and setting it back to `normal` restores
+the portal exactly as it was.
+
+| `PORTAL_MODE` | What every visitor gets | Writes |
+|---|---|---|
+| `normal` (default, also for unset or misspelt values) | The portal as it is today | allowed |
+| `readonly` | Everything they are authorized to view, with a persistent "Read-only mode" pill | **refused in the browser before they are sent** — create, edit, delete, upload, approve, reassign, status changes, every write RPC |
+| `maintenance` | The "Portal temporarily unavailable for maintenance" screen on every address, HTTP 503 | n/a — nothing loads |
+| `retired` | The retirement notice on every address, HTTP 503 | n/a — nothing loads |
+
+**How it is enforced.**
+
+- **Server side** — `src/proxy.ts` (the Next 16 proxy, formerly middleware)
+  runs before every page, RSC request, `/api/*` path and server action. In
+  `maintenance` and `retired` it rewrites every route to `/unavailable` with a
+  503 (typing `/owner` or `/m/cases/<id>` shows the notice, nothing else), and
+  answers API paths and server actions with a JSON refusal
+  `{ ok:false, code:'portal_retired'|'portal_maintenance', message }`. Only the
+  build's static assets pass. In every mode it sets the `cid-portal-mode`
+  cookie and the `x-portal-mode` header, so the browser learns the mode at
+  runtime rather than from a build.
+- **Browser side** — the Supabase client (`src/lib/supabase.ts`) routes every
+  request through a guard. In `readonly` it refuses anything that is not a
+  read: PostgREST inserts/updates/deletes, every RPC that is not in the STABLE
+  read list (`src/lib/portalModeReadRpcs.ts`, generated from `pg_proc`; the
+  view-audit RPCs stay allowed so restricted views remain logged), storage
+  uploads/moves/deletes, non-search edge functions, FiveManage uploads. The
+  refusal reaches the user as the mode sentence in the usual toast. In the
+  blocking modes an already-open tab refuses everything but sign-out until
+  its next navigation, which the proxy then replaces with the notice.
+- **Reversible** — `getPortalMode()` in `src/lib/portalMode.ts` is the single
+  reader; nothing is written anywhere when the mode changes.
+
+**Operating it on Vercel.** Set `PORTAL_MODE` in Project → Settings →
+Environment Variables (Production), then **redeploy** — an environment
+variable change is not picked up by a running deployment. To restore, set
+it back to `normal` (or remove it) and redeploy again. Preview deployments
+have their own variables, so a mode set on Production never affects them.
+Locally: `PORTAL_MODE=readonly npm run dev`.
+
+**Verify a mode after deploying** (from anywhere; nothing here needs a
+session):
+
+```bash
+curl -sI https://<portal>/inbox | grep -i -e '^HTTP' -e 'x-portal-mode'
+# maintenance / retired → HTTP/2 503, x-portal-mode: <mode>; normal / readonly → 200
+curl -s -X POST https://<portal>/api/anything          # blocking modes → the JSON refusal
+```
+
+**Boundary, stated plainly.** The switch lives in the Vercel environment, so
+it governs the portal — the pages, the proxy, the browser client. It does not
+reach PostgREST itself: someone holding a live session JWT and the public
+publishable key could still address the Supabase REST API directly in
+`readonly` mode, and RLS (not the mode) is what decides that request. A
+database-side switch (a `portal_control` row folded into
+`private.is_active()`) would close that gap and is the documented follow-up;
+it is deliberately not part of this feature so the mode has exactly one
+source of truth and reverting the variable reverts everything.

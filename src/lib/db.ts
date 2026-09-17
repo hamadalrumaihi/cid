@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabase } from './supabase'
+import { PORTAL_MODE_HEADER } from './portalMode'
 import type { Database, Tables, TablesInsert, TablesUpdate } from './database.types'
 
 type TableName = keyof Database['public']['Tables']
@@ -271,10 +272,23 @@ export async function rpc<F extends Fn>(fn: F, args: Database['public']['Functio
 
 /** Edge-function invoke (discord-notify). Fire-and-forget friendly: resolves
  *  { error } and never throws, so a dead function can't break the caller. */
+/** functions-js reports every non-2xx as "Edge Function returned a non-2xx
+ *  status code"; when the portal-mode guard (src/lib/supabase.ts) refused the
+ *  call, the body's sentence is the one to show. */
+async function portalRefusalFrom(error: unknown): Promise<string | null> {
+  const ctx = (error as { context?: unknown }).context
+  if (typeof Response === 'undefined' || !(ctx instanceof Response) || !ctx.headers.get(PORTAL_MODE_HEADER)) return null
+  try {
+    const j = (await ctx.clone().json()) as { message?: unknown } | null
+    return j && typeof j.message === 'string' ? j.message : null
+  } catch { return null }
+}
+
 export async function invokeFunction(name: string, body: unknown): Promise<{ error: DbError | null }> {
   try {
     const { error } = await raw().functions.invoke(name, { body: body as Record<string, unknown> })
-    return { error: error ? { message: error.message } : null }
+    if (!error) return { error: null }
+    return { error: { message: (await portalRefusalFrom(error)) ?? error.message } }
   } catch (e) {
     return { error: { message: e instanceof Error ? e.message : String(e) } }
   }
@@ -301,7 +315,8 @@ export async function invokeFunctionJson<T = unknown>(
           if (j && typeof j.code === 'string') code = j.code
         } catch { /* non-JSON body */ }
       }
-      return { data: null, error: { message: error.message, code }, status: res?.status ?? null }
+      const refused = await portalRefusalFrom(error)
+      return { data: null, error: { message: refused ?? error.message, code }, status: res?.status ?? null }
     }
     return { data: (data ?? null) as T | null, error: null, status: 200 }
   } catch (e) {

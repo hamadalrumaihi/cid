@@ -35,6 +35,9 @@ const config: StorybookConfig = {
     // card grid at phone width) cannot be checked any other way without a
     // signed-in portal.
     '../src/components/guides/**/*.stories.@(ts|tsx)',
+    // The portal-mode screens (retired / maintenance) — the whole page while
+    // the portal is not available. Server-renderable, no providers.
+    '../src/components/portal/**/*.stories.@(ts|tsx)',
   ],
   addons: [
     // Advisory only — parameters.a11y.test is 'todo' in preview.tsx, so

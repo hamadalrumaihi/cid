@@ -10,6 +10,7 @@ import { AppShell } from '@/components/shell/AppShell'
 import { FieldShell } from '@/components/field/FieldShell'
 import { Toaster } from '@/components/ui/Toaster'
 import { DialogHost } from '@/components/ui/dialog'
+import { ReadOnlyBanner } from '@/components/shell/ReadOnlyBanner'
 
 function Gated({ children }: { children: React.ReactNode }) {
   const { state } = useAuth()
@@ -26,6 +27,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
       <Gated>{children}</Gated>
+      <ReadOnlyBanner />
       <Toaster />
       <DialogHost />
     </AuthProvider>

@@ -11,18 +11,7 @@ import {
   type FieldAgency,
 } from '@/lib/fieldAccess'
 import { MembershipRequest } from './MembershipRequest'
-
-function ShieldLogo({ size = 'h-12 w-12' }: { size?: string }) {
-  return (
-    <div className={`grid ${size} flex-shrink-0 place-items-center rounded-lg bg-badge-500`}>
-      <svg className="h-7 w-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M12 2.5l8 3v6.5c0 5.2-3.6 8.7-8 9.5-4.4-.8-8-4.3-8-9.5V5.5z" />
-        <path d="M12 6l1.2 2.4 2.6.4-1.9 1.9.5 2.6-2.4-1.2-2.4 1.2.5-2.6-1.9-1.9 2.6-.4z" />
-        <path d="M8 17h8" />
-      </svg>
-    </div>
-  )
-}
+import { ShieldMark } from '@/components/ui/ShieldMark'
 
 function LoginBody() {
   const { signInOAuth, signInEmail } = useAuth()
@@ -271,7 +260,7 @@ export function Gate() {
     <main className="flex min-h-screen items-center justify-center bg-ink-950 p-6">
       <div className="w-full max-w-md rounded-lg border border-white/10 bg-ink-900 p-8">
         <div className="mb-6 flex items-center gap-3">
-          <ShieldLogo />
+          <ShieldMark />
           <div>
             <h1 className="text-lg font-semibold tracking-tight text-white">CID Portal</h1>
             <p className="text-xs text-slate-400">Criminal Investigation Division · San Andreas</p>

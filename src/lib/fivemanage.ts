@@ -7,6 +7,8 @@
  *  vanilla app ships in index.html — provided via NEXT_PUBLIC_ env. If
  *  absent, uploads are disabled and views fall back to paste-a-URL. */
 
+import { clientPortalMode, portalRefusal } from './portalMode'
+
 const API_KEY = process.env.NEXT_PUBLIC_FIVEMANAGE_API_KEY ?? ''
 const BASE_URL = (process.env.NEXT_PUBLIC_FIVEMANAGE_BASE_URL ?? 'https://api.fivemanage.com').replace(/\/+$/, '')
 
@@ -16,6 +18,9 @@ export type FmKind = 'image' | 'video' | 'audio'
 
 export async function fmUpload(file: File): Promise<{ url: string; kind: FmKind }> {
   if (!fmConfigured()) throw new Error('FiveManage not configured')
+  // Read-only mode: an upload is a write even though it goes to the media host.
+  const mode = clientPortalMode()
+  if (mode !== 'normal') throw new Error(portalRefusal(mode).message)
   const mime = file.type || ''
   const kind: FmKind = mime.startsWith('video') ? 'video' : mime.startsWith('audio') ? 'audio' : 'image'
   const fd = new FormData()
