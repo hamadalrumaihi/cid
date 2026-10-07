@@ -36,7 +36,7 @@ jobs:
       - name: Upload static build
         # Download from the PR's checks → Storybook → Artifacts, unzip, and
         # open index.html (or `npx http-server storybook-static`).
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: storybook-static
           path: storybook-static
